@@ -1,0 +1,61 @@
+Buat backend Node.js menggunakan framework Replit (Express/Fastify) untuk layanan AI Video-Gen dengan aturan sebagai berikut:
+
+1. Subscription & Paket
+   - User bisa beli paket 1 hari (24 jam)
+   - Setiap user mendapat API key APP unik untuk request generate
+   - Subscription disimpan di database (id, user_id, room_id, started_at, expired_at, status, room_locked=false)
+
+2. Room / Server
+   - Room = server/channel untuk generate
+   - Setiap room punya 1 API provider key (Freepik / Stability / dsb) yang disembunyikan
+   - Max user per room = 3-4
+   - Room status: OPEN / FULL / MAINTENANCE
+   - User bisa pilih room bebas, dan boleh pindah room jika room penuh atau quota habis
+   - Slot room di-update otomatis sesuai active user
+
+3. Generate Request
+   - Endpoint: /generate
+   - Backend harus cek:
+     - API key APP valid
+     - Subscription aktif dan belum expired
+     - Room tersedia dan provider key tersedia
+   - Jika valid → route request ke provider sesuai room → hasil dikembalikan ke user
+   - Queue request per room jika ada limit concurrency provider
+
+4. Room Maintenance / Provider Quota Habis
+   - Jika provider di room habis quota → room status = MAINTENANCE
+   - User bisa pindah room lain
+   - Room key tetap tersembunyi
+
+5. Subscription Expired
+   - Setelah 24 jam → subscription expired
+   - Slot room dikurangi (active_users--)
+   - User harus beli paket baru untuk generate lagi
+
+6. Endpoints API
+   - /buy-package → user beli paket → generate subscription
+   - /select-room → user pilih room → cek slot & lock room sementara
+   - /generate → route ke provider → return hasil ke user
+   - /status → cek subscription, expired, slot room, dan sisa quota provider
+
+7. Database Schema
+   - users: id, api_key, name, email, dsb
+   - subscriptions: id, user_id, room_id, started_at, expired_at, status, room_locked
+   - rooms: id, provider, provider_api_key_enc, max_users, active_users, status
+
+8. Keamanan
+   - Provider API key disembunyikan
+   - Semua request user wajib lewat API APP
+   - User tidak bisa generate tanpa subscription aktif
+
+9. Queue & Slot Management
+   - Backend mengatur max user per room
+   - Queue per room jika ada limit provider
+   - Slot dilepas otomatis saat subscription expired
+
+Buatkan backend siap pakai dengan:
+- Route lengkap
+- Struktur folder standard Node.js
+- Contoh database setup (PostgreSQL / SQLite / MongoDB)
+- Contoh logic lock/pindah room, expired subscription, queue, dan generate request
+- Komentar di setiap bagian kode supaya jelas fungsinya

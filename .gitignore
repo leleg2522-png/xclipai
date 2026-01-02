@@ -1,0 +1,12 @@
+node_modules/
+.env
+.replit
+.cache
+dist/
+build/
+*.log
+
+uploads/
+processed/
+*.mp4
+*.tar.gz
