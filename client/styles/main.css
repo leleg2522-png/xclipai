@@ -3658,3 +3658,78 @@ body {
   width: 14px;
   height: 14px;
 }
+
+/* Upload Progress */
+.upload-progress-container {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.upload-progress-bar {
+  width: 100%;
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  border-radius: 6px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.upload-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.upload-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.upload-progress-text {
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--primary);
+}
+
+.upload-status-text {
+  color: var(--text-secondary);
+}
+
+/* Processing Progress */
+.processing-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+  border-radius: 6px;
+  transition: width 0.5s ease;
+  position: relative;
+}
+
+.processing-status-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+}

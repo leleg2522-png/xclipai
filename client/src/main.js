@@ -6,7 +6,10 @@ const state = {
   jobId: null,
   status: 'idle',
   progress: 0,
+  statusDetail: '',
   clips: [],
+  isUploading: false,
+  uploadProgress: 0,
   settings: {
     resolution: '720p',
     clipCount: 3,
@@ -1870,6 +1873,34 @@ function createParticles() {
 }
 
 function renderVideoSection() {
+  if (state.isUploading) {
+    return `
+      <div class="card glass-card fade-in">
+        <div class="card-header">
+          <div class="card-icon pulse">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <h2 class="card-title">Uploading Video...</h2>
+        </div>
+        <div class="card-body">
+          <div class="upload-progress-container">
+            <div class="upload-progress-bar">
+              <div class="upload-progress-fill" style="width: ${state.uploadProgress}%"></div>
+            </div>
+            <div class="upload-progress-info">
+              <span class="upload-progress-text">${state.uploadProgress}%</span>
+              <span class="upload-status-text">Uploading to server...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
   if (!state.video) {
     return `
       <div class="card glass-card fade-in">
@@ -1995,11 +2026,11 @@ function renderVideoSection() {
         ${state.status === 'processing' ? `
           <div class="progress-section">
             <div class="progress-header">
-              <span class="progress-status">${getStatusText(state.statusDetail)}</span>
+              <span class="processing-status-text">${getStatusText(state.statusDetail)}</span>
               <span class="progress-percent">${state.progress}%</span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill" style="width: ${state.progress}%">
+              <div class="processing-progress-fill" style="width: ${state.progress}%">
                 <div class="progress-glow"></div>
               </div>
             </div>
@@ -3285,20 +3316,37 @@ async function uploadVideo(file) {
   const formData = new FormData();
   formData.append('video', file);
   
+  state.uploadProgress = 0;
+  state.isUploading = true;
+  render();
+  
   try {
-    showToast('Uploading video...', 'info');
+    const xhr = new XMLHttpRequest();
     
-    const response = await fetch(`${API_URL}/api/upload`, {
-      method: 'POST',
-      body: formData
+    const uploadPromise = new Promise((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          state.uploadProgress = Math.round((e.loaded / e.total) * 100);
+          updateUploadProgressUI();
+        }
+      });
+      
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error(xhr.responseText || 'Upload failed'));
+        }
+      });
+      
+      xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
     });
     
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Upload failed');
-    }
+    xhr.open('POST', `${API_URL}/api/upload`);
+    xhr.send(formData);
     
-    const data = await response.json();
+    const data = await uploadPromise;
     
     state.video = {
       url: data.videoUrl,
@@ -3307,12 +3355,28 @@ async function uploadVideo(file) {
     };
     state.jobId = data.jobId;
     state.status = 'uploaded';
+    state.isUploading = false;
+    state.uploadProgress = 0;
     
     showToast('Video uploaded successfully!', 'success');
     render();
   } catch (error) {
     console.error('Upload error:', error);
+    state.isUploading = false;
+    state.uploadProgress = 0;
     showToast('Failed to upload video: ' + error.message, 'error');
+    render();
+  }
+}
+
+function updateUploadProgressUI() {
+  const progressBar = document.querySelector('.upload-progress-fill');
+  const progressText = document.querySelector('.upload-progress-text');
+  if (progressBar) {
+    progressBar.style.width = `${state.uploadProgress}%`;
+  }
+  if (progressText) {
+    progressText.textContent = `${state.uploadProgress}%`;
   }
 }
 
@@ -3348,6 +3412,9 @@ async function pollJobStatus() {
     const response = await fetch(`${API_URL}/api/job/${state.jobId}`);
     const data = await response.json();
     
+    const prevProgress = state.progress;
+    const prevStatus = state.statusDetail;
+    
     state.progress = data.progress;
     state.statusDetail = data.status;
     
@@ -3355,17 +3422,44 @@ async function pollJobStatus() {
       state.status = 'completed';
       state.clips = data.clips;
       showToast('Clips generated successfully!', 'success');
+      render();
     } else if (data.status === 'error') {
       state.status = 'error';
       showToast(data.error || 'Processing failed', 'error');
+      render();
     } else {
-      setTimeout(pollJobStatus, 1000);
+      if (prevProgress !== data.progress || prevStatus !== data.status) {
+        updateProcessingProgressUI();
+      }
+      setTimeout(pollJobStatus, 2000);
     }
-    
-    render();
   } catch (error) {
     console.error('Polling error:', error);
-    setTimeout(pollJobStatus, 2000);
+    setTimeout(pollJobStatus, 3000);
+  }
+}
+
+function updateProcessingProgressUI() {
+  const progressFill = document.querySelector('.processing-progress-fill');
+  const progressPercent = document.querySelector('.progress-percent');
+  const statusText = document.querySelector('.processing-status-text');
+  
+  if (progressFill) {
+    progressFill.style.width = `${state.progress}%`;
+  }
+  if (progressPercent) {
+    progressPercent.textContent = `${state.progress}%`;
+  }
+  if (statusText) {
+    const statusMap = {
+      'extracting_audio': 'Extracting audio...',
+      'transcribing': 'Transcribing speech...',
+      'analyzing_viral': 'Analyzing viral potential...',
+      'selecting_clips': 'Selecting best clips...',
+      'processing_clips': 'Processing clips...',
+      'adding_subtitles': 'Adding subtitles...'
+    };
+    statusText.textContent = statusMap[state.statusDetail] || state.statusDetail;
   }
 }
 
