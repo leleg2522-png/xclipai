@@ -198,7 +198,8 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 
 ## Recent Changes
 - January 5, 2026: Complete premium UI redesign - modern SaaS-style design system with glassmorphism, improved typography, and smooth animations
-- January 5, 2026: Updated logo to modern "X" monogram style with "PRO" badge
+- January 5, 2026: Upgraded to futuristic dark theme with neon glow effects, cyber grid background, and animated logo
+- January 5, 2026: Updated logo to modern "X" monogram style with "PRO" badge and animated gradient border
 - January 5, 2026: Implemented API key rotation system - 3 keys per room rotating every 3 minutes
 - January 5, 2026: Refactored for platform-agnostic deployment (Railway, Render, etc.)
 - December 16, 2025: Initial creation with full feature set
