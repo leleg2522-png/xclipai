@@ -3052,6 +3052,7 @@ async function generateVideo() {
       showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
       state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now() });
+      saveGeneratedVideosToStorage();
       state.videogen.isGenerating = false;
       showToast('Video berhasil di-generate!', 'success');
       render();
@@ -3097,6 +3098,7 @@ async function pollVideoStatus(taskId, model) {
         task.status = 'completed';
         task.videoUrl = data.videoUrl;
         state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
+        saveGeneratedVideosToStorage();
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
         showToast('Video berhasil di-generate!', 'success');
         render();
@@ -3131,7 +3133,32 @@ async function pollVideoStatus(taskId, model) {
 
 function removeGeneratedVideo(index) {
   state.videogen.generatedVideos.splice(index, 1);
+  saveGeneratedVideosToStorage();
   render();
+}
+
+function saveGeneratedVideosToStorage() {
+  try {
+    localStorage.setItem('xclip_generated_videos', JSON.stringify(state.videogen.generatedVideos));
+  } catch (e) {
+    console.log('Failed to save videos to localStorage:', e);
+  }
+}
+
+function loadGeneratedVideosFromStorage() {
+  try {
+    const saved = localStorage.getItem('xclip_generated_videos');
+    if (saved) {
+      const videos = JSON.parse(saved);
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      state.videogen.generatedVideos = videos.filter(v => v.createdAt > oneHourAgo);
+      if (state.videogen.generatedVideos.length !== videos.length) {
+        saveGeneratedVideosToStorage();
+      }
+    }
+  } catch (e) {
+    console.log('Failed to load videos from localStorage:', e);
+  }
 }
 
 window.removeGeneratedVideo = removeGeneratedVideo;
@@ -3463,6 +3490,7 @@ function updateProcessingProgressUI() {
   }
 }
 
+loadGeneratedVideosFromStorage();
 checkAuth();
 // Live stats disabled
 // startLiveStatsPolling();
