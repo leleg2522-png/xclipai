@@ -37,16 +37,32 @@ In Railway dashboard → Variables, add:
 - `OPENROUTER_API_KEY` - For AI Chat & viral analysis
 - `ELEVENLABS_API_KEY` - For video transcription
 
-**For Room System (Image/Video Gen):**
+**For Room System (Image/Video Gen) - 5 Rooms x 3 Keys = 15 Keys:**
+
+Room 1:
 - `ROOM1_FREEPIK_KEY_1` - Room 1 API key 1
 - `ROOM1_FREEPIK_KEY_2` - Room 1 API key 2
 - `ROOM1_FREEPIK_KEY_3` - Room 1 API key 3
+
+Room 2:
 - `ROOM2_FREEPIK_KEY_1` - Room 2 API key 1
 - `ROOM2_FREEPIK_KEY_2` - Room 2 API key 2
 - `ROOM2_FREEPIK_KEY_3` - Room 2 API key 3
+
+Room 3:
 - `ROOM3_FREEPIK_KEY_1` - Room 3 API key 1
 - `ROOM3_FREEPIK_KEY_2` - Room 3 API key 2
 - `ROOM3_FREEPIK_KEY_3` - Room 3 API key 3
+
+Room 4:
+- `ROOM4_FREEPIK_KEY_1` - Room 4 API key 1
+- `ROOM4_FREEPIK_KEY_2` - Room 4 API key 2
+- `ROOM4_FREEPIK_KEY_3` - Room 4 API key 3
+
+Room 5:
+- `ROOM5_FREEPIK_KEY_1` - Room 5 API key 1
+- `ROOM5_FREEPIK_KEY_2` - Room 5 API key 2
+- `ROOM5_FREEPIK_KEY_3` - Room 5 API key 3
 
 **Optional:**
 - `ALLOWED_ORIGINS` - Your domain (e.g., `xclip.up.railway.app`)
