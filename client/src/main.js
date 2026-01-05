@@ -3023,8 +3023,8 @@ async function generateVideo() {
 }
 
 async function pollVideoStatus(taskId, model) {
-  const maxAttempts = 300;
-  const pollInterval = 2000;
+  const maxAttempts = 120;
+  const pollInterval = 5000;
   let attempts = 0;
   
   const poll = async () => {
@@ -3041,7 +3041,7 @@ async function pollVideoStatus(taskId, model) {
       const data = await response.json();
       
       console.log('Video status:', data);
-      const elapsedSec = attempts * 2;
+      const elapsedSec = attempts * 5;
       state.videogen.status = `processing (${Math.floor(elapsedSec / 60)}m ${elapsedSec % 60}s)`;
       render();
       
