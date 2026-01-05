@@ -1008,7 +1008,7 @@ function render() {
   `;
   
   attachEventListeners();
-  createParticles();
+  // createParticles(); // Disabled - particles hidden for cleaner look
   
   if (state.currentPage === 'chat') {
     scrollChatToBottom();
