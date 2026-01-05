@@ -2332,6 +2332,11 @@ select option {
   min-width: 220px;
   z-index: 100;
   overflow: hidden;
+  display: none;
+}
+
+.user-dropdown.show {
+  display: block;
   animation: dropdown-in 0.2s var(--ease-out);
 }
 
