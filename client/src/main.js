@@ -878,7 +878,7 @@ function render() {
         <div class="logo">
           <div class="logo-icon">X</div>
           <span class="logo-text">Xclip</span>
-          <span class="logo-badge">PRO</span>
+          <span class="logo-badge">AI</span>
         </div>
         
         <nav class="nav-menu">
