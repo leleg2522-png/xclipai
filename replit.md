@@ -13,6 +13,12 @@ Xclip is an AI-powered creative suite featuring four main tools:
 
 This application can be deployed on any Node.js hosting platform (Railway, Render, Fly.io, etc.).
 
+### Railway Deployment Files
+- `Procfile` - Start command
+- `railway.toml` - Railway configuration
+- `nixpacks.toml` - FFmpeg installation
+- `DEPLOY.md` - Full deployment guide
+
 ## Features
 
 ### Video Clipper

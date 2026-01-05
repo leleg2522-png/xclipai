@@ -1,8 +1,11 @@
 {
-  "name": "nodejs",
+  "name": "xclip",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI-Powered Video Clipping, Image Generation & Chat Tool by MANAZIL",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
