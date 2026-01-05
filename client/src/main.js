@@ -38,9 +38,8 @@ const state = {
     duration: '5',
     aspectRatio: '16:9',
     isGenerating: false,
-    taskId: null,
-    status: 'idle',
-    generatedVideo: null,
+    tasks: [],
+    generatedVideos: [],
     error: null,
     customApiKey: ''
   },
@@ -1765,18 +1764,19 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
           
           <div class="card glass-card">
             <div class="card-body">
-              <button class="btn btn-primary btn-full btn-generate" id="generateVideoBtn" ${state.videogen.isGenerating || !state.videogen.sourceImage ? 'disabled' : ''}>
+              <button class="btn btn-primary btn-full btn-generate" id="generateVideoBtn" ${state.videogen.isGenerating || !state.videogen.sourceImage || state.videogen.tasks.length >= 3 ? 'disabled' : ''}>
                 ${state.videogen.isGenerating ? `
                   <div class="btn-loader"></div>
-                  <span>${state.videogen.status === 'processing' ? 'Memproses...' : 'Mengirim...'}</span>
+                  <span>Mengirim...</span>
                 ` : `
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
-                  <span>Generate Video</span>
+                  <span>Generate Video ${state.videogen.tasks.length > 0 ? `(${state.videogen.tasks.length}/3 aktif)` : ''}</span>
                 `}
               </button>
               ${!state.videogen.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:8px;">Upload gambar terlebih dahulu</p>' : ''}
+              ${state.videogen.tasks.length >= 3 ? '<p class="setting-hint" style="text-align:center;margin-top:8px;color:var(--warning);">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
           </div>
         </div>
@@ -1793,51 +1793,47 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
               <h2 class="card-title">Hasil Video</h2>
             </div>
             <div class="card-body">
-              ${state.videogen.isGenerating ? `
-                <div class="generating-status">
-                  <div class="generating-animation">
-                    <div class="gen-circle"></div>
-                    <div class="gen-circle"></div>
-                    <div class="gen-circle"></div>
-                  </div>
-                  <p class="generating-text">${state.videogen.status.includes('processing') ? 'AI sedang membuat video...' : 'Mengirim ke server...'}</p>
-                  <p class="generating-hint">${state.videogen.status.includes('(') ? state.videogen.status.replace('processing ', 'Waktu berjalan: ') : 'Proses ini memerlukan waktu 1-5 menit'}</p>
-                  <div class="video-progress-container">
-                    <div class="video-progress-bar"></div>
-                  </div>
+              ${state.videogen.tasks.length > 0 ? `
+                <div class="active-tasks">
+                  <p class="tasks-header">Sedang diproses (${state.videogen.tasks.length}/3):</p>
+                  ${state.videogen.tasks.map((task, idx) => `
+                    <div class="task-item">
+                      <div class="task-info">
+                        <span class="task-number">Video ${idx + 1}</span>
+                        <span class="task-time">${Math.floor(task.elapsed / 60)}m ${task.elapsed % 60}s</span>
+                      </div>
+                      <div class="video-progress-bar"></div>
+                    </div>
+                  `).join('')}
                 </div>
-              ` : state.videogen.generatedVideo ? `
-                <div class="video-result">
-                  <video src="${state.videogen.generatedVideo}" controls class="generated-video" autoplay loop></video>
-                  <div class="video-actions">
-                    <a href="${state.videogen.generatedVideo}" download="xclip-video-${Date.now()}.mp4" class="btn btn-primary">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                      </svg>
-                      Download Video
-                    </a>
-                    <button class="btn btn-secondary" id="clearVideoResult">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      </svg>
-                      Hapus
-                    </button>
-                  </div>
+              ` : ''}
+              
+              ${state.videogen.generatedVideos.length > 0 ? `
+                <div class="generated-videos-list">
+                  ${state.videogen.generatedVideos.map((video, idx) => `
+                    <div class="video-result">
+                      <video src="${video.url}" controls class="generated-video" ${idx === 0 ? 'autoplay' : ''} loop></video>
+                      <div class="video-actions">
+                        <a href="${video.url}" download="xclip-video-${video.createdAt}.mp4" class="btn btn-primary btn-sm">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                          </svg>
+                          Download
+                        </a>
+                        <button class="btn btn-secondary btn-sm" onclick="removeGeneratedVideo(${idx})">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  `).join('')}
                 </div>
-              ` : state.videogen.error ? `
-                <div class="error-state">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <p>${state.videogen.error}</p>
-                  <button class="btn btn-secondary" id="retryVideoGen">Coba Lagi</button>
-                </div>
-              ` : `
+              ` : state.videogen.tasks.length === 0 ? `
                 <div class="empty-gallery">
                   <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
                     <polygon points="23 7 16 12 23 17 23 7"/>
@@ -1845,7 +1841,7 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                   </svg>
                   <p>Video yang di-generate akan muncul di sini</p>
                 </div>
-              `}
+              ` : ''}
             </div>
           </div>
         </div>
@@ -2972,8 +2968,13 @@ async function generateVideo() {
     return;
   }
   
+  const activeTasks = state.videogen.tasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
+  if (activeTasks.length >= 3) {
+    showToast('Maksimal 3 video dapat diproses bersamaan. Tunggu salah satu selesai.', 'error');
+    return;
+  }
+  
   state.videogen.isGenerating = true;
-  state.videogen.status = 'sending';
   state.videogen.error = null;
   render();
   
@@ -3005,12 +3006,21 @@ async function generateVideo() {
     const data = await response.json();
     
     if (data.taskId) {
-      state.videogen.taskId = data.taskId;
-      state.videogen.status = 'processing';
+      const newTask = {
+        taskId: data.taskId,
+        model: data.model || state.videogen.selectedModel,
+        status: 'processing',
+        elapsed: 0,
+        videoUrl: null,
+        createdAt: Date.now()
+      };
+      state.videogen.tasks.push(newTask);
+      state.videogen.isGenerating = false;
       render();
-      pollVideoStatus(data.taskId, data.model);
+      pollVideoStatus(data.taskId, newTask.model);
+      showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
-      state.videogen.generatedVideo = data.videoUrl;
+      state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now() });
       state.videogen.isGenerating = false;
       showToast('Video berhasil di-generate!', 'success');
       render();
@@ -3032,6 +3042,9 @@ async function pollVideoStatus(taskId, model) {
   
   const poll = async () => {
     try {
+      const task = state.videogen.tasks.find(t => t.taskId === taskId);
+      if (!task) return;
+      
       const headers = { 
         'Content-Type': 'application/json',
         'X-Xclip-Key': state.videogen.customApiKey
@@ -3045,13 +3058,15 @@ async function pollVideoStatus(taskId, model) {
       
       console.log('Video status:', data);
       const elapsedSec = attempts * 5;
-      state.videogen.status = `processing (${Math.floor(elapsedSec / 60)}m ${elapsedSec % 60}s)`;
+      task.elapsed = elapsedSec;
+      task.status = 'processing';
       render();
       
       if (data.status === 'completed' && data.videoUrl) {
-        state.videogen.generatedVideo = data.videoUrl;
-        state.videogen.isGenerating = false;
-        state.videogen.taskId = null;
+        task.status = 'completed';
+        task.videoUrl = data.videoUrl;
+        state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
+        state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
         showToast('Video berhasil di-generate!', 'success');
         render();
         return;
@@ -3069,15 +3084,26 @@ async function pollVideoStatus(taskId, model) {
       }
       
     } catch (error) {
-      state.videogen.error = error.message;
-      state.videogen.isGenerating = false;
-      state.videogen.taskId = null;
+      const task = state.videogen.tasks.find(t => t.taskId === taskId);
+      if (task) {
+        task.status = 'failed';
+        task.error = error.message;
+      }
+      state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
+      showToast('Gagal generate video: ' + error.message, 'error');
       render();
     }
   };
   
   setTimeout(poll, 1000);
 }
+
+function removeGeneratedVideo(index) {
+  state.videogen.generatedVideos.splice(index, 1);
+  render();
+}
+
+window.removeGeneratedVideo = removeGeneratedVideo;
 
 async function generateImages() {
   const description = state.xmaker.characterDescription.trim();

@@ -3596,3 +3596,65 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Multiple Video Tasks */
+.active-tasks {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+  border-radius: var(--radius);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.tasks-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+
+.task-item {
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
+}
+
+.task-item:last-child {
+  margin-bottom: 0;
+}
+
+.task-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.task-number {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-time {
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.generated-videos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.btn-sm svg {
+  width: 14px;
+  height: 14px;
+}
