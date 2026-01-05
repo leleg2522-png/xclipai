@@ -917,23 +917,29 @@ async function validateXclipApiKey(apiKey) {
   return result.rows[0];
 }
 
-function getRotatedApiKey(keyInfo) {
+function getRotatedApiKey(keyInfo, forceKeyIndex = null) {
   const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
   const keys = keyNames.map(name => process.env[name]).filter(k => k);
   
   if (keys.length === 0) {
     if (keyInfo.provider_key_name) {
-      return process.env[keyInfo.provider_key_name] || process.env.FREEPIK_API_KEY;
+      return { key: process.env[keyInfo.provider_key_name] || process.env.FREEPIK_API_KEY, keyIndex: 0 };
     }
-    return null;
+    return { key: null, keyIndex: 0 };
   }
   
-  const rotationMinutes = 3;
-  const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
-  const keyIndex = currentMinute % keys.length;
+  let keyIndex;
+  if (forceKeyIndex !== null && forceKeyIndex >= 0 && forceKeyIndex < keys.length) {
+    keyIndex = forceKeyIndex;
+    console.log(`Using saved key index: ${keyIndex + 1} of ${keys.length}`);
+  } else {
+    const rotationMinutes = 3;
+    const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
+    keyIndex = currentMinute % keys.length;
+    console.log(`API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
+  }
   
-  console.log(`API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
-  return keys[keyIndex];
+  return { key: keys[keyIndex], keyIndex };
 }
 
 app.post('/api/videogen/proxy', async (req, res) => {
@@ -951,9 +957,12 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     let freepikApiKey = null;
+    let usedKeyIndex = null;
     
     if (keyInfo.room_id) {
-      freepikApiKey = getRotatedApiKey(keyInfo);
+      const rotated = getRotatedApiKey(keyInfo);
+      freepikApiKey = rotated.key;
+      usedKeyIndex = rotated.keyIndex;
     }
     
     if (!freepikApiKey) {
@@ -1050,8 +1059,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model) VALUES ($1, $2, $3, $4, $5)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model]
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, usedKeyIndex]
       );
     }
     
@@ -1092,10 +1101,12 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       return res.status(404).json({ error: 'Task tidak ditemukan atau bukan milik API key ini' });
     }
     
+    const savedTask = taskResult.rows[0];
     let freepikApiKey = null;
     
     if (keyInfo.room_id) {
-      freepikApiKey = getRotatedApiKey(keyInfo);
+      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
+      freepikApiKey = rotated.key;
     }
     
     if (!freepikApiKey) {
