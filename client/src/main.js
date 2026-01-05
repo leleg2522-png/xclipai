@@ -3042,7 +3042,7 @@ async function generateVideo() {
       showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
       state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now() });
-      saveGeneratedVideosToStorage();
+      // Video not persisted to localStorage
       state.videogen.isGenerating = false;
       showToast('Video berhasil di-generate!', 'success');
       render();
@@ -3088,7 +3088,7 @@ async function pollVideoStatus(taskId, model) {
         task.status = 'completed';
         task.videoUrl = data.videoUrl;
         state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
-        saveGeneratedVideosToStorage();
+        // Video not persisted to localStorage
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
         showToast('Video berhasil di-generate!', 'success');
         render();
@@ -3123,7 +3123,6 @@ async function pollVideoStatus(taskId, model) {
 
 function removeGeneratedVideo(index) {
   state.videogen.generatedVideos.splice(index, 1);
-  saveGeneratedVideosToStorage();
   render();
 }
 
@@ -3143,7 +3142,7 @@ function loadGeneratedVideosFromStorage() {
       const oneHourAgo = Date.now() - (60 * 60 * 1000);
       state.videogen.generatedVideos = videos.filter(v => v.createdAt > oneHourAgo);
       if (state.videogen.generatedVideos.length !== videos.length) {
-        saveGeneratedVideosToStorage();
+        // Video not persisted to localStorage
       }
     }
   } catch (e) {
@@ -3480,7 +3479,7 @@ function updateProcessingProgressUI() {
   }
 }
 
-loadGeneratedVideosFromStorage();
+// Video results will be cleared on page refresh (not persisted)
 checkAuth();
 // Live stats disabled
 // startLiveStatsPolling();
