@@ -185,6 +185,11 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `APP_URL` - Application URL for API referer headers
 - `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., "myapp.railway.app,mydomain.com")
 
+### Room API Keys (3 per room, rotated every 3 minutes)
+- `ROOM1_FREEPIK_KEY_1`, `ROOM1_FREEPIK_KEY_2`, `ROOM1_FREEPIK_KEY_3` - Room 1 Freepik API keys
+- `ROOM2_FREEPIK_KEY_1`, `ROOM2_FREEPIK_KEY_2`, `ROOM2_FREEPIK_KEY_3` - Room 2 Freepik API keys
+- `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
+
 ## Recent Changes
 - January 5, 2026: Refactored for platform-agnostic deployment (Railway, Render, etc.)
 - December 16, 2025: Initial creation with full feature set

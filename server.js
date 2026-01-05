@@ -902,7 +902,7 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
 
 async function validateXclipApiKey(apiKey) {
   const result = await pool.query(
-    `SELECT k.id, k.user_id, k.status, s.room_id, r.provider_key_name
+    `SELECT k.id, k.user_id, k.status, s.room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
      FROM xclip_api_keys k
      LEFT JOIN subscriptions s ON s.user_id = k.user_id AND s.status = 'active' AND s.expired_at > CURRENT_TIMESTAMP
      LEFT JOIN rooms r ON r.id = s.room_id
@@ -915,6 +915,25 @@ async function validateXclipApiKey(apiKey) {
   }
   
   return result.rows[0];
+}
+
+function getRotatedApiKey(keyInfo) {
+  const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  
+  if (keys.length === 0) {
+    if (keyInfo.provider_key_name) {
+      return process.env[keyInfo.provider_key_name] || process.env.FREEPIK_API_KEY;
+    }
+    return null;
+  }
+  
+  const rotationMinutes = 3;
+  const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
+  const keyIndex = currentMinute % keys.length;
+  
+  console.log(`API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
+  return keys[keyIndex];
 }
 
 app.post('/api/videogen/proxy', async (req, res) => {
@@ -933,8 +952,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     let freepikApiKey = null;
     
-    if (keyInfo.provider_key_name && keyInfo.room_id) {
-      freepikApiKey = process.env[keyInfo.provider_key_name];
+    if (keyInfo.room_id) {
+      freepikApiKey = getRotatedApiKey(keyInfo);
     }
     
     if (!freepikApiKey) {
@@ -1075,8 +1094,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     let freepikApiKey = null;
     
-    if (keyInfo.provider_key_name && keyInfo.room_id) {
-      freepikApiKey = process.env[keyInfo.provider_key_name];
+    if (keyInfo.room_id) {
+      freepikApiKey = getRotatedApiKey(keyInfo);
     }
     
     if (!freepikApiKey) {
@@ -1235,7 +1254,7 @@ app.post('/api/generate-image', async (req, res) => {
     
     if (xclipKey) {
       const keyResult = await pool.query(`
-        SELECT xk.id, xk.user_id, s.xmaker_room_id, r.provider_key_name
+        SELECT xk.id, xk.user_id, s.xmaker_room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
         FROM xclip_api_keys xk
         JOIN users u ON xk.user_id = u.id
         LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' AND s.expired_at > NOW()
@@ -1252,10 +1271,9 @@ app.post('/api/generate-image', async (req, res) => {
         return res.status(403).json({ error: 'Belum pilih XMaker Room. Silakan pilih room di X Maker terlebih dahulu.' });
       }
       
-      const providerKeyName = keyData.provider_key_name;
-      apiKey = process.env[providerKeyName] || process.env.FREEPIK_API_KEY;
+      apiKey = getRotatedApiKey(keyData);
     } else if (req.session.userId) {
-      const roomKey = await getRoomApiKey(req.session.userId);
+      const roomKey = await getRoomApiKey(req.session.userId, 'xmaker');
       if (roomKey) {
         apiKey = roomKey;
       }
@@ -2064,21 +2082,63 @@ app.post('/api/room/leave', async (req, res) => {
   }
 });
 
-// Helper: Get API key for user's room (uses room's provider_key_name)
-async function getRoomApiKey(userId) {
+// Helper: Get API key for user's room with 3-minute rotation
+async function getRoomApiKey(userId, feature = 'videogen') {
+  const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
+  
   const result = await pool.query(`
-    SELECT r.provider_key_name 
+    SELECT r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name 
     FROM subscriptions s
-    JOIN rooms r ON s.room_id = r.id
-    WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.room_id IS NOT NULL
+    JOIN rooms r ON s.${roomColumn} = r.id
+    WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.${roomColumn} IS NOT NULL
   `, [userId]);
   
   if (result.rows.length === 0) {
     return null;
   }
   
-  const keyName = result.rows[0].provider_key_name;
-  return process.env[keyName] || process.env.FREEPIK_API_KEY;
+  const room = result.rows[0];
+  const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
+  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  
+  if (keys.length === 0) {
+    const keyName = room.provider_key_name;
+    return process.env[keyName] || process.env.FREEPIK_API_KEY;
+  }
+  
+  const rotationMinutes = 3;
+  const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
+  const keyIndex = currentMinute % keys.length;
+  
+  console.log(`Room API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
+  return keys[keyIndex];
+}
+
+// Helper: Get API key for room by room ID with rotation
+async function getRoomApiKeyByRoomId(roomId) {
+  const result = await pool.query(`
+    SELECT key_name_1, key_name_2, key_name_3, provider_key_name FROM rooms WHERE id = $1
+  `, [roomId]);
+  
+  if (result.rows.length === 0) {
+    return null;
+  }
+  
+  const room = result.rows[0];
+  const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
+  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  
+  if (keys.length === 0) {
+    const keyName = room.provider_key_name;
+    return process.env[keyName] || process.env.FREEPIK_API_KEY;
+  }
+  
+  const rotationMinutes = 3;
+  const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
+  const keyIndex = currentMinute % keys.length;
+  
+  console.log(`Room ${roomId} API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
+  return keys[keyIndex];
 }
 
 // Cleanup expired subscriptions (run periodically)
