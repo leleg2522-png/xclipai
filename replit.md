@@ -9,6 +9,10 @@ Xclip is an AI-powered creative suite featuring four main tools:
 
 **Created by:** MANAZIL
 
+## Deployment
+
+This application can be deployed on any Node.js hosting platform (Railway, Render, Fly.io, etc.).
+
 ## Features
 
 ### Video Clipper
@@ -167,12 +171,22 @@ Xclip is an AI-powered creative suite featuring four main tools:
 
 ## Environment Variables
 
-Required secrets for full functionality:
+### Required
+- `DATABASE_URL` - PostgreSQL connection string
+- `SESSION_SECRET` - Secret key for session encryption
+
+### API Keys (for full functionality)
 - `ELEVENLABS_API_KEY` - For speech-to-text transcription
 - `OPENROUTER_API_KEY` - For viral content analysis, image generation, translation, and AI chat
 - `FREEPIK_API_KEY` - For image-to-video generation
 
+### Optional Configuration
+- `PORT` - Server port (default: 5000)
+- `APP_URL` - Application URL for API referer headers
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., "myapp.railway.app,mydomain.com")
+
 ## Recent Changes
+- January 5, 2026: Refactored for platform-agnostic deployment (Railway, Render, etc.)
 - December 16, 2025: Initial creation with full feature set
 - December 16, 2025: Fixed upload error, combined servers, added premium UI animations
 - December 29, 2025: Added AI Chat feature with multiple LLM models and file/image upload support

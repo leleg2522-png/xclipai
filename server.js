@@ -14,17 +14,42 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : [];
+
+function isAllowedOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname;
+    
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname === '127.0.0.1') {
+      return true;
+    }
+    
+    for (const allowed of allowedOrigins) {
+      if (hostname === allowed || hostname.endsWith('.' + allowed)) {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) {
       callback(null, true);
-    } else if (origin.includes('replit') || origin.includes('localhost') || origin.includes('0.0.0.0') || origin.includes('127.0.0.1')) {
+    } else if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       console.log('CORS rejected origin:', origin);
@@ -1517,7 +1542,7 @@ Generate the image now following these exact specifications.`;
             headers: {
               'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
               'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://xclip.replit.app',
+              'HTTP-Referer': process.env.APP_URL || 'https://xclip.app',
               'X-Title': 'Xclip X Maker'
             },
             timeout: 180000
