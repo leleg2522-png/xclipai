@@ -3468,3 +3468,131 @@ body {
 .api-badge .badge-icon {
   font-size: 18px;
 }
+
+/* Video Generation Loading Animation */
+.generating-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.generating-animation {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.gen-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  animation: genPulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+.gen-circle:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.gen-circle:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.gen-circle:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes genPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+}
+
+.generating-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: textShimmer 2s ease-in-out infinite;
+}
+
+@keyframes textShimmer {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.generating-hint {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Video Progress Bar */
+.video-progress-container {
+  width: 100%;
+  max-width: 300px;
+  margin-top: 20px;
+}
+
+.video-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.video-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary));
+  background-size: 200% 100%;
+  border-radius: 3px;
+  animation: progressSlide 1.5s ease-in-out infinite;
+}
+
+@keyframes progressSlide {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Video Gen Loader on Button */
+.btn-loader {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: btnSpin 0.8s linear infinite;
+}
+
+@keyframes btnSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

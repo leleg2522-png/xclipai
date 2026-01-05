@@ -1800,8 +1800,11 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                     <div class="gen-circle"></div>
                     <div class="gen-circle"></div>
                   </div>
-                  <p class="generating-text">${state.videogen.status === 'processing' ? 'AI sedang membuat video...' : 'Mengirim ke server...'}</p>
-                  <p class="generating-hint">Proses ini memerlukan waktu 1-3 menit</p>
+                  <p class="generating-text">${state.videogen.status.includes('processing') ? 'AI sedang membuat video...' : 'Mengirim ke server...'}</p>
+                  <p class="generating-hint">${state.videogen.status.includes('(') ? state.videogen.status.replace('processing ', 'Waktu berjalan: ') : 'Proses ini memerlukan waktu 1-5 menit'}</p>
+                  <div class="video-progress-container">
+                    <div class="video-progress-bar"></div>
+                  </div>
                 </div>
               ` : state.videogen.generatedVideo ? `
                 <div class="video-result">
