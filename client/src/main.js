@@ -876,14 +876,9 @@ function render() {
     <header class="header">
       <div class="container header-content">
         <div class="logo">
-          <div class="logo-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="23 7 16 12 23 17 23 7"/>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-            </svg>
-          </div>
+          <div class="logo-icon">X</div>
           <span class="logo-text">Xclip</span>
-          <span class="logo-badge">AI</span>
+          <span class="logo-badge">PRO</span>
         </div>
         
         <nav class="nav-menu">
@@ -1003,15 +998,10 @@ function render() {
       <div class="container">
         <div class="footer-content">
           <div class="footer-logo">
-            <div class="logo-icon small">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="23 7 16 12 23 17 23 7"/>
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-              </svg>
-            </div>
+            <div class="logo-icon small">X</div>
             <span>Xclip</span>
           </div>
-          <p>AI Video Clipper & Chat | Created with passion by <a href="#">MANAZIL</a></p>
+          <p>AI Creative Suite | Crafted with passion by <a href="#">MANAZIL</a></p>
         </div>
       </div>
     </footer>
