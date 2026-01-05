@@ -1855,12 +1855,31 @@ app.get('/api/rooms', async (req, res) => {
     
     const result = await pool.query(`
       SELECT id, name, provider, max_users, active_users, status,
+             key_name_1, key_name_2, key_name_3, provider_key_name,
              (max_users - active_users) as available_slots
       FROM rooms 
       ${whereClause}
       ORDER BY id
     `);
-    res.json({ rooms: result.rows });
+    
+    const rooms = result.rows.map(room => {
+      const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
+      const hasApiKeys = keyNames.some(name => process.env[name]) || 
+                         (room.provider_key_name && process.env[room.provider_key_name]);
+      
+      return {
+        id: room.id,
+        name: room.name,
+        provider: room.provider,
+        max_users: room.max_users,
+        active_users: room.active_users,
+        status: hasApiKeys ? room.status : 'MAINTENANCE',
+        available_slots: room.available_slots,
+        maintenance_reason: hasApiKeys ? null : 'API key belum dikonfigurasi'
+      };
+    });
+    
+    res.json({ rooms });
   } catch (error) {
     console.error('Get rooms error:', error);
     res.status(500).json({ error: 'Failed to get rooms' });
