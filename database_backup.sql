@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ne6X2s7c37K2vvhYdtkphFsCNFMyuDPXS2gTkuq8btmxfW8zvfQUDHIqe9a63or
+\restrict XM2wpNsuIm2PCAwe3ueTvZSKL4LGCGB1sL80yjmgtl3ul4dY2mSdzlenVkVJSpy
 
 -- Dumped from database version 16.10
 -- Dumped by pg_dump version 16.10
@@ -21,6 +21,47 @@ SET row_security = off;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: payments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payments (
+    id integer NOT NULL,
+    user_id integer,
+    package character varying(50) NOT NULL,
+    amount integer NOT NULL,
+    status character varying(20) DEFAULT 'pending'::character varying,
+    proof_image text,
+    admin_notes text,
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.payments OWNER TO postgres;
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.payments_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.payments_id_seq OWNER TO postgres;
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.payments_id_seq OWNED BY public.payments.id;
+
 
 --
 -- Name: rooms; Type: TABLE; Schema: public; Owner: postgres
@@ -171,7 +212,9 @@ CREATE TABLE public.users (
     password_hash character varying(255) NOT NULL,
     freepik_api_key text,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    is_admin boolean DEFAULT false,
+    subscription_expired_at timestamp without time zone
 );
 
 
@@ -283,6 +326,13 @@ ALTER SEQUENCE public.xclip_api_keys_id_seq OWNED BY public.xclip_api_keys.id;
 
 
 --
+-- Name: payments id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments ALTER COLUMN id SET DEFAULT nextval('public.payments_id_seq'::regclass);
+
+
+--
 -- Name: rooms id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -325,13 +375,21 @@ ALTER TABLE ONLY public.xclip_api_keys ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Data for Name: payments; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.payments (id, user_id, package, amount, status, proof_image, admin_notes, created_at, updated_at) FROM stdin;
+\.
+
+
+--
 -- Data for Name: rooms; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
 COPY public.rooms (id, name, max_users, active_users, status, provider_key_name, created_at, provider, key_name_1, key_name_2, key_name_3) FROM stdin;
 3	Room 3	5	0	OPEN	FREEPIK_API_KEY_3	2026-01-05 13:59:46.766791	freepik	ROOM3_FREEPIK_KEY_1	ROOM3_FREEPIK_KEY_2	ROOM3_FREEPIK_KEY_3
 2	Room 2	5	0	OPEN	FREEPIK_API_KEY_2	2026-01-05 13:59:46.766791	freepik	ROOM2_FREEPIK_KEY_1	ROOM2_FREEPIK_KEY_2	ROOM2_FREEPIK_KEY_3
-1	Room 1	5	1	OPEN	FREEPIK_API_KEY_1	2026-01-05 13:59:46.766791	freepik	ROOM1_FREEPIK_KEY_1	ROOM1_FREEPIK_KEY_2	ROOM1_FREEPIK_KEY_3
+1	Room 1	5	0	OPEN	FREEPIK_API_KEY_1	2026-01-05 13:59:46.766791	freepik	ROOM1_FREEPIK_KEY_1	ROOM1_FREEPIK_KEY_2	ROOM1_FREEPIK_KEY_3
 \.
 
 
@@ -340,7 +398,7 @@ COPY public.rooms (id, name, max_users, active_users, status, provider_key_name,
 --
 
 COPY public.sessions (sid, sess, expire) FROM stdin;
-BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-05 09:28:28
+BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-05 21:04:52
 \.
 
 
@@ -349,10 +407,9 @@ BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires
 --
 
 COPY public.subscription_plans (id, name, duration_days, price_idr, description, is_active, created_at) FROM stdin;
-1	1 Hari	1	15000	Akses semua fitur selama 1 hari	t	2026-01-05 13:59:46.766791
-2	3 Hari	3	35000	Akses semua fitur selama 3 hari	t	2026-01-05 13:59:46.766791
-3	1 Minggu	7	65000	Akses semua fitur selama 7 hari	t	2026-01-05 13:59:46.766791
-4	1 Bulan	30	199000	Akses semua fitur selama 30 hari	t	2026-01-05 13:59:46.766791
+1	1 Hari	1	15000	Akses premium selama 1 hari	t	2026-01-05 13:59:46.766791
+2	7 Hari	7	80000	Akses premium selama 7 hari	t	2026-01-05 13:59:46.766791
+3	1 Bulan	30	270000	Akses premium selama 30 hari	t	2026-01-05 13:59:46.766791
 \.
 
 
@@ -361,7 +418,7 @@ COPY public.subscription_plans (id, name, duration_days, price_idr, description,
 --
 
 COPY public.subscriptions (id, user_id, plan_id, room_id, xmaker_room_id, room_locked, status, expired_at, last_active, created_at, started_at) FROM stdin;
-1	1	1	1	\N	f	active	2026-01-06 14:15:33.996	2026-01-06 09:28:27.164734	2026-01-05 14:15:33.99626	2026-01-05 14:15:33.99626
+1	1	1	\N	\N	f	expired	2026-01-06 14:15:33.996	2026-01-06 11:02:56.170237	2026-01-05 14:15:33.99626	2026-01-05 14:15:33.99626
 \.
 
 
@@ -369,8 +426,8 @@ COPY public.subscriptions (id, user_id, plan_id, room_id, xmaker_room_id, room_l
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.users (id, username, email, password_hash, freepik_api_key, created_at, updated_at) FROM stdin;
-1	lala	lalapou@gmail.com	$2b$12$wwckK1QWm7qY53L3pUazmeg/jP23oanc7IeDnJGOKzlEO6dFCml.q	\N	2026-01-05 14:13:43.847111	2026-01-05 14:13:43.847111
+COPY public.users (id, username, email, password_hash, freepik_api_key, created_at, updated_at, is_admin, subscription_expired_at) FROM stdin;
+1	lala	lalapou@gmail.com	$2b$12$wwckK1QWm7qY53L3pUazmeg/jP23oanc7IeDnJGOKzlEO6dFCml.q	\N	2026-01-05 14:13:43.847111	2026-01-05 14:13:43.847111	f	\N
 \.
 
 
@@ -398,6 +455,13 @@ COPY public.video_generation_tasks (id, task_id, xclip_api_key_id, user_id, mode
 COPY public.xclip_api_keys (id, user_id, api_key, label, status, requests_count, last_used_at, created_at) FROM stdin;
 1	1	xclip_HTi9CqpBmaxaRW1wKQ7yd7DArG3S2uSN	545745as	active	12	2026-01-05 18:35:32.17014	2026-01-05 14:15:43.488261
 \.
+
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.payments_id_seq', 1, false);
 
 
 --
@@ -440,6 +504,14 @@ SELECT pg_catalog.setval('public.video_generation_tasks_id_seq', 9, true);
 --
 
 SELECT pg_catalog.setval('public.xclip_api_keys_id_seq', 1, true);
+
+
+--
+-- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_pkey PRIMARY KEY (id);
 
 
 --
@@ -530,6 +602,14 @@ CREATE INDEX idx_session_expire ON public.sessions USING btree (expire);
 
 
 --
+-- Name: payments payments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subscriptions subscriptions_plan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -597,5 +677,5 @@ ALTER TABLE ONLY public.xclip_api_keys
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ne6X2s7c37K2vvhYdtkphFsCNFMyuDPXS2gTkuq8btmxfW8zvfQUDHIqe9a63or
+\unrestrict XM2wpNsuIm2PCAwe3ueTvZSKL4LGCGB1sL80yjmgtl3ul4dY2mSdzlenVkVJSpy
 

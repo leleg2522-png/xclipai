@@ -172,6 +172,17 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `GET /api/videogen/tasks/:taskId` - Check video generation status using Xclip API key
 - `GET /api/xclip-keys/tasks` - List user's video generation tasks
 
+### QRIS Payment (Manual Verification)
+- `POST /api/payments/submit` - Submit payment with proof image (FormData: proof, planId)
+- `GET /api/payments/my` - Get user's payment history
+- `GET /api/subscription/my-status` - Get simplified subscription status from users table
+
+### Admin Dashboard
+- `GET /api/admin/check` - Check if current user is admin
+- `GET /api/admin/payments` - Get all payments (filter by ?status=pending|approved|rejected)
+- `POST /api/admin/payments/:id/approve` - Approve payment and activate subscription
+- `POST /api/admin/payments/:id/reject` - Reject payment with optional reason
+
 ### Utility
 - `GET /api/health` - Health check
 
@@ -197,6 +208,12 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
+- January 6, 2026: Implemented manual QRIS payment system with payment proof upload
+- January 6, 2026: Added admin dashboard for payment verification (approve/reject)
+- January 6, 2026: Added is_admin column to users table for admin role management
+- January 6, 2026: Created payments table for tracking payment submissions
+- January 6, 2026: Updated subscription plans to 3 tiers (1 Hari Rp15.000, 7 Hari Rp80.000, 1 Bulan Rp270.000)
+- January 6, 2026: Added automatic MAINTENANCE mode for rooms without configured API keys
 - January 5, 2026: Complete premium UI redesign - modern SaaS-style design system with glassmorphism, improved typography, and smooth animations
 - January 5, 2026: Upgraded to futuristic dark theme with neon glow effects, cyber grid background, and animated logo
 - January 5, 2026: Updated logo to modern "X" monogram style with "PRO" badge and animated gradient border

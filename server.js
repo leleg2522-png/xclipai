@@ -156,6 +156,34 @@ const upload = multer({
   limits: { fileSize: 1024 * 1024 * 1024 }
 });
 
+// Storage for payment proof images
+const paymentProofStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const proofDir = path.join(__dirname, 'uploads', 'payment_proofs');
+    if (!fs.existsSync(proofDir)) {
+      fs.mkdirSync(proofDir, { recursive: true });
+    }
+    cb(null, proofDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `proof-${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
+});
+
+const uploadPaymentProof = multer({
+  storage: paymentProofStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max for proof images
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Hanya file gambar (JPG, PNG, WEBP) yang diperbolehkan'));
+    }
+  }
+});
+
 const jobs = new Map();
 
 app.post('/api/upload', upload.single('video'), async (req, res) => {
@@ -1837,6 +1865,304 @@ app.get('/api/subscription/plans', async (req, res) => {
   }
 });
 
+// ==================== QRIS PAYMENT API ====================
+
+// Submit payment with proof
+app.post('/api/payments/submit', uploadPaymentProof.single('proof'), async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'Bukti pembayaran wajib diupload' });
+    }
+    
+    const { planId } = req.body;
+    if (!planId) {
+      return res.status(400).json({ error: 'Pilih paket langganan' });
+    }
+    
+    // Get plan details
+    const planResult = await pool.query(
+      'SELECT * FROM subscription_plans WHERE id = $1 AND is_active = true',
+      [planId]
+    );
+    
+    if (planResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Paket tidak ditemukan' });
+    }
+    
+    const plan = planResult.rows[0];
+    const proofImage = `/uploads/payment_proofs/${req.file.filename}`;
+    
+    // Check if user has pending payment
+    const pendingCheck = await pool.query(
+      'SELECT id FROM payments WHERE user_id = $1 AND status = $2',
+      [req.session.userId, 'pending']
+    );
+    
+    if (pendingCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Anda masih memiliki pembayaran yang menunggu verifikasi' });
+    }
+    
+    // Create payment record
+    const result = await pool.query(`
+      INSERT INTO payments (user_id, package, amount, status, proof_image)
+      VALUES ($1, $2, $3, 'pending', $4)
+      RETURNING *
+    `, [req.session.userId, plan.name, plan.price_idr, proofImage]);
+    
+    res.json({
+      success: true,
+      message: 'Pembayaran berhasil disubmit. Menunggu verifikasi admin.',
+      payment: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Submit payment error:', error);
+    res.status(500).json({ error: 'Gagal submit pembayaran' });
+  }
+});
+
+// Get user's payment history
+app.get('/api/payments/my', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    }
+    
+    const result = await pool.query(`
+      SELECT * FROM payments 
+      WHERE user_id = $1 
+      ORDER BY created_at DESC
+    `, [req.session.userId]);
+    
+    res.json({ payments: result.rows });
+  } catch (error) {
+    console.error('Get payments error:', error);
+    res.status(500).json({ error: 'Gagal mengambil riwayat pembayaran' });
+  }
+});
+
+// Get user's current subscription status (simplified)
+app.get('/api/subscription/my-status', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.json({ hasSubscription: false });
+    }
+    
+    const result = await pool.query(
+      'SELECT subscription_expired_at FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ hasSubscription: false });
+    }
+    
+    const user = result.rows[0];
+    const expiredAt = user.subscription_expired_at;
+    
+    if (!expiredAt || new Date(expiredAt) < new Date()) {
+      return res.json({ hasSubscription: false });
+    }
+    
+    const remainingMs = new Date(expiredAt) - new Date();
+    res.json({
+      hasSubscription: true,
+      expiredAt: expiredAt,
+      remainingSeconds: Math.floor(remainingMs / 1000)
+    });
+  } catch (error) {
+    console.error('Get subscription status error:', error);
+    res.status(500).json({ error: 'Gagal mengambil status langganan' });
+  }
+});
+
+// ==================== ADMIN PAYMENT API ====================
+
+// Middleware to check if user is admin
+const requireAdmin = async (req, res, next) => {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    }
+    
+    const result = await pool.query(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    
+    if (result.rows.length === 0 || !result.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Akses ditolak. Anda bukan admin.' });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Admin check error:', error);
+    res.status(500).json({ error: 'Gagal verifikasi admin' });
+  }
+};
+
+// Get all pending payments (admin only)
+app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+    let whereClause = '';
+    
+    if (status) {
+      whereClause = 'WHERE p.status = $1';
+    }
+    
+    const query = `
+      SELECT p.*, u.username, u.email
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      ${status ? 'WHERE p.status = $1' : ''}
+      ORDER BY p.created_at DESC
+    `;
+    
+    const result = status 
+      ? await pool.query(query, [status])
+      : await pool.query(query);
+    
+    res.json({ payments: result.rows });
+  } catch (error) {
+    console.error('Get admin payments error:', error);
+    res.status(500).json({ error: 'Gagal mengambil daftar pembayaran' });
+  }
+});
+
+// Approve payment (admin only)
+app.post('/api/admin/payments/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get payment details
+    const paymentResult = await pool.query(
+      'SELECT * FROM payments WHERE id = $1',
+      [id]
+    );
+    
+    if (paymentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Pembayaran tidak ditemukan' });
+    }
+    
+    const payment = paymentResult.rows[0];
+    
+    if (payment.status !== 'pending') {
+      return res.status(400).json({ error: 'Pembayaran sudah diproses sebelumnya' });
+    }
+    
+    // Get plan duration based on package name
+    const planResult = await pool.query(
+      'SELECT duration_days FROM subscription_plans WHERE name = $1',
+      [payment.package]
+    );
+    
+    if (planResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Paket tidak ditemukan' });
+    }
+    
+    const durationDays = planResult.rows[0].duration_days;
+    
+    // Calculate new expiry date
+    // If user already has active subscription, extend from current expiry
+    const userResult = await pool.query(
+      'SELECT subscription_expired_at FROM users WHERE id = $1',
+      [payment.user_id]
+    );
+    
+    let baseDate = new Date();
+    if (userResult.rows[0]?.subscription_expired_at) {
+      const currentExpiry = new Date(userResult.rows[0].subscription_expired_at);
+      if (currentExpiry > baseDate) {
+        baseDate = currentExpiry;
+      }
+    }
+    
+    const newExpiry = new Date(baseDate.getTime() + (durationDays * 24 * 60 * 60 * 1000));
+    
+    // Update payment status
+    await pool.query(
+      'UPDATE payments SET status = $1, updated_at = NOW() WHERE id = $2',
+      ['approved', id]
+    );
+    
+    // Update user subscription
+    await pool.query(
+      'UPDATE users SET subscription_expired_at = $1 WHERE id = $2',
+      [newExpiry, payment.user_id]
+    );
+    
+    res.json({
+      success: true,
+      message: 'Pembayaran berhasil di-approve',
+      expiredAt: newExpiry
+    });
+  } catch (error) {
+    console.error('Approve payment error:', error);
+    res.status(500).json({ error: 'Gagal approve pembayaran' });
+  }
+});
+
+// Reject payment (admin only)
+app.post('/api/admin/payments/:id/reject', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    // Get payment details
+    const paymentResult = await pool.query(
+      'SELECT * FROM payments WHERE id = $1',
+      [id]
+    );
+    
+    if (paymentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Pembayaran tidak ditemukan' });
+    }
+    
+    const payment = paymentResult.rows[0];
+    
+    if (payment.status !== 'pending') {
+      return res.status(400).json({ error: 'Pembayaran sudah diproses sebelumnya' });
+    }
+    
+    // Update payment status
+    await pool.query(
+      'UPDATE payments SET status = $1, admin_notes = $2, updated_at = NOW() WHERE id = $3',
+      ['rejected', reason || 'Ditolak oleh admin', id]
+    );
+    
+    res.json({
+      success: true,
+      message: 'Pembayaran ditolak'
+    });
+  } catch (error) {
+    console.error('Reject payment error:', error);
+    res.status(500).json({ error: 'Gagal reject pembayaran' });
+  }
+});
+
+// Check if current user is admin
+app.get('/api/admin/check', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.json({ isAdmin: false });
+    }
+    
+    const result = await pool.query(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    
+    res.json({ isAdmin: result.rows[0]?.is_admin || false });
+  } catch (error) {
+    console.error('Admin check error:', error);
+    res.json({ isAdmin: false });
+  }
+});
+
 // ==================== ROOM MANAGER API ====================
 
 // Get all rooms with status (filter by feature: videogen or xmaker)
@@ -1893,6 +2219,29 @@ app.get('/api/subscription/status', async (req, res) => {
       return res.json({ hasSubscription: false, message: 'Not logged in' });
     }
     
+    // Check subscription_expired_at from users table (QRIS payment system)
+    const userResult = await pool.query(
+      'SELECT subscription_expired_at FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    
+    if (userResult.rows.length > 0 && userResult.rows[0].subscription_expired_at) {
+      const expiredAt = new Date(userResult.rows[0].subscription_expired_at);
+      if (expiredAt > new Date()) {
+        const remainingSeconds = Math.floor((expiredAt - new Date()) / 1000);
+        return res.json({
+          hasSubscription: true,
+          subscription: {
+            expiredAt: expiredAt,
+            remainingSeconds: remainingSeconds,
+            planName: 'QRIS Subscription',
+            status: 'active'
+          }
+        });
+      }
+    }
+    
+    // Fallback: Check old subscriptions table
     const result = await pool.query(`
       SELECT s.*, 
              r.name as room_name, r.status as room_status,

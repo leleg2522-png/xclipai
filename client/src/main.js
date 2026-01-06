@@ -79,6 +79,20 @@ const state = {
     recentPurchases: [],
     showPurchaseAnimation: false,
     currentPurchase: null
+  },
+  payment: {
+    showModal: false,
+    selectedPlan: null,
+    proofFile: null,
+    isSubmitting: false,
+    myPayments: [],
+    pendingPayment: null
+  },
+  admin: {
+    isAdmin: false,
+    payments: [],
+    isLoading: false,
+    filter: 'pending'
   }
 };
 
@@ -203,6 +217,7 @@ async function checkAuth() {
       await fetchRooms();
       await fetchSubscriptionStatus();
       await fetchXclipKeys();
+      await checkAdminStatus();
     }
     
     render();
@@ -210,6 +225,127 @@ async function checkAuth() {
     console.error('Auth check error:', error);
     state.auth.isLoading = false;
     render();
+  }
+}
+
+async function checkAdminStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/check`, { credentials: 'include' });
+    const data = await response.json();
+    state.admin.isAdmin = data.isAdmin || false;
+  } catch (error) {
+    console.error('Admin check error:', error);
+    state.admin.isAdmin = false;
+  }
+}
+
+async function fetchMyPayments() {
+  try {
+    const response = await fetch(`${API_URL}/api/payments/my`, { credentials: 'include' });
+    const data = await response.json();
+    state.payment.myPayments = data.payments || [];
+  } catch (error) {
+    console.error('Fetch payments error:', error);
+    state.payment.myPayments = [];
+  }
+}
+
+async function submitPayment() {
+  if (!state.payment.proofFile || !state.payment.selectedPlan) return;
+  
+  try {
+    state.payment.isSubmitting = true;
+    render();
+    
+    const formData = new FormData();
+    formData.append('proof', state.payment.proofFile);
+    formData.append('planId', state.payment.selectedPlan);
+    
+    const response = await fetch(`${API_URL}/api/payments/submit`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Pembayaran berhasil disubmit! Menunggu verifikasi admin.', 'success');
+      state.payment.showModal = false;
+      state.payment.proofFile = null;
+      state.payment.selectedPlan = null;
+    } else {
+      showToast(data.error || 'Gagal submit pembayaran', 'error');
+    }
+  } catch (error) {
+    console.error('Submit payment error:', error);
+    showToast('Gagal submit pembayaran', 'error');
+  } finally {
+    state.payment.isSubmitting = false;
+    render();
+  }
+}
+
+async function fetchAdminPayments() {
+  try {
+    state.admin.isLoading = true;
+    render();
+    
+    const filter = state.admin.filter === 'all' ? '' : `?status=${state.admin.filter}`;
+    const response = await fetch(`${API_URL}/api/admin/payments${filter}`, { credentials: 'include' });
+    const data = await response.json();
+    state.admin.payments = data.payments || [];
+  } catch (error) {
+    console.error('Fetch admin payments error:', error);
+    state.admin.payments = [];
+  } finally {
+    state.admin.isLoading = false;
+    render();
+  }
+}
+
+async function approvePayment(paymentId) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/payments/${paymentId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Pembayaran berhasil di-approve!', 'success');
+      await fetchAdminPayments();
+    } else {
+      showToast(data.error || 'Gagal approve pembayaran', 'error');
+    }
+  } catch (error) {
+    console.error('Approve payment error:', error);
+    showToast('Gagal approve pembayaran', 'error');
+  }
+}
+
+async function rejectPayment(paymentId, reason) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/payments/${paymentId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ reason })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Pembayaran ditolak', 'success');
+      await fetchAdminPayments();
+    } else {
+      showToast(data.error || 'Gagal reject pembayaran', 'error');
+    }
+  } catch (error) {
+    console.error('Reject payment error:', error);
+    showToast('Gagal reject pembayaran', 'error');
   }
 }
 
@@ -700,6 +836,172 @@ function renderFeatureLock() {
   `;
 }
 
+function renderPaymentModal() {
+  if (!state.payment.showModal || !state.payment.selectedPlan) return '';
+  
+  const plan = state.pricing.plans.find(p => p.id === state.payment.selectedPlan);
+  if (!plan) return '';
+  
+  return `
+    <div class="modal-overlay" id="paymentModalOverlay">
+      <div class="auth-modal payment-modal">
+        <button class="modal-close" id="closePaymentModal">&times;</button>
+        <div class="auth-header">
+          <h2>Pembayaran QRIS</h2>
+          <p>Scan QRIS untuk melakukan pembayaran</p>
+        </div>
+        
+        <div class="payment-details">
+          <div class="payment-plan-info">
+            <h3>${plan.name}</h3>
+            <div class="payment-amount">${formatPrice(plan.price_idr)}</div>
+          </div>
+          
+          <div class="qris-container">
+            <img src="/uploads/qris.jpg" alt="QRIS" class="qris-image" onerror="this.src='https://via.placeholder.com/300x300?text=QRIS+Not+Found'">
+            <p class="qris-note">Scan menggunakan aplikasi e-wallet atau mobile banking</p>
+          </div>
+          
+          <div class="payment-instructions">
+            <h4>Instruksi Pembayaran:</h4>
+            <ol>
+              <li>Scan QRIS di atas menggunakan aplikasi pembayaran Anda</li>
+              <li>Pastikan nominal sesuai: <strong>${formatPrice(plan.price_idr)}</strong></li>
+              <li>Selesaikan pembayaran</li>
+              <li>Screenshot bukti pembayaran</li>
+              <li>Upload bukti pembayaran di bawah</li>
+            </ol>
+          </div>
+          
+          <div class="proof-upload-section">
+            <label class="upload-label">
+              <input type="file" id="paymentProofInput" accept="image/*" hidden>
+              <div class="upload-box ${state.payment.proofFile ? 'has-file' : ''}">
+                ${state.payment.proofFile ? `
+                  <img src="${URL.createObjectURL(state.payment.proofFile)}" alt="Proof" class="proof-preview">
+                  <span class="file-name">${state.payment.proofFile.name}</span>
+                ` : `
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <span>Upload Bukti Pembayaran</span>
+                `}
+              </div>
+            </label>
+          </div>
+          
+          <button class="btn btn-primary btn-lg" id="submitPaymentBtn" 
+            ${!state.payment.proofFile || state.payment.isSubmitting ? 'disabled' : ''}>
+            ${state.payment.isSubmitting ? 'Mengirim...' : 'Saya Sudah Bayar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMyPaymentsModal() {
+  if (!state.payment.pendingPayment && state.payment.myPayments.length === 0) return '';
+  
+  const showModal = state.payment.pendingPayment !== null;
+  if (!showModal) return '';
+  
+  return `
+    <div class="modal-overlay" id="myPaymentsModalOverlay">
+      <div class="auth-modal my-payments-modal">
+        <button class="modal-close" id="closeMyPaymentsModal">&times;</button>
+        <div class="auth-header">
+          <h2>Riwayat Pembayaran</h2>
+          <p>Lihat status pembayaran Anda</p>
+        </div>
+        
+        <div class="payments-list">
+          ${state.payment.myPayments.length === 0 ? `
+            <p class="no-payments">Belum ada riwayat pembayaran.</p>
+          ` : state.payment.myPayments.map(payment => `
+            <div class="payment-card status-${payment.status}">
+              <div class="payment-header">
+                <span class="payment-package">${payment.package}</span>
+                <span class="payment-status status-badge-${payment.status}">
+                  ${payment.status === 'pending' ? 'Menunggu Verifikasi' : 
+                    payment.status === 'approved' ? 'Berhasil' : 'Ditolak'}
+                </span>
+              </div>
+              <div class="payment-info">
+                <span class="payment-amount">${formatPrice(payment.amount)}</span>
+                <span class="payment-date">${new Date(payment.created_at).toLocaleDateString('id-ID')}</span>
+              </div>
+              ${payment.admin_notes ? `<p class="payment-notes">${payment.admin_notes}</p>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminPage() {
+  if (!state.admin.isAdmin) return '';
+  
+  return `
+    <div class="container admin-page">
+      <div class="admin-header">
+        <h1>Admin Dashboard</h1>
+        <p>Verifikasi pembayaran user</p>
+        <button class="btn btn-secondary" id="backToMainBtn">Kembali</button>
+      </div>
+      
+      <div class="admin-filters">
+        <button class="filter-btn ${state.admin.filter === 'all' ? 'active' : ''}" data-filter="all">Semua</button>
+        <button class="filter-btn ${state.admin.filter === 'pending' ? 'active' : ''}" data-filter="pending">Menunggu</button>
+        <button class="filter-btn ${state.admin.filter === 'approved' ? 'active' : ''}" data-filter="approved">Approved</button>
+        <button class="filter-btn ${state.admin.filter === 'rejected' ? 'active' : ''}" data-filter="rejected">Rejected</button>
+        <button class="btn btn-secondary refresh-btn" id="refreshAdminPayments">Refresh</button>
+      </div>
+      
+      <div class="admin-payments-list">
+        ${state.admin.isLoading ? `
+          <div class="loading-spinner">Loading...</div>
+        ` : state.admin.payments.length === 0 ? `
+          <div class="no-payments">Tidak ada pembayaran ${state.admin.filter !== 'all' ? 'dengan status ini' : ''}</div>
+        ` : state.admin.payments.map(payment => `
+          <div class="admin-payment-card">
+            <div class="payment-user-info">
+              <strong>${payment.username}</strong>
+              <span>${payment.email}</span>
+            </div>
+            <div class="payment-details">
+              <span class="package">${payment.package}</span>
+              <span class="amount">${formatPrice(payment.amount)}</span>
+              <span class="date">${new Date(payment.created_at).toLocaleString('id-ID')}</span>
+            </div>
+            <div class="payment-proof">
+              <a href="${payment.proof_image}" target="_blank" class="view-proof-btn">
+                <img src="${payment.proof_image}" alt="Bukti" class="proof-thumbnail">
+                Lihat Bukti
+              </a>
+            </div>
+            <div class="payment-status">
+              <span class="status-badge-${payment.status}">
+                ${payment.status === 'pending' ? 'Menunggu' : 
+                  payment.status === 'approved' ? 'Approved' : 'Rejected'}
+              </span>
+            </div>
+            ${payment.status === 'pending' ? `
+              <div class="payment-actions">
+                <button class="btn btn-success approve-btn" data-payment-id="${payment.id}">ACC</button>
+                <button class="btn btn-danger reject-btn" data-payment-id="${payment.id}">Tolak</button>
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 async function fetchXclipKeys() {
   try {
     const response = await fetch(`${API_URL}/api/xclip-keys`, { credentials: 'include' });
@@ -959,6 +1261,21 @@ function render() {
                   </svg>
                   Xclip API Keys
                 </button>
+                <button class="dropdown-item" id="myPaymentsBtn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                    <line x1="1" y1="10" x2="23" y2="10"/>
+                  </svg>
+                  Riwayat Pembayaran
+                </button>
+                ${state.admin.isAdmin ? `
+                <button class="dropdown-item admin" id="adminDashboardBtn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  Admin Dashboard
+                </button>
+                ` : ''}
                 <button class="dropdown-item logout" id="logoutBtn">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -988,10 +1305,16 @@ function render() {
     ${renderXmakerRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
+    ${renderPaymentModal()}
+    ${renderMyPaymentsModal()}
     
     <main class="main-content">
-      ${renderFeatureLock()}
-      ${state.currentPage === 'video' ? renderVideoPage() : state.currentPage === 'xmaker' ? renderXMakerPage() : state.currentPage === 'videogen' ? renderVideoGenPage() : renderChatPage()}
+      ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
+      ${state.currentPage === 'video' ? renderVideoPage() : 
+        state.currentPage === 'xmaker' ? renderXMakerPage() : 
+        state.currentPage === 'videogen' ? renderVideoGenPage() : 
+        state.currentPage === 'admin' ? '' :
+        state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
     </main>
     
     <footer class="footer">
@@ -2605,7 +2928,119 @@ function attachEventListeners() {
     btn.addEventListener('click', (e) => {
       const planId = parseInt(e.currentTarget.dataset.planId);
       state.pricing.selectedPlan = planId;
-      buySubscription(planId);
+      state.payment.selectedPlan = planId;
+      state.pricing.showModal = false;
+      state.payment.showModal = true;
+      state.payment.proofFile = null;
+      render();
+    });
+  });
+
+  // Payment modal event listeners
+  const closePaymentModal = document.getElementById('closePaymentModal');
+  const paymentModalOverlay = document.getElementById('paymentModalOverlay');
+  if (closePaymentModal) {
+    closePaymentModal.addEventListener('click', () => {
+      state.payment.showModal = false;
+      state.payment.proofFile = null;
+      render();
+    });
+  }
+  if (paymentModalOverlay) {
+    paymentModalOverlay.addEventListener('click', (e) => {
+      if (e.target === paymentModalOverlay) {
+        state.payment.showModal = false;
+        state.payment.proofFile = null;
+        render();
+      }
+    });
+  }
+  
+  const paymentProofInput = document.getElementById('paymentProofInput');
+  if (paymentProofInput) {
+    paymentProofInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        state.payment.proofFile = file;
+        render();
+      }
+    });
+  }
+  
+  const submitPaymentBtn = document.getElementById('submitPaymentBtn');
+  if (submitPaymentBtn) {
+    submitPaymentBtn.addEventListener('click', submitPayment);
+  }
+  
+  // My Payments event listeners
+  const myPaymentsBtn = document.getElementById('myPaymentsBtn');
+  if (myPaymentsBtn) {
+    myPaymentsBtn.addEventListener('click', async () => {
+      await fetchMyPayments();
+      state.payment.pendingPayment = true;
+      render();
+    });
+  }
+  
+  const closeMyPaymentsModal = document.getElementById('closeMyPaymentsModal');
+  const myPaymentsModalOverlay = document.getElementById('myPaymentsModalOverlay');
+  if (closeMyPaymentsModal) {
+    closeMyPaymentsModal.addEventListener('click', () => {
+      state.payment.pendingPayment = null;
+      render();
+    });
+  }
+  if (myPaymentsModalOverlay) {
+    myPaymentsModalOverlay.addEventListener('click', (e) => {
+      if (e.target === myPaymentsModalOverlay) {
+        state.payment.pendingPayment = null;
+        render();
+      }
+    });
+  }
+  
+  // Admin dashboard event listeners
+  const adminDashboardBtn = document.getElementById('adminDashboardBtn');
+  if (adminDashboardBtn) {
+    adminDashboardBtn.addEventListener('click', async () => {
+      state.currentPage = 'admin';
+      await fetchAdminPayments();
+      render();
+    });
+  }
+  
+  const backToMainBtn = document.getElementById('backToMainBtn');
+  if (backToMainBtn) {
+    backToMainBtn.addEventListener('click', () => {
+      state.currentPage = 'video';
+      render();
+    });
+  }
+  
+  const refreshAdminPayments = document.getElementById('refreshAdminPayments');
+  if (refreshAdminPayments) {
+    refreshAdminPayments.addEventListener('click', fetchAdminPayments);
+  }
+  
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      state.admin.filter = e.currentTarget.dataset.filter;
+      fetchAdminPayments();
+    });
+  });
+  
+  document.querySelectorAll('.approve-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const paymentId = parseInt(e.currentTarget.dataset.paymentId);
+      approvePayment(paymentId);
+    });
+  });
+  
+  document.querySelectorAll('.reject-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const paymentId = parseInt(e.currentTarget.dataset.paymentId);
+      const reason = prompt('Alasan penolakan (opsional):');
+      rejectPayment(paymentId, reason);
     });
   });
 
