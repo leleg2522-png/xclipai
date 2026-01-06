@@ -3621,6 +3621,8 @@ textarea.form-input {
 /* Payment Modal */
 .payment-modal {
   max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .payment-details {
