@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict AqYkK4HHjF4ySwm9dGQk3PVmu0c9AdxCrhLUdx3xJw4Eq0arkks7cwT64zpgSxW
+\restrict ne6X2s7c37K2vvhYdtkphFsCNFMyuDPXS2gTkuq8btmxfW8zvfQUDHIqe9a63or
 
 -- Dumped from database version 16.10
 -- Dumped by pg_dump version 16.10
@@ -329,9 +329,9 @@ ALTER TABLE ONLY public.xclip_api_keys ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 COPY public.rooms (id, name, max_users, active_users, status, provider_key_name, created_at, provider, key_name_1, key_name_2, key_name_3) FROM stdin;
-3	Room 3	10	0	OPEN	FREEPIK_API_KEY_3	2026-01-05 13:59:46.766791	freepik	ROOM3_FREEPIK_KEY_1	ROOM3_FREEPIK_KEY_2	ROOM3_FREEPIK_KEY_3
-2	Room 2	10	0	OPEN	FREEPIK_API_KEY_2	2026-01-05 13:59:46.766791	freepik	ROOM2_FREEPIK_KEY_1	ROOM2_FREEPIK_KEY_2	ROOM2_FREEPIK_KEY_3
-1	Room 1	10	1	OPEN	FREEPIK_API_KEY_1	2026-01-05 13:59:46.766791	freepik	ROOM1_FREEPIK_KEY_1	ROOM1_FREEPIK_KEY_2	ROOM1_FREEPIK_KEY_3
+3	Room 3	5	0	OPEN	FREEPIK_API_KEY_3	2026-01-05 13:59:46.766791	freepik	ROOM3_FREEPIK_KEY_1	ROOM3_FREEPIK_KEY_2	ROOM3_FREEPIK_KEY_3
+2	Room 2	5	0	OPEN	FREEPIK_API_KEY_2	2026-01-05 13:59:46.766791	freepik	ROOM2_FREEPIK_KEY_1	ROOM2_FREEPIK_KEY_2	ROOM2_FREEPIK_KEY_3
+1	Room 1	5	1	OPEN	FREEPIK_API_KEY_1	2026-01-05 13:59:46.766791	freepik	ROOM1_FREEPIK_KEY_1	ROOM1_FREEPIK_KEY_2	ROOM1_FREEPIK_KEY_3
 \.
 
 
@@ -340,7 +340,7 @@ COPY public.rooms (id, name, max_users, active_users, status, provider_key_name,
 --
 
 COPY public.sessions (sid, sess, expire) FROM stdin;
-BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-04 22:40:49
+BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-05 09:28:28
 \.
 
 
@@ -361,7 +361,7 @@ COPY public.subscription_plans (id, name, duration_days, price_idr, description,
 --
 
 COPY public.subscriptions (id, user_id, plan_id, room_id, xmaker_room_id, room_locked, status, expired_at, last_active, created_at, started_at) FROM stdin;
-1	1	1	1	\N	f	active	2026-01-06 14:15:33.996	2026-01-05 22:40:48.444913	2026-01-05 14:15:33.99626	2026-01-05 14:15:33.99626
+1	1	1	1	\N	f	active	2026-01-06 14:15:33.996	2026-01-06 09:28:27.164734	2026-01-05 14:15:33.99626	2026-01-05 14:15:33.99626
 \.
 
 
@@ -597,5 +597,5 @@ ALTER TABLE ONLY public.xclip_api_keys
 -- PostgreSQL database dump complete
 --
 
-\unrestrict AqYkK4HHjF4ySwm9dGQk3PVmu0c9AdxCrhLUdx3xJw4Eq0arkks7cwT64zpgSxW
+\unrestrict ne6X2s7c37K2vvhYdtkphFsCNFMyuDPXS2gTkuq8btmxfW8zvfQUDHIqe9a63or
 
