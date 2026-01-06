@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict XM2wpNsuIm2PCAwe3ueTvZSKL4LGCGB1sL80yjmgtl3ul4dY2mSdzlenVkVJSpy
+\restrict jHbFthYLUBsYAbehfn7UAdvXRiEDmdXsaDEWp5yXNlvk9LhlDfAAAJMbvcLJa82
 
 -- Dumped from database version 16.10
 -- Dumped by pg_dump version 16.10
@@ -379,6 +379,7 @@ ALTER TABLE ONLY public.xclip_api_keys ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 COPY public.payments (id, user_id, package, amount, status, proof_image, admin_notes, created_at, updated_at) FROM stdin;
+1	1	1 Hari	15000	approved	/uploads/payment_proofs/proof-4f3d8409-e5b3-4dec-9818-108049916c02-1767735173085.jpg	\N	2026-01-06 21:32:54.146004	2026-01-06 21:33:16.00262
 \.
 
 
@@ -398,7 +399,7 @@ COPY public.rooms (id, name, max_users, active_users, status, provider_key_name,
 --
 
 COPY public.sessions (sid, sess, expire) FROM stdin;
-BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-05 21:04:52
+BqqyKBYl1FbCRIQ0MYUmLKNzO2WLQIbH	{"cookie":{"originalMaxAge":2592000000,"expires":"2026-02-04T14:13:43.874Z","secure":false,"httpOnly":true,"path":"/"},"userId":1}	2026-02-05 21:34:25
 \.
 
 
@@ -427,7 +428,7 @@ COPY public.subscriptions (id, user_id, plan_id, room_id, xmaker_room_id, room_l
 --
 
 COPY public.users (id, username, email, password_hash, freepik_api_key, created_at, updated_at, is_admin, subscription_expired_at) FROM stdin;
-1	lala	lalapou@gmail.com	$2b$12$wwckK1QWm7qY53L3pUazmeg/jP23oanc7IeDnJGOKzlEO6dFCml.q	\N	2026-01-05 14:13:43.847111	2026-01-05 14:13:43.847111	f	\N
+1	lala	lalapou@gmail.com	$2b$12$wwckK1QWm7qY53L3pUazmeg/jP23oanc7IeDnJGOKzlEO6dFCml.q	\N	2026-01-05 14:13:43.847111	2026-01-05 14:13:43.847111	t	2026-01-07 21:33:16.002
 \.
 
 
@@ -461,7 +462,7 @@ COPY public.xclip_api_keys (id, user_id, api_key, label, status, requests_count,
 -- Name: payments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.payments_id_seq', 1, false);
+SELECT pg_catalog.setval('public.payments_id_seq', 1, true);
 
 
 --
@@ -677,5 +678,5 @@ ALTER TABLE ONLY public.xclip_api_keys
 -- PostgreSQL database dump complete
 --
 
-\unrestrict XM2wpNsuIm2PCAwe3ueTvZSKL4LGCGB1sL80yjmgtl3ul4dY2mSdzlenVkVJSpy
+\unrestrict jHbFthYLUBsYAbehfn7UAdvXRiEDmdXsaDEWp5yXNlvk9LhlDfAAAJMbvcLJa82
 
