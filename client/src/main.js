@@ -858,7 +858,7 @@ function renderPaymentModal() {
           </div>
           
           <div class="qris-container">
-            <img src="/uploads/qris.jpg" alt="QRIS" class="qris-image" onerror="this.src='https://via.placeholder.com/300x300?text=QRIS+Not+Found'">
+            <img src="/assets/qris.jpg" alt="QRIS" class="qris-image" onerror="this.src='https://via.placeholder.com/300x300?text=QRIS+Not+Found'">
             <p class="qris-note">Scan menggunakan aplikasi e-wallet atau mobile banking</p>
           </div>
           
