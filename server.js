@@ -2591,6 +2591,17 @@ app.get('/{*splat}', (req, res) => {
 // Initialize database tables
 async function initDatabase() {
   try {
+    // Create sessions table for express-session (required for login)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        sid VARCHAR NOT NULL COLLATE "default",
+        sess JSON NOT NULL,
+        expire TIMESTAMP(6) NOT NULL,
+        CONSTRAINT sessions_pkey PRIMARY KEY (sid)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS sessions_expire_idx ON sessions (expire)`);
+    
     // Create subscription_plans table if not exists
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscription_plans (
