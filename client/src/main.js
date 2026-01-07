@@ -857,15 +857,68 @@ function renderPricingModal() {
 }
 
 function renderFeatureLock() {
-  if (!state.auth.user || state.roomManager.hasSubscription || state.admin.isAdmin) return '';
+  // Admin bypasses all locks
+  if (state.admin.isAdmin) return '';
   
+  // User logged in with subscription - no lock
+  if (state.auth.user && state.roomManager.hasSubscription) return '';
+  
+  // Not logged in - show login prompt
+  if (!state.auth.user) {
+    return `
+      <div class="feature-lock-overlay">
+        <div class="lock-content">
+          <div class="xclip-ai-animation">
+            <div class="ai-logo-container">
+              <div class="ai-ring ring-1"></div>
+              <div class="ai-ring ring-2"></div>
+              <div class="ai-ring ring-3"></div>
+              <div class="ai-core">X</div>
+            </div>
+            <div class="ai-particles">
+              <span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <h3 class="lock-title">Xclip AI</h3>
+          <p class="lock-subtitle">Platform AI Creative Suite Terlengkap</p>
+          <p class="lock-desc">Login atau daftar untuk mengakses semua fitur AI canggih</p>
+          <button class="btn btn-primary btn-lg pulse-btn" id="openLoginBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+            Login / Daftar
+          </button>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Logged in but no subscription - show subscription prompt
   return `
     <div class="feature-lock-overlay">
       <div class="lock-content">
-        <div class="lock-icon">🔒</div>
-        <h3>Fitur Terkunci</h3>
-        <p>Berlangganan untuk mengakses semua fitur Xclip</p>
-        <button class="btn btn-primary btn-lg" id="openPricingBtn">Lihat Paket Berlangganan</button>
+        <div class="xclip-ai-animation">
+          <div class="ai-logo-container">
+            <div class="ai-ring ring-1"></div>
+            <div class="ai-ring ring-2"></div>
+            <div class="ai-ring ring-3"></div>
+            <div class="ai-core">X</div>
+          </div>
+          <div class="ai-particles">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <h3 class="lock-title">Fitur Premium Terkunci</h3>
+        <p class="lock-subtitle">Halo, ${state.auth.user?.username || 'User'}!</p>
+        <p class="lock-desc">Berlangganan untuk mengakses semua fitur AI Xclip</p>
+        <button class="btn btn-primary btn-lg pulse-btn" id="openPricingBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+          </svg>
+          Lihat Paket Berlangganan
+        </button>
       </div>
     </div>
   `;
@@ -2931,6 +2984,16 @@ function attachEventListeners() {
       }
     });
   });
+
+  // Feature lock login button
+  const openLoginBtn = document.getElementById('openLoginBtn');
+  if (openLoginBtn) {
+    openLoginBtn.addEventListener('click', () => {
+      state.auth.showModal = true;
+      state.auth.isLogin = true;
+      render();
+    });
+  }
 
   // Pricing modal event listeners
   const openPricingBtn = document.getElementById('openPricingBtn');
