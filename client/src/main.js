@@ -213,11 +213,14 @@ async function checkAuth() {
     state.auth.isLoading = false;
     
     if (data.user) {
-      await fetchSubscriptionPlans();
-      await fetchRooms();
-      await fetchSubscriptionStatus();
-      await fetchXclipKeys();
-      await checkAdminStatus();
+      // Load all data in parallel for faster performance
+      await Promise.all([
+        fetchSubscriptionPlans(),
+        fetchRooms(),
+        fetchSubscriptionStatus(),
+        fetchXclipKeys(),
+        checkAdminStatus()
+      ]);
     }
     
     render();
@@ -461,10 +464,13 @@ async function handleLogin(email, password) {
       state.auth.showModal = false;
       showToast(`Selamat datang, ${data.user.username}!`, 'success');
       
-      await fetchRooms();
-      await fetchSubscriptionStatus();
-      await fetchXclipKeys();
-      await checkAdminStatus();
+      // Load all data in parallel for faster performance
+      await Promise.all([
+        fetchRooms(),
+        fetchSubscriptionStatus(),
+        fetchXclipKeys(),
+        checkAdminStatus()
+      ]);
       
       render();
     } else {
@@ -492,11 +498,13 @@ async function handleRegister(username, email, password) {
       state.auth.showModal = false;
       showToast(`Akun berhasil dibuat! Selamat datang, ${data.user.username}!`, 'success');
       
-      // Fetch new user's data (not previous user's data)
-      await fetchRooms();
-      await fetchSubscriptionStatus();
-      await fetchXclipKeys();
-      await checkAdminStatus();
+      // Load all data in parallel for faster performance
+      await Promise.all([
+        fetchRooms(),
+        fetchSubscriptionStatus(),
+        fetchXclipKeys(),
+        checkAdminStatus()
+      ]);
       
       render();
     } else {
