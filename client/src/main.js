@@ -3615,7 +3615,10 @@ async function pollVideoStatus(taskId, model) {
       const elapsedSec = attempts * 5;
       task.elapsed = elapsedSec;
       task.status = 'processing';
-      render();
+      // Only render if user is on videogen page to prevent glitches
+      if (state.currentPage === 'videogen') {
+        render();
+      }
       
       if (data.status === 'completed' && data.videoUrl) {
         task.status = 'completed';
