@@ -491,6 +491,13 @@ async function handleRegister(username, email, password) {
       state.auth.user = data.user;
       state.auth.showModal = false;
       showToast(`Akun berhasil dibuat! Selamat datang, ${data.user.username}!`, 'success');
+      
+      // Fetch new user's data (not previous user's data)
+      await fetchRooms();
+      await fetchSubscriptionStatus();
+      await fetchXclipKeys();
+      await checkAdminStatus();
+      
       render();
     } else {
       showToast(data.error || 'Registrasi gagal', 'error');
@@ -508,12 +515,31 @@ async function handleLogout() {
       credentials: 'include'
     });
     
+    // Reset ALL state to initial values
     state.auth.user = null;
+    state.auth.showModal = false;
+    state.auth.isLogin = true;
     state.videogen.customApiKey = '';
+    state.videogen.tasks = [];
     state.roomManager.hasSubscription = false;
     state.roomManager.subscription = null;
+    state.roomManager.rooms = [];
+    state.roomManager.xmakerRooms = [];
+    state.roomManager.currentRoom = null;
+    state.roomManager.xmakerCurrentRoom = null;
     state.pricing.remainingSeconds = 0;
     state.xclipKeys.keys = [];
+    state.xclipKeys.tasks = [];
+    state.admin.isAdmin = false;
+    state.admin.payments = [];
+    state.admin.filter = 'pending';
+    state.payment.myPayments = [];
+    state.payment.selectedPlan = null;
+    state.payment.proofFile = null;
+    state.chat.messages = [];
+    state.xmaker.images = [];
+    state.currentPage = 'video';
+    
     showToast('Logout berhasil', 'success');
     render();
   } catch (error) {
