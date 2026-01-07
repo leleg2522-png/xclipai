@@ -823,7 +823,7 @@ function renderPricingModal() {
 }
 
 function renderFeatureLock() {
-  if (!state.auth.user || state.roomManager.hasSubscription) return '';
+  if (!state.auth.user || state.roomManager.hasSubscription || state.admin.isAdmin) return '';
   
   return `
     <div class="feature-lock-overlay">
