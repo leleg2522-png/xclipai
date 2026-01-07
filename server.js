@@ -2393,11 +2393,25 @@ app.post('/api/room/select', async (req, res) => {
     const { roomId, feature } = req.body;
     const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
     
+    // Check if user is admin (admin can bypass subscription)
+    const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.session.userId]);
+    const isAdmin = adminCheck.rows[0]?.is_admin || false;
+    
     // Check active subscription
-    const subResult = await pool.query(`
+    let subResult = await pool.query(`
       SELECT id, room_id, xmaker_room_id FROM subscriptions 
       WHERE user_id = $1 AND status = 'active' AND expired_at > NOW()
     `, [req.session.userId]);
+    
+    // If admin has no subscription, create a temporary one
+    if (subResult.rows.length === 0 && isAdmin) {
+      const tempSub = await pool.query(`
+        INSERT INTO subscriptions (user_id, status, expired_at)
+        VALUES ($1, 'active', NOW() + INTERVAL '1 year')
+        RETURNING id, room_id, xmaker_room_id
+      `, [req.session.userId]);
+      subResult = tempSub;
+    }
     
     if (subResult.rows.length === 0) {
       return res.status(403).json({ error: 'No active subscription. Please buy a package first.' });
