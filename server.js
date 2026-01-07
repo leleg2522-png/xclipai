@@ -67,6 +67,9 @@ function isAllowedOrigin(origin) {
   }
 }
 
+// Trust proxy for Railway/production HTTPS
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) {
@@ -83,6 +86,8 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
+
 app.use(session({
   store: new pgSession({
     pool: pool,
@@ -92,8 +97,9 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
+    secure: isProduction,
     httpOnly: true,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
 }));
