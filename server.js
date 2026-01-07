@@ -2134,6 +2134,24 @@ app.post('/api/admin/payments/:id/approve', requireAdmin, async (req, res) => {
       [newExpiry, payment.user_id]
     );
     
+    // Also create/update subscriptions table entry (for room selection)
+    const existingSub = await pool.query(
+      'SELECT id FROM subscriptions WHERE user_id = $1',
+      [payment.user_id]
+    );
+    
+    if (existingSub.rows.length > 0) {
+      await pool.query(
+        'UPDATE subscriptions SET status = $1, expired_at = $2 WHERE user_id = $3',
+        ['active', newExpiry, payment.user_id]
+      );
+    } else {
+      await pool.query(
+        'INSERT INTO subscriptions (user_id, status, expired_at) VALUES ($1, $2, $3)',
+        [payment.user_id, 'active', newExpiry]
+      );
+    }
+    
     res.json({
       success: true,
       message: 'Pembayaran berhasil di-approve',
