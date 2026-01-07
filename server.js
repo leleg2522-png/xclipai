@@ -86,18 +86,18 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
-
 app.use(session({
   store: new pgSession({
     pool: pool,
-    tableName: 'sessions'
+    tableName: 'sessions',
+    createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET || 'xclip-secret-key-2024',
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
-    secure: isProduction,
+    secure: false,
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000
@@ -716,6 +716,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('Login attempt for:', email);
     
     if (!email || !password) {
       return res.status(400).json({ error: 'Email dan password diperlukan' });
@@ -727,6 +728,7 @@ app.post('/api/auth/login', async (req, res) => {
     );
     
     if (result.rows.length === 0) {
+      console.log('User not found:', email);
       return res.status(401).json({ error: 'Email atau password salah' });
     }
     
@@ -734,19 +736,28 @@ app.post('/api/auth/login', async (req, res) => {
     const validPassword = await bcrypt.compare(password, user.password_hash);
     
     if (!validPassword) {
+      console.log('Invalid password for:', email);
       return res.status(401).json({ error: 'Email atau password salah' });
     }
     
     req.session.userId = user.id;
     
-    res.json({ 
-      success: true, 
-      user: { 
-        id: user.id, 
-        username: user.username, 
-        email: user.email,
-        hasApiKey: !!user.freepik_api_key
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Login gagal - session error' });
       }
+      
+      console.log('Login successful for:', user.username, 'Session ID:', req.sessionID);
+      res.json({ 
+        success: true, 
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          email: user.email,
+          hasApiKey: !!user.freepik_api_key
+        }
+      });
     });
     
   } catch (error) {
