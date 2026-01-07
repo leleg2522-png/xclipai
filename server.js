@@ -29,10 +29,32 @@ function isAllowedOrigin(origin) {
     const url = new URL(origin);
     const hostname = url.hostname;
     
+    // Allow localhost
     if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname === '127.0.0.1') {
       return true;
     }
     
+    // Allow common hosting platforms
+    const trustedDomains = [
+      'railway.app',
+      'up.railway.app', 
+      'replit.dev',
+      'replit.app',
+      'replit.co',
+      'render.com',
+      'onrender.com',
+      'vercel.app',
+      'netlify.app',
+      'fly.dev'
+    ];
+    
+    for (const domain of trustedDomains) {
+      if (hostname === domain || hostname.endsWith('.' + domain)) {
+        return true;
+      }
+    }
+    
+    // Check custom allowed origins
     for (const allowed of allowedOrigins) {
       if (hostname === allowed || hostname.endsWith('.' + allowed)) {
         return true;
