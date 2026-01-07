@@ -1,5 +1,10 @@
 const API_URL = '';
 
+// Debounce render to prevent too many updates
+let renderTimeout = null;
+let lastRenderTime = 0;
+const RENDER_THROTTLE = 50; // ms
+
 const state = {
   currentPage: 'video',
   video: null,
@@ -1252,6 +1257,15 @@ function showToast(message, type = 'info') {
 }
 
 function render() {
+  // Throttle renders to prevent performance issues
+  const now = Date.now();
+  if (now - lastRenderTime < RENDER_THROTTLE) {
+    if (renderTimeout) clearTimeout(renderTimeout);
+    renderTimeout = setTimeout(render, RENDER_THROTTLE);
+    return;
+  }
+  lastRenderTime = now;
+  
   const app = document.getElementById('app');
   
   app.innerHTML = `
