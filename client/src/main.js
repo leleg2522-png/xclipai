@@ -550,10 +550,18 @@ async function handleLogout() {
     state.payment.selectedPlan = null;
     state.payment.proofFile = null;
     state.chat.messages = [];
-    state.xmaker.images = [];
+    state.xmaker.generatedImages = [];
     state.currentPage = 'video';
     
+    // Clear countdown timer
+    if (typeof countdownInterval !== 'undefined' && countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+    
     showToast('Logout berhasil', 'success');
+    
+    // Force immediate render (bypass throttle)
+    lastRenderTime = 0;
     render();
   } catch (error) {
     console.error('Logout error:', error);
