@@ -464,6 +464,7 @@ async function handleLogin(email, password) {
       await fetchRooms();
       await fetchSubscriptionStatus();
       await fetchXclipKeys();
+      await checkAdminStatus();
       
       render();
     } else {
