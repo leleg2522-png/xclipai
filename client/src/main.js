@@ -3656,13 +3656,27 @@ async function pollVideoStatus(taskId, model) {
       
       console.log('Video status:', data);
       
-      // Dynamic interval: faster at start
       const elapsedSec = attempts < 10 ? attempts * 3 : (10 * 3) + ((attempts - 10) * 5);
-      task.elapsed = elapsedSec;
-      task.status = 'processing';
       
-      // Only render if user is on videogen page to prevent glitches
-      if (state.currentPage === 'videogen') {
+      // Update task but avoid frequent re-renders that break scrolling
+      let needsRender = false;
+      if (data.status === 'processing' || data.status === 'pending') {
+        if (task.status !== 'processing') {
+          task.status = 'processing';
+          needsRender = true;
+        }
+        
+        const newProgress = data.progress || Math.min(95, (attempts * 2));
+        if (Math.abs((task.progress || 0) - newProgress) >= 10) { 
+          task.progress = newProgress;
+          needsRender = true;
+        }
+      }
+      
+      task.elapsed = elapsedSec;
+      
+      // Only render if something meaningful changed or user is on the page
+      if (state.currentPage === 'videogen' && (needsRender || data.status === 'completed' || data.status === 'failed')) {
         render();
       }
       
