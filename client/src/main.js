@@ -3636,7 +3636,6 @@ async function generateVideo() {
 
 async function pollVideoStatus(taskId, model) {
   const maxAttempts = 120;
-  const pollInterval = 5000;
   let attempts = 0;
   
   const poll = async () => {
@@ -3646,7 +3645,7 @@ async function pollVideoStatus(taskId, model) {
       
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Xclip-Key': state.videogen.customApiKey
+        'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
       };
       
       const response = await fetch(`${API_URL}/api/videogen/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
@@ -3656,9 +3655,12 @@ async function pollVideoStatus(taskId, model) {
       const data = await response.json();
       
       console.log('Video status:', data);
-      const elapsedSec = attempts * 5;
+      
+      // Dynamic interval: faster at start
+      const elapsedSec = attempts < 10 ? attempts * 3 : (10 * 3) + ((attempts - 10) * 5);
       task.elapsed = elapsedSec;
       task.status = 'processing';
+      
       // Only render if user is on videogen page to prevent glitches
       if (state.currentPage === 'videogen') {
         render();
@@ -3668,7 +3670,6 @@ async function pollVideoStatus(taskId, model) {
         task.status = 'completed';
         task.videoUrl = data.videoUrl;
         state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
-        // Video not persisted to localStorage
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
         showToast('Video berhasil di-generate!', 'success');
         render();
@@ -3681,7 +3682,9 @@ async function pollVideoStatus(taskId, model) {
       
       attempts++;
       if (attempts < maxAttempts) {
-        setTimeout(poll, pollInterval);
+        // Poll every 3s for first 10 attempts, then every 5s
+        const nextInterval = attempts < 10 ? 3000 : 5000;
+        setTimeout(poll, nextInterval);
       } else {
         throw new Error('Timeout: Video generation took too long (10+ menit)');
       }
@@ -3698,7 +3701,8 @@ async function pollVideoStatus(taskId, model) {
     }
   };
   
-  setTimeout(poll, 1000);
+  // Start polling faster (after 3s instead of 5s)
+  setTimeout(poll, 3000);
 }
 
 function removeGeneratedVideo(index) {
