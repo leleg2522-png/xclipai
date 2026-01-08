@@ -1381,6 +1381,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
       requestBody.webhook_url = webhookUrl;
     }
     
+    const startTime = Date.now();
+    console.log(`[TIMING] Starting Freepik request at ${new Date().toISOString()} | Model: ${model} | KeySource: ${keySource}`);
+    
     const response = await axios.post(
       `${baseUrl}${config.endpoint}`,
       requestBody,
@@ -1389,14 +1392,15 @@ app.post('/api/videogen/proxy', async (req, res) => {
           'x-freepik-api-key': freepikApiKey,
           'Content-Type': 'application/json'
         },
-        timeout: 60000 // Add 60s timeout for initial request
+        timeout: 60000
       }
     );
     
     const taskId = response.data.data?.task_id || response.data.task_id;
     const requestTime = new Date().toISOString();
+    const createLatency = Date.now() - startTime;
     
-    console.log(`[TIMING] Task ${taskId} created at ${requestTime} for model ${model}`);
+    console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
     
     if (taskId) {
       await pool.query(
@@ -1485,6 +1489,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
     
+    const pollStart = Date.now();
     const response = await axios.get(
       `https://api.freepik.com${endpoint}${taskId}`,
       {
@@ -1494,8 +1499,10 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
         timeout: 10000
       }
     );
+    const pollLatency = Date.now() - pollStart;
     
     const data = response.data.data || response.data;
+    console.log(`[TIMING] Poll ${taskId} | Status: ${data.status} | Latency: ${pollLatency}ms`);
     
     // Enhanced video URL extraction - check all possible locations
     let videoUrl = null;
