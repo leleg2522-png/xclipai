@@ -1245,40 +1245,43 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     let freepikApiKey = null;
     let usedKeyIndex = null;
+    let keySource = 'none';
     
-    // 1. Try room's rotated key if user has subscription
-    if (keyInfo.room_id) {
+    // PRIORITY 1: User's personal API key (FASTEST - no queue!)
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      freepikApiKey = userResult.rows[0].freepik_api_key;
+      keySource = 'personal';
+      console.log(`[SPEED] Using user's personal API key - no queue delay!`);
+    }
+    
+    // PRIORITY 2: Room's rotated key if user has subscription (shared pool)
+    if (!freepikApiKey && keyInfo.room_id) {
       const rotated = getRotatedApiKey(keyInfo);
       freepikApiKey = rotated.key;
       usedKeyIndex = rotated.keyIndex;
+      keySource = 'room';
     }
     
-    // 2. For admins without subscription, use any available room key
+    // PRIORITY 3: For admins without subscription, use any available room key
     if (!freepikApiKey && keyInfo.is_admin) {
-      // Try to get first available room key
       const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
                        'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
                        'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
       for (const keyName of roomKeys) {
         if (process.env[keyName]) {
           freepikApiKey = process.env[keyName];
+          keySource = 'admin';
           console.log(`Admin using fallback key: ${keyName}`);
           break;
         }
       }
     }
     
-    // 3. Try user's personal API key
-    if (!freepikApiKey) {
-      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-        freepikApiKey = userResult.rows[0].freepik_api_key;
-      }
-    }
-    
-    // 4. Try global default key
+    // PRIORITY 4: Global default key
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
+      keySource = 'global';
     }
     
     if (!freepikApiKey) {
@@ -1449,23 +1452,25 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const savedTask = taskResult.rows[0];
     let freepikApiKey = null;
     
-    if (keyInfo.room_id) {
+    // PRIORITY 1: User's personal API key (FASTEST)
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      freepikApiKey = userResult.rows[0].freepik_api_key;
+    }
+    
+    // PRIORITY 2: Room's rotated key
+    if (!freepikApiKey && keyInfo.room_id) {
       const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
       freepikApiKey = rotated.key;
     }
     
-    if (!freepikApiKey) {
-      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-        freepikApiKey = userResult.rows[0].freepik_api_key;
-      }
-    }
-    
+    // PRIORITY 3: Global default
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
     }
     
     const statusEndpoints = {
+      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2.5-turbo-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2/',
       'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
       'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
@@ -1486,11 +1491,9 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
         headers: {
           'x-freepik-api-key': freepikApiKey
         },
-        timeout: 30000
+        timeout: 10000
       }
     );
-    
-    console.log('Freepik status response:', JSON.stringify(response.data, null, 2));
     
     const data = response.data.data || response.data;
     
@@ -1520,10 +1523,10 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
                        (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
     
     if (isCompleted && videoUrl) {
-      await pool.query(
+      pool.query(
         'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['completed', videoUrl, taskId]
-      );
+      ).catch(e => console.error('DB update error:', e));
       
       return res.json({
         status: 'completed',

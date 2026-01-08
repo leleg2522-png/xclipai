@@ -210,6 +210,10 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
+- January 8, 2026: **CRITICAL FIX** - Personal API key now prioritized over room pool (eliminates queue delay)
+- January 8, 2026: Added Kling V2.5 Turbo Pro model (40% faster than regular Pro)
+- January 8, 2026: Reduced status check timeout from 30s to 10s for faster response
+- January 8, 2026: Added cfg_scale: 0.3 optimization for faster video generation
 - January 8, 2026: Implemented real-time video generation updates via Webhooks and SSE
 - January 8, 2026: Added admin bypass for subscription checks in video/image generation
 - January 8, 2026: Improved Xclip API key validation with flexible subscription handling
