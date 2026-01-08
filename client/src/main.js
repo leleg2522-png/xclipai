@@ -637,13 +637,21 @@ async function fetchSubscriptionPlans() {
   }
 }
 
-let countdownInterval = null;
 function startCountdownTimer() {
   if (countdownInterval) clearInterval(countdownInterval);
+  
+  // Initial display update
+  updateCountdownDisplay();
+  
   countdownInterval = setInterval(() => {
     if (state.pricing.remainingSeconds > 0) {
       state.pricing.remainingSeconds--;
       updateCountdownDisplay();
+      
+      // Every 30 seconds, sync with server just in case
+      if (state.pricing.remainingSeconds % 30 === 0) {
+        fetchSubscriptionStatus();
+      }
     } else {
       clearInterval(countdownInterval);
       state.roomManager.hasSubscription = false;
@@ -658,6 +666,14 @@ function updateCountdownDisplay() {
   if (timerEl) {
     timerEl.textContent = formatRemainingTime(state.pricing.remainingSeconds);
   }
+  
+  // Also update room manager displays if they exist
+  const roomSubTimes = document.querySelectorAll('.sub-time');
+  roomSubTimes.forEach(el => {
+    if (!el.textContent.includes('Unlimited')) {
+      el.textContent = formatRemainingTime(state.pricing.remainingSeconds);
+    }
+  });
 }
 
 function formatRemainingTime(seconds) {
