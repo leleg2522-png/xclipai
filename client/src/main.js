@@ -3696,8 +3696,8 @@ async function pollVideoStatus(taskId, model) {
           needsRender = true;
         }
         
-        const newProgress = data.progress || Math.min(95, (attempts * 2));
-        if (Math.abs((task.progress || 0) - newProgress) >= 10) { 
+        const newProgress = data.progress || Math.min(95, (attempts * 1.5)); // Slower artificial progress
+        if (Math.abs((task.progress || 0) - newProgress) >= 15) { // Even higher threshold (15%)
           task.progress = newProgress;
           needsRender = true;
         }
@@ -3706,7 +3706,11 @@ async function pollVideoStatus(taskId, model) {
       task.elapsed = elapsedSec;
       
       // Only render if something meaningful changed or user is on the page
-      if (state.currentPage === 'videogen' && (needsRender || data.status === 'completed' || data.status === 'failed')) {
+      // And use a throttle: don't render more than once every 10 seconds for progress
+      const now = Date.now();
+      const lastRender = task.lastRender || 0;
+      if (state.currentPage === 'videogen' && (data.status === 'completed' || data.status === 'failed' || (needsRender && now - lastRender > 10000))) {
+        task.lastRender = now;
         render();
       }
       
