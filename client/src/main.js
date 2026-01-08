@@ -241,6 +241,11 @@ async function checkAdminStatus() {
     const response = await fetch(`${API_URL}/api/admin/check`, { credentials: 'include' });
     const data = await response.json();
     state.admin.isAdmin = data.isAdmin || false;
+    
+    // If admin, treat as having subscription to bypass UI locks
+    if (state.admin.isAdmin) {
+      state.roomManager.hasSubscription = true;
+    }
   } catch (error) {
     console.error('Admin check error:', error);
     state.admin.isAdmin = false;
@@ -3561,8 +3566,22 @@ async function generateVideo() {
     return;
   }
   
-  if (!state.videogen.customApiKey) {
-    showToast('Silakan masukkan Xclip API Key terlebih dahulu', 'error');
+  // Admin bypass API key requirement for testing if needed, 
+  // but usually they use the room key which is handled by proxy.
+  // However, the error here is likely the subscription check.
+  
+  if (!state.auth.user) {
+    showToast('Silakan login terlebih dahulu', 'error');
+    state.auth.showModal = true;
+    state.auth.modalMode = 'login';
+    render();
+    return;
+  }
+
+  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
+    showToast('Anda perlu berlangganan untuk generate video', 'error');
+    state.pricing.showModal = true;
+    render();
     return;
   }
   
@@ -3766,7 +3785,7 @@ async function generateImages() {
     return;
   }
   
-  if (!state.roomManager.hasSubscription) {
+  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
     showToast('Anda perlu berlangganan untuk generate gambar', 'error');
     state.pricing.showModal = true;
     render();
