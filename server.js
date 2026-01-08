@@ -1297,14 +1297,11 @@ app.post('/api/videogen/proxy', async (req, res) => {
     );
     
     const modelConfigs = {
-      // FAST models (30-60 detik) - RECOMMENDED
-      'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
-      'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
-      // Quality models (slower, 90+ detik)
       'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
       'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
+      'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
+      'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
       'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      // Other models
       'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
       'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
       'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
@@ -1312,8 +1309,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' }
     };
     
-    // Default to FASTEST model (kling-v2.1-std)
-    const config = modelConfigs[model] || modelConfigs['kling-v2.1-std'];
+    const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
     // Get webhook URL for instant notifications
