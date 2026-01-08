@@ -4223,21 +4223,19 @@ textarea.form-input {
   background: rgba(245, 158, 11, 0.1);
 }
 
-/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+/* ===== PERFORMANCE OPTIMIZATIONS - REVERTED ANIMATIONS ===== */
 
-/* Reduce animation complexity for better performance */
 .bg-blob {
-  animation-duration: 40s !important;
-  filter: blur(80px) !important;
-  opacity: 0.4 !important;
+  animation-duration: 20s !important;
+  filter: blur(120px) !important;
+  opacity: 0.6 !important;
 }
 
-/* Disable grid scroll animation - causes repaints */
 .bg-animation::before {
-  animation: none !important;
+  animation: grid-scroll 240s linear infinite !important;
 }
 
-/* GPU acceleration for frequently animated elements */
+/* GPU acceleration remains for performance */
 .ai-core,
 .ai-ring,
 .logo-icon,
@@ -4249,42 +4247,17 @@ textarea.form-input {
   backface-visibility: hidden;
 }
 
-/* Reduce glow intensity globally for better performance */
+/* Restoring glow intensity */
 :root {
-  --glow-primary: 0 0 15px rgba(139, 92, 246, 0.3);
-  --glow-accent: 0 0 15px rgba(6, 182, 212, 0.3);
-  --glow-pink: 0 0 15px rgba(236, 72, 153, 0.3);
+  --glow-primary: 0 0 30px rgba(139, 92, 246, 0.5);
+  --glow-accent: 0 0 30px rgba(6, 182, 212, 0.5);
+  --glow-pink: 0 0 30px rgba(236, 72, 153, 0.5);
 }
 
-/* Respect user preference for reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-  
-  .bg-blob,
-  .ai-ring,
-  .ai-particles span,
-  .pulse-btn {
-    animation: none !important;
-  }
-}
-
-/* Optimize for mobile devices */
+/* Optimization for mobile - only disabling heavy ones */
 @media (max-width: 768px) {
   .bg-blob {
-    display: none !important;
-  }
-  
-  .bg-animation::before {
-    display: none !important;
-  }
-  
-  .ai-ring {
-    animation-duration: 8s !important;
+    filter: blur(80px) !important;
+    opacity: 0.4 !important;
   }
 }
