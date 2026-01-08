@@ -3654,7 +3654,7 @@ async function generateVideo() {
 }
 
 async function pollVideoStatus(taskId, model) {
-  const maxAttempts = 120;
+  const maxAttempts = 180; // Increase to 15-20 minutes
   let attempts = 0;
   
   const poll = async () => {
@@ -3671,8 +3671,19 @@ async function pollVideoStatus(taskId, model) {
         method: 'GET',
         headers: headers
       });
-      const data = await response.json();
       
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn('Polling error response:', errorData);
+        // Don't throw immediately on 5xx or transient errors, try again
+        if (response.status >= 500 && attempts < maxAttempts) {
+          attempts++;
+          setTimeout(poll, 10000);
+          return;
+        }
+      }
+      
+      const data = await response.json();
       console.log('Video status:', data);
       
       const elapsedSec = attempts < 10 ? attempts * 3 : (10 * 3) + ((attempts - 10) * 5);

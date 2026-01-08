@@ -1118,7 +1118,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         headers: {
           'x-freepik-api-key': freepikApiKey,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 60000 // Add 60s timeout for initial request
       }
     );
     
