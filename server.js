@@ -1354,7 +1354,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     // Add webhook callback URL for instant notifications
     if (webhookUrl) {
-      requestBody.callback_url = webhookUrl;
+      requestBody.webhook_url = webhookUrl;
     }
     
     const response = await axios.post(
