@@ -102,16 +102,17 @@ const state = {
 };
 
 const VIDEO_MODELS = [
-  { id: 'kling-v2-5-pro', name: 'Kling V2.5 Pro', desc: '1080p HD, kualitas terbaik', icon: '👑' },
-  { id: 'kling-v2-1-master', name: 'Kling V2.1 Master', desc: 'Kontrol motion lanjutan', icon: '🎬' },
-  { id: 'kling-v2-1-pro', name: 'Kling V2.1 Pro', desc: 'Kualitas profesional', icon: '⭐' },
-  { id: 'kling-v2-1-std', name: 'Kling V2.1 Std', desc: 'Budget friendly', icon: '💰' },
-  { id: 'kling-v2', name: 'Kling V2', desc: 'Model generasi baru', icon: '🎥' },
-  { id: 'kling-pro', name: 'Kling 1.6 Pro', desc: 'Model stabil klasik', icon: '🌟' },
-  { id: 'minimax-hailuo-02-1080p', name: 'MiniMax Hailuo 1080p', desc: 'HD dengan audio', icon: '🔊' },
-  { id: 'minimax-hailuo-02-768p', name: 'MiniMax Hailuo 768p', desc: 'Cepat dengan audio', icon: '⚡' },
-  { id: 'seedance-lite-1080p', name: 'Seedance Lite 1080p', desc: 'Durasi panjang HD', icon: '🌱' },
-  { id: 'seedance-lite-720p', name: 'Seedance Lite 720p', desc: 'Keseimbangan kualitas', icon: '🌿' },
+  { id: 'wan-2.5', name: 'Wan 2.5 (CEPAT)', desc: 'Tercepat! ~1-2 menit + audio', icon: '🚀' },
+  { id: 'wan-2.6', name: 'Wan 2.6 (CEPAT)', desc: 'Multi-shot, durasi panjang', icon: '⚡' },
+  { id: 'kling-v2.5-pro', name: 'Kling V2.5 Pro', desc: '1080p HD, kualitas terbaik', icon: '👑' },
+  { id: 'kling-v2.1-master', name: 'Kling V2.1 Master', desc: 'Kontrol motion lanjutan', icon: '🎬' },
+  { id: 'kling-v2.1-pro', name: 'Kling V2.1 Pro', desc: 'Kualitas profesional', icon: '⭐' },
+  { id: 'kling-v2.1-std', name: 'Kling V2.1 Std', desc: 'Budget friendly', icon: '💰' },
+  { id: 'kling-v1.6-pro', name: 'Kling 1.6 Pro', desc: 'Model stabil klasik', icon: '🌟' },
+  { id: 'minimax-hailuo-1080p', name: 'MiniMax Hailuo 1080p', desc: 'HD dengan audio', icon: '🔊' },
+  { id: 'minimax-hailuo-768p', name: 'MiniMax Hailuo 768p', desc: 'Cepat dengan audio', icon: '🔉' },
+  { id: 'seedance-pro-1080p', name: 'Seedance Pro 1080p', desc: 'Durasi panjang HD', icon: '🌱' },
+  { id: 'seedance-pro-720p', name: 'Seedance Pro 720p', desc: 'Keseimbangan kualitas', icon: '🌿' },
   { id: 'pixverse-v5', name: 'PixVerse V5', desc: 'Efek transisi', icon: '✨' }
 ];
 

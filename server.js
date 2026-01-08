@@ -710,7 +710,8 @@ app.post('/api/webhook/freepik', async (req, res) => {
       return res.status(200).json({ received: true, error: 'Unknown task' });
     }
     
-    console.log('Freepik webhook verified for task:', taskId);
+    const webhookReceivedAt = new Date().toISOString();
+    console.log(`[TIMING] Webhook received for task ${taskId} at ${webhookReceivedAt}`);
     
     const status = (data.status || req.body.status || '').toLowerCase();
     
@@ -1296,11 +1297,16 @@ app.post('/api/videogen/proxy', async (req, res) => {
     );
     
     const modelConfigs = {
-      'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2' },
+      // Fast models (recommended for speed)
+      'wan-2.5': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-2-5' },
+      'wan-2.6': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-2-6' },
+      // Kling models
+      'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
       'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
       'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
       'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
       'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
+      // Other models
       'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
       'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
       'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
@@ -1350,6 +1356,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
         motion_mode: 'normal',
         template_id: null
       };
+    } else if (config.api === 'wan') {
+      requestBody = {
+        image: image,
+        prompt: prompt || '',
+        duration: duration || '5',
+        aspect_ratio: aspectRatio || '16:9'
+      };
     }
     
     // Add webhook callback URL for instant notifications
@@ -1370,6 +1383,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
     );
     
     const taskId = response.data.data?.task_id || response.data.task_id;
+    const requestTime = new Date().toISOString();
+    
+    console.log(`[TIMING] Task ${taskId} created at ${requestTime} for model ${model}`);
     
     if (taskId) {
       await pool.query(
@@ -1381,7 +1397,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     res.json({
       success: true,
       taskId: taskId,
-      model: model
+      model: model,
+      createdAt: requestTime
     });
     
   } catch (error) {
