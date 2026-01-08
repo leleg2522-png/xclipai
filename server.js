@@ -1301,6 +1301,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
+    // Get webhook URL for instant notifications
+    const webhookUrl = getWebhookUrl();
+    console.log(`Using webhook callback: ${webhookUrl}`);
+    
     let requestBody = {};
     
     if (config.api === 'kling-ai') {
@@ -1336,6 +1340,11 @@ app.post('/api/videogen/proxy', async (req, res) => {
         motion_mode: 'normal',
         template_id: null
       };
+    }
+    
+    // Add webhook callback URL for instant notifications
+    if (webhookUrl) {
+      requestBody.callback_url = webhookUrl;
     }
     
     const response = await axios.post(
