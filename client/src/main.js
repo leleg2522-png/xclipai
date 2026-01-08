@@ -3654,8 +3654,9 @@ async function generateVideo() {
 }
 
 async function pollVideoStatus(taskId, model) {
-  const maxAttempts = 180; // Increase to 15-20 minutes
+  const maxAttempts = 300; // ~15 minutes with aggressive polling
   let attempts = 0;
+  const startTime = Date.now();
   
   const poll = async () => {
     try {
@@ -3675,46 +3676,21 @@ async function pollVideoStatus(taskId, model) {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.warn('Polling error response:', errorData);
-        // Don't throw immediately on 5xx or transient errors, try again
         if (response.status >= 500 && attempts < maxAttempts) {
           attempts++;
-          setTimeout(poll, 10000);
+          setTimeout(poll, 5000);
           return;
         }
       }
       
       const data = await response.json();
-      console.log('Video status:', data);
       
-      const elapsedSec = attempts < 10 ? attempts * 3 : (10 * 3) + ((attempts - 10) * 5);
-      
-      // Update task but avoid frequent re-renders that break scrolling
-      let needsRender = false;
-      if (data.status === 'processing' || data.status === 'pending') {
-        if (task.status !== 'processing') {
-          task.status = 'processing';
-          needsRender = true;
-        }
-        
-        const newProgress = data.progress || Math.min(95, (attempts * 1.5)); // Slower artificial progress
-        if (Math.abs((task.progress || 0) - newProgress) >= 15) { // Even higher threshold (15%)
-          task.progress = newProgress;
-          needsRender = true;
-        }
-      }
-      
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
       task.elapsed = elapsedSec;
       
-      // Only render if something meaningful changed or user is on the page
-      // And use a throttle: don't render more than once every 10 seconds for progress
-      const now = Date.now();
-      const lastRender = task.lastRender || 0;
-      if (state.currentPage === 'videogen' && (data.status === 'completed' || data.status === 'failed' || (needsRender && now - lastRender > 10000))) {
-        task.lastRender = now;
-        render();
-      }
-      
-      if (data.status === 'completed' && data.videoUrl) {
+      // Check for completion FIRST (priority)
+      const isCompleted = data.status === 'completed' || data.status === 'COMPLETED';
+      if (isCompleted && data.videoUrl) {
         task.status = 'completed';
         task.videoUrl = data.videoUrl;
         state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
@@ -3724,17 +3700,28 @@ async function pollVideoStatus(taskId, model) {
         return;
       }
       
-      if (data.status === 'failed') {
+      // Check for failure
+      if (data.status === 'failed' || data.status === 'FAILED') {
         throw new Error(data.error || 'Video generation failed');
+      }
+      
+      // Update progress display (minimal re-renders)
+      const newProgress = data.progress || Math.min(95, Math.floor(elapsedSec / 3));
+      if (task.status !== 'processing' || Math.abs((task.progress || 0) - newProgress) >= 20) {
+        task.status = 'processing';
+        task.progress = newProgress;
+        if (state.currentPage === 'videogen') {
+          render();
+        }
       }
       
       attempts++;
       if (attempts < maxAttempts) {
-        // Poll every 3s for first 10 attempts, then every 5s
-        const nextInterval = attempts < 10 ? 3000 : 5000;
+        // Aggressive polling: 2s for first 60 attempts (~2 min), then 3s
+        const nextInterval = attempts < 60 ? 2000 : 3000;
         setTimeout(poll, nextInterval);
       } else {
-        throw new Error('Timeout: Video generation took too long (10+ menit)');
+        throw new Error('Timeout: Video generation took too long (15+ menit)');
       }
       
     } catch (error) {
@@ -3749,8 +3736,8 @@ async function pollVideoStatus(taskId, model) {
     }
   };
   
-  // Start polling faster (after 3s instead of 5s)
-  setTimeout(poll, 3000);
+  // Start polling immediately (1 second delay)
+  setTimeout(poll, 1000);
 }
 
 function removeGeneratedVideo(index) {

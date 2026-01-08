@@ -1208,25 +1208,59 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       {
         headers: {
           'x-freepik-api-key': freepikApiKey
-        }
+        },
+        timeout: 30000
       }
     );
     
     console.log('Freepik status response:', JSON.stringify(response.data, null, 2));
     
     const data = response.data.data || response.data;
-    const videoUrl = data.generated?.[0] || data.video_url || data.video?.url || data.result?.video_url || data.output?.video_url;
     
-    if (data.status === 'COMPLETED' || videoUrl) {
+    // Enhanced video URL extraction - check all possible locations
+    let videoUrl = null;
+    if (data.generated && data.generated.length > 0) {
+      videoUrl = data.generated[0];
+    } else if (data.video_url) {
+      videoUrl = data.video_url;
+    } else if (data.video?.url) {
+      videoUrl = data.video.url;
+    } else if (data.result?.video_url) {
+      videoUrl = data.result.video_url;
+    } else if (data.output?.video_url) {
+      videoUrl = data.output.video_url;
+    } else if (data.result?.url) {
+      videoUrl = data.result.url;
+    } else if (data.output?.url) {
+      videoUrl = data.output.url;
+    } else if (data.url) {
+      videoUrl = data.url;
+    }
+    
+    // Check multiple completion status formats
+    const isCompleted = data.status === 'COMPLETED' || data.status === 'completed' || 
+                       data.status === 'SUCCESS' || data.status === 'success' ||
+                       (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
+    
+    if (isCompleted && videoUrl) {
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['completed', videoUrl, taskId]
       );
+      
+      return res.json({
+        status: 'completed',
+        progress: 100,
+        videoUrl: videoUrl,
+        taskId: taskId
+      });
     }
     
+    // Return current status
+    const normalizedStatus = (data.status || 'processing').toLowerCase();
     res.json({
-      status: data.status === 'COMPLETED' ? 'completed' : data.status,
-      progress: data.progress,
+      status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
+      progress: data.progress || 0,
       videoUrl: videoUrl,
       taskId: taskId
     });
