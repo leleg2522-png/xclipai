@@ -2031,23 +2031,23 @@ function renderVideoGenPage() {
             </svg>
             <span>Room Manager</span>
           </div>
-          ${state.roomManager.hasSubscription && state.roomManager.subscription ? `
+          ${(state.roomManager.hasSubscription || state.admin.isAdmin) ? `
             <div class="subscription-info">
-              <span class="sub-badge active">Aktif</span>
-              <span class="sub-time">${formatTimeRemaining(state.roomManager.subscription.expiredAt)}</span>
+              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : 'Aktif'}</span>
+              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.roomManager.subscription?.expiredAt)}</span>
             </div>
           ` : ''}
         </div>
         
         <div class="room-manager-content">
-          ${!state.roomManager.hasSubscription ? `
+          ${(!state.roomManager.hasSubscription && !state.admin.isAdmin) ? `
             <div class="no-subscription">
               <p>Anda belum memiliki paket aktif</p>
               <button class="btn btn-primary" id="buyPackageBtn" ${state.roomManager.isLoading ? 'disabled' : ''}>
                 ${state.roomManager.isLoading ? 'Memproses...' : 'Beli Paket 24 Jam'}
               </button>
             </div>
-          ` : state.roomManager.subscription && !state.roomManager.subscription.roomId ? `
+          ` : (state.roomManager.subscription && !state.roomManager.subscription.roomId && !state.admin.isAdmin) ? `
             <div class="select-room-prompt">
               <p>Pilih room untuk mulai generate</p>
               <button class="btn btn-primary" id="openRoomModalBtn">Pilih Room</button>
@@ -2056,8 +2056,8 @@ function renderVideoGenPage() {
             <div class="current-room">
               <div class="room-info">
                 <span class="room-label">Room:</span>
-                <span class="room-value">${state.roomManager.subscription?.roomName || 'Unknown'}</span>
-                <span class="room-status-badge status-${(state.roomManager.subscription?.roomStatus || 'open').toLowerCase()}">${state.roomManager.subscription?.roomStatus || 'OPEN'}</span>
+                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : (state.roomManager.subscription?.roomName || 'Unknown')}</span>
+                <span class="room-status-badge status-${(state.roomManager.subscription?.roomStatus || 'open').toLowerCase()}">${state.admin.isAdmin ? 'OPEN' : (state.roomManager.subscription?.roomStatus || 'OPEN')}</span>
               </div>
               <button class="btn btn-secondary btn-sm" id="changeRoomBtn">Ganti Room</button>
             </div>
