@@ -619,6 +619,181 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// ============ SSE & WEBHOOK FOR REAL-TIME VIDEO UPDATES ============
+
+// Store SSE connections by user ID
+const sseConnections = new Map();
+
+// SSE endpoint for real-time video updates
+app.get('/api/video-events', (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login required' });
+  }
+  
+  const userId = req.session.userId;
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected', userId })}\n\n`);
+  
+  // Store connection
+  if (!sseConnections.has(userId)) {
+    sseConnections.set(userId, new Set());
+  }
+  sseConnections.get(userId).add(res);
+  
+  console.log(`SSE connected: user ${userId}, total connections: ${sseConnections.get(userId).size}`);
+  
+  // Keep-alive ping every 30 seconds
+  const pingInterval = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
+  }, 30000);
+  
+  // Cleanup on close
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    const userConnections = sseConnections.get(userId);
+    if (userConnections) {
+      userConnections.delete(res);
+      if (userConnections.size === 0) {
+        sseConnections.delete(userId);
+      }
+    }
+    console.log(`SSE disconnected: user ${userId}`);
+  });
+});
+
+// Function to send SSE event to user
+function sendSSEToUser(userId, data) {
+  const connections = sseConnections.get(userId);
+  if (connections && connections.size > 0) {
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    connections.forEach(res => {
+      try {
+        res.write(message);
+      } catch (e) {
+        console.error('SSE write error:', e);
+      }
+    });
+    return true;
+  }
+  return false;
+}
+
+// Webhook endpoint for Freepik notifications
+app.post('/api/webhook/freepik', async (req, res) => {
+  try {
+    console.log('Freepik webhook received:', JSON.stringify(req.body, null, 2));
+    
+    const data = req.body.data || req.body;
+    const taskId = data.task_id || req.body.task_id;
+    const status = (data.status || req.body.status || '').toLowerCase();
+    
+    if (!taskId) {
+      console.log('Webhook: No task_id in payload');
+      return res.status(200).json({ received: true });
+    }
+    
+    // Find the task in database
+    const taskResult = await pool.query(
+      `SELECT t.*, k.user_id 
+       FROM video_generation_tasks t 
+       JOIN xclip_api_keys k ON k.id = t.xclip_api_key_id
+       WHERE t.task_id = $1`,
+      [taskId]
+    );
+    
+    if (taskResult.rows.length === 0) {
+      console.log('Webhook: Task not found:', taskId);
+      return res.status(200).json({ received: true });
+    }
+    
+    const task = taskResult.rows[0];
+    
+    // Extract video URL
+    let videoUrl = null;
+    if (data.generated && data.generated.length > 0) {
+      videoUrl = data.generated[0];
+    } else if (data.video_url) {
+      videoUrl = data.video_url;
+    } else if (data.video?.url) {
+      videoUrl = data.video.url;
+    } else if (data.result?.video_url) {
+      videoUrl = data.result.video_url;
+    } else if (data.url) {
+      videoUrl = data.url;
+    }
+    
+    const isCompleted = status === 'completed' || status === 'success' || 
+                       (videoUrl && status !== 'processing' && status !== 'pending');
+    const isFailed = status === 'failed' || status === 'error';
+    
+    if (isCompleted && videoUrl) {
+      // Update database
+      await pool.query(
+        'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
+        ['completed', videoUrl, taskId]
+      );
+      
+      // Send SSE to user for instant notification
+      const sent = sendSSEToUser(task.user_id, {
+        type: 'video_completed',
+        taskId: taskId,
+        videoUrl: videoUrl,
+        model: task.model
+      });
+      
+      console.log(`Webhook: Video completed! Task ${taskId}, SSE sent: ${sent}`);
+    } else if (isFailed) {
+      await pool.query(
+        'UPDATE video_generation_tasks SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE task_id = $2',
+        ['failed', taskId]
+      );
+      
+      sendSSEToUser(task.user_id, {
+        type: 'video_failed',
+        taskId: taskId,
+        error: data.error || 'Video generation failed'
+      });
+      
+      console.log(`Webhook: Video failed! Task ${taskId}`);
+    } else {
+      // Progress update
+      sendSSEToUser(task.user_id, {
+        type: 'video_progress',
+        taskId: taskId,
+        status: status,
+        progress: data.progress || 0
+      });
+    }
+    
+    res.status(200).json({ received: true });
+    
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(200).json({ received: true, error: error.message });
+  }
+});
+
+// Get webhook URL for current environment
+function getWebhookUrl() {
+  const domain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS;
+  if (domain) {
+    return `https://${domain}/api/webhook/freepik`;
+  }
+  if (process.env.APP_URL) {
+    return `${process.env.APP_URL}/api/webhook/freepik`;
+  }
+  return null;
+}
+
+// ============ END SSE & WEBHOOK ============
+
 // Live Statistics API
 let onlineUsers = new Set();
 let recentPurchases = [];
