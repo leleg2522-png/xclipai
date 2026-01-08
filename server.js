@@ -968,20 +968,54 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
 });
 
 async function validateXclipApiKey(apiKey) {
-  const result = await pool.query(
-    `SELECT k.id, k.user_id, k.status, s.room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
+  // First check if the API key exists and is active
+  const keyResult = await pool.query(
+    `SELECT k.id, k.user_id, k.status, u.is_admin
      FROM xclip_api_keys k
-     LEFT JOIN subscriptions s ON s.user_id = k.user_id AND s.status = 'active' AND s.expired_at > CURRENT_TIMESTAMP
-     LEFT JOIN rooms r ON r.id = s.room_id
+     JOIN users u ON u.id = k.user_id
      WHERE k.api_key = $1 AND k.status = 'active'`,
     [apiKey]
   );
   
-  if (result.rows.length === 0) {
+  if (keyResult.rows.length === 0) {
     return null;
   }
   
-  return result.rows[0];
+  const keyInfo = keyResult.rows[0];
+  
+  // Check for active subscription (but don't fail if none - admin bypass)
+  const subResult = await pool.query(
+    `SELECT s.room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
+     FROM subscriptions s
+     LEFT JOIN rooms r ON r.id = s.room_id
+     WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > CURRENT_TIMESTAMP
+     ORDER BY s.expired_at DESC
+     LIMIT 1`,
+    [keyInfo.user_id]
+  );
+  
+  if (subResult.rows.length > 0) {
+    // User has active subscription
+    return {
+      ...keyInfo,
+      room_id: subResult.rows[0].room_id,
+      key_name_1: subResult.rows[0].key_name_1,
+      key_name_2: subResult.rows[0].key_name_2,
+      key_name_3: subResult.rows[0].key_name_3,
+      provider_key_name: subResult.rows[0].provider_key_name
+    };
+  }
+  
+  // No active subscription - allow if admin, otherwise still return key info
+  // (the getRotatedApiKey will handle fallback to user's personal key or default)
+  return {
+    ...keyInfo,
+    room_id: null,
+    key_name_1: null,
+    key_name_2: null,
+    key_name_3: null,
+    provider_key_name: null
+  };
 }
 
 function getRotatedApiKey(keyInfo, forceKeyIndex = null) {
@@ -1026,12 +1060,29 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let freepikApiKey = null;
     let usedKeyIndex = null;
     
+    // 1. Try room's rotated key if user has subscription
     if (keyInfo.room_id) {
       const rotated = getRotatedApiKey(keyInfo);
       freepikApiKey = rotated.key;
       usedKeyIndex = rotated.keyIndex;
     }
     
+    // 2. For admins without subscription, use any available room key
+    if (!freepikApiKey && keyInfo.is_admin) {
+      // Try to get first available room key
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      for (const keyName of roomKeys) {
+        if (process.env[keyName]) {
+          freepikApiKey = process.env[keyName];
+          console.log(`Admin using fallback key: ${keyName}`);
+          break;
+        }
+      }
+    }
+    
+    // 3. Try user's personal API key
     if (!freepikApiKey) {
       const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
       if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
@@ -1039,6 +1090,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       }
     }
     
+    // 4. Try global default key
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
     }
