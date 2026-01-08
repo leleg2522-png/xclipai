@@ -1312,6 +1312,17 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
+    // Map aspect ratio to Freepik format
+    const aspectRatioMap = {
+      '1:1': 'square_1_1',
+      '9:16': 'social_story_9_16',
+      '16:9': 'widescreen_16_9',
+      'square_1_1': 'square_1_1',
+      'social_story_9_16': 'social_story_9_16',
+      'widescreen_16_9': 'widescreen_16_9'
+    };
+    const mappedAspectRatio = aspectRatioMap[aspectRatio] || 'widescreen_16_9';
+    
     // Get webhook URL for instant notifications
     const webhookUrl = getWebhookUrl();
     console.log(`Using webhook callback: ${webhookUrl}`);
@@ -1323,7 +1334,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         image: image,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: aspectRatio || '16:9'
+        aspect_ratio: mappedAspectRatio
       };
     } else if (config.api === 'minimax') {
       requestBody = {
@@ -1345,7 +1356,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         prompt: prompt || '',
         duration: duration || '5',
         quality: 'high',
-        aspect_ratio: aspectRatio || '16:9',
+        aspect_ratio: mappedAspectRatio,
         negative_prompt: '',
         seed: Math.floor(Math.random() * 1000000),
         motion_mode: 'normal',
@@ -1356,7 +1367,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         image: image,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: aspectRatio || '16:9'
+        aspect_ratio: mappedAspectRatio
       };
     }
     
