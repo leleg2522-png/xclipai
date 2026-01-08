@@ -102,12 +102,10 @@ const state = {
 };
 
 const VIDEO_MODELS = [
-  { id: 'wan-2.5', name: 'Wan 2.5 (CEPAT)', desc: 'Tercepat! ~1-2 menit + audio', icon: '🚀' },
-  { id: 'wan-2.6', name: 'Wan 2.6 (CEPAT)', desc: 'Multi-shot, durasi panjang', icon: '⚡' },
-  { id: 'kling-v2.5-pro', name: 'Kling V2.5 Pro', desc: '1080p HD, kualitas terbaik', icon: '👑' },
-  { id: 'kling-v2.1-master', name: 'Kling V2.1 Master', desc: 'Kontrol motion lanjutan', icon: '🎬' },
-  { id: 'kling-v2.1-pro', name: 'Kling V2.1 Pro', desc: 'Kualitas profesional', icon: '⭐' },
-  { id: 'kling-v2.1-std', name: 'Kling V2.1 Std', desc: 'Budget friendly', icon: '💰' },
+  { id: 'kling-v2.1-std', name: 'Kling 2.1 Standard', desc: '⚡ TERCEPAT! ~30-45 detik', icon: '🚀' },
+  { id: 'kling-v2.1-pro', name: 'Kling 2.1 Pro', desc: '~45-60 detik, 1080p HD', icon: '⚡' },
+  { id: 'kling-v2.5-pro', name: 'Kling V2.5 Pro', desc: 'Kualitas terbaik, lebih lama', icon: '👑' },
+  { id: 'kling-v2.1-master', name: 'Kling V2.1 Master', desc: 'Sinematik, ~90-120 detik', icon: '🎬' },
   { id: 'kling-v1.6-pro', name: 'Kling 1.6 Pro', desc: 'Model stabil klasik', icon: '🌟' },
   { id: 'minimax-hailuo-1080p', name: 'MiniMax Hailuo 1080p', desc: 'HD dengan audio', icon: '🔊' },
   { id: 'minimax-hailuo-768p', name: 'MiniMax Hailuo 768p', desc: 'Cepat dengan audio', icon: '🔉' },
