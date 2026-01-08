@@ -1397,8 +1397,14 @@ app.post('/api/videogen/proxy', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Xclip proxy error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Gagal memproses permintaan: ' + (error.response?.data?.message || error.message) });
+    console.error('Xclip proxy error:', JSON.stringify(error.response?.data, null, 2) || error.message);
+    console.error('Full error details:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
+    const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.response?.data?.error || error.message;
+    res.status(500).json({ error: 'Gagal memproses permintaan: ' + errorMsg });
   }
 });
 
