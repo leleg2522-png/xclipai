@@ -664,14 +664,20 @@ function startCountdownTimer() {
 function updateCountdownDisplay() {
   const timerEl = document.getElementById('subscriptionTimer');
   if (timerEl) {
-    timerEl.textContent = formatRemainingTime(state.pricing.remainingSeconds);
+    const newTime = formatRemainingTime(state.pricing.remainingSeconds);
+    if (timerEl.textContent !== newTime) {
+      timerEl.textContent = newTime;
+    }
   }
   
   // Also update room manager displays if they exist
   const roomSubTimes = document.querySelectorAll('.sub-time');
   roomSubTimes.forEach(el => {
     if (!el.textContent.includes('Unlimited')) {
-      el.textContent = formatRemainingTime(state.pricing.remainingSeconds);
+      const newTime = formatRemainingTime(state.pricing.remainingSeconds);
+      if (el.textContent !== newTime) {
+        el.textContent = newTime;
+      }
     }
   });
 }

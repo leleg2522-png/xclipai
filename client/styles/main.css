@@ -2476,6 +2476,15 @@ select option {
   font-size: 13px;
   font-weight: 600;
   box-shadow: var(--glow-accent);
+  min-width: 130px;
+  justify-content: center;
+  contain: layout style paint;
+}
+
+#subscriptionTimer {
+  display: inline-block;
+  min-width: 90px;
+  text-align: center;
 }
 
 .timer-icon {
