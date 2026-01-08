@@ -57,6 +57,8 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 
 ### Video Gen (Image to Video)
 - Convert static images to dynamic videos using Freepik API
+- **Real-time updates via Webhooks** - Instant notification when video is ready (no polling delay)
+- **Server-Sent Events (SSE)** - Live browser updates for instant video delivery
 - Multiple AI models available:
   - Kling V2.5 Pro (1080p HD, best quality)
   - Kling V2.1 Master (advanced motion control)
@@ -69,7 +71,7 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - Duration options: 5 or 10 seconds
 - Aspect ratios: 16:9, 9:16, 1:1
 - Optional motion prompt for controlling animation
-- Async processing with status polling
+- Hybrid polling + webhook system for maximum reliability
 
 ### AI Chat
 - Multiple LLM models from OpenRouter:
@@ -208,6 +210,10 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
+- January 8, 2026: Implemented real-time video generation updates via Webhooks and SSE
+- January 8, 2026: Added admin bypass for subscription checks in video/image generation
+- January 8, 2026: Improved Xclip API key validation with flexible subscription handling
+- January 8, 2026: Optimized video polling with aggressive 2-second intervals
 - January 6, 2026: Implemented manual QRIS payment system with payment proof upload
 - January 6, 2026: Added admin dashboard for payment verification (approve/reject)
 - January 6, 2026: Added is_admin column to users table for admin role management

@@ -635,7 +635,7 @@ app.get('/api/video-events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Don't override CORS - let the existing middleware handle it
   res.flushHeaders();
   
   // Send initial connection message
@@ -686,20 +686,35 @@ function sendSSEToUser(userId, data) {
 }
 
 // Webhook endpoint for Freepik notifications
+// Uses internal task ID verification for security (only accepts known task IDs)
 app.post('/api/webhook/freepik', async (req, res) => {
   try {
-    console.log('Freepik webhook received:', JSON.stringify(req.body, null, 2));
-    
+    // Basic validation: must have a task_id that exists in our database
+    // This prevents arbitrary injection since only our tasks are accepted
     const data = req.body.data || req.body;
     const taskId = data.task_id || req.body.task_id;
-    const status = (data.status || req.body.status || '').toLowerCase();
     
     if (!taskId) {
-      console.log('Webhook: No task_id in payload');
-      return res.status(200).json({ received: true });
+      console.log('Webhook rejected: No task_id in payload');
+      return res.status(200).json({ received: true, error: 'No task_id' });
     }
     
-    // Find the task in database
+    // Verify task exists in our database before processing
+    const taskCheck = await pool.query(
+      'SELECT id FROM video_generation_tasks WHERE task_id = $1',
+      [taskId]
+    );
+    
+    if (taskCheck.rows.length === 0) {
+      console.log('Webhook rejected: Unknown task_id:', taskId);
+      return res.status(200).json({ received: true, error: 'Unknown task' });
+    }
+    
+    console.log('Freepik webhook verified for task:', taskId);
+    
+    const status = (data.status || req.body.status || '').toLowerCase();
+    
+    // Find the task in database (already verified above, now get full details)
     const taskResult = await pool.query(
       `SELECT t.*, k.user_id 
        FROM video_generation_tasks t 
@@ -707,11 +722,6 @@ app.post('/api/webhook/freepik', async (req, res) => {
        WHERE t.task_id = $1`,
       [taskId]
     );
-    
-    if (taskResult.rows.length === 0) {
-      console.log('Webhook: Task not found:', taskId);
-      return res.status(200).json({ received: true });
-    }
     
     const task = taskResult.rows[0];
     

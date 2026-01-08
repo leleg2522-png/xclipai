@@ -482,6 +482,11 @@ async function handleLogin(email, password) {
         checkAdminStatus()
       ]);
       
+      // Connect SSE for real-time video updates
+      if (typeof connectSSE === 'function') {
+        connectSSE();
+      }
+      
       render();
     } else {
       showToast(data.error || 'Login gagal', 'error');
@@ -4098,7 +4103,124 @@ function updateProcessingProgressUI() {
   }
 }
 
+// ============ SSE for Real-Time Video Updates ============
+let sseConnection = null;
+
+function connectSSE() {
+  if (sseConnection) {
+    sseConnection.close();
+  }
+  
+  if (!state.auth.user) {
+    return;
+  }
+  
+  console.log('Connecting to SSE for real-time video updates...');
+  
+  sseConnection = new EventSource(`${API_URL}/api/video-events`, { withCredentials: true });
+  
+  sseConnection.onopen = () => {
+    console.log('SSE connected!');
+  };
+  
+  sseConnection.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleSSEEvent(data);
+    } catch (e) {
+      console.error('SSE parse error:', e);
+    }
+  };
+  
+  sseConnection.onerror = (error) => {
+    console.error('SSE error:', error);
+    // Reconnect after 5 seconds
+    setTimeout(() => {
+      if (state.auth.user) {
+        connectSSE();
+      }
+    }, 5000);
+  };
+}
+
+function disconnectSSE() {
+  if (sseConnection) {
+    sseConnection.close();
+    sseConnection = null;
+    console.log('SSE disconnected');
+  }
+}
+
 // Video results will be cleared on page refresh (not persisted)
-checkAuth();
-// Live stats disabled
-// startLiveStatsPolling();
+// checkAuth will be called below after SSE setup
+
+function handleSSEEvent(data) {
+  console.log('SSE event received:', data);
+  
+  switch (data.type) {
+    case 'connected':
+      console.log('SSE connected for user:', data.userId);
+      break;
+      
+    case 'video_completed':
+      // Instantly update UI when video is ready
+      const completedTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
+      if (completedTask) {
+        completedTask.status = 'completed';
+        completedTask.videoUrl = data.videoUrl;
+        state.videogen.generatedVideos.unshift({ 
+          url: data.videoUrl, 
+          createdAt: Date.now(), 
+          taskId: data.taskId 
+        });
+        state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
+        showToast('Video berhasil di-generate! (via webhook)', 'success');
+        render();
+      }
+      break;
+      
+    case 'video_failed':
+      const failedTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
+      if (failedTask) {
+        failedTask.status = 'failed';
+        failedTask.error = data.error;
+        state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
+        showToast('Gagal generate video: ' + data.error, 'error');
+        render();
+      }
+      break;
+      
+    case 'video_progress':
+      const progressTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
+      if (progressTask && data.progress) {
+        progressTask.progress = data.progress;
+        progressTask.status = data.status || 'processing';
+        // Don't render on every progress update to avoid glitches
+      }
+      break;
+      
+    case 'ping':
+      // Keep-alive ping, ignore
+      break;
+      
+    default:
+      console.log('Unknown SSE event type:', data.type);
+  }
+}
+
+// Disconnect SSE on page unload
+window.addEventListener('beforeunload', () => {
+  disconnectSSE();
+});
+
+// Wrap checkAuth to connect SSE after auth is verified
+async function initApp() {
+  await checkAuth();
+  // Connect SSE after auth check completes
+  if (state.auth.user) {
+    connectSSE();
+  }
+}
+
+// Start the app
+initApp();
