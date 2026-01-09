@@ -1473,11 +1473,20 @@ app.post('/api/videogen/proxy', async (req, res) => {
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
     
     if (taskId) {
-      await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
-      );
-      console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
+      try {
+        await pool.query(
+          'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
+        );
+        console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
+      } catch (dbError) {
+        console.error('[DB ERROR] Failed to save task with creator_key_name, falling back:', dbError.message);
+        // Fallback for production if migration hasn't propagated
+        await pool.query(
+          'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
+          [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+        );
+      }
     }
     
     res.json({
