@@ -3475,15 +3475,22 @@ textarea.form-input {
   position: relative;
 }
 
-.video-progress-bar::after {
-  content: '';
+.task-progress-fill {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  width: 30%;
   background: linear-gradient(90deg, var(--primary), var(--accent));
-  animation: progress-indeterminate 1.5s ease-in-out infinite;
+  transition: width 0.3s ease;
+  border-radius: var(--radius-full);
+}
+
+.task-progress-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+  display: block;
+  text-align: right;
 }
 
 @keyframes progress-indeterminate {

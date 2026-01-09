@@ -2254,12 +2254,15 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                 <div class="active-tasks">
                   <p class="tasks-header">Sedang diproses (${state.videogen.tasks.length}/3):</p>
                   ${state.videogen.tasks.map((task, idx) => `
-                    <div class="task-item">
+                    <div class="task-item" data-task-id="${task.taskId}">
                       <div class="task-info">
                         <span class="task-number">Video ${idx + 1}</span>
-                        <span class="task-time">${Math.floor(task.elapsed / 60)}m ${task.elapsed % 60}s</span>
+                        <span class="task-time task-elapsed">${task.elapsed || 0}s</span>
                       </div>
-                      <div class="video-progress-bar"></div>
+                      <div class="video-progress-bar">
+                        <div class="task-progress-fill" style="width: ${task.progress || 0}%"></div>
+                      </div>
+                      <span class="task-progress-text">${task.progress || 0}%</span>
                     </div>
                   `).join('')}
                 </div>
@@ -3709,15 +3712,18 @@ async function pollVideoStatus(taskId, model) {
         throw new Error(data.error || 'Video generation failed');
       }
       
-      // Update progress display (minimal re-renders)
+      // Update progress display (partial DOM update - no full re-render)
       const newProgress = data.progress || Math.min(95, Math.floor(elapsedSec / 3));
-      if (task.status !== 'processing' || Math.abs((task.progress || 0) - newProgress) >= 20) {
-        task.status = 'processing';
-        task.progress = newProgress;
-        if (state.currentPage === 'videogen') {
-          render();
-        }
-      }
+      task.status = 'processing';
+      task.progress = newProgress;
+      
+      // Partial update: only update progress elements without full re-render
+      const progressEl = document.querySelector(`[data-task-id="${taskId}"] .task-progress-fill`);
+      const progressText = document.querySelector(`[data-task-id="${taskId}"] .task-progress-text`);
+      const elapsedEl = document.querySelector(`[data-task-id="${taskId}"] .task-elapsed`);
+      if (progressEl) progressEl.style.width = `${newProgress}%`;
+      if (progressText) progressText.textContent = `${newProgress}%`;
+      if (elapsedEl) elapsedEl.textContent = `${elapsedSec}s`;
       
       attempts++;
       if (attempts < maxAttempts) {
