@@ -46,6 +46,7 @@ const state = {
     duration: '5',
     aspectRatio: '16:9',
     isGenerating: false,
+    isPolling: false,
     tasks: [],
     generatedVideos: [],
     error: null,
@@ -1295,12 +1296,17 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 4000);
 }
 
-function render() {
+function render(force = false) {
+  // Skip render during video polling to prevent glitches (unless forced)
+  if (state.videogen.isPolling && !force && state.currentPage === 'videogen') {
+    return;
+  }
+  
   // Throttle renders to prevent performance issues
   const now = Date.now();
   if (now - lastRenderTime < RENDER_THROTTLE) {
     if (renderTimeout) clearTimeout(renderTimeout);
-    renderTimeout = setTimeout(render, RENDER_THROTTLE);
+    renderTimeout = setTimeout(() => render(force), RENDER_THROTTLE);
     return;
   }
   lastRenderTime = now;
@@ -3665,6 +3671,9 @@ async function pollVideoStatus(taskId, model) {
   let attempts = 0;
   const startTime = Date.now();
   
+  // Set polling flag to prevent render glitches
+  state.videogen.isPolling = true;
+  
   const poll = async () => {
     try {
       const task = state.videogen.tasks.find(t => t.taskId === taskId);
@@ -3702,8 +3711,12 @@ async function pollVideoStatus(taskId, model) {
         task.videoUrl = data.videoUrl;
         state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
+        // Clear polling flag if no more active tasks
+        if (state.videogen.tasks.length === 0) {
+          state.videogen.isPolling = false;
+        }
         showToast('Video berhasil di-generate!', 'success');
-        render();
+        render(true); // Force render on completion
         return;
       }
       
@@ -3741,8 +3754,12 @@ async function pollVideoStatus(taskId, model) {
         task.error = error.message;
       }
       state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
+      // Clear polling flag if no more active tasks
+      if (state.videogen.tasks.length === 0) {
+        state.videogen.isPolling = false;
+      }
       showToast('Gagal generate video: ' + error.message, 'error');
-      render();
+      render(true); // Force render on error
     }
   };
   

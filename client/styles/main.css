@@ -4261,10 +4261,41 @@ textarea.form-input {
   --glow-pink: 0 0 30px rgba(236, 72, 153, 0.5);
 }
 
-/* Optimization for mobile - only disabling heavy ones */
+/* Optimization for mobile - disable heavy GPU effects */
 @media (max-width: 768px) {
-  .bg-blob {
-    filter: blur(80px) !important;
-    opacity: 0.4 !important;
+  /* Disable animated blobs completely */
+  .bg-animation {
+    display: none !important;
+  }
+  
+  /* Replace with static gradient background */
+  body {
+    background: linear-gradient(135deg, #0f0a1a 0%, #1a0f2e 50%, #0d1117 100%) !important;
+  }
+  
+  /* Disable all backdrop-filter (very heavy on mobile GPU) */
+  .card,
+  .sidebar,
+  .modal-content,
+  .toast,
+  .dropdown-menu,
+  .nav,
+  .header {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--bg-card) !important;
+  }
+  
+  /* Disable heavy box shadows */
+  .card,
+  .btn,
+  .modal-content {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+  }
+  
+  /* Disable glow effects */
+  .btn:hover,
+  .card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
   }
 }
