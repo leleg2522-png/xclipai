@@ -1,0 +1,21 @@
+API key rotation: using key 2 of 2
+Using webhook callback: null
+[KEYS] Total available keys: 4
+[TIMING] Attempt 1/4 - Using key: ROOM1_FREEPIK_KEY_1 | Model: kling-v2.1-pro
+[ERROR] Key ROOM1_FREEPIK_KEY_1 failed with status 403: Request failed with status code 403
+All API keys exhausted or failed
+Last error: "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;freepik&#46;com&#47;v1&#47;ai&#47;image&#45;to&#45;video&#47;kling&#45;v2&#45;1&#45;pro\" on this server.<P>\nReference&#32;&#35;18&#46;4b52d117&#46;1767970727&#46;7ddcd856\n<P>https&#58;&#47;&#47;errors&#46;edgesuite&#46;net&#47;18&#46;4b52d117&#46;1767970727&#46;7ddcd856</P>\n</BODY>\n</HTML>\n"
+API key rotation: using key 2 of 2
+Using webhook callback: null
+[KEYS] Total available keys: 4
+[TIMING] Attempt 1/4 - Using key: ROOM1_FREEPIK_KEY_1 | Model: kling-v2.1-pro
+[ERROR] Key ROOM1_FREEPIK_KEY_1 failed with status 403: Request failed with status code 403
+All API keys exhausted or failed
+Last error: "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;freepik&#46;com&#47;v1&#47;ai&#47;image&#45;to&#45;video&#47;kling&#45;v2&#45;1&#45;pro\" on this server.<P>\nReference&#32;&#35;18&#46;5a52d117&#46;1767970741&#46;88499a9\n<P>https&#58;&#47;&#47;errors&#46;edgesuite&#46;net&#47;18&#46;5a52d117&#46;1767970741&#46;88499a9</P>\n</BODY>\n</HTML>\n"
+API key rotation: using key 2 of 2
+Using webhook callback: null
+[KEYS] Total available keys: 4
+[TIMING] Attempt 1/4 - Using key: ROOM1_FREEPIK_KEY_1 | Model: kling-v2.1-pro
+[ERROR] Key ROOM1_FREEPIK_KEY_1 failed with status 403: Request failed with status code 403
+All API keys exhausted or failed
+Last error: "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;freepik&#46;com&#47;v1&#47;ai&#47;image&#45;to&#45;video&#47;kling&#45;v2&#45;1&#45;pro\" on this server.<P>\nReference&#32;&#35;18&#46;4b52d117&#46;1767970748&#46;7dddcb6b\n<P>https&#58;&#47;&#47;errors&#46;edgesuite&#46;net&#47;18&#46;4b52d117&#46;1767970748&#46;7dddcb6b</P>\n</BODY>\n</HTML>\n"
