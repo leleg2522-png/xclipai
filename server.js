@@ -2208,24 +2208,44 @@ app.post('/api/generate-video', async (req, res) => {
     const { model, image, prompt, duration, aspectRatio, customApiKey } = req.body;
     
     let apiKey = null;
+    let usedKeyName = 'unknown';
+    
+    // All possible Freepik key names for lookup
+    const freepikKeyNames = [
+      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
+      'FREEPIK_API_KEY'
+    ];
     
     // Priority 1: If user is logged in and has subscription with room, use room's API key
     if (req.session.userId) {
       const roomKey = await getRoomApiKey(req.session.userId);
       if (roomKey) {
         apiKey = roomKey;
+        // Find the key name immediately
+        for (const keyName of freepikKeyNames) {
+          if (process.env[keyName] === apiKey) {
+            usedKeyName = keyName;
+            break;
+          }
+        }
       }
     }
     
     // Priority 2: User's custom API key (only if no room key)
     if (!apiKey && customApiKey) {
       apiKey = customApiKey;
+      usedKeyName = 'custom';
     }
     
     // Priority 3: Fallback to default API key
     if (!apiKey) {
       apiKey = process.env.FREEPIK_API_KEY;
+      usedKeyName = 'FREEPIK_API_KEY';
     }
+    
+    console.log(`[VIDEO-GEN] Using key: ${usedKeyName}`);
     
     if (!apiKey) {
       return res.status(500).json({ error: 'Xclip API key not configured. Please add your API key or buy a subscription package.' });
@@ -2292,8 +2312,20 @@ app.post('/api/generate-video', async (req, res) => {
     const taskId = response.data.data?.task_id || response.data.task_id || response.data.id;
     
     if (taskId) {
-      console.log(`Video task created: ${taskId}`);
-      res.json({ taskId, model: endpoint });
+      console.log(`Video task created: ${taskId} with key: ${usedKeyName}`);
+      
+      // Save task to database with creator key name (usedKeyName already captured at the start)
+      try {
+        await pool.query(
+          'INSERT INTO video_generation_tasks (user_id, task_id, model, status, creator_key_name, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+          [req.session.userId || null, taskId, endpoint, 'processing', usedKeyName]
+        );
+        console.log(`[DB] Saved video task ${taskId} with creator_key: ${usedKeyName}`);
+      } catch (dbError) {
+        console.error('[DB] Failed to save video task:', dbError.message);
+      }
+      
+      res.json({ taskId, model: endpoint, creatorKey: usedKeyName });
     } else {
       console.log('Freepik response:', JSON.stringify(response.data, null, 2));
       res.status(500).json({ error: 'No task ID returned from API' });
@@ -2310,7 +2342,33 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     const { model, taskId } = req.params;
     const { customApiKey } = req.body || {};
     
-    const apiKey = customApiKey || process.env.FREEPIK_API_KEY;
+    // First, try to get the creator key from database
+    let apiKey = null;
+    let usedKeyName = null;
+    
+    const taskResult = await pool.query(
+      'SELECT creator_key_name, freepik_key_name FROM video_generation_tasks WHERE task_id = $1',
+      [taskId]
+    );
+    
+    if (taskResult.rows.length > 0) {
+      const savedTask = taskResult.rows[0];
+      usedKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
+      if (usedKeyName && usedKeyName !== 'unknown' && usedKeyName !== 'custom') {
+        apiKey = process.env[usedKeyName];
+        console.log(`[STATUS] Using saved creator key: ${usedKeyName}`);
+      }
+    }
+    
+    // Fallback to custom key or default
+    if (!apiKey && customApiKey) {
+      apiKey = customApiKey;
+      console.log('[STATUS] Using custom API key');
+    }
+    if (!apiKey) {
+      apiKey = process.env.FREEPIK_API_KEY;
+      console.log('[STATUS] Using default FREEPIK_API_KEY');
+    }
     
     if (!apiKey) {
       return res.status(500).json({ error: 'API key tidak tersedia' });
@@ -2334,7 +2392,7 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     const statusEndpoint = statusEndpointMap[model] || model;
     const statusUrl = `https://api.freepik.com/v1/ai/image-to-video/${statusEndpoint}/${taskId}`;
     
-    console.log(`Checking status: ${statusUrl}`);
+    console.log(`Checking status: ${statusUrl} with key: ${usedKeyName || 'fallback'}`);
     
     const response = await axios.get(statusUrl, {
       headers: {
