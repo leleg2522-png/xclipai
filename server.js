@@ -1474,12 +1474,12 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const statusEndpoints = {
-      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-pro/',
+      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2.5-turbo-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
-      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-pro/',
+      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
+      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
+      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
+      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
       'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-1080p/',
       'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-768p/',
       'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
