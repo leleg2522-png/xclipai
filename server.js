@@ -1533,6 +1533,14 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // Build list of ALL available Freepik keys (same as task creation)
     const allKeys = [];
+    
+    // Add user's personal key if they have one
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
+    }
+    
+    // Add all environment Freepik keys
     const freepikKeyNames = [
       'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',

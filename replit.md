@@ -57,8 +57,10 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 
 ### Video Gen (Image to Video)
 - Convert static images to dynamic videos using Freepik API
+- **Simplified Architecture** - No room selection, uses all available Freepik API keys with auto-rotation
 - **Real-time updates via Webhooks** - Instant notification when video is ready (no polling delay)
 - **Server-Sent Events (SSE)** - Live browser updates for instant video delivery
+- **Smart Key Persistence** - Tracks which API key created each task for reliable polling
 - Multiple AI models available:
   - Kling V2.5 Pro (1080p HD, best quality)
   - Kling V2.1 Master (advanced motion control)
