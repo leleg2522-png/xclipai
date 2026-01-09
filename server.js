@@ -1452,8 +1452,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
         );
         
         successResponse = response;
-        finalKeyIndex = attempt; // Store the index in allKeys array that worked
-        console.log(`[SUCCESS] Key ${currentKey.name} worked! (index: ${attempt})`);
+        finalKeyIndex = attempt;
+        successKeyName = currentKey.name; // Store the KEY NAME that worked
+        console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
         break;
         
       } catch (error) {
@@ -1486,10 +1487,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
       );
-      console.log(`[DB] Task saved with key_index: ${finalKeyIndex}`);
+      console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
     }
     
     res.json({
