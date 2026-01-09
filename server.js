@@ -1386,21 +1386,76 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     const startTime = Date.now();
-    console.log(`[TIMING] Starting Freepik request at ${new Date().toISOString()} | Model: ${model} | KeySource: ${keySource}`);
     
-    const response = await axios.post(
-      `${baseUrl}${config.endpoint}`,
-      requestBody,
-      {
-        headers: {
-          'x-freepik-api-key': freepikApiKey,
-          'Content-Type': 'application/json'
-        },
-        timeout: 60000
+    // Get all available keys for retry on 429
+    const allKeys = [];
+    if (keySource === 'room' && keyInfo.room_id) {
+      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+      keyNames.forEach((name, idx) => {
+        const key = process.env[name];
+        if (key) allKeys.push({ key, index: idx, name });
+      });
+    } else if (keySource === 'admin') {
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      roomKeys.forEach((name, idx) => {
+        const key = process.env[name];
+        if (key) allKeys.push({ key, index: idx, name });
+      });
+    } else {
+      allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
+    }
+    
+    let lastError = null;
+    let successResponse = null;
+    let finalKeyIndex = usedKeyIndex;
+    
+    // Try each key until success or all exhausted
+    for (let attempt = 0; attempt < allKeys.length; attempt++) {
+      const currentKey = allKeys[attempt];
+      console.log(`[TIMING] Attempt ${attempt + 1}/${allKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
+      
+      try {
+        const response = await axios.post(
+          `${baseUrl}${config.endpoint}`,
+          requestBody,
+          {
+            headers: {
+              'x-freepik-api-key': currentKey.key,
+              'Content-Type': 'application/json'
+            },
+            timeout: 60000
+          }
+        );
+        
+        successResponse = response;
+        finalKeyIndex = currentKey.index;
+        console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
+        break;
+        
+      } catch (error) {
+        lastError = error;
+        const status = error.response?.status;
+        
+        if (status === 429) {
+          console.log(`[RETRY] Key ${currentKey.name} hit budget limit (429), trying next key...`);
+          continue;
+        } else {
+          console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, error.response?.data?.message || error.message);
+          break;
+        }
       }
-    );
+    }
     
-    const taskId = response.data.data?.task_id || response.data.task_id;
+    if (!successResponse) {
+      console.error('All API keys exhausted or failed');
+      console.error('Last error:', JSON.stringify(lastError?.response?.data, null, 2) || lastError?.message);
+      const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.response?.data?.error || lastError?.message;
+      return res.status(500).json({ error: 'Semua API key sudah mencapai limit bulanan. ' + errorMsg });
+    }
+    
+    const taskId = successResponse.data.data?.task_id || successResponse.data.task_id;
     const requestTime = new Date().toISOString();
     const createLatency = Date.now() - startTime;
     
@@ -1409,7 +1464,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     if (taskId) {
       await pool.query(
         'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, usedKeyIndex]
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
       );
     }
     
