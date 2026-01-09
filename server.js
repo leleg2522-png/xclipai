@@ -1474,27 +1474,35 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       try {
-        await pool.query(
-          'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
-        );
-        console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
-      } catch (dbError) {
-        console.error('[DB ERROR] Failed to save task with creator_key_name, falling back:', dbError.message);
-        // Secondary fallback: Try inserting with freepik_key_name if creator_key_name fails
-        try {
-          await pool.query(
-            'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, freepik_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
-          );
-          console.log(`[DB] Task saved with freepik_key_name: ${successKeyName}`);
-        } catch (dbError2) {
-          console.error('[DB ERROR] Failed to save with any key name column, using base columns:', dbError2.message);
+        // Build keys and values dynamically to avoid "column does not exist" errors
+        const columns = ['xclip_api_key_id', 'user_id', 'room_id', 'task_id', 'model', 'key_index'];
+        const values = [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex];
+        const placeholders = ['$1', '$2', '$3', '$4', '$5', '$6'];
+
+        // Add creator_key_name if available (we'll check if it works)
+        if (successKeyName) {
+          try {
+            await pool.query(
+              'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+              [...values, successKeyName]
+            );
+            console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
+          } catch (innerError) {
+            console.warn('[DB WARNING] creator_key_name failed, trying base insert:', innerError.message);
+            await pool.query(
+              'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
+              values
+            );
+          }
+        } else {
           await pool.query(
             'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-            [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+            values
           );
         }
+      } catch (dbError) {
+        console.error('[DB FATAL] Failed to save task to database:', dbError.message);
+        // We still return success to the user as the task was created on Freepik
       }
     }
     
