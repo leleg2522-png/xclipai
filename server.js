@@ -17,7 +17,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
+  connectionString: process.env.RAILWAY_DATABASE_URL || process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
 });
 
 // Shared model configurations for video generation
