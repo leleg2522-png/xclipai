@@ -1387,25 +1387,43 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     const startTime = Date.now();
     
-    // Get all available keys for retry on 429
+    // Build complete list of all available keys for retry on errors
     const allKeys = [];
-    if (keySource === 'room' && keyInfo.room_id) {
+    
+    // Add personal key first if exists
+    if (keySource === 'personal' && freepikApiKey) {
+      allKeys.push({ key: freepikApiKey, index: -1, name: 'personal' });
+    }
+    
+    // Add room keys if user has subscription
+    if (keyInfo.room_id) {
       const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
       keyNames.forEach((name, idx) => {
         const key = process.env[name];
         if (key) allKeys.push({ key, index: idx, name });
       });
-    } else if (keySource === 'admin') {
+    }
+    
+    // Add admin fallback keys
+    if (keyInfo.is_admin) {
       const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
                        'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
                        'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
       roomKeys.forEach((name, idx) => {
         const key = process.env[name];
-        if (key) allKeys.push({ key, index: idx, name });
+        // Avoid duplicates
+        if (key && !allKeys.find(k => k.key === key)) {
+          allKeys.push({ key, index: idx, name });
+        }
       });
-    } else {
-      allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
+    
+    // Add global default as last resort
+    if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
+      allKeys.push({ key: process.env.FREEPIK_API_KEY, index: -2, name: 'global' });
+    }
+    
+    console.log(`[KEYS] Total available keys: ${allKeys.length}`);
     
     let lastError = null;
     let successResponse = null;
@@ -1430,7 +1448,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         );
         
         successResponse = response;
-        finalKeyIndex = currentKey.index;
+        finalKeyIndex = currentKey.index >= 0 ? currentKey.index : usedKeyIndex;
         console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
         break;
         
@@ -1438,8 +1456,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
         lastError = error;
         const status = error.response?.status;
         
-        if (status === 429) {
-          console.log(`[RETRY] Key ${currentKey.name} hit budget limit (429), trying next key...`);
+        // Retry on 429 (rate limit) or 401 (invalid key)
+        if (status === 429 || status === 401) {
+          console.log(`[RETRY] Key ${currentKey.name} failed (${status}), trying next key...`);
           continue;
         } else {
           console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, error.response?.data?.message || error.message);
