@@ -17,25 +17,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const pool = new Pool({
-  connectionString: process.env.RAILWAY_DATABASE_URL || process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
 });
-
-// Shared model configurations for video generation
-const VIDEO_MODEL_CONFIGS = {
-  'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
-  'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
-  'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
-  'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
-  'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
-  'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-  'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
-  'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
-  'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
-  'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
-  'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' },
-  'wan-v1': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v1' },
-  'wan-pro': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-pro' }
-};
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
@@ -1316,7 +1299,21 @@ app.post('/api/videogen/proxy', async (req, res) => {
       [keyInfo.id]
     );
     
-    const config = VIDEO_MODEL_CONFIGS[model] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
+    const modelConfigs = {
+      'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
+      'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
+      'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
+      'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
+      'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
+      'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
+      'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
+      'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
+      'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
+      'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
+      'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' }
+    };
+    
+    const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
     // Map aspect ratio to Freepik format
@@ -1390,35 +1387,29 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     const startTime = Date.now();
     
-    // Build list of ALL available Freepik keys (simplified - no room logic)
+    // Get all available keys for retry on 429
     const allKeys = [];
-    
-    // Add personal key FIRST if user has one
-    if (keySource === 'personal' && freepikApiKey) {
-      allKeys.push({ key: freepikApiKey, name: 'personal' });
+    if (keySource === 'room' && keyInfo.room_id) {
+      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+      keyNames.forEach((name, idx) => {
+        const key = process.env[name];
+        if (key) allKeys.push({ key, index: idx, name });
+      });
+    } else if (keySource === 'admin') {
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      roomKeys.forEach((name, idx) => {
+        const key = process.env[name];
+        if (key) allKeys.push({ key, index: idx, name });
+      });
+    } else {
+      allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
-    
-    // Add all environment Freepik keys
-    const freepikKeyNames = [
-      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
-      'FREEPIK_API_KEY'
-    ];
-    
-    freepikKeyNames.forEach((name) => {
-      const key = process.env[name];
-      if (key && !allKeys.find(k => k.key === key)) {
-        allKeys.push({ key, name });
-      }
-    });
-    
-    console.log(`[KEYS] Total available keys: ${allKeys.length}`);
     
     let lastError = null;
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
-    let successKeyName = null;
     
     // Try each key until success or all exhausted
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
@@ -1439,8 +1430,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         );
         
         successResponse = response;
-        finalKeyIndex = attempt;
-        successKeyName = currentKey.name; // Store the KEY NAME that worked
+        finalKeyIndex = currentKey.index;
         console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
         break;
         
@@ -1448,9 +1438,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         lastError = error;
         const status = error.response?.status;
         
-        // Retry on 429 (rate limit), 401 (invalid key), 403 (access denied)
-        if (status === 429 || status === 401 || status === 403) {
-          console.log(`[RETRY] Key ${currentKey.name} failed (${status}), trying next key...`);
+        if (status === 429) {
+          console.log(`[RETRY] Key ${currentKey.name} hit budget limit (429), trying next key...`);
           continue;
         } else {
           console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, error.response?.data?.message || error.message);
@@ -1473,40 +1462,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
     
     if (taskId) {
-      try {
-        console.log(`[DB SAVE] Attempting to save task ${taskId} with key: ${successKeyName}`);
-        // Build values
-        const values = [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex];
-
-        // Attempt to insert with creator_key_name
-        try {
-          await pool.query(
-            'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [...values, successKeyName]
-          );
-          console.log(`[DB] Task saved successfully with creator_key_name: ${successKeyName}`);
-        } catch (innerError) {
-          console.warn(`[DB WARNING] creator_key_name insert failed for ${taskId}:`, innerError.message);
-          // If creator_key_name fails, try freepik_key_name (fallback)
-          try {
-            await pool.query(
-              'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, freepik_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-              [...values, successKeyName]
-            );
-            console.log(`[DB] Task saved successfully with freepik_key_name: ${successKeyName}`);
-          } catch (innerError2) {
-            console.error(`[DB ERROR] All key name columns failed for ${taskId}:`, innerError2.message);
-            // Final fallback: just the basics
-            await pool.query(
-              'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-              values
-            );
-            console.log(`[DB] Task saved with base columns ONLY for ${taskId}`);
-          }
-        }
-      } catch (dbError) {
-        console.error('[DB FATAL] Failed to save task at all:', dbError.message);
-      }
+      await pool.query(
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+      );
     }
     
     res.json({
@@ -1554,99 +1513,51 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
+    let freepikApiKey = null;
     
-    // Use saved model from database or query param
-    const taskModel = savedTask.model || model;
-    const modelConfig = VIDEO_MODEL_CONFIGS[taskModel] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
-    const endpoint = modelConfig.endpoint + '/';
-    
-    // Build list of ALL available Freepik keys (same as task creation)
-    const allKeys = [];
-    
-    // Add user's personal key if they have one
+    // PRIORITY 1: User's personal API key (FASTEST)
     const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
     if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
+      freepikApiKey = userResult.rows[0].freepik_api_key;
     }
     
-    // Add all environment Freepik keys - MUST MATCH TASK CREATION EXACTLY
-    const freepikKeyNames = [
-      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
-      'FREEPIK_API_KEY'
-    ];
-    
-    freepikKeyNames.forEach((name) => {
-      const key = process.env[name];
-      if (key && !allKeys.find(k => k.key === key)) {
-        allKeys.push({ key, name });
-      }
-    });
-
-    // DEBUG: Log all built keys to verify against environment
-    console.log(`[POLL DEBUG] Built allKeys: ${allKeys.map(k => k.name).join(', ')}`);
-    
-    // PRIORITIZE: Put the creator key FIRST if we have it stored
-    // Check both columns as migration might be messy
-    const creatorKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
-    console.log(`[POLL] Task ${taskId} | creator_key from DB: ${creatorKeyName}`);
-    
-    // Fallback: If no creator_key_name, try to get it from key_index
-    let finalCreatorKeyName = creatorKeyName;
-    if (!finalCreatorKeyName) {
-      const savedKeyIndex = savedTask.key_index;
-      if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
-        finalCreatorKeyName = allKeys[savedKeyIndex].name;
-        console.log(`[POLL] Derived creator_key_name from index ${savedKeyIndex}: ${finalCreatorKeyName}`);
-      }
-    }
-
-    if (finalCreatorKeyName) {
-      const creatorIdx = allKeys.findIndex(k => k.name === finalCreatorKeyName);
-      if (creatorIdx >= 0) {
-        const creatorKey = allKeys.splice(creatorIdx, 1)[0];
-        allKeys.unshift(creatorKey);
-        console.log(`[POLL] Prioritizing creator key: ${finalCreatorKeyName}`);
-      } else {
-        console.log(`[POLL WARNING] Creator key ${finalCreatorKeyName} not found in environment variables!`);
-      }
+    // PRIORITY 2: Room's rotated key
+    if (!freepikApiKey && keyInfo.room_id) {
+      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
+      freepikApiKey = rotated.key;
     }
     
-    let response = null;
-    let lastError = null;
+    // PRIORITY 3: Global default
+    if (!freepikApiKey) {
+      freepikApiKey = process.env.FREEPIK_API_KEY;
+    }
+    
+    const statusEndpoints = {
+      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
+      'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
+      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
+      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
+      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
+      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
+      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-1080p/',
+      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-768p/',
+      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
+      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-1-0-pro-720p/',
+      'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5/'
+    };
+    
+    const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
+    
     const pollStart = Date.now();
-    
-    // Try each key until success
-    for (let i = 0; i < allKeys.length; i++) {
-      const currentKey = allKeys[i];
-      try {
-        response = await axios.get(
-          `https://api.freepik.com${endpoint}${taskId}`,
-          {
-            headers: {
-              'x-freepik-api-key': currentKey.key
-            },
-            timeout: 10000
-          }
-        );
-        break; // Success!
-      } catch (error) {
-        lastError = error;
-        const status = error.response?.status;
-        // Retry on 401, 403, 404, 429
-        if (status === 401 || status === 403 || status === 404 || status === 429) {
-          console.log(`[POLL RETRY] Key ${currentKey.name} failed (${status}), trying next...`);
-          continue;
-        }
-        break; // Other errors, don't retry
+    const response = await axios.get(
+      `https://api.freepik.com${endpoint}${taskId}`,
+      {
+        headers: {
+          'x-freepik-api-key': freepikApiKey
+        },
+        timeout: 10000
       }
-    }
-    
-    if (!response) {
-      throw lastError || new Error('No API keys available');
-    }
-    
+    );
     const pollLatency = Date.now() - pollStart;
     
     const data = response.data.data || response.data;
@@ -2208,44 +2119,24 @@ app.post('/api/generate-video', async (req, res) => {
     const { model, image, prompt, duration, aspectRatio, customApiKey } = req.body;
     
     let apiKey = null;
-    let usedKeyName = 'unknown';
-    
-    // All possible Freepik key names for lookup
-    const freepikKeyNames = [
-      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
-      'FREEPIK_API_KEY'
-    ];
     
     // Priority 1: If user is logged in and has subscription with room, use room's API key
     if (req.session.userId) {
       const roomKey = await getRoomApiKey(req.session.userId);
       if (roomKey) {
         apiKey = roomKey;
-        // Find the key name immediately
-        for (const keyName of freepikKeyNames) {
-          if (process.env[keyName] === apiKey) {
-            usedKeyName = keyName;
-            break;
-          }
-        }
       }
     }
     
     // Priority 2: User's custom API key (only if no room key)
     if (!apiKey && customApiKey) {
       apiKey = customApiKey;
-      usedKeyName = 'custom';
     }
     
     // Priority 3: Fallback to default API key
     if (!apiKey) {
       apiKey = process.env.FREEPIK_API_KEY;
-      usedKeyName = 'FREEPIK_API_KEY';
     }
-    
-    console.log(`[VIDEO-GEN] Using key: ${usedKeyName}`);
     
     if (!apiKey) {
       return res.status(500).json({ error: 'Xclip API key not configured. Please add your API key or buy a subscription package.' });
@@ -2312,20 +2203,8 @@ app.post('/api/generate-video', async (req, res) => {
     const taskId = response.data.data?.task_id || response.data.task_id || response.data.id;
     
     if (taskId) {
-      console.log(`Video task created: ${taskId} with key: ${usedKeyName}`);
-      
-      // Save task to database with creator key name (usedKeyName already captured at the start)
-      try {
-        await pool.query(
-          'INSERT INTO video_generation_tasks (user_id, task_id, model, status, creator_key_name, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-          [req.session.userId || null, taskId, endpoint, 'processing', usedKeyName]
-        );
-        console.log(`[DB] Saved video task ${taskId} with creator_key: ${usedKeyName}`);
-      } catch (dbError) {
-        console.error('[DB] Failed to save video task:', dbError.message);
-      }
-      
-      res.json({ taskId, model: endpoint, creatorKey: usedKeyName });
+      console.log(`Video task created: ${taskId}`);
+      res.json({ taskId, model: endpoint });
     } else {
       console.log('Freepik response:', JSON.stringify(response.data, null, 2));
       res.status(500).json({ error: 'No task ID returned from API' });
@@ -2342,33 +2221,7 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     const { model, taskId } = req.params;
     const { customApiKey } = req.body || {};
     
-    // First, try to get the creator key from database
-    let apiKey = null;
-    let usedKeyName = null;
-    
-    const taskResult = await pool.query(
-      'SELECT creator_key_name, freepik_key_name FROM video_generation_tasks WHERE task_id = $1',
-      [taskId]
-    );
-    
-    if (taskResult.rows.length > 0) {
-      const savedTask = taskResult.rows[0];
-      usedKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
-      if (usedKeyName && usedKeyName !== 'unknown' && usedKeyName !== 'custom') {
-        apiKey = process.env[usedKeyName];
-        console.log(`[STATUS] Using saved creator key: ${usedKeyName}`);
-      }
-    }
-    
-    // Fallback to custom key or default
-    if (!apiKey && customApiKey) {
-      apiKey = customApiKey;
-      console.log('[STATUS] Using custom API key');
-    }
-    if (!apiKey) {
-      apiKey = process.env.FREEPIK_API_KEY;
-      console.log('[STATUS] Using default FREEPIK_API_KEY');
-    }
+    const apiKey = customApiKey || process.env.FREEPIK_API_KEY;
     
     if (!apiKey) {
       return res.status(500).json({ error: 'API key tidak tersedia' });
@@ -2392,7 +2245,7 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     const statusEndpoint = statusEndpointMap[model] || model;
     const statusUrl = `https://api.freepik.com/v1/ai/image-to-video/${statusEndpoint}/${taskId}`;
     
-    console.log(`Checking status: ${statusUrl} with key: ${usedKeyName || 'fallback'}`);
+    console.log(`Checking status: ${statusUrl}`);
     
     const response = await axios.get(statusUrl, {
       headers: {

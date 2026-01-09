@@ -2056,12 +2056,57 @@ function renderVideoGenPage() {
         <p class="hero-subtitle">Ubah gambar menjadi video menakjubkan dengan Xclip AI</p>
       </div>
       
-      ${!state.auth.user ? `
+      ${state.auth.user ? `
+      <div class="room-manager-panel glass-card">
+        <div class="room-manager-header">
+          <div class="room-manager-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span>Room Manager</span>
+          </div>
+          ${(state.roomManager.hasSubscription || state.admin.isAdmin) ? `
+            <div class="subscription-info">
+              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : 'Aktif'}</span>
+              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.roomManager.subscription?.expiredAt)}</span>
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="room-manager-content">
+          ${(!state.roomManager.hasSubscription && !state.admin.isAdmin) ? `
+            <div class="no-subscription">
+              <p>Anda belum memiliki paket aktif</p>
+              <button class="btn btn-primary" id="buyPackageBtn" ${state.roomManager.isLoading ? 'disabled' : ''}>
+                ${state.roomManager.isLoading ? 'Memproses...' : 'Beli Paket 24 Jam'}
+              </button>
+            </div>
+          ` : (state.roomManager.subscription && !state.roomManager.subscription.roomId && !state.admin.isAdmin) ? `
+            <div class="select-room-prompt">
+              <p>Pilih room untuk mulai generate</p>
+              <button class="btn btn-primary" id="openRoomModalBtn">Pilih Room</button>
+            </div>
+          ` : `
+            <div class="current-room">
+              <div class="room-info">
+                <span class="room-label">Room:</span>
+                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : (state.roomManager.subscription?.roomName || 'Unknown')}</span>
+                <span class="room-status-badge status-${(state.roomManager.subscription?.roomStatus || 'open').toLowerCase()}">${state.admin.isAdmin ? 'OPEN' : (state.roomManager.subscription?.roomStatus || 'OPEN')}</span>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="changeRoomBtn">Ganti Room</button>
+            </div>
+          `}
+        </div>
+      </div>
+      ` : `
       <div class="room-manager-panel glass-card login-prompt-panel">
-        <p>Login untuk menggunakan Video Generator</p>
+        <p>Login untuk menggunakan Room Manager dan fitur subscription</p>
         <button class="btn btn-primary" id="loginForRoomBtn">Login</button>
       </div>
-      ` : ''}
+      `}
       
       <div class="xmaker-layout">
         <div class="xmaker-settings">
