@@ -1459,8 +1459,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         lastError = error;
         const status = error.response?.status;
         
-        // Retry on 429 (rate limit) or 401 (invalid key)
-        if (status === 429 || status === 401) {
+        // Retry on 429 (rate limit), 401 (invalid key), 403 (access denied)
+        if (status === 429 || status === 401 || status === 403) {
           console.log(`[RETRY] Key ${currentKey.name} failed (${status}), trying next key...`);
           continue;
         } else {
@@ -1596,8 +1596,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       } catch (error) {
         lastError = error;
         const status = error.response?.status;
-        // Retry on 401, 404, 429
-        if (status === 401 || status === 404 || status === 429) {
+        // Retry on 401, 403, 404, 429
+        if (status === 401 || status === 403 || status === 404 || status === 429) {
           console.log(`[POLL RETRY] Key ${currentKey.name} failed (${status}), trying next...`);
           continue;
         }
