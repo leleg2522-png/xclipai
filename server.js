@@ -1431,7 +1431,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let lastError = null;
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
-    let successKeyName = null;
     
     // Try each key until success or all exhausted
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
@@ -1452,9 +1451,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         );
         
         successResponse = response;
-        finalKeyIndex = currentKey.index >= 0 ? currentKey.index : usedKeyIndex;
-        successKeyName = currentKey.name;
-        console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
+        finalKeyIndex = attempt; // Store the index in allKeys array that worked
+        console.log(`[SUCCESS] Key ${currentKey.name} worked! (index: ${attempt})`);
         break;
         
       } catch (error) {
@@ -1487,10 +1485,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, freepik_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
       );
-      console.log(`[DB] Task saved with key: ${successKeyName}`);
+      console.log(`[DB] Task saved with key_index: ${finalKeyIndex}`);
     }
     
     res.json({
@@ -1544,27 +1542,16 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const modelConfig = VIDEO_MODEL_CONFIGS[taskModel] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
     const endpoint = modelConfig.endpoint + '/';
     
-    // Build list of all available keys - PRIORITIZE the key that created this task
+    // Build list of all available keys (same order as task creation)
     const allKeys = [];
     
-    // PRIORITY 1: Use the SAME key that created this task (stored in freepik_key_name)
-    if (savedTask.freepik_key_name) {
-      const creatorKey = process.env[savedTask.freepik_key_name];
-      if (creatorKey) {
-        allKeys.push({ key: creatorKey, name: savedTask.freepik_key_name });
-        console.log(`[POLL] Using creator key first: ${savedTask.freepik_key_name}`);
-      }
-    }
-    
-    // PRIORITY 2: User's personal key
+    // Add user's personal key
     const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
     if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      if (!allKeys.find(k => k.key === userResult.rows[0].freepik_api_key)) {
-        allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
-      }
+      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
     }
     
-    // PRIORITY 3: Room keys
+    // Add room keys
     if (keyInfo.room_id) {
       const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
       keyNames.forEach((name) => {
@@ -1573,7 +1560,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // PRIORITY 4: Admin fallback keys
+    // Add admin fallback keys
     if (keyInfo.is_admin) {
       const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
                        'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
@@ -1584,9 +1571,18 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // PRIORITY 5: Global default
+    // Add global default
     if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
       allKeys.push({ key: process.env.FREEPIK_API_KEY, name: 'global' });
+    }
+    
+    // REORDER: Put the creator key (from key_index) FIRST
+    const savedKeyIndex = savedTask.key_index;
+    if (savedKeyIndex !== null && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
+      const creatorKey = allKeys[savedKeyIndex];
+      allKeys.splice(savedKeyIndex, 1); // Remove from original position
+      allKeys.unshift(creatorKey); // Put at front
+      console.log(`[POLL] Prioritizing creator key at index ${savedKeyIndex}: ${creatorKey.name}`);
     }
     
     let response = null;
