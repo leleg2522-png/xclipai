@@ -1345,7 +1345,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
       requestBody = {
         image: image,
         prompt: prompt || '',
-        prompt_optimizer: true
+        prompt_optimizer: true,
+        cfg_scale: 0.8
       };
     } else if (config.api === 'seedance') {
       requestBody = {
@@ -1353,7 +1354,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         prompt: prompt || '',
         duration: duration || '5',
         resolution: model.includes('1080p') ? '1080p' : '720p',
-        seed: Math.floor(Math.random() * 1000000)
+        seed: Math.floor(Math.random() * 1000000),
+        cfg_scale: 0.8
       };
     } else if (config.api === 'pixverse') {
       requestBody = {
@@ -1365,14 +1367,16 @@ app.post('/api/videogen/proxy', async (req, res) => {
         negative_prompt: '',
         seed: Math.floor(Math.random() * 1000000),
         motion_mode: 'normal',
-        template_id: null
+        template_id: null,
+        cfg_scale: 0.8
       };
     } else if (config.api === 'wan') {
       requestBody = {
         image: image,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio
+        aspect_ratio: mappedAspectRatio,
+        cfg_scale: 0.8
       };
     }
     
