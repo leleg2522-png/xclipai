@@ -1474,7 +1474,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       try {
-        // Build keys and values dynamically
+        console.log(`[DB SAVE] Attempting to save task ${taskId} with key: ${successKeyName}`);
+        // Build values
         const values = [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex];
 
         // Attempt to insert with creator_key_name
@@ -1483,26 +1484,28 @@ app.post('/api/videogen/proxy', async (req, res) => {
             'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, creator_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
             [...values, successKeyName]
           );
-          console.log(`[DB] Task saved with creator_key_name: ${successKeyName}`);
+          console.log(`[DB] Task saved successfully with creator_key_name: ${successKeyName}`);
         } catch (innerError) {
-          // If creator_key_name fails, try freepik_key_name (some old migrations used this)
+          console.warn(`[DB WARNING] creator_key_name insert failed for ${taskId}:`, innerError.message);
+          // If creator_key_name fails, try freepik_key_name (fallback)
           try {
             await pool.query(
               'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, freepik_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
               [...values, successKeyName]
             );
-            console.log(`[DB] Task saved with freepik_key_name: ${successKeyName}`);
+            console.log(`[DB] Task saved successfully with freepik_key_name: ${successKeyName}`);
           } catch (innerError2) {
+            console.error(`[DB ERROR] All key name columns failed for ${taskId}:`, innerError2.message);
             // Final fallback: just the basics
             await pool.query(
               'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
               values
             );
-            console.log(`[DB] Task saved with base columns only`);
+            console.log(`[DB] Task saved with base columns ONLY for ${taskId}`);
           }
         }
       } catch (dbError) {
-        console.error('[DB FATAL] Failed to save task:', dbError.message);
+        console.error('[DB FATAL] Failed to save task at all:', dbError.message);
       }
     }
     
@@ -1566,7 +1569,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
     }
     
-    // Add all environment Freepik keys
+    // Add all environment Freepik keys - MUST MATCH TASK CREATION EXACTLY
     const freepikKeyNames = [
       'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
@@ -1580,10 +1583,13 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
         allKeys.push({ key, name });
       }
     });
+
+    // DEBUG: Log all built keys to verify against environment
+    console.log(`[POLL DEBUG] Built allKeys: ${allKeys.map(k => k.name).join(', ')}`);
     
     // PRIORITIZE: Put the creator key FIRST if we have it stored
     const creatorKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
-    console.log(`[POLL] Task ${taskId} | creator_key: ${creatorKeyName} | available: ${allKeys.map(k => k.name).join(', ')}`);
+    console.log(`[POLL] Task ${taskId} | creator_key from DB: ${creatorKeyName}`);
     
     if (creatorKeyName) {
       const creatorIdx = allKeys.findIndex(k => k.name === creatorKeyName);
