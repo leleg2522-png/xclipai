@@ -1390,41 +1390,28 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     const startTime = Date.now();
     
-    // Build complete list of all available keys for retry on errors
+    // Build list of ALL available Freepik keys (simplified - no room logic)
     const allKeys = [];
     
-    // Add personal key first if exists
+    // Add personal key FIRST if user has one
     if (keySource === 'personal' && freepikApiKey) {
-      allKeys.push({ key: freepikApiKey, index: -1, name: 'personal' });
+      allKeys.push({ key: freepikApiKey, name: 'personal' });
     }
     
-    // Add room keys if user has subscription
-    if (keyInfo.room_id) {
-      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-      keyNames.forEach((name, idx) => {
-        const key = process.env[name];
-        if (key) allKeys.push({ key, index: idx, name });
-      });
-    }
+    // Add all environment Freepik keys
+    const freepikKeyNames = [
+      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
+      'FREEPIK_API_KEY'
+    ];
     
-    // Add admin fallback keys
-    if (keyInfo.is_admin) {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
-      roomKeys.forEach((name, idx) => {
-        const key = process.env[name];
-        // Avoid duplicates
-        if (key && !allKeys.find(k => k.key === key)) {
-          allKeys.push({ key, index: idx, name });
-        }
-      });
-    }
-    
-    // Add global default as last resort
-    if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
-      allKeys.push({ key: process.env.FREEPIK_API_KEY, index: -2, name: 'global' });
-    }
+    freepikKeyNames.forEach((name) => {
+      const key = process.env[name];
+      if (key && !allKeys.find(k => k.key === key)) {
+        allKeys.push({ key, name });
+      }
+    });
     
     console.log(`[KEYS] Total available keys: ${allKeys.length}`);
     
@@ -1544,52 +1531,33 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const modelConfig = VIDEO_MODEL_CONFIGS[taskModel] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
     const endpoint = modelConfig.endpoint + '/';
     
-    // Build list of all available keys (same order as task creation)
+    // Build list of ALL available Freepik keys (same as task creation)
     const allKeys = [];
+    const freepikKeyNames = [
+      'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+      'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+      'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3',
+      'FREEPIK_API_KEY'
+    ];
     
-    // Add user's personal key
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
-    }
+    freepikKeyNames.forEach((name) => {
+      const key = process.env[name];
+      if (key && !allKeys.find(k => k.key === key)) {
+        allKeys.push({ key, name });
+      }
+    });
     
-    // Add room keys
-    if (keyInfo.room_id) {
-      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-      keyNames.forEach((name) => {
-        const key = process.env[name];
-        if (key && !allKeys.find(k => k.key === key)) allKeys.push({ key, name });
-      });
-    }
+    // PRIORITIZE: Put the creator key FIRST if we have it stored
+    const creatorKeyName = savedTask.creator_key_name;
+    console.log(`[POLL] Task ${taskId} | creator_key: ${creatorKeyName} | available: ${allKeys.map(k => k.name).join(', ')}`);
     
-    // Add admin fallback keys
-    if (keyInfo.is_admin) {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
-      roomKeys.forEach((name) => {
-        const key = process.env[name];
-        if (key && !allKeys.find(k => k.key === key)) allKeys.push({ key, name });
-      });
-    }
-    
-    // Add global default
-    if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
-      allKeys.push({ key: process.env.FREEPIK_API_KEY, name: 'global' });
-    }
-    
-    // REORDER: Put the creator key (from key_index) FIRST
-    const savedKeyIndex = savedTask.key_index;
-    console.log(`[POLL DEBUG] Task ${taskId} | key_index: ${savedKeyIndex} | allKeys count: ${allKeys.length}`);
-    console.log(`[POLL DEBUG] Available keys: ${allKeys.map(k => k.name).join(', ')}`);
-    
-    if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
-      const creatorKey = allKeys[savedKeyIndex];
-      allKeys.splice(savedKeyIndex, 1); // Remove from original position
-      allKeys.unshift(creatorKey); // Put at front
-      console.log(`[POLL] Prioritizing creator key at index ${savedKeyIndex}: ${creatorKey.name}`);
-    } else {
-      console.log(`[POLL WARNING] key_index invalid or null, using default order`);
+    if (creatorKeyName) {
+      const creatorIdx = allKeys.findIndex(k => k.name === creatorKeyName);
+      if (creatorIdx > 0) {
+        const creatorKey = allKeys.splice(creatorIdx, 1)[0];
+        allKeys.unshift(creatorKey);
+        console.log(`[POLL] Prioritizing creator key: ${creatorKeyName}`);
+      }
     }
     
     let response = null;
