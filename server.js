@@ -20,6 +20,23 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
 });
 
+// Shared model configurations for video generation
+const VIDEO_MODEL_CONFIGS = {
+  'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
+  'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
+  'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
+  'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
+  'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
+  'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
+  'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
+  'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
+  'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
+  'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
+  'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' },
+  'wan-v1': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v1' },
+  'wan-pro': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-pro' }
+};
+
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : [];
@@ -1299,21 +1316,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       [keyInfo.id]
     );
     
-    const modelConfigs = {
-      'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
-      'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
-      'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
-      'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
-      'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
-      'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
-      'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
-      'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
-      'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
-      'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' }
-    };
-    
-    const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
+    const config = VIDEO_MODEL_CONFIGS[model] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
     // Map aspect ratio to Freepik format
@@ -1532,21 +1535,11 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
-    const statusEndpoints = {
-      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
-      'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
-      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
-      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
-      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
-      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
-      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-1080p/',
-      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-768p/',
-      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
-      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-1-0-pro-720p/',
-      'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5/'
-    };
     
-    const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
+    // Use saved model from database or query param
+    const taskModel = savedTask.model || model;
+    const modelConfig = VIDEO_MODEL_CONFIGS[taskModel] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
+    const endpoint = modelConfig.endpoint + '/';
     
     // Build list of all available keys for retry
     const allKeys = [];
