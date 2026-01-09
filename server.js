@@ -1592,22 +1592,24 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const creatorKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
     console.log(`[POLL] Task ${taskId} | creator_key from DB: ${creatorKeyName}`);
     
-    if (creatorKeyName) {
-      const creatorIdx = allKeys.findIndex(k => k.name === creatorKeyName);
+    // Fallback: If no creator_key_name, try to get it from key_index
+    let finalCreatorKeyName = creatorKeyName;
+    if (!finalCreatorKeyName) {
+      const savedKeyIndex = savedTask.key_index;
+      if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
+        finalCreatorKeyName = allKeys[savedKeyIndex].name;
+        console.log(`[POLL] Derived creator_key_name from index ${savedKeyIndex}: ${finalCreatorKeyName}`);
+      }
+    }
+
+    if (finalCreatorKeyName) {
+      const creatorIdx = allKeys.findIndex(k => k.name === finalCreatorKeyName);
       if (creatorIdx >= 0) {
         const creatorKey = allKeys.splice(creatorIdx, 1)[0];
         allKeys.unshift(creatorKey);
-        console.log(`[POLL] Prioritizing creator key: ${creatorKeyName}`);
+        console.log(`[POLL] Prioritizing creator key: ${finalCreatorKeyName}`);
       } else {
-        console.log(`[POLL WARNING] Creator key ${creatorKeyName} not found in environment variables!`);
-      }
-    } else {
-      // Fallback: If no creator_key_name, but we have key_index (legacy support)
-      const savedKeyIndex = savedTask.key_index;
-      if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
-        const creatorKey = allKeys.splice(savedKeyIndex, 1)[0];
-        allKeys.unshift(creatorKey);
-        console.log(`[POLL] Fallback: Prioritizing key at saved index ${savedKeyIndex}: ${creatorKey.name}`);
+        console.log(`[POLL WARNING] Creator key ${finalCreatorKeyName} not found in environment variables!`);
       }
     }
     
