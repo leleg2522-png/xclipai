@@ -1612,7 +1612,18 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Get task status error:', error.response?.data || error.message);
+    const responseData = error.response?.data;
+    const isHtmlError = typeof responseData === 'string' && responseData.includes('<!DOCTYPE');
+    
+    if (isHtmlError) {
+      console.error('Freepik server error (HTML response) - server may be down');
+      return res.status(503).json({ 
+        error: 'Freepik server sedang bermasalah. Coba lagi dalam beberapa saat.',
+        retryable: true
+      });
+    }
+    
+    console.error('Get task status error:', responseData || error.message);
     res.status(500).json({ error: 'Gagal mengambil status task' });
   }
 });
