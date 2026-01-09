@@ -2773,7 +2773,7 @@ function attachEventListeners() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       state.currentPage = btn.dataset.page;
-      render();
+      render(true); // Force render when switching pages
     });
   });
 
