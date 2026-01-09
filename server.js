@@ -1578,11 +1578,16 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // REORDER: Put the creator key (from key_index) FIRST
     const savedKeyIndex = savedTask.key_index;
-    if (savedKeyIndex !== null && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
+    console.log(`[POLL DEBUG] Task ${taskId} | key_index: ${savedKeyIndex} | allKeys count: ${allKeys.length}`);
+    console.log(`[POLL DEBUG] Available keys: ${allKeys.map(k => k.name).join(', ')}`);
+    
+    if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
       const creatorKey = allKeys[savedKeyIndex];
       allKeys.splice(savedKeyIndex, 1); // Remove from original position
       allKeys.unshift(creatorKey); // Put at front
       console.log(`[POLL] Prioritizing creator key at index ${savedKeyIndex}: ${creatorKey.name}`);
+    } else {
+      console.log(`[POLL WARNING] key_index invalid or null, using default order`);
     }
     
     let response = null;
