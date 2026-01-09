@@ -1532,25 +1532,6 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
-    let freepikApiKey = null;
-    
-    // PRIORITY 1: User's personal API key (FASTEST)
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      freepikApiKey = userResult.rows[0].freepik_api_key;
-    }
-    
-    // PRIORITY 2: Room's rotated key
-    if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
-      freepikApiKey = rotated.key;
-    }
-    
-    // PRIORITY 3: Global default
-    if (!freepikApiKey) {
-      freepikApiKey = process.env.FREEPIK_API_KEY;
-    }
-    
     const statusEndpoints = {
       'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
@@ -1567,16 +1548,74 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
     
+    // Build list of all available keys for retry
+    const allKeys = [];
+    
+    // Add user's personal key first
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
+    }
+    
+    // Add room keys
+    if (keyInfo.room_id) {
+      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+      keyNames.forEach((name) => {
+        const key = process.env[name];
+        if (key && !allKeys.find(k => k.key === key)) allKeys.push({ key, name });
+      });
+    }
+    
+    // Add admin fallback keys
+    if (keyInfo.is_admin) {
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      roomKeys.forEach((name) => {
+        const key = process.env[name];
+        if (key && !allKeys.find(k => k.key === key)) allKeys.push({ key, name });
+      });
+    }
+    
+    // Add global default
+    if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
+      allKeys.push({ key: process.env.FREEPIK_API_KEY, name: 'global' });
+    }
+    
+    let response = null;
+    let lastError = null;
     const pollStart = Date.now();
-    const response = await axios.get(
-      `https://api.freepik.com${endpoint}${taskId}`,
-      {
-        headers: {
-          'x-freepik-api-key': freepikApiKey
-        },
-        timeout: 10000
+    
+    // Try each key until success
+    for (let i = 0; i < allKeys.length; i++) {
+      const currentKey = allKeys[i];
+      try {
+        response = await axios.get(
+          `https://api.freepik.com${endpoint}${taskId}`,
+          {
+            headers: {
+              'x-freepik-api-key': currentKey.key
+            },
+            timeout: 10000
+          }
+        );
+        break; // Success!
+      } catch (error) {
+        lastError = error;
+        const status = error.response?.status;
+        // Retry on 401, 404, 429
+        if (status === 401 || status === 404 || status === 429) {
+          console.log(`[POLL RETRY] Key ${currentKey.name} failed (${status}), trying next...`);
+          continue;
+        }
+        break; // Other errors, don't retry
       }
-    );
+    }
+    
+    if (!response) {
+      throw lastError || new Error('No API keys available');
+    }
+    
     const pollLatency = Date.now() - pollStart;
     
     const data = response.data.data || response.data;
