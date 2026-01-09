@@ -1431,6 +1431,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let lastError = null;
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
+    let successKeyName = null;
     
     // Try each key until success or all exhausted
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
