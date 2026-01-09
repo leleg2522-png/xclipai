@@ -1588,6 +1588,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     console.log(`[POLL DEBUG] Built allKeys: ${allKeys.map(k => k.name).join(', ')}`);
     
     // PRIORITIZE: Put the creator key FIRST if we have it stored
+    // Check both columns as migration might be messy
     const creatorKeyName = savedTask.creator_key_name || savedTask.freepik_key_name;
     console.log(`[POLL] Task ${taskId} | creator_key from DB: ${creatorKeyName}`);
     
@@ -1599,6 +1600,14 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
         console.log(`[POLL] Prioritizing creator key: ${creatorKeyName}`);
       } else {
         console.log(`[POLL WARNING] Creator key ${creatorKeyName} not found in environment variables!`);
+      }
+    } else {
+      // Fallback: If no creator_key_name, but we have key_index (legacy support)
+      const savedKeyIndex = savedTask.key_index;
+      if (savedKeyIndex !== null && savedKeyIndex !== undefined && savedKeyIndex >= 0 && savedKeyIndex < allKeys.length) {
+        const creatorKey = allKeys.splice(savedKeyIndex, 1)[0];
+        allKeys.unshift(creatorKey);
+        console.log(`[POLL] Fallback: Prioritizing key at saved index ${savedKeyIndex}: ${creatorKey.name}`);
       }
     }
     
