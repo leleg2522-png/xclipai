@@ -1431,6 +1431,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let lastError = null;
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
+    let successKeyName = null;
     
     // Try each key until success or all exhausted
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
@@ -1452,6 +1453,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         
         successResponse = response;
         finalKeyIndex = currentKey.index >= 0 ? currentKey.index : usedKeyIndex;
+        successKeyName = currentKey.name;
         console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
         break;
         
@@ -1485,9 +1487,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (taskId) {
       await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, freepik_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, successKeyName]
       );
+      console.log(`[DB] Task saved with key: ${successKeyName}`);
     }
     
     res.json({
@@ -1541,16 +1544,27 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const modelConfig = VIDEO_MODEL_CONFIGS[taskModel] || VIDEO_MODEL_CONFIGS['kling-v2.5-pro'];
     const endpoint = modelConfig.endpoint + '/';
     
-    // Build list of all available keys for retry
+    // Build list of all available keys - PRIORITIZE the key that created this task
     const allKeys = [];
     
-    // Add user's personal key first
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
+    // PRIORITY 1: Use the SAME key that created this task (stored in freepik_key_name)
+    if (savedTask.freepik_key_name) {
+      const creatorKey = process.env[savedTask.freepik_key_name];
+      if (creatorKey) {
+        allKeys.push({ key: creatorKey, name: savedTask.freepik_key_name });
+        console.log(`[POLL] Using creator key first: ${savedTask.freepik_key_name}`);
+      }
     }
     
-    // Add room keys
+    // PRIORITY 2: User's personal key
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      if (!allKeys.find(k => k.key === userResult.rows[0].freepik_api_key)) {
+        allKeys.push({ key: userResult.rows[0].freepik_api_key, name: 'personal' });
+      }
+    }
+    
+    // PRIORITY 3: Room keys
     if (keyInfo.room_id) {
       const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
       keyNames.forEach((name) => {
@@ -1559,7 +1573,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // Add admin fallback keys
+    // PRIORITY 4: Admin fallback keys
     if (keyInfo.is_admin) {
       const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
                        'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
@@ -1570,7 +1584,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // Add global default
+    // PRIORITY 5: Global default
     if (process.env.FREEPIK_API_KEY && !allKeys.find(k => k.key === process.env.FREEPIK_API_KEY)) {
       allKeys.push({ key: process.env.FREEPIK_API_KEY, name: 'global' });
     }
