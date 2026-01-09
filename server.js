@@ -1339,7 +1339,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         prompt: prompt || '',
         duration: duration || '5',
         aspect_ratio: mappedAspectRatio,
-        cfg_scale: 0.3
+        cfg_scale: 0.7
       };
     } else if (config.api === 'minimax') {
       requestBody = {
