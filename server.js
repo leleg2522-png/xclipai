@@ -1514,23 +1514,39 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     const savedTask = taskResult.rows[0];
     let freepikApiKey = null;
+    let keySource = 'unknown';
     
-    // PRIORITY 1: User's personal API key (FASTEST)
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      freepikApiKey = userResult.rows[0].freepik_api_key;
+    // Use the SAME key that was used to create the task
+    // Get all available keys and use the one at saved key_index
+    if (keyInfo.room_id) {
+      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+      const keys = keyNames.map(name => ({ key: process.env[name], name })).filter(k => k.key);
+      
+      if (savedTask.key_index !== null && keys[savedTask.key_index]) {
+        freepikApiKey = keys[savedTask.key_index].key;
+        keySource = `room_key_${savedTask.key_index + 1}`;
+      } else if (keys.length > 0) {
+        freepikApiKey = keys[0].key;
+        keySource = 'room_key_fallback';
+      }
     }
     
-    // PRIORITY 2: Room's rotated key
-    if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
-      freepikApiKey = rotated.key;
+    // Fallback to user's personal API key
+    if (!freepikApiKey) {
+      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+        freepikApiKey = userResult.rows[0].freepik_api_key;
+        keySource = 'personal';
+      }
     }
     
-    // PRIORITY 3: Global default
+    // Fallback to global default
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
+      keySource = 'global';
     }
+    
+    console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_index: ${savedTask.key_index}`);
     
     const statusEndpoints = {
       'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
