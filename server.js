@@ -1461,11 +1461,15 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
     
+    // Get the key name that was actually used
+    const usedKeyName = allKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
+    
     if (taskId) {
       await pool.query(
-        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index) VALUES ($1, $2, $3, $4, $5, $6)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex]
+        'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, used_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, usedKeyName]
       );
+      console.log(`[SAVED] Task ${taskId} saved with key_name: ${usedKeyName}`);
     }
     
     res.json({
@@ -1516,22 +1520,27 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     let freepikApiKey = null;
     let keySource = 'unknown';
     
-    // Use the SAME key that was used to create the task
-    // Get all available keys and use the one at saved key_index
-    if (keyInfo.room_id) {
+    // PRIORITY 1: Use the EXACT key name that was saved when task was created
+    if (savedTask.used_key_name && process.env[savedTask.used_key_name]) {
+      freepikApiKey = process.env[savedTask.used_key_name];
+      keySource = savedTask.used_key_name;
+    }
+    
+    // PRIORITY 2: Fallback to room keys using saved index
+    if (!freepikApiKey && keyInfo.room_id) {
       const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
       const keys = keyNames.map(name => ({ key: process.env[name], name })).filter(k => k.key);
       
       if (savedTask.key_index !== null && keys[savedTask.key_index]) {
         freepikApiKey = keys[savedTask.key_index].key;
-        keySource = `room_key_${savedTask.key_index + 1}`;
+        keySource = keys[savedTask.key_index].name;
       } else if (keys.length > 0) {
         freepikApiKey = keys[0].key;
-        keySource = 'room_key_fallback';
+        keySource = keys[0].name + '_fallback';
       }
     }
     
-    // Fallback to user's personal API key
+    // PRIORITY 3: User's personal API key
     if (!freepikApiKey) {
       const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
       if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
@@ -1540,13 +1549,13 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       }
     }
     
-    // Fallback to global default
+    // PRIORITY 4: Global default
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
       keySource = 'global';
     }
     
-    console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_index: ${savedTask.key_index}`);
+    console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_name: ${savedTask.used_key_name}`);
     
     const statusEndpoints = {
       'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
