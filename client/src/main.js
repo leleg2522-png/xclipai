@@ -3,7 +3,7 @@ const API_URL = '';
 // Debounce render to prevent too many updates
 let renderTimeout = null;
 let lastRenderTime = 0;
-const RENDER_THROTTLE = 50; // ms
+const RENDER_THROTTLE = 100; // ms
 
 const state = {
   currentPage: 'video',
