@@ -96,6 +96,15 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ===== RESET ===== */
 *, *::before, *::after {
   margin: 0;
@@ -117,6 +126,7 @@ body {
   background: var(--bg-dark);
   min-height: 100vh;
   overflow-x: hidden;
+  contain: layout style;
 }
 
 #app {
@@ -146,8 +156,11 @@ body {
   border-radius: 50%;
   filter: blur(120px);
   opacity: 0.3;
-  animation: blob-morph 30s ease-in-out infinite;
-  will-change: transform;
+  animation: blob-morph 60s ease-in-out infinite;
+  will-change: transform, opacity;
+  contain: strict;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .blob-1 {
@@ -281,7 +294,9 @@ body {
   font-size: 22px;
   position: relative;
   box-shadow: var(--glow-primary);
-  animation: logo-gradient 4s ease-in-out infinite, logo-pulse 2s ease-in-out infinite;
+  animation: logo-gradient 8s ease-in-out infinite, logo-pulse 4s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
   transition: all var(--duration-normal) var(--ease-elastic);
 }
 
@@ -293,7 +308,7 @@ body {
   background-size: 300% 300%;
   border-radius: calc(var(--radius) + 3px);
   z-index: -1;
-  animation: border-rotate 3s linear infinite;
+  animation: border-rotate 6s linear infinite;
   opacity: 0.8;
 }
 
@@ -350,7 +365,7 @@ body {
   background-clip: text;
   letter-spacing: -0.5px;
   text-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
-  animation: text-shimmer 3s ease-in-out infinite;
+  animation: text-shimmer 6s ease-in-out infinite;
 }
 
 @keyframes text-shimmer {
@@ -368,7 +383,7 @@ body {
   letter-spacing: 1px;
   text-transform: uppercase;
   box-shadow: 0 0 20px var(--gold-glow);
-  animation: badge-glow 2s ease-in-out infinite;
+  animation: badge-glow 4s ease-in-out infinite;
 }
 
 @keyframes badge-glow {
@@ -719,7 +734,7 @@ body {
 }
 
 .card-icon.pulse {
-  animation: icon-cyber-pulse 2s ease-in-out infinite;
+  animation: icon-cyber-pulse 4s ease-in-out infinite;
 }
 
 @keyframes icon-cyber-pulse {
@@ -811,7 +826,7 @@ body {
   background: linear-gradient(135deg, var(--primary), var(--accent));
   border-radius: 50%;
   opacity: 0.3;
-  animation: upload-pulse 2s ease-in-out infinite;
+  animation: upload-pulse 4s ease-in-out infinite;
 }
 
 @keyframes upload-pulse {
@@ -1270,7 +1285,7 @@ body {
 }
 
 .btn-glow {
-  animation: btn-cyber-glow 2s ease-in-out infinite;
+  animation: btn-cyber-glow 4s ease-in-out infinite;
 }
 
 @keyframes btn-cyber-glow {
@@ -1819,7 +1834,7 @@ body {
   margin: 0 auto var(--space-5);
   color: white;
   box-shadow: var(--glow-primary);
-  animation: icon-cyber-pulse 2s ease-in-out infinite;
+  animation: icon-cyber-pulse 4s ease-in-out infinite;
 }
 
 .chat-welcome h3 {
@@ -2487,7 +2502,7 @@ select option {
 }
 
 .timer-icon {
-  animation: pulse-soft 2s ease-in-out infinite;
+  animation: pulse-soft 4s ease-in-out infinite;
 }
 
 @keyframes pulse-soft {
@@ -2597,7 +2612,7 @@ select option {
   color: white;
   z-index: 10;
   box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(139, 92, 246, 0.3);
-  animation: coreGlow 2s ease-in-out infinite;
+  animation: coreGlow 4s ease-in-out infinite;
 }
 
 @keyframes coreGlow {
@@ -2727,7 +2742,7 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  animation: pulseBtn 2s ease-in-out infinite;
+  animation: pulseBtn 4s ease-in-out infinite;
 }
 
 @keyframes pulseBtn {

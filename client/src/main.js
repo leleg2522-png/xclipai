@@ -3,7 +3,7 @@ const API_URL = '';
 // Debounce render to prevent too many updates
 let renderTimeout = null;
 let lastRenderTime = 0;
-const RENDER_THROTTLE = 100; // ms
+const RENDER_THROTTLE = 150; // ms - increased for better performance
 
 const state = {
   currentPage: 'video',
@@ -451,11 +451,11 @@ function startLiveStatsPolling() {
   
   setInterval(() => {
     showRandomPurchaseAnimation();
-  }, 5000 + Math.random() * 5000);
+  }, 15000 + Math.random() * 15000);
   
   setTimeout(() => {
     showRandomPurchaseAnimation();
-  }, 3000);
+  }, 8000);
 }
 
 async function handleLogin(email, password) {
