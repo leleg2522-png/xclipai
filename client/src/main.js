@@ -218,9 +218,9 @@ async function checkAuth() {
     state.auth.isLoading = false;
     
     if (data.user) {
-      // Load essential data first
-      fetchSubscriptionStatus().then(() => {
-        // Load others in background to not block UI
+      // Load essential data first, then others in background
+      // Use .finally() so other fetches run even if subscription fails
+      fetchSubscriptionStatus().finally(() => {
         fetchSubscriptionPlans();
         fetchRooms();
         fetchXclipKeys();
