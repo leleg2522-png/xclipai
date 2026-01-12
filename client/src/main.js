@@ -1314,14 +1314,6 @@ function render(force = false) {
   const app = document.getElementById('app');
   
   app.innerHTML = `
-    <div class="bg-animation">
-      <div class="bg-blob blob-1"></div>
-      <div class="bg-blob blob-2"></div>
-      <div class="bg-blob blob-3"></div>
-    </div>
-    
-    <div class="particles" id="particles"></div>
-    
     <header class="header">
       <div class="container header-content">
         <div class="logo">
