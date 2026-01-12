@@ -210,6 +210,10 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
+- January 12, 2026: **DROPLET PROXY SYSTEM** - Added DigitalOcean droplet proxy support per room to prevent Freepik IP bans
+- January 12, 2026: Added admin API endpoints for droplet configuration (GET/POST /api/admin/rooms/droplets)
+- January 12, 2026: Created droplet-proxy/ folder with proxy server script and SETUP.md guide
+- January 12, 2026: Added database columns: droplet_ip, droplet_port, proxy_secret, use_proxy per room
 - January 12, 2026: **PERFORMANCE FIX** - Refactored render() to update only dynamic DOM areas (nav, header, main content, modals) instead of rebuilding entire DOM tree
 - January 12, 2026: Moved background animation (blur blobs) to static HTML to prevent expensive re-renders
 - January 12, 2026: Fixed fetchSubscriptionStatus() to properly check response.ok and reset state on errors
