@@ -210,6 +210,10 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
+- January 12, 2026: **PERFORMANCE FIX** - Refactored render() to update only dynamic DOM areas (nav, header, main content, modals) instead of rebuilding entire DOM tree
+- January 12, 2026: Moved background animation (blur blobs) to static HTML to prevent expensive re-renders
+- January 12, 2026: Fixed fetchSubscriptionStatus() to properly check response.ok and reset state on errors
+- January 12, 2026: Improved error handling for subscription status API calls
 - January 8, 2026: **CRITICAL FIX** - Personal API key now prioritized over room pool (eliminates queue delay)
 - January 8, 2026: Added Kling V2.5 Turbo Pro model (40% faster than regular Pro)
 - January 8, 2026: Reduced status check timeout from 30s to 10s for faster response

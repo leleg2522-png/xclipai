@@ -5,6 +5,9 @@ let renderTimeout = null;
 let lastRenderTime = 0;
 const RENDER_THROTTLE = 150; // ms - increased for better performance
 
+// Countdown timer for subscription
+let countdownInterval = null;
+
 const state = {
   currentPage: 'video',
   video: null,
@@ -630,7 +633,7 @@ async function fetchSubscriptionStatus() {
       return;
     }
     const data = await response.json();
-    state.roomManager.hasSubscription = data.hasSubscription;
+    state.roomManager.hasSubscription = data.hasSubscription || false;
     state.roomManager.subscription = data.subscription || null;
     if (data.subscription?.remainingSeconds) {
       state.pricing.remainingSeconds = data.subscription.remainingSeconds;
@@ -639,7 +642,10 @@ async function fetchSubscriptionStatus() {
       state.pricing.remainingSeconds = 0;
     }
   } catch (error) {
-    console.error('Fetch subscription error:', error);
+    // Only log actual errors, not network timeouts during SSE reconnection
+    if (error && error.message) {
+      console.error('Fetch subscription error:', error.message);
+    }
     state.roomManager.hasSubscription = false;
     state.roomManager.subscription = null;
     state.pricing.remainingSeconds = 0;
