@@ -227,13 +227,14 @@ const uploadPaymentProof = multer({
 async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
   try {
     const roomResult = await pool.query(
-      'SELECT droplet_ip, proxy_secret FROM rooms WHERE id = $1',
+      'SELECT droplet_ip, droplet_port, proxy_secret, use_proxy FROM rooms WHERE id = $1',
       [roomId]
     );
     
     const room = roomResult.rows[0];
-    if (!room || !room.droplet_ip) {
-      // Fallback to direct request if no proxy configured
+    const useProxy = room && room.use_proxy && room.droplet_ip && room.proxy_secret;
+    
+    if (!useProxy) {
       const freepikUrl = `https://api.freepik.com/${endpoint}`;
       const response = await axios({
         method,
@@ -248,20 +249,29 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
       return response.data;
     }
 
-    const dropletUrl = `http://${room.droplet_ip}:3000/proxy/freepik/${endpoint}`;
+    const port = room.droplet_port || 3000;
+    const proxyUrl = `http://${room.droplet_ip}:${port}/proxy/freepik`;
     
     const response = await axios({
-      method,
-      url: dropletUrl,
+      method: 'POST',
+      url: proxyUrl,
       headers: { 
         'x-proxy-secret': room.proxy_secret,
-        'x-freepik-api-key': apiKey 
+        'Content-Type': 'application/json'
       },
-      data: body,
+      data: {
+        url: `https://api.freepik.com/${endpoint}`,
+        method: method,
+        headers: {
+          'x-freepik-api-key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        data: body
+      },
       timeout: 120000
     });
     
-    return response.data;
+    return response.data.data || response.data;
   } catch (error) {
     console.error(`Proxy Request Error [${endpoint}]:`, error.response?.data || error.message);
     throw error;
@@ -2688,6 +2698,76 @@ app.get('/api/admin/check', async (req, res) => {
   } catch (error) {
     console.error('Admin check error:', error);
     res.json({ isAdmin: false });
+  }
+});
+
+// Get room droplet config (admin only)
+app.get('/api/admin/rooms/droplets', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, droplet_ip, droplet_port, use_proxy 
+      FROM rooms ORDER BY id
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get droplet config error:', error);
+    res.status(500).json({ error: 'Gagal mengambil konfigurasi droplet' });
+  }
+});
+
+// Update room droplet config (admin only)
+app.post('/api/admin/rooms/:id/droplet', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { droplet_ip, droplet_port, proxy_secret, use_proxy } = req.body;
+    
+    await pool.query(`
+      UPDATE rooms SET 
+        droplet_ip = $1,
+        droplet_port = $2,
+        proxy_secret = $3,
+        use_proxy = $4
+      WHERE id = $5
+    `, [droplet_ip, droplet_port || 3000, proxy_secret, use_proxy || false, id]);
+    
+    res.json({ success: true, message: 'Konfigurasi droplet berhasil diupdate' });
+  } catch (error) {
+    console.error('Update droplet config error:', error);
+    res.status(500).json({ error: 'Gagal update konfigurasi droplet' });
+  }
+});
+
+// Test droplet connection (admin only)
+app.post('/api/admin/rooms/:id/test-droplet', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const roomResult = await pool.query(
+      'SELECT droplet_ip, droplet_port, proxy_secret FROM rooms WHERE id = $1',
+      [id]
+    );
+    
+    const room = roomResult.rows[0];
+    if (!room || !room.droplet_ip) {
+      return res.status(400).json({ error: 'Droplet belum dikonfigurasi' });
+    }
+    
+    const port = room.droplet_port || 3000;
+    const healthUrl = `http://${room.droplet_ip}:${port}/health`;
+    
+    const response = await axios.get(healthUrl, { timeout: 5000 });
+    
+    res.json({ 
+      success: true, 
+      message: 'Droplet aktif dan bisa diakses',
+      data: response.data
+    });
+  } catch (error) {
+    console.error('Test droplet error:', error.message);
+    res.status(500).json({ 
+      error: 'Tidak bisa terhubung ke droplet',
+      details: error.message
+    });
   }
 });
 
