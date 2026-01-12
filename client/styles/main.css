@@ -505,7 +505,8 @@ body {
 }
 
 /* ===== MAIN CONTENT ===== */
-.main-content {
+.main-content,
+#mainContent {
   padding: var(--space-10) 0;
   position: relative;
   z-index: 10;

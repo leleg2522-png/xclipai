@@ -623,16 +623,26 @@ async function fetchRooms(feature = 'videogen') {
 async function fetchSubscriptionStatus() {
   try {
     const response = await fetch(`${API_URL}/api/subscription/status`, { credentials: 'include' });
+    if (!response.ok) {
+      state.roomManager.hasSubscription = false;
+      state.roomManager.subscription = null;
+      state.pricing.remainingSeconds = 0;
+      return;
+    }
     const data = await response.json();
     state.roomManager.hasSubscription = data.hasSubscription;
     state.roomManager.subscription = data.subscription || null;
     if (data.subscription?.remainingSeconds) {
       state.pricing.remainingSeconds = data.subscription.remainingSeconds;
       startCountdownTimer();
+    } else {
+      state.pricing.remainingSeconds = 0;
     }
-    
   } catch (error) {
     console.error('Fetch subscription error:', error);
+    state.roomManager.hasSubscription = false;
+    state.roomManager.subscription = null;
+    state.pricing.remainingSeconds = 0;
   }
 }
 
@@ -640,6 +650,7 @@ async function fetchSubscriptionStatus() {
 async function fetchSubscriptionPlans() {
   try {
     const response = await fetch(`${API_URL}/api/subscription/plans`, { credentials: 'include' });
+    if (!response.ok) return;
     const data = await response.json();
     state.pricing.plans = data.plans || [];
   } catch (error) {
@@ -1311,134 +1322,165 @@ function render(force = false) {
   }
   lastRenderTime = now;
   
-  const app = document.getElementById('app');
+  // Synchronous render to ensure DOM is available for subsequent operations
+  const navMenu = document.getElementById('navMenu');
+  const headerRight = document.getElementById('headerRight');
+  const mainContent = document.getElementById('mainContent');
+  const modalsContainer = document.getElementById('modals');
   
-  app.innerHTML = `
-    <header class="header">
-      <div class="container header-content">
-        <div class="logo">
-          <div class="logo-icon">X</div>
-          <span class="logo-text">Xclip</span>
-          <span class="logo-badge">AI</span>
-        </div>
-        
-        <nav class="nav-menu">
-          <button class="nav-btn ${state.currentPage === 'video' ? 'active' : ''}" data-page="video">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="23 7 16 12 23 17 23 7"/>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-            </svg>
-            Video Clipper
-          </button>
-          <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-            X Maker
-          </button>
-          <button class="nav-btn ${state.currentPage === 'videogen' ? 'active' : ''}" data-page="videogen">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
-              <line x1="7" y1="2" x2="7" y2="22"/>
-              <line x1="17" y1="2" x2="17" y2="22"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <line x1="2" y1="7" x2="7" y2="7"/>
-              <line x1="2" y1="17" x2="7" y2="17"/>
-              <line x1="17" y1="17" x2="22" y2="17"/>
-              <line x1="17" y1="7" x2="22" y2="7"/>
-            </svg>
-            Video Gen
-          </button>
-          <button class="nav-btn ${state.currentPage === 'chat' ? 'active' : ''}" data-page="chat">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            AI Chat
-          </button>
-        </nav>
-        
-        <div class="header-right">
-          <div class="credit">
-            <span class="credit-label">Created by</span>
-            <span class="credit-name">MANAZIL</span>
+  if (!navMenu || !headerRight || !mainContent) return;
+  
+  // Update nav menu (only active states change)
+  navMenu.innerHTML = renderNavMenu();
+  
+  // Update header right (user menu, timer)
+  headerRight.innerHTML = renderHeaderRight();
+  
+  // Update main content
+  mainContent.innerHTML = renderMainContent();
+  
+  // Update modals
+  if (modalsContainer) modalsContainer.innerHTML = renderModals();
+  
+  attachEventListeners();
+  
+  if (state.currentPage === 'chat') {
+    scrollChatToBottom();
+  }
+}
+
+function renderNavMenu() {
+  return `
+    <button class="nav-btn ${state.currentPage === 'video' ? 'active' : ''}" data-page="video">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="23 7 16 12 23 17 23 7"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>
+      Video Clipper
+    </button>
+    <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      X Maker
+    </button>
+    <button class="nav-btn ${state.currentPage === 'videogen' ? 'active' : ''}" data-page="videogen">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+        <line x1="7" y1="2" x2="7" y2="22"/>
+        <line x1="17" y1="2" x2="17" y2="22"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <line x1="2" y1="7" x2="7" y2="7"/>
+        <line x1="2" y1="17" x2="7" y2="17"/>
+        <line x1="17" y1="17" x2="22" y2="17"/>
+        <line x1="17" y1="7" x2="22" y2="7"/>
+      </svg>
+      Video Gen
+    </button>
+    <button class="nav-btn ${state.currentPage === 'chat' ? 'active' : ''}" data-page="chat">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      AI Chat
+    </button>
+  `;
+}
+
+function renderHeaderRight() {
+  return `
+    <div class="credit">
+      <span class="credit-label">Created by</span>
+      <span class="credit-name">MANAZIL</span>
+    </div>
+    
+    ${state.auth.user && state.roomManager.hasSubscription ? `
+      <div class="subscription-timer">
+        <span class="timer-icon">⏱️</span>
+        <span id="subscriptionTimer">${formatRemainingTime(state.pricing.remainingSeconds)}</span>
+      </div>
+    ` : ''}
+    
+    ${state.auth.user ? `
+      <div class="user-menu">
+        <button class="user-btn" id="userMenuBtn">
+          <div class="user-avatar">${state.auth.user.username.charAt(0).toUpperCase()}</div>
+          <span class="user-name">${state.auth.user.username}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div class="user-dropdown" id="userDropdown">
+          <div class="dropdown-header">
+            <strong>${state.auth.user.username}</strong>
+            <span>${state.auth.user.email}</span>
           </div>
-          
-          ${state.auth.user && state.roomManager.hasSubscription ? `
-            <div class="subscription-timer">
-              <span class="timer-icon">⏱️</span>
-              <span id="subscriptionTimer">${formatRemainingTime(state.pricing.remainingSeconds)}</span>
-            </div>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item" id="manageApiKeyBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Kelola API Key
+          </button>
+          <button class="dropdown-item" id="openXclipKeysDropdownBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            Xclip API Keys
+          </button>
+          <button class="dropdown-item" id="myPaymentsBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            Riwayat Pembayaran
+          </button>
+          ${state.admin.isAdmin ? `
+          <button class="dropdown-item admin" id="adminDashboardBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Admin Dashboard
+          </button>
           ` : ''}
-          
-          ${state.auth.user ? `
-            <div class="user-menu">
-              <button class="user-btn" id="userMenuBtn">
-                <div class="user-avatar">${state.auth.user.username.charAt(0).toUpperCase()}</div>
-                <span class="user-name">${state.auth.user.username}</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-              <div class="user-dropdown" id="userDropdown">
-                <div class="dropdown-header">
-                  <strong>${state.auth.user.username}</strong>
-                  <span>${state.auth.user.email}</span>
-                </div>
-                <div class="dropdown-divider"></div>
-                <button class="dropdown-item" id="manageApiKeyBtn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                  Kelola API Key
-                </button>
-                <button class="dropdown-item" id="openXclipKeysDropdownBtn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-                  </svg>
-                  Xclip API Keys
-                </button>
-                <button class="dropdown-item" id="myPaymentsBtn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-                    <line x1="1" y1="10" x2="23" y2="10"/>
-                  </svg>
-                  Riwayat Pembayaran
-                </button>
-                ${state.admin.isAdmin ? `
-                <button class="dropdown-item admin" id="adminDashboardBtn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  </svg>
-                  Admin Dashboard
-                </button>
-                ` : ''}
-                <button class="dropdown-item logout" id="logoutBtn">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/>
-                    <line x1="21" y1="12" x2="9" y2="12"/>
-                  </svg>
-                  Logout
-                </button>
-              </div>
-            </div>
-          ` : `
-            <button class="auth-btn" id="loginBtn">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                <polyline points="10 17 15 12 10 7"/>
-                <line x1="15" y1="12" x2="3" y2="12"/>
-              </svg>
-              Login
-            </button>
-          `}
+          <button class="dropdown-item logout" id="logoutBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Logout
+          </button>
         </div>
       </div>
-    </header>
-    
+    ` : `
+      <button class="auth-btn" id="loginBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        Login
+      </button>
+    `}
+  `;
+}
+
+function renderMainContent() {
+  return `
+    ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
+    ${state.currentPage === 'video' ? renderVideoPage() : 
+      state.currentPage === 'xmaker' ? renderXMakerPage() : 
+      state.currentPage === 'videogen' ? renderVideoGenPage() : 
+      state.currentPage === 'admin' ? '' :
+      state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
+  `;
+}
+
+function renderModals() {
+  return `
     ${renderAuthModal()}
     ${renderRoomModal()}
     ${renderXmakerRoomModal()}
@@ -1446,35 +1488,7 @@ function render(force = false) {
     ${renderPricingModal()}
     ${renderPaymentModal()}
     ${renderMyPaymentsModal()}
-    
-    <main class="main-content">
-      ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
-      ${state.currentPage === 'video' ? renderVideoPage() : 
-        state.currentPage === 'xmaker' ? renderXMakerPage() : 
-        state.currentPage === 'videogen' ? renderVideoGenPage() : 
-        state.currentPage === 'admin' ? '' :
-        state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
-    </main>
-    
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-content">
-          <div class="footer-logo">
-            <div class="logo-icon small">X</div>
-            <span>Xclip</span>
-          </div>
-          <p>AI Creative Suite | Crafted with passion by <a href="#">MANAZIL</a></p>
-        </div>
-      </div>
-    </footer>
   `;
-  
-  attachEventListeners();
-  // createParticles(); // Disabled - particles hidden for cleaner look
-  
-  if (state.currentPage === 'chat') {
-    scrollChatToBottom();
-  }
 }
 
 function renderVideoPage() {
