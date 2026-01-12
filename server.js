@@ -67,8 +67,19 @@ function isAllowedOrigin(origin) {
   }
 }
 
-// Trust proxy for Railway/production HTTPS
-app.set('trust proxy', 1);
+// ============ PERFORMANCE MONITORING ============
+app.use((req, res, next) => {
+  const start = Date.now();
+  // Set cache control for better performance
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (duration > 2000) {
+      console.log(`[VERY SLOW REQUEST] ${req.method} ${req.originalUrl} took ${duration}ms`);
+    }
+  });
+  next();
+});
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -212,7 +223,50 @@ const uploadPaymentProof = multer({
   }
 });
 
-const jobs = new Map();
+// ============ DROPLET PROXY SUPPORT ============
+async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
+  try {
+    const roomResult = await pool.query(
+      'SELECT droplet_ip, proxy_secret FROM rooms WHERE id = $1',
+      [roomId]
+    );
+    
+    const room = roomResult.rows[0];
+    if (!room || !room.droplet_ip) {
+      // Fallback to direct request if no proxy configured
+      const freepikUrl = `https://api.freepik.com/${endpoint}`;
+      const response = await axios({
+        method,
+        url: freepikUrl,
+        headers: {
+          'x-freepik-api-key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        data: body,
+        timeout: 120000
+      });
+      return response.data;
+    }
+
+    const dropletUrl = `http://${room.droplet_ip}:3000/proxy/freepik/${endpoint}`;
+    
+    const response = await axios({
+      method,
+      url: dropletUrl,
+      headers: { 
+        'x-proxy-secret': room.proxy_secret,
+        'x-freepik-api-key': apiKey 
+      },
+      data: body,
+      timeout: 120000
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Proxy Request Error [${endpoint}]:`, error.response?.data || error.message);
+    throw error;
+  }
+}
 
 app.post('/api/upload', upload.single('video'), async (req, res) => {
   try {

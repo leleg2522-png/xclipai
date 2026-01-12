@@ -218,14 +218,14 @@ async function checkAuth() {
     state.auth.isLoading = false;
     
     if (data.user) {
-      // Load all data in parallel for faster performance
-      await Promise.all([
-        fetchSubscriptionPlans(),
-        fetchRooms(),
-        fetchSubscriptionStatus(),
-        fetchXclipKeys(),
-        checkAdminStatus()
-      ]);
+      // Load essential data first
+      fetchSubscriptionStatus().then(() => {
+        // Load others in background to not block UI
+        fetchSubscriptionPlans();
+        fetchRooms();
+        fetchXclipKeys();
+        checkAdminStatus();
+      });
     }
     
     render();
