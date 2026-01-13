@@ -210,9 +210,6 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
 
 ## Recent Changes
-- January 13, 2026: **WEBSHARE PROXY INTEGRATION** - Added Webshare.io proxy support as simpler alternative to droplets
-- January 13, 2026: All rooms now use Webshare proxies for Freepik requests (rotating IPs)
-- January 13, 2026: Added use_webshare column to rooms table
 - January 12, 2026: **DROPLET PROXY SYSTEM** - Added DigitalOcean droplet proxy support per room to prevent Freepik IP bans
 - January 12, 2026: Added admin API endpoints for droplet configuration (GET/POST /api/admin/rooms/droplets)
 - January 12, 2026: Created droplet-proxy/ folder with proxy server script and SETUP.md guide

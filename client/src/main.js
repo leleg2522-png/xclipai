@@ -1220,43 +1220,44 @@ async function revokeXclipKey(keyId) {
 }
 
 function copyToClipboard(text) {
-  // If we are in an iframe, we might need a different approach
-  // Try to use a temporary input that is actually visible to help browser security
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  
-  // Ensure it's not hidden in a way that prevents copying
-  textArea.style.position = 'fixed';
-  textArea.style.top = '0';
-  textArea.style.left = '0';
-  textArea.style.width = '2em';
-  textArea.style.height = '2em';
-  textArea.style.padding = '0';
-  textArea.style.border = 'none';
-  textArea.style.outline = 'none';
-  textArea.style.boxShadow = 'none';
-  textArea.style.background = 'transparent';
-  
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-  textArea.setSelectionRange(0, 99999); // For mobile devices
+  // Method 1: Modern Clipboard API
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('API Key disalin ke clipboard!', 'success'))
+      .catch(() => fallbackCopy(text));
+    return;
+  }
+  fallbackCopy(text);
+}
 
-  let successful = false;
+function fallbackCopy(text) {
+  // Method 2: Create a visible but non-disturbing input for the browser to allow copy
+  const input = document.createElement('input');
+  input.value = text;
+  input.style.position = 'fixed';
+  input.style.bottom = '0';
+  input.style.left = '0';
+  input.style.opacity = '0.01';
+  input.style.zIndex = '10000';
+  document.body.appendChild(input);
+  
+  input.focus();
+  input.select();
+  input.setSelectionRange(0, 99999);
+
   try {
-    successful = document.execCommand('copy');
+    const successful = document.execCommand('copy');
+    if (successful) {
+      showToast('API Key disalin ke clipboard!', 'success');
+    } else {
+      throw new Error('execCommand failed');
+    }
   } catch (err) {
-    console.error('Fallback copy failed:', err);
+    // Method 3: Final fallback - prompt the user
+    window.prompt('Browser memblokir salin otomatis. Silakan salin manual dari kotak ini:', text);
   }
-
-  document.body.removeChild(textArea);
-
-  if (successful) {
-    showToast('API Key disalin ke clipboard!', 'success');
-  } else {
-    // If all else fails, show the key in a prompt for manual copy
-    window.prompt('Gagal menyalin otomatis. Silakan salin manual:', text);
-  }
+  
+  document.body.removeChild(input);
 }
 
 function renderXclipKeysModal() {
