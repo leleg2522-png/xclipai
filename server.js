@@ -262,6 +262,41 @@ function getNextWebshareProxy() {
   return proxy;
 }
 
+// Helper to make Freepik API calls with optional Webshare proxy
+async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true) {
+  const config = {
+    method,
+    url,
+    headers: {
+      'x-freepik-api-key': apiKey,
+      'Content-Type': 'application/json'
+    },
+    timeout: 60000
+  };
+  
+  if (body) config.data = body;
+  
+  // Try Webshare proxy if available and enabled
+  if (useProxy && process.env.WEBSHARE_API_KEY) {
+    await fetchWebshareProxies();
+    const proxy = getNextWebshareProxy();
+    
+    if (proxy) {
+      console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
+      config.proxy = {
+        host: proxy.proxy_address,
+        port: proxy.port,
+        auth: {
+          username: proxy.username,
+          password: proxy.password
+        }
+      };
+    }
+  }
+  
+  return axios(config);
+}
+
 // ============ DROPLET PROXY SUPPORT ============
 async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
   try {
@@ -1544,25 +1579,21 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
     
-    // Try each key until success or all exhausted
+    // Try each key until success or all exhausted (with Webshare proxy rotation)
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
       const currentKey = allKeys[attempt];
       console.log(`[TIMING] Attempt ${attempt + 1}/${allKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
       
       try {
-        const response = await axios.post(
+        const response = await makeFreepikRequest(
+          'POST',
           `${baseUrl}${config.endpoint}`,
+          currentKey.key,
           requestBody,
-          {
-            headers: {
-              'x-freepik-api-key': currentKey.key,
-              'Content-Type': 'application/json'
-            },
-            timeout: 60000
-          }
+          true
         );
         
-        successResponse = response;
+        successResponse = { data: response.data };
         finalKeyIndex = currentKey.index;
         console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
         break;
@@ -1708,18 +1739,16 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
     
     const pollStart = Date.now();
-    const response = await axios.get(
+    const response = await makeFreepikRequest(
+      'GET',
       `https://api.freepik.com${endpoint}${taskId}`,
-      {
-        headers: {
-          'x-freepik-api-key': freepikApiKey
-        },
-        timeout: 10000
-      }
+      freepikApiKey,
+      null,
+      true
     );
     const pollLatency = Date.now() - pollStart;
     
-    const data = response.data.data || response.data;
+    const data = response.data?.data || response.data;
     console.log(`[TIMING] Poll ${taskId} | Status: ${data.status} | Latency: ${pollLatency}ms`);
     
     // Enhanced video URL extraction - check all possible locations
