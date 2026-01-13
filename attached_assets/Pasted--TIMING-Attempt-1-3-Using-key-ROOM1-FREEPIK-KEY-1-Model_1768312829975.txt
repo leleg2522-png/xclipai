@@ -1,0 +1,28 @@
+[TIMING] Attempt 1/3 - Using key: ROOM1_FREEPIK_KEY_1 | Model: kling-v2.1-pro
+[RETRY] Key ROOM1_FREEPIK_KEY_1 hit budget limit (429), trying next key...
+[TIMING] Task c75bda67-12cc-4939-ab4f-e4ce031115f3 created in 1431ms at 2026-01-13T13:59:14.156Z | Model: kling-v2.1-pro
+[TIMING] Attempt 2/3 - Using key: ROOM1_FREEPIK_KEY_2 | Model: kling-v2.1-pro
+[SAVED] Task c75bda67-12cc-4939-ab4f-e4ce031115f3 saved with key_name: ROOM1_FREEPIK_KEY_2
+[SUCCESS] Key ROOM1_FREEPIK_KEY_2 worked!
+[VERY SLOW REQUEST] POST /api/videogen/proxy took 2205ms
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+API key rotation: using key 1 of 3
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not found' }
+[STATUS] Checking task c75bda67-12cc-4939-ab4f-e4ce031115f3 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+Get task status error: { message: 'Not f
