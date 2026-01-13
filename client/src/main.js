@@ -3076,20 +3076,31 @@ function attachEventListeners() {
     });
   }
   
-  document.querySelectorAll('.copy-key-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const key = e.currentTarget.dataset.key;
-      copyToClipboard(key);
-    });
-  });
-  
-  document.querySelectorAll('.revoke-key-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const keyId = parseInt(e.currentTarget.dataset.keyId);
-      if (confirm('Apakah Anda yakin ingin menonaktifkan API key ini?')) {
+  // Use event delegation for dynamically created modal buttons
+  document.body.addEventListener('click', (e) => {
+    // Handle copy button clicks
+    const copyBtn = e.target.closest('.copy-key-btn');
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = copyBtn.dataset.key;
+      if (key) {
+        copyToClipboard(key);
+      }
+      return;
+    }
+    
+    // Handle revoke button clicks
+    const revokeBtn = e.target.closest('.revoke-key-btn');
+    if (revokeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const keyId = parseInt(revokeBtn.dataset.keyId);
+      if (keyId && confirm('Apakah Anda yakin ingin menonaktifkan API key ini?')) {
         revokeXclipKey(keyId);
       }
-    });
+      return;
+    }
   });
 
   // Feature lock login button
