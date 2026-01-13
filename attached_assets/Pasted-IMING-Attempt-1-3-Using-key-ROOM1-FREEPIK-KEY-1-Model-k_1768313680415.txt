@@ -1,0 +1,21 @@
+IMING] Attempt 1/3 - Using key: ROOM1_FREEPIK_KEY_1 | Model: kling-v2.1-pro
+[RETRY] Key ROOM1_FREEPIK_KEY_1 hit budget limit (429), trying next key...
+[TIMING] Attempt 2/3 - Using key: ROOM1_FREEPIK_KEY_2 | Model: kling-v2.1-pro
+[SUCCESS] Key ROOM1_FREEPIK_KEY_2 worked!
+[TIMING] Task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 created in 1962ms at 2026-01-13T14:13:57.335Z | Model: kling-v2.1-pro
+[SAVED] Task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 saved with key_name: ROOM1_FREEPIK_KEY_2
+[VERY SLOW REQUEST] POST /api/videogen/proxy took 2694ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 186ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 183ms
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 185ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 187ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 184ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 181ms
+[STATUS] Checking task fd2f2616-f37b-4c22-a7e7-fb46d34e9048 with key: ROOM1_FREEPIK_KEY_2, saved_key_name: ROOM1_FREEPIK_KEY_2
+[TIMING] Poll fd2f2616-f37b-4c22-a7e7-fb46d34e9048 | Status: IN_PROGRESS | Latency: 192ms
