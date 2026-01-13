@@ -277,7 +277,10 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   if (body) config.data = body;
   
   // Try Webshare proxy if available and enabled
-  if (useProxy && process.env.WEBSHARE_API_KEY) {
+  const hasWebshareKey = !!process.env.WEBSHARE_API_KEY;
+  console.log(`[PROXY DEBUG] useProxy=${useProxy}, hasWebshareKey=${hasWebshareKey}, proxyCount=${webshareProxies.length}`);
+  
+  if (useProxy && hasWebshareKey) {
     await fetchWebshareProxies();
     const proxy = getNextWebshareProxy();
     
@@ -291,7 +294,11 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
           password: proxy.password
         }
       };
+    } else {
+      console.log(`[PROXY] No proxy available, using direct connection`);
     }
+  } else {
+    console.log(`[PROXY] Skipped - useProxy=${useProxy}, hasKey=${hasWebshareKey}`);
   }
   
   return axios(config);
