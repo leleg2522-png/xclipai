@@ -1220,11 +1220,43 @@ async function revokeXclipKey(keyId) {
 }
 
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('API Key disalin ke clipboard!', 'success');
-  }).catch(() => {
-    showToast('Gagal menyalin API key', 'error');
-  });
+  // Try modern clipboard API first
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('API Key disalin ke clipboard!', 'success');
+    }).catch(() => {
+      // Fallback if clipboard API fails (e.g., in iframe)
+      fallbackCopyToClipboard(text);
+    });
+  } else {
+    // Fallback for older browsers or restricted contexts
+    fallbackCopyToClipboard(text);
+  }
+}
+
+function fallbackCopyToClipboard(text) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  textArea.style.top = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) {
+      showToast('API Key disalin ke clipboard!', 'success');
+    } else {
+      // Show the key in a prompt so user can copy manually
+      showToast('Silakan salin manual: ' + text.substring(0, 20) + '...', 'info');
+    }
+  } catch (err) {
+    showToast('Silakan salin manual: ' + text.substring(0, 20) + '...', 'info');
+  }
+  
+  document.body.removeChild(textArea);
 }
 
 function renderXclipKeysModal() {
