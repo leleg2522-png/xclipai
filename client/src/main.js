@@ -1220,43 +1220,43 @@ async function revokeXclipKey(keyId) {
 }
 
 function copyToClipboard(text) {
-  // Try modern clipboard API first
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast('API Key disalin ke clipboard!', 'success');
-    }).catch(() => {
-      // Fallback if clipboard API fails (e.g., in iframe)
-      fallbackCopyToClipboard(text);
-    });
-  } else {
-    // Fallback for older browsers or restricted contexts
-    fallbackCopyToClipboard(text);
-  }
-}
-
-function fallbackCopyToClipboard(text) {
+  // If we are in an iframe, we might need a different approach
+  // Try to use a temporary input that is actually visible to help browser security
   const textArea = document.createElement('textarea');
   textArea.value = text;
+  
+  // Ensure it's not hidden in a way that prevents copying
   textArea.style.position = 'fixed';
-  textArea.style.left = '-9999px';
-  textArea.style.top = '-9999px';
+  textArea.style.top = '0';
+  textArea.style.left = '0';
+  textArea.style.width = '2em';
+  textArea.style.height = '2em';
+  textArea.style.padding = '0';
+  textArea.style.border = 'none';
+  textArea.style.outline = 'none';
+  textArea.style.boxShadow = 'none';
+  textArea.style.background = 'transparent';
+  
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  
+  textArea.setSelectionRange(0, 99999); // For mobile devices
+
+  let successful = false;
   try {
-    const successful = document.execCommand('copy');
-    if (successful) {
-      showToast('API Key disalin ke clipboard!', 'success');
-    } else {
-      // Show the key in a prompt so user can copy manually
-      showToast('Silakan salin manual: ' + text.substring(0, 20) + '...', 'info');
-    }
+    successful = document.execCommand('copy');
   } catch (err) {
-    showToast('Silakan salin manual: ' + text.substring(0, 20) + '...', 'info');
+    console.error('Fallback copy failed:', err);
   }
-  
+
   document.body.removeChild(textArea);
+
+  if (successful) {
+    showToast('API Key disalin ke clipboard!', 'success');
+  } else {
+    // If all else fails, show the key in a prompt for manual copy
+    window.prompt('Gagal menyalin otomatis. Silakan salin manual:', text);
+  }
 }
 
 function renderXclipKeysModal() {
