@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 require('dotenv').config();
 
 const app = express();
@@ -285,15 +286,10 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     const proxy = getNextWebshareProxy();
     
     if (proxy) {
+      const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
       console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
-      config.proxy = {
-        host: proxy.proxy_address,
-        port: proxy.port,
-        auth: {
-          username: proxy.username,
-          password: proxy.password
-        }
-      };
+      config.httpsAgent = new HttpsProxyAgent(proxyUrl);
+      config.proxy = false; // Disable axios built-in proxy when using agent
     } else {
       console.log(`[PROXY] No proxy available, using direct connection`);
     }
