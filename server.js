@@ -223,55 +223,124 @@ const uploadPaymentProof = multer({
   }
 });
 
+// ============ WEBSHARE PROXY SUPPORT ============
+let webshareProxies = [];
+let webshareProxyIndex = 0;
+let webshareLastFetch = 0;
+
+async function fetchWebshareProxies() {
+  const apiKey = process.env.WEBSHARE_API_KEY;
+  if (!apiKey) {
+    console.log('WEBSHARE_API_KEY not configured');
+    return [];
+  }
+  
+  if (webshareProxies.length > 0 && Date.now() - webshareLastFetch < 300000) {
+    return webshareProxies;
+  }
+  
+  try {
+    const response = await axios.get('https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100', {
+      headers: { 'Authorization': `Token ${apiKey}` },
+      timeout: 10000
+    });
+    
+    webshareProxies = response.data.results || [];
+    webshareLastFetch = Date.now();
+    console.log(`Fetched ${webshareProxies.length} proxies from Webshare`);
+    return webshareProxies;
+  } catch (error) {
+    console.error('Failed to fetch Webshare proxies:', error.message);
+    return [];
+  }
+}
+
+function getNextWebshareProxy() {
+  if (webshareProxies.length === 0) return null;
+  const proxy = webshareProxies[webshareProxyIndex % webshareProxies.length];
+  webshareProxyIndex++;
+  return proxy;
+}
+
 // ============ DROPLET PROXY SUPPORT ============
 async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
   try {
     const roomResult = await pool.query(
-      'SELECT droplet_ip, droplet_port, proxy_secret, use_proxy FROM rooms WHERE id = $1',
+      'SELECT droplet_ip, droplet_port, proxy_secret, use_proxy, use_webshare FROM rooms WHERE id = $1',
       [roomId]
     );
     
     const room = roomResult.rows[0];
-    const useProxy = room && room.use_proxy && room.droplet_ip && room.proxy_secret;
+    const useDropletProxy = room && room.use_proxy && room.droplet_ip && room.proxy_secret;
+    const useWebshare = room && room.use_webshare && process.env.WEBSHARE_API_KEY;
     
-    if (!useProxy) {
-      const freepikUrl = `https://api.freepik.com/${endpoint}`;
+    const freepikUrl = `https://api.freepik.com/${endpoint}`;
+    
+    if (useWebshare) {
+      await fetchWebshareProxies();
+      const proxy = getNextWebshareProxy();
+      
+      if (proxy) {
+        console.log(`Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        const response = await axios({
+          method,
+          url: freepikUrl,
+          headers: {
+            'x-freepik-api-key': apiKey,
+            'Content-Type': 'application/json'
+          },
+          data: body,
+          timeout: 120000,
+          proxy: {
+            host: proxy.proxy_address,
+            port: proxy.port,
+            auth: {
+              username: proxy.username,
+              password: proxy.password
+            }
+          }
+        });
+        return response.data;
+      }
+    }
+    
+    if (useDropletProxy) {
+      const port = room.droplet_port || 3000;
+      const proxyUrl = `http://${room.droplet_ip}:${port}/proxy/freepik`;
+      
       const response = await axios({
-        method,
-        url: freepikUrl,
-        headers: {
-          'x-freepik-api-key': apiKey,
+        method: 'POST',
+        url: proxyUrl,
+        headers: { 
+          'x-proxy-secret': room.proxy_secret,
           'Content-Type': 'application/json'
         },
-        data: body,
+        data: {
+          url: freepikUrl,
+          method: method,
+          headers: {
+            'x-freepik-api-key': apiKey,
+            'Content-Type': 'application/json'
+          },
+          data: body
+        },
         timeout: 120000
       });
-      return response.data;
+      
+      return response.data.data || response.data;
     }
-
-    const port = room.droplet_port || 3000;
-    const proxyUrl = `http://${room.droplet_ip}:${port}/proxy/freepik`;
     
     const response = await axios({
-      method: 'POST',
-      url: proxyUrl,
-      headers: { 
-        'x-proxy-secret': room.proxy_secret,
+      method,
+      url: freepikUrl,
+      headers: {
+        'x-freepik-api-key': apiKey,
         'Content-Type': 'application/json'
       },
-      data: {
-        url: `https://api.freepik.com/${endpoint}`,
-        method: method,
-        headers: {
-          'x-freepik-api-key': apiKey,
-          'Content-Type': 'application/json'
-        },
-        data: body
-      },
+      data: body,
       timeout: 120000
     });
-    
-    return response.data.data || response.data;
+    return response.data;
   } catch (error) {
     console.error(`Proxy Request Error [${endpoint}]:`, error.response?.data || error.message);
     throw error;
