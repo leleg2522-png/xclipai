@@ -224,6 +224,9 @@ const uploadPaymentProof = multer({
   }
 });
 
+// Storage for video processing jobs
+const jobs = new Map();
+
 // ============ WEBSHARE PROXY SUPPORT ============
 let webshareProxies = [];
 let webshareProxyIndex = 0;
