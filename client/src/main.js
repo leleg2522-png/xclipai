@@ -4144,10 +4144,27 @@ async function pollJobStatus() {
     if (data.status === 'completed') {
       state.status = 'completed';
       state.clips = data.clips || [];
-      console.log('Job completed! Clips received:', state.clips);
+      console.log('=== JOB COMPLETED ===');
+      console.log('Raw data.clips:', JSON.stringify(data.clips));
+      console.log('state.clips after assign:', JSON.stringify(state.clips));
       console.log('Clips count:', state.clips.length);
-      showToast('Clips generated successfully!', 'success');
+      if (state.clips.length > 0) {
+        console.log('First clip path:', state.clips[0].path);
+      }
+      showToast(`${state.clips.length} clips generated!`, 'success');
+      
+      // Force scroll to clips section after render
       render(true);
+      setTimeout(() => {
+        const clipsSection = document.querySelector('.clips-grid');
+        if (clipsSection) {
+          clipsSection.scrollIntoView({ behavior: 'smooth' });
+          console.log('Scrolled to clips section');
+        } else {
+          console.log('WARNING: Clips grid not found in DOM after render!');
+          console.log('Current state.clips:', state.clips.length);
+        }
+      }, 500);
     } else if (data.status === 'error') {
       state.status = 'error';
       showToast(data.error || 'Processing failed', 'error');
