@@ -4143,9 +4143,11 @@ async function pollJobStatus() {
     
     if (data.status === 'completed') {
       state.status = 'completed';
-      state.clips = data.clips;
+      state.clips = data.clips || [];
+      console.log('Job completed! Clips received:', state.clips);
+      console.log('Clips count:', state.clips.length);
       showToast('Clips generated successfully!', 'success');
-      render();
+      render(true);
     } else if (data.status === 'error') {
       state.status = 'error';
       showToast(data.error || 'Processing failed', 'error');

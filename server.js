@@ -779,6 +779,8 @@ app.get('/api/job/:jobId', (req, res) => {
     return res.status(404).json({ error: 'Job not found' });
   }
   
+  console.log(`[Job Status] ${req.params.jobId}: status=${job.status}, progress=${job.progress}, clips=${job.clips?.length || 0}`);
+  
   res.json({
     id: job.id,
     status: job.status,
