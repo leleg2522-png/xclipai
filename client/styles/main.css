@@ -1421,9 +1421,9 @@ body {
   overflow: hidden;
   border: 1px solid var(--border);
   transition: all var(--duration-normal) var(--ease-out);
-  animation: clip-appear 0.5s var(--ease-out) forwards;
-  opacity: 0;
-  transform: translateY(30px);
+  animation: clip-appear 0.5s ease-out forwards;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @keyframes clip-appear {
