@@ -1758,6 +1758,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     const data = response.data?.data || response.data;
     console.log(`[TIMING] Poll ${taskId} | Status: ${data.status} | Latency: ${pollLatency}ms`);
+    console.log(`[DEBUG] Full response:`, JSON.stringify(data, null, 2));
     
     // Enhanced video URL extraction - check all possible locations
     let videoUrl = null;
