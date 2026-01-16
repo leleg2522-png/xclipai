@@ -230,7 +230,7 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - January 6, 2026: Added admin dashboard for payment verification (approve/reject)
 - January 6, 2026: Added is_admin column to users table for admin role management
 - January 6, 2026: Created payments table for tracking payment submissions
-- January 6, 2026: Updated subscription plans to 4 tiers (1 Hari Rp15.000, 3 Hari Rp35.000, 1 Minggu Rp65.000, 1 Bulan Rp150.000)
+- January 6, 2026: Updated subscription plans to 3 tiers (1 Hari Rp15.000, 7 Hari Rp80.000, 1 Bulan Rp270.000)
 - January 6, 2026: Added automatic MAINTENANCE mode for rooms without configured API keys
 - January 5, 2026: Complete premium UI redesign - modern SaaS-style design system with glassmorphism, improved typography, and smooth animations
 - January 5, 2026: Upgraded to futuristic dark theme with neon glow effects, cyber grid background, and animated logo
