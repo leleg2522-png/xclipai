@@ -1729,18 +1729,18 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_name: ${savedTask.used_key_name}`);
     
-    // Status endpoints - based on Freepik API docs (different from create endpoints!)
+    // Status endpoints - must match generate endpoints exactly
     const statusEndpoints = {
-      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5/',
-      'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5/',
-      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1/',
-      'kling-v1.6-pro': '/v1/ai/image-to-video/kling/',
-      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-02-1080p/',
-      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-02-768p/',
-      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-pro-1080p/',
-      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-pro-720p/',
+      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
+      'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
+      'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
+      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
+      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
+      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
+      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-1080p/',
+      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-768p/',
+      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
+      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-1-0-pro-720p/',
       'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5/'
     };
     
