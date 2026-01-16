@@ -3329,7 +3329,7 @@ async function initDatabase() {
           ('1 Hari', 1, 15000, 'Akses semua fitur selama 1 hari'),
           ('3 Hari', 3, 35000, 'Akses semua fitur selama 3 hari'),
           ('1 Minggu', 7, 65000, 'Akses semua fitur selama 7 hari'),
-          ('1 Bulan', 30, 199000, 'Akses semua fitur selama 30 hari')
+          ('1 Bulan', 30, 150000, 'Akses semua fitur selama 30 hari')
       `);
       console.log('Subscription plans seeded');
     }
