@@ -1476,8 +1476,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     );
     
     const modelConfigs = {
-      // Kling 2.6 (NEW)
-      'kling-v2.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-6-pro' },
+      // Kling 2.6 (NEW - with audio support)
+      'kling-v2.6-pro': { api: 'kling26', endpoint: '/v1/ai/image-to-video/kling-v2-6-pro' },
       // Kling O1 (NEW)
       'kling-o1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-pro' },
       'kling-o1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-std' },
@@ -1534,7 +1534,18 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     let requestBody = {};
     
-    if (config.api === 'kling-ai') {
+    if (config.api === 'kling26') {
+      // Kling 2.6 Pro with native audio support
+      requestBody = {
+        image: image,
+        prompt: prompt || '',
+        duration: duration || '5',
+        aspect_ratio: mappedAspectRatio,
+        negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy',
+        cfg_scale: 0.5,
+        generate_audio: true
+      };
+    } else if (config.api === 'kling-ai') {
       requestBody = {
         image: image,
         prompt: prompt || '',
