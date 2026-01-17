@@ -1476,16 +1476,38 @@ app.post('/api/videogen/proxy', async (req, res) => {
     );
     
     const modelConfigs = {
+      // Kling 2.6 (NEW)
+      'kling-v2.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-6-pro' },
+      // Kling O1 (NEW)
+      'kling-o1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-pro' },
+      'kling-o1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-std' },
+      // Kling 2.5
       'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
       'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
+      // Kling 2.1
       'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
       'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
       'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
+      // Kling Elements
+      'kling-elements-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-pro' },
+      'kling-elements-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-std' },
+      // Kling 1.6
       'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-1080p' },
-      'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-768p' },
+      // Wan 2.2 (NEW)
+      'wan-v2.2-720p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
+      'wan-v2.2-580p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
+      'wan-v2.2-480p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-480p' },
+      // MiniMax Hailuo 2.3 (NEW)
+      'minimax-hailuo-2.3-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p' },
+      'minimax-hailuo-2.3-1080p-fast': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p-fast' },
+      'minimax-hailuo-2.3-768p-fast': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-768p-fast' },
+      // MiniMax Hailuo 02
+      'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-1080p' },
+      'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-768p' },
+      // Seedance
       'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
       'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
+      // PixVerse
       'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' }
     };
     
@@ -1731,16 +1753,38 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // Status endpoints - must match generate endpoints exactly
     const statusEndpoints = {
+      // Kling 2.6 (NEW)
+      'kling-v2.6-pro': '/v1/ai/image-to-video/kling-v2-6-pro/',
+      // Kling O1 (NEW)
+      'kling-o1-pro': '/v1/ai/image-to-video/kling-o1/',
+      'kling-o1-std': '/v1/ai/image-to-video/kling-o1/',
+      // Kling 2.5
       'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
+      // Kling 2.1
       'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
       'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
       'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
+      // Kling Elements
+      'kling-elements-pro': '/v1/ai/image-to-video/kling-elements-pro/',
+      'kling-elements-std': '/v1/ai/image-to-video/kling-elements-std/',
+      // Kling 1.6
       'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
-      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-1080p/',
-      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-768p/',
+      // Wan 2.2 (NEW)
+      'wan-v2.2-720p': '/v1/ai/image-to-video/wan-v2-2-720p/',
+      'wan-v2.2-580p': '/v1/ai/image-to-video/wan-v2-2-580p/',
+      'wan-v2.2-480p': '/v1/ai/image-to-video/wan-v2-2-480p/',
+      // MiniMax Hailuo 2.3 (NEW)
+      'minimax-hailuo-2.3-1080p': '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p/',
+      'minimax-hailuo-2.3-1080p-fast': '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p-fast/',
+      'minimax-hailuo-2.3-768p-fast': '/v1/ai/image-to-video/minimax-hailuo-2-3-768p-fast/',
+      // MiniMax Hailuo 02
+      'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-02-1080p/',
+      'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-02-768p/',
+      // Seedance
       'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
       'seedance-pro-720p': '/v1/ai/image-to-video/seedance-1-0-pro-720p/',
+      // PixVerse
       'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5/'
     };
     

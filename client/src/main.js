@@ -106,13 +106,24 @@ const state = {
 };
 
 const VIDEO_MODELS = [
+  { id: 'kling-v2.6-pro', name: 'Kling V2.6 Pro', desc: '1080p HD + Audio, model terbaru', icon: '🔥' },
+  { id: 'kling-o1-pro', name: 'Kling O1 Pro', desc: 'Model AI terbaru, premium', icon: '🧠' },
+  { id: 'kling-o1-std', name: 'Kling O1 Std', desc: 'Model AI baru, hemat', icon: '💡' },
   { id: 'kling-v2.5-pro', name: 'Kling V2.5 Pro', desc: '1080p HD, kualitas terbaik', icon: '👑' },
   { id: 'kling-v2.1-master', name: 'Kling V2.1 Master', desc: 'Kontrol motion lanjutan', icon: '🎬' },
   { id: 'kling-v2.1-pro', name: 'Kling V2.1 Pro', desc: 'Kualitas profesional', icon: '⭐' },
   { id: 'kling-v2.1-std', name: 'Kling V2.1 Std', desc: 'Budget friendly', icon: '💰' },
+  { id: 'kling-elements-pro', name: 'Kling Elements Pro', desc: 'Kontrol elemen detail', icon: '🎨' },
+  { id: 'kling-elements-std', name: 'Kling Elements Std', desc: 'Kontrol elemen hemat', icon: '🖌️' },
   { id: 'kling-v1.6-pro', name: 'Kling 1.6 Pro', desc: 'Model stabil klasik', icon: '🌟' },
-  { id: 'minimax-hailuo-1080p', name: 'MiniMax Hailuo 1080p', desc: 'HD dengan audio', icon: '🔊' },
-  { id: 'minimax-hailuo-768p', name: 'MiniMax Hailuo 768p', desc: 'Cepat dengan audio', icon: '🔉' },
+  { id: 'wan-v2.2-720p', name: 'Wan V2.2 720p', desc: 'Model Alibaba HD', icon: '🐉' },
+  { id: 'wan-v2.2-580p', name: 'Wan V2.2 580p', desc: 'Model Alibaba cepat', icon: '🐲' },
+  { id: 'wan-v2.2-480p', name: 'Wan V2.2 480p', desc: 'Model Alibaba hemat', icon: '🐍' },
+  { id: 'minimax-hailuo-2.3-1080p', name: 'MiniMax Hailuo 2.3 1080p', desc: 'Terbaru HD + Audio', icon: '🔊' },
+  { id: 'minimax-hailuo-2.3-1080p-fast', name: 'MiniMax Hailuo 2.3 Fast', desc: 'HD cepat + Audio', icon: '⚡' },
+  { id: 'minimax-hailuo-2.3-768p-fast', name: 'MiniMax Hailuo 2.3 768p', desc: 'Cepat + Audio', icon: '🔉' },
+  { id: 'minimax-hailuo-1080p', name: 'MiniMax Hailuo 1080p', desc: 'HD dengan audio', icon: '🎵' },
+  { id: 'minimax-hailuo-768p', name: 'MiniMax Hailuo 768p', desc: 'Standar dengan audio', icon: '🎶' },
   { id: 'seedance-pro-1080p', name: 'Seedance Pro 1080p', desc: 'Durasi panjang HD', icon: '🌱' },
   { id: 'seedance-pro-720p', name: 'Seedance Pro 720p', desc: 'Keseimbangan kualitas', icon: '🌿' },
   { id: 'pixverse-v5', name: 'PixVerse V5', desc: 'Efek transisi', icon: '✨' }
