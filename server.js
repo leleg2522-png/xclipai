@@ -1493,13 +1493,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
       'kling-elements-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-std' },
       // Kling 1.6
       'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      // Wan 2.6 (NEW)
-      'wan-v2.6-1080p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p' },
-      'wan-v2.6-720p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-6-720p' },
-      // Wan 2.2
-      'wan-v2.2-720p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
-      'wan-v2.2-580p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
-      'wan-v2.2-480p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-480p' },
+      // Wan 2.6 (NEW - uses 'size' parameter)
+      'wan-v2.6-1080p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p' },
+      'wan-v2.6-720p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-720p' },
+      // Wan 2.2 (uses 'aspect_ratio' parameter)
+      'wan-v2.2-720p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
+      'wan-v2.2-580p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
+      'wan-v2.2-480p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-480p' },
       // MiniMax Hailuo 2.3 (NEW)
       'minimax-hailuo-2.3-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p' },
       'minimax-hailuo-2.3-1080p-fast': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p-fast' },
@@ -1570,14 +1570,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
         motion_mode: 'normal',
         reference_strength: 0.8
       };
-    } else if (config.api === 'wan') {
-      // Wan 2.6 uses 'size' parameter instead of 'aspect_ratio'
+    } else if (config.api === 'wan26') {
+      // Wan 2.6 uses 'size' parameter
       const wanSizeMap = {
         'widescreen_16_9': 'landscape_720p',
         'social_story_9_16': 'portrait_720p',
         'square_1_1': 'landscape_720p'
       };
-      // For 1080p models, use 1080p size
       let wanSize = wanSizeMap[mappedAspectRatio] || 'landscape_720p';
       if (model.includes('1080p')) {
         wanSize = wanSize.replace('720p', '1080p');
@@ -1591,6 +1590,15 @@ app.post('/api/videogen/proxy', async (req, res) => {
         enable_prompt_expansion: false,
         shot_type: 'single',
         seed: -1
+      };
+    } else if (config.api === 'wan22') {
+      // Wan 2.2 uses 'aspect_ratio' parameter
+      requestBody = {
+        image: image,
+        prompt: prompt || '',
+        duration: duration || '5',
+        aspect_ratio: mappedAspectRatio || 'auto',
+        seed: Math.floor(Math.random() * 1000000)
       };
     }
     
