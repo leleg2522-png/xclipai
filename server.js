@@ -1571,13 +1571,26 @@ app.post('/api/videogen/proxy', async (req, res) => {
         reference_strength: 0.8
       };
     } else if (config.api === 'wan') {
+      // Wan 2.6 uses 'size' parameter instead of 'aspect_ratio'
+      const wanSizeMap = {
+        'widescreen_16_9': 'landscape_720p',
+        'social_story_9_16': 'portrait_720p',
+        'square_1_1': 'landscape_720p'
+      };
+      // For 1080p models, use 1080p size
+      let wanSize = wanSizeMap[mappedAspectRatio] || 'landscape_720p';
+      if (model.includes('1080p')) {
+        wanSize = wanSize.replace('720p', '1080p');
+      }
       requestBody = {
         image: image,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio,
+        size: wanSize,
         negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy',
-        motion_strength: 0.7
+        enable_prompt_expansion: false,
+        shot_type: 'single',
+        seed: -1
       };
     }
     
