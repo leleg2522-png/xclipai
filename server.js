@@ -1493,7 +1493,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
       'kling-elements-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-std' },
       // Kling 1.6
       'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      // Wan 2.2 (NEW)
+      // Wan 2.6 (NEW)
+      'wan-v2.6-1080p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p' },
+      'wan-v2.6-720p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-6-720p' },
+      // Wan 2.2
       'wan-v2.2-720p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
       'wan-v2.2-580p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
       'wan-v2.2-480p': { api: 'wan', endpoint: '/v1/ai/image-to-video/wan-v2-2-480p' },
@@ -1770,7 +1773,10 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       'kling-elements-std': '/v1/ai/image-to-video/kling-elements-std/',
       // Kling 1.6
       'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
-      // Wan 2.2 (NEW)
+      // Wan 2.6 (NEW)
+      'wan-v2.6-1080p': '/v1/ai/image-to-video/wan-v2-6-1080p/',
+      'wan-v2.6-720p': '/v1/ai/image-to-video/wan-v2-6-720p/',
+      // Wan 2.2
       'wan-v2.2-720p': '/v1/ai/image-to-video/wan-v2-2-720p/',
       'wan-v2.2-580p': '/v1/ai/image-to-video/wan-v2-2-580p/',
       'wan-v2.2-480p': '/v1/ai/image-to-video/wan-v2-2-480p/',
