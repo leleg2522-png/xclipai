@@ -1767,11 +1767,11 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_name: ${savedTask.used_key_name}`);
     
-    // Status endpoints - must match generate endpoints exactly
+    // Status endpoints - based on Freepik API docs
     const statusEndpoints = {
-      // Kling 2.6 (NEW)
-      'kling-v2.6-pro': '/v1/ai/image-to-video/kling-v2-6-pro/',
-      // Kling O1 (NEW)
+      // Kling 2.6 (status uses kling-v2-6 without -pro suffix)
+      'kling-v2.6-pro': '/v1/ai/image-to-video/kling-v2-6/',
+      // Kling O1 (shared status endpoint)
       'kling-o1-pro': '/v1/ai/image-to-video/kling-o1/',
       'kling-o1-std': '/v1/ai/image-to-video/kling-o1/',
       // Kling 2.5
