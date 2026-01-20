@@ -2519,7 +2519,7 @@ function renderMotionPage() {
               
               <div class="settings-group">
                 <label class="setting-label">Prompt (Opsional)</label>
-                <textarea class="form-textarea" id="motionPrompt" placeholder="Deskripsi tambahan untuk mengontrol hasil motion..." rows="2">${state.motion.prompt}</textarea>
+                <textarea class="form-textarea" id="motionPrompt" placeholder="Deskripsi tambahan untuk mengontrol hasil motion, misalnya: 'orang berjalan perlahan', 'gerakan tangan melambai', 'kepala menoleh ke kanan'..." rows="5" style="min-height: 120px; resize: vertical;">${state.motion.prompt}</textarea>
               </div>
             </div>
           </div>
