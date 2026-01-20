@@ -4364,3 +4364,315 @@ textarea.form-input {
     box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
   }
 }
+
+/* ===== MOTION CONTROL PAGE STYLES ===== */
+
+/* Small Upload Zone for Motion */
+.upload-zone.small-upload {
+  padding: var(--space-6) var(--space-4);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-zone.small-upload .upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+}
+
+.upload-zone.small-upload .upload-content svg {
+  color: var(--primary);
+  opacity: 0.7;
+  transition: all var(--duration-normal);
+}
+
+.upload-zone.small-upload:hover .upload-content svg {
+  opacity: 1;
+  transform: scale(1.1);
+  color: var(--accent);
+}
+
+.upload-zone.small-upload .upload-content span {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.upload-zone.small-upload .upload-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Uploaded Preview */
+.uploaded-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.uploaded-preview img,
+.uploaded-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius);
+}
+
+.uploaded-preview .remove-upload {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  background: rgba(239, 68, 68, 0.9);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.uploaded-preview .remove-upload:hover {
+  background: #ef4444;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Video Preview Thumbnail */
+.video-preview-thumb {
+  background: #000;
+}
+
+.video-preview-thumb video {
+  max-height: 150px;
+}
+
+.video-preview-thumb .video-overlay-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-2) var(--space-3);
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-preview-thumb .video-duration {
+  font-size: 11px;
+  color: rgba(255,255,255,0.9);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Option Buttons for Motion */
+.option-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-elevated);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  text-align: center;
+}
+
+.option-btn:hover {
+  border-color: var(--primary);
+  background: rgba(139, 92, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.option-btn.active {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(6, 182, 212, 0.1));
+  box-shadow: var(--glow-primary);
+}
+
+.option-btn .option-icon {
+  font-size: 24px;
+}
+
+.option-btn .option-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.option-btn .option-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* Motion Task List */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.task-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: all var(--duration-normal);
+}
+
+.task-item.processing {
+  border-color: var(--primary);
+  animation: task-pulse 2s ease-in-out infinite;
+}
+
+@keyframes task-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+  50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+}
+
+.task-item.completed {
+  border-color: var(--green);
+}
+
+.task-item.failed {
+  border-color: var(--red);
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.task-model {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.task-status {
+  font-size: 12px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+}
+
+.task-status.status-processing {
+  background: rgba(139, 92, 246, 0.2);
+  color: var(--primary);
+}
+
+.task-status.status-completed {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--green);
+}
+
+.task-status.status-failed {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--red);
+}
+
+.task-progress {
+  margin-top: var(--space-3);
+}
+
+.task-progress .progress-bar {
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.task-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
+}
+
+.task-progress .progress-fill.pulse {
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.task-progress .progress-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.task-result {
+  margin-top: var(--space-3);
+}
+
+.task-result .result-video {
+  width: 100%;
+  border-radius: var(--radius);
+  background: #000;
+  max-height: 250px;
+}
+
+.task-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.task-error {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius);
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* Model Select Grid for Motion */
+.model-select-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .model-select-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.model-option.selected {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(6, 182, 212, 0.1));
+  box-shadow: var(--glow-primary);
+}
