@@ -3622,6 +3622,264 @@ app.get('/{*splat}', (req, res) => {
 });
 
 // Initialize database tables
+// ==================== MOTION ROOM MANAGER API ====================
+
+// Get all motion rooms
+app.get('/api/motion/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, active_users, status,
+             key_name_1, key_name_2, key_name_3,
+             (max_users - active_users) as available_slots
+      FROM motion_rooms 
+      ORDER BY id
+    `);
+    
+    const rooms = result.rows.map(room => {
+      const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
+      const hasApiKeys = keyNames.some(name => process.env[name]);
+      
+      return {
+        id: room.id,
+        name: room.name,
+        max_users: room.max_users,
+        active_users: room.active_users,
+        status: hasApiKeys ? room.status : 'maintenance',
+        available_slots: room.available_slots,
+        maintenance_reason: hasApiKeys ? null : 'API key belum dikonfigurasi'
+      };
+    });
+    
+    res.json({ rooms });
+  } catch (error) {
+    console.error('Get motion rooms error:', error);
+    res.status(500).json({ error: 'Failed to get motion rooms' });
+  }
+});
+
+// Get user motion subscription status
+app.get('/api/motion/subscription/status', async (req, res) => {
+  try {
+    if (!req.session.userId) {
+      return res.json({ hasSubscription: false, message: 'Not logged in' });
+    }
+    
+    const result = await pool.query(`
+      SELECT ms.*, mr.name as room_name, mr.status as room_status,
+             EXTRACT(EPOCH FROM (ms.expired_at - NOW())) as remaining_seconds
+      FROM motion_subscriptions ms
+      JOIN motion_rooms mr ON ms.motion_room_id = mr.id
+      WHERE ms.user_id = $1 AND ms.is_active = true AND ms.expired_at > NOW()
+      ORDER BY ms.expired_at DESC
+      LIMIT 1
+    `, [req.session.userId]);
+    
+    if (result.rows.length === 0) {
+      return res.json({ hasSubscription: false });
+    }
+    
+    const sub = result.rows[0];
+    res.json({
+      hasSubscription: true,
+      subscription: {
+        id: sub.id,
+        roomId: sub.motion_room_id,
+        roomName: sub.room_name,
+        roomStatus: sub.room_status,
+        startedAt: sub.started_at,
+        expiredAt: sub.expired_at,
+        remainingSeconds: Math.max(0, Math.floor(sub.remaining_seconds))
+      }
+    });
+  } catch (error) {
+    console.error('Motion subscription status error:', error);
+    res.status(500).json({ error: 'Failed to get motion subscription status' });
+  }
+});
+
+// Join a motion room (via Xclip API key)
+app.post('/api/motion/rooms/:roomId/join', async (req, res) => {
+  try {
+    const { xclipApiKey } = req.body;
+    const { roomId } = req.params;
+    
+    if (!xclipApiKey) {
+      return res.status(400).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    // Validate Xclip API key
+    const keyResult = await pool.query(
+      'SELECT xk.*, u.username FROM xclip_api_keys xk JOIN users u ON xk.user_id = u.id WHERE xk.api_key = $1 AND xk.is_active = true',
+      [xclipApiKey]
+    );
+    
+    if (keyResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const keyOwner = keyResult.rows[0];
+    const userId = keyOwner.user_id;
+    
+    // Check if room exists and has space
+    const roomResult = await pool.query(
+      'SELECT * FROM motion_rooms WHERE id = $1',
+      [roomId]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Motion room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    
+    if (room.status !== 'open') {
+      return res.status(400).json({ error: 'Motion room sedang dalam maintenance' });
+    }
+    
+    if (room.active_users >= room.max_users) {
+      return res.status(400).json({ error: 'Motion room sudah penuh' });
+    }
+    
+    // Check if user already has active subscription
+    const existingSub = await pool.query(`
+      SELECT ms.*, mr.name as room_name FROM motion_subscriptions ms
+      JOIN motion_rooms mr ON ms.motion_room_id = mr.id
+      WHERE ms.user_id = $1 AND ms.is_active = true AND ms.expired_at > NOW()
+    `, [userId]);
+    
+    if (existingSub.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `Anda sudah bergabung di ${existingSub.rows[0].room_name}. Leave room dulu sebelum join room lain.`
+      });
+    }
+    
+    // Create subscription (30 days by default)
+    const expiredAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    
+    await pool.query(`
+      INSERT INTO motion_subscriptions (user_id, motion_room_id, expired_at, is_active)
+      VALUES ($1, $2, $3, true)
+    `, [userId, roomId, expiredAt]);
+    
+    // Increment active users
+    await pool.query(
+      'UPDATE motion_rooms SET active_users = active_users + 1 WHERE id = $1',
+      [roomId]
+    );
+    
+    res.json({
+      success: true,
+      message: `Berhasil bergabung ke ${room.name}`,
+      subscription: {
+        roomId: room.id,
+        roomName: room.name,
+        expiredAt: expiredAt
+      }
+    });
+  } catch (error) {
+    console.error('Join motion room error:', error);
+    res.status(500).json({ error: 'Gagal bergabung ke room' });
+  }
+});
+
+// Leave motion room
+app.post('/api/motion/rooms/leave', async (req, res) => {
+  try {
+    const { xclipApiKey } = req.body;
+    
+    if (!xclipApiKey) {
+      return res.status(400).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    // Validate Xclip API key
+    const keyResult = await pool.query(
+      'SELECT user_id FROM xclip_api_keys WHERE api_key = $1 AND is_active = true',
+      [xclipApiKey]
+    );
+    
+    if (keyResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const userId = keyResult.rows[0].user_id;
+    
+    // Find active subscription
+    const subResult = await pool.query(`
+      SELECT ms.*, mr.name as room_name FROM motion_subscriptions ms
+      JOIN motion_rooms mr ON ms.motion_room_id = mr.id
+      WHERE ms.user_id = $1 AND ms.is_active = true AND ms.expired_at > NOW()
+    `, [userId]);
+    
+    if (subResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Anda tidak memiliki subscription motion room aktif' });
+    }
+    
+    const sub = subResult.rows[0];
+    
+    // Deactivate subscription
+    await pool.query(
+      'UPDATE motion_subscriptions SET is_active = false WHERE id = $1',
+      [sub.id]
+    );
+    
+    // Decrement active users
+    await pool.query(
+      'UPDATE motion_rooms SET active_users = GREATEST(0, active_users - 1) WHERE id = $1',
+      [sub.motion_room_id]
+    );
+    
+    res.json({
+      success: true,
+      message: `Berhasil keluar dari ${sub.room_name}`
+    });
+  } catch (error) {
+    console.error('Leave motion room error:', error);
+    res.status(500).json({ error: 'Gagal keluar dari room' });
+  }
+});
+
+// Get motion room API key for user (internal use)
+async function getMotionRoomApiKey(xclipApiKey) {
+  // Validate Xclip API key and get user
+  const keyResult = await pool.query(
+    'SELECT user_id FROM xclip_api_keys WHERE api_key = $1 AND is_active = true',
+    [xclipApiKey]
+  );
+  
+  if (keyResult.rows.length === 0) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  const userId = keyResult.rows[0].user_id;
+  
+  // Get user's motion subscription
+  const subResult = await pool.query(`
+    SELECT ms.motion_room_id, mr.key_name_1, mr.key_name_2, mr.key_name_3
+    FROM motion_subscriptions ms
+    JOIN motion_rooms mr ON ms.motion_room_id = mr.id
+    WHERE ms.user_id = $1 AND ms.is_active = true AND ms.expired_at > NOW()
+  `, [userId]);
+  
+  if (subResult.rows.length === 0) {
+    return { error: 'Anda belum bergabung ke motion room manapun' };
+  }
+  
+  const room = subResult.rows[0];
+  const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k && process.env[k]);
+  
+  if (keyNames.length === 0) {
+    return { error: 'Motion room tidak memiliki API key yang valid' };
+  }
+  
+  // Round-robin key selection
+  const randomKey = keyNames[Math.floor(Math.random() * keyNames.length)];
+  return { 
+    apiKey: process.env[randomKey], 
+    keyName: randomKey,
+    roomId: room.motion_room_id
+  };
+}
+
 async function initDatabase() {
   try {
     // Create sessions table for express-session (required for login)

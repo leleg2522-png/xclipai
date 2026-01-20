@@ -76,6 +76,14 @@ const state = {
     showRoomModal: false,
     showXmakerRoomModal: false
   },
+  motionRoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
   pricing: {
     plans: [],
     isLoading: false,
