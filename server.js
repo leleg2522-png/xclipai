@@ -1922,18 +1922,21 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     let freepikApiKey = null;
-    let keySource = 'none';
+    let usedKeyIndex = null;
+    let usedKeyName = 'global';
     
     const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
     if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
       freepikApiKey = userResult.rows[0].freepik_api_key;
-      keySource = 'personal';
+      usedKeyName = 'personal';
     }
     
     if (!freepikApiKey && keyInfo.room_id) {
       const rotated = getRotatedApiKey(keyInfo);
       freepikApiKey = rotated.key;
-      keySource = 'room';
+      usedKeyIndex = rotated.keyIndex;
+      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+      usedKeyName = keyNames[usedKeyIndex] || 'room';
     }
     
     if (!freepikApiKey && keyInfo.is_admin) {
@@ -1941,7 +1944,7 @@ app.post('/api/motion/generate', async (req, res) => {
       for (const keyName of roomKeys) {
         if (process.env[keyName]) {
           freepikApiKey = process.env[keyName];
-          keySource = 'admin';
+          usedKeyName = keyName;
           break;
         }
       }
@@ -1949,7 +1952,7 @@ app.post('/api/motion/generate', async (req, res) => {
     
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
-      keySource = 'global';
+      usedKeyName = 'global';
     }
     
     if (!freepikApiKey) {
@@ -2001,6 +2004,15 @@ app.post('/api/motion/generate', async (req, res) => {
     
     console.log(`[MOTION] Task created: ${taskId}`);
     
+    if (taskId) {
+      await pool.query(
+        `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, used_key_name) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, 'motion-' + model, usedKeyIndex, usedKeyName]
+      );
+      console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}`);
+    }
+    
     res.json({
       success: true,
       taskId: taskId,
@@ -2031,15 +2043,31 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       return res.status(401).json({ error: 'Xclip API key tidak valid' });
     }
     
+    const taskResult = await pool.query(
+      'SELECT * FROM video_generation_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+      [taskId, keyInfo.id]
+    );
+    
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan atau bukan milik API key ini' });
+    }
+    
+    const savedTask = taskResult.rows[0];
     let freepikApiKey = null;
     
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      freepikApiKey = userResult.rows[0].freepik_api_key;
+    if (savedTask.used_key_name && savedTask.used_key_name !== 'personal' && savedTask.used_key_name !== 'global') {
+      freepikApiKey = process.env[savedTask.used_key_name];
+    }
+    
+    if (!freepikApiKey && savedTask.used_key_name === 'personal') {
+      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+        freepikApiKey = userResult.rows[0].freepik_api_key;
+      }
     }
     
     if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo);
+      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
       freepikApiKey = rotated.key;
     }
     
@@ -2086,14 +2114,26 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       videoUrl = data.video.url;
     } else if (data.result?.video_url) {
       videoUrl = data.result.video_url;
+    } else if (data.output?.video_url) {
+      videoUrl = data.output.video_url;
+    } else if (data.result?.url) {
+      videoUrl = data.result.url;
+    } else if (data.output?.url) {
+      videoUrl = data.output.url;
     } else if (data.url) {
       videoUrl = data.url;
     }
     
     const isCompleted = data.status === 'COMPLETED' || data.status === 'completed' || 
-                       data.status === 'SUCCESS' || data.status === 'success';
+                       data.status === 'SUCCESS' || data.status === 'success' ||
+                       (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
     
     if (isCompleted && videoUrl) {
+      pool.query(
+        'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
+        ['completed', videoUrl, taskId]
+      ).catch(e => console.error('DB update error:', e));
+      
       return res.json({
         status: 'completed',
         progress: 100,
@@ -2104,7 +2144,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     
     const normalizedStatus = (data.status || 'processing').toLowerCase();
     res.json({
-      status: normalizedStatus,
+      status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
       progress: data.progress || 0,
       videoUrl: videoUrl,
       taskId: taskId
