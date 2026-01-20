@@ -1927,6 +1927,36 @@ app.post('/api/motion/generate', async (req, res) => {
     let freepikApiKey = null;
     let usedKeyName = null;
     
+    // Check room capacity (max 3 users per room in last 30 minutes)
+    const usageResult = await pool.query(`
+      SELECT COUNT(DISTINCT xclip_api_key_id) as active_users
+      FROM video_generation_tasks 
+      WHERE model LIKE 'motion-%' 
+        AND room_id = $1
+        AND created_at > NOW() - INTERVAL '30 minutes'
+    `, [selectedRoomId]);
+    
+    const currentUsers = parseInt(usageResult.rows[0]?.active_users) || 0;
+    
+    // Check if this user already used this room (allow them to continue)
+    const userInRoomResult = await pool.query(`
+      SELECT 1 FROM video_generation_tasks 
+      WHERE model LIKE 'motion-%' 
+        AND room_id = $1 
+        AND xclip_api_key_id = $2
+        AND created_at > NOW() - INTERVAL '30 minutes'
+      LIMIT 1
+    `, [selectedRoomId, keyInfo.id]);
+    
+    const isUserAlreadyInRoom = userInRoomResult.rows.length > 0;
+    
+    if (currentUsers >= 3 && !isUserAlreadyInRoom) {
+      return res.status(400).json({ 
+        error: `Room ${selectedRoomId} sudah penuh (3/3 user). Coba room lain.`,
+        roomFull: true 
+      });
+    }
+    
     // Get room's API keys from environment
     const roomKeyPrefix = `MOTION_ROOM${selectedRoomId}_KEY_`;
     const roomKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
@@ -3598,12 +3628,34 @@ async function cleanupExpiredSubscriptions() {
 setInterval(cleanupExpiredSubscriptions, 60000);
 cleanupExpiredSubscriptions();
 
-app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'index.html'));
-});
-
-// Initialize database tables
 // ==================== MOTION ROOM MANAGER API ====================
+
+// Get motion room usage (active users per room)
+app.get('/api/motion/room-usage', async (req, res) => {
+  try {
+    // Count active tasks per room in the last 30 minutes (considered active)
+    const result = await pool.query(`
+      SELECT room_id, COUNT(DISTINCT xclip_api_key_id) as active_users
+      FROM video_generation_tasks 
+      WHERE model LIKE 'motion-%' 
+        AND created_at > NOW() - INTERVAL '30 minutes'
+        AND room_id IS NOT NULL
+      GROUP BY room_id
+    `);
+    
+    const usage = { 1: 0, 2: 0, 3: 0 };
+    result.rows.forEach(row => {
+      if (row.room_id && usage.hasOwnProperty(row.room_id)) {
+        usage[row.room_id] = parseInt(row.active_users) || 0;
+      }
+    });
+    
+    res.json({ usage });
+  } catch (error) {
+    console.error('Get motion room usage error:', error);
+    res.json({ usage: { 1: 0, 2: 0, 3: 0 } });
+  }
+});
 
 // Get all motion rooms
 app.get('/api/motion/rooms', async (req, res) => {
@@ -3860,6 +3912,11 @@ async function getMotionRoomApiKey(xclipApiKey) {
     roomId: room.motion_room_id
   };
 }
+
+// Catch-all route - must be last
+app.get('/{*splat}', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'index.html'));
+});
 
 async function initDatabase() {
   try {

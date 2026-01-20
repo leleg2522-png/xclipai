@@ -67,7 +67,8 @@ const state = {
     generatedVideos: [],
     error: null,
     customApiKey: '',
-    selectedRoom: 1
+    selectedRoom: 1,
+    roomUsage: { 1: 0, 2: 0, 3: 0 }
   },
   roomManager: {
     rooms: [],
@@ -269,6 +270,7 @@ async function checkAuth() {
         fetchXclipKeys();
         checkAdminStatus();
         loadMotionSubscriptionStatus();
+        loadMotionRoomUsage();
       });
     }
     
@@ -882,6 +884,19 @@ async function loadMotionSubscriptionStatus() {
     console.error('Load motion subscription error:', error);
     state.motionRoomManager.hasSubscription = false;
     state.motionRoomManager.subscription = null;
+  }
+}
+
+async function loadMotionRoomUsage() {
+  try {
+    const response = await fetch(`${API_URL}/api/motion/room-usage`, { credentials: 'include' });
+    const data = await response.json();
+    if (data.usage) {
+      state.motion.roomUsage = data.usage;
+      render();
+    }
+  } catch (error) {
+    console.error('Load motion room usage error:', error);
   }
 }
 
@@ -2638,12 +2653,22 @@ function renderMotionPage() {
         </div>
         
         <div class="room-manager-content" style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
-          <div class="room-selection" style="flex: 1; min-width: 200px;">
-            <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room</label>
+          <div class="room-selection" style="flex: 1; min-width: 280px;">
+            <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room (Maks 3 user/room)</label>
             <div class="room-buttons" style="display: flex; gap: 8px;">
-              <button class="btn ${state.motion.selectedRoom === 1 ? 'btn-primary' : 'btn-outline'}" data-motion-room="1" style="flex: 1;">Room 1</button>
-              <button class="btn ${state.motion.selectedRoom === 2 ? 'btn-primary' : 'btn-outline'}" data-motion-room="2" style="flex: 1;">Room 2</button>
-              <button class="btn ${state.motion.selectedRoom === 3 ? 'btn-primary' : 'btn-outline'}" data-motion-room="3" style="flex: 1;">Room 3</button>
+              ${[1, 2, 3].map(roomId => {
+                const usage = state.motion.roomUsage[roomId] || 0;
+                const isFull = usage >= 3;
+                const isSelected = state.motion.selectedRoom === roomId;
+                return `<button 
+                  class="btn ${isSelected ? 'btn-primary' : isFull ? 'btn-disabled' : 'btn-outline'}" 
+                  data-motion-room="${roomId}" 
+                  style="flex: 1; position: relative;" 
+                  ${isFull && !isSelected ? 'disabled' : ''}>
+                  Room ${roomId}
+                  <span style="display: block; font-size: 10px; opacity: 0.8;">${usage}/3 user</span>
+                </button>`;
+              }).join('')}
             </div>
           </div>
           <div class="api-key-section" style="flex: 2; min-width: 280px;">
