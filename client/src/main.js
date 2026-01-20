@@ -65,7 +65,9 @@ const state = {
     isPolling: false,
     tasks: [],
     generatedVideos: [],
-    error: null
+    error: null,
+    customApiKey: '',
+    selectedRoom: 1
   },
   roomManager: {
     rooms: [],
@@ -2630,34 +2632,38 @@ function renderMotionPage() {
             </svg>
             <span>Motion Room</span>
           </div>
-          ${(state.motionRoomManager.hasSubscription || state.admin.isAdmin) ? `
-            <div class="subscription-info">
-              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : state.motionRoomManager.subscription?.roomName || 'Aktif'}</span>
-              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.motionRoomManager.subscription?.expiredAt)}</span>
-            </div>
-          ` : ''}
+          <div class="subscription-info">
+            <span class="sub-badge active">Room ${state.motion.selectedRoom}</span>
+          </div>
         </div>
         
-        <div class="room-manager-content">
-          ${(!state.motionRoomManager.hasSubscription && !state.admin.isAdmin) ? `
-            <div class="no-subscription">
-              <p>Bergabung ke Motion Room untuk menggunakan fitur ini</p>
-              <button class="btn btn-primary" id="openMotionRoomModalBtn" ${state.motionRoomManager.isLoading ? 'disabled' : ''}>
-                ${state.motionRoomManager.isLoading ? 'Memuat...' : 'Pilih Motion Room'}
-              </button>
+        <div class="room-manager-content" style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="room-selection" style="flex: 1; min-width: 200px;">
+            <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room</label>
+            <div class="room-buttons" style="display: flex; gap: 8px;">
+              <button class="btn ${state.motion.selectedRoom === 1 ? 'btn-primary' : 'btn-outline'}" data-motion-room="1" style="flex: 1;">Room 1</button>
+              <button class="btn ${state.motion.selectedRoom === 2 ? 'btn-primary' : 'btn-outline'}" data-motion-room="2" style="flex: 1;">Room 2</button>
+              <button class="btn ${state.motion.selectedRoom === 3 ? 'btn-primary' : 'btn-outline'}" data-motion-room="3" style="flex: 1;">Room 3</button>
             </div>
-          ` : `
-            <div class="current-room">
-              <div class="room-info">
-                <span class="room-label">Room:</span>
-                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : state.motionRoomManager.subscription?.roomName}</span>
-                <span class="room-status-badge status-open">READY</span>
-              </div>
-              ${!state.admin.isAdmin ? `
-              <button class="btn btn-sm btn-outline" id="leaveMotionRoomBtn">Leave Room</button>
-              ` : ''}
-            </div>
-          `}
+          </div>
+          <div class="api-key-section" style="flex: 2; min-width: 280px;">
+            <label class="setting-label" style="margin-bottom: 8px; display: block;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Xclip API Key
+            </label>
+            <input 
+              type="password" 
+              id="motionApiKey" 
+              class="api-key-input"
+              placeholder="Masukkan Xclip API key Anda..."
+              value="${state.motion.customApiKey}"
+              style="width: 100%;"
+            >
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses motion control</p>
+          </div>
         </div>
       </div>
       ` : `
@@ -4253,17 +4259,20 @@ function attachMotionEventListeners() {
     });
   }
   
-  document.querySelectorAll('.join-motion-room-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const roomId = parseInt(btn.dataset.roomId);
-      joinMotionRoom(roomId);
+  // Motion room selection buttons
+  document.querySelectorAll('[data-motion-room]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.motion.selectedRoom = parseInt(btn.dataset.motionRoom);
+      render();
     });
   });
   
-  const leaveMotionRoomBtn = document.getElementById('leaveMotionRoomBtn');
-  if (leaveMotionRoomBtn) {
-    leaveMotionRoomBtn.addEventListener('click', leaveMotionRoom);
+  // Motion API key input
+  const motionApiKey = document.getElementById('motionApiKey');
+  if (motionApiKey) {
+    motionApiKey.addEventListener('input', (e) => {
+      state.motion.customApiKey = e.target.value;
+    });
   }
 }
 
@@ -4344,10 +4353,8 @@ async function generateMotion() {
     return;
   }
   
-  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
-    showToast('Anda perlu berlangganan untuk generate motion video', 'error');
-    state.pricing.showModal = true;
-    render();
+  if (!state.motion.customApiKey && !state.admin.isAdmin) {
+    showToast('Masukkan Xclip API key terlebih dahulu', 'error');
     return;
   }
   
@@ -4367,12 +4374,13 @@ async function generateMotion() {
       characterImage: state.motion.characterImage.data,
       referenceVideo: state.motion.referenceVideo.data,
       prompt: state.motion.prompt || '',
-      characterOrientation: state.motion.characterOrientation
+      characterOrientation: state.motion.characterOrientation,
+      roomId: state.motion.selectedRoom
     };
     
     const headers = { 
       'Content-Type': 'application/json',
-      'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
+      'X-Xclip-Key': state.motion.customApiKey
     };
     
     const response = await fetch(`${API_URL}/api/motion/generate`, {

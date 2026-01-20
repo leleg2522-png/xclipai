@@ -1910,6 +1910,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
 app.post('/api/motion/generate', async (req, res) => {
   try {
     const xclipApiKey = req.headers['x-xclip-key'];
+    const { model, characterImage, referenceVideo, prompt, characterOrientation, roomId } = req.body;
     
     if (!xclipApiKey) {
       return res.status(401).json({ error: 'Xclip API key diperlukan' });
@@ -1921,43 +1922,25 @@ app.post('/api/motion/generate', async (req, res) => {
       return res.status(401).json({ error: 'Xclip API key tidak valid' });
     }
     
+    // Get the selected room's API keys (default to room 1)
+    const selectedRoomId = roomId || 1;
     let freepikApiKey = null;
     let usedKeyName = null;
-    let motionRoomId = null;
     
-    // Admin users can use any available motion room key without joining
-    if (keyInfo.is_admin) {
-      const motionKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM1_KEY_2', 'MOTION_ROOM1_KEY_3', 
-                          'MOTION_ROOM2_KEY_1', 'MOTION_ROOM2_KEY_2', 'MOTION_ROOM2_KEY_3',
-                          'MOTION_ROOM3_KEY_1', 'MOTION_ROOM3_KEY_2', 'MOTION_ROOM3_KEY_3'];
-      const availableKeys = motionKeys.filter(k => process.env[k]);
-      if (availableKeys.length > 0) {
-        const randomKey = availableKeys[Math.floor(Math.random() * availableKeys.length)];
-        freepikApiKey = process.env[randomKey];
-        usedKeyName = randomKey;
-      }
-    } else {
-      // Non-admin users MUST join a motion room
-      const motionRoomResult = await getMotionRoomApiKey(xclipApiKey);
-      
-      if (motionRoomResult.error || !motionRoomResult.apiKey) {
-        return res.status(403).json({ 
-          error: motionRoomResult.error || 'Anda belum bergabung ke Motion Room. Silakan pilih Motion Room terlebih dahulu.',
-          requiresRoom: true 
-        });
-      }
-      
-      freepikApiKey = motionRoomResult.apiKey;
-      usedKeyName = motionRoomResult.keyName;
-      motionRoomId = motionRoomResult.roomId;
+    // Get room's API keys from environment
+    const roomKeyPrefix = `MOTION_ROOM${selectedRoomId}_KEY_`;
+    const roomKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+    
+    if (roomKeys.length > 0) {
+      // Round-robin selection
+      const randomKey = roomKeys[Math.floor(Math.random() * roomKeys.length)];
+      freepikApiKey = process.env[randomKey];
+      usedKeyName = randomKey;
     }
     
     if (!freepikApiKey) {
-      // This should only be reached by admins when no MOTION_ROOM keys are configured
-      return res.status(500).json({ error: 'Tidak ada API key Motion Room yang dikonfigurasi. Hubungi admin.' });
+      return res.status(500).json({ error: `Motion Room ${selectedRoomId} belum dikonfigurasi. Coba room lain atau hubungi admin.` });
     }
-    
-    const { model, characterImage, referenceVideo, prompt, characterOrientation } = req.body;
     
     if (!characterImage) {
       return res.status(400).json({ error: 'Gambar karakter diperlukan' });
@@ -2006,9 +1989,9 @@ app.post('/api/motion/generate', async (req, res) => {
       await pool.query(
         `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, used_key_name) 
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [keyInfo.id, keyInfo.user_id, motionRoomId, taskId, 'motion-' + model, usedKeyName]
+        [keyInfo.id, keyInfo.user_id, selectedRoomId, taskId, 'motion-' + model, usedKeyName]
       );
-      console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}, motion_room_id: ${motionRoomId}`);
+      console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}, motion_room: ${selectedRoomId}`);
     }
     
     res.json({
