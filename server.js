@@ -1922,26 +1922,29 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     let freepikApiKey = null;
-    let usedKeyIndex = null;
     let usedKeyName = 'global';
+    let motionRoomId = null;
     
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      freepikApiKey = userResult.rows[0].freepik_api_key;
-      usedKeyName = 'personal';
+    // Try to get API key from motion room first
+    const motionRoomResult = await getMotionRoomApiKey(xclipApiKey);
+    
+    if (motionRoomResult.apiKey) {
+      freepikApiKey = motionRoomResult.apiKey;
+      usedKeyName = motionRoomResult.keyName;
+      motionRoomId = motionRoomResult.roomId;
+    } else if (motionRoomResult.error && !keyInfo.is_admin) {
+      // Personal API key fallback for non-admin users
+      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+        freepikApiKey = userResult.rows[0].freepik_api_key;
+        usedKeyName = 'personal';
+      }
     }
     
-    if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo);
-      freepikApiKey = rotated.key;
-      usedKeyIndex = rotated.keyIndex;
-      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-      usedKeyName = keyNames[usedKeyIndex] || 'room';
-    }
-    
+    // Admin fallback - use any available motion room key
     if (!freepikApiKey && keyInfo.is_admin) {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
-      for (const keyName of roomKeys) {
+      const motionKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM3_KEY_1'];
+      for (const keyName of motionKeys) {
         if (process.env[keyName]) {
           freepikApiKey = process.env[keyName];
           usedKeyName = keyName;
@@ -1950,13 +1953,14 @@ app.post('/api/motion/generate', async (req, res) => {
       }
     }
     
+    // Global fallback
     if (!freepikApiKey) {
       freepikApiKey = process.env.FREEPIK_API_KEY;
       usedKeyName = 'global';
     }
     
     if (!freepikApiKey) {
-      return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
+      return res.status(500).json({ error: 'Tidak ada API key yang tersedia. Pastikan Anda sudah bergabung ke Motion Room.' });
     }
     
     const { model, characterImage, referenceVideo, prompt, characterOrientation } = req.body;
@@ -2006,11 +2010,11 @@ app.post('/api/motion/generate', async (req, res) => {
     
     if (taskId) {
       await pool.query(
-        `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, used_key_name) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, 'motion-' + model, usedKeyIndex, usedKeyName]
+        `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, used_key_name) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [keyInfo.id, keyInfo.user_id, motionRoomId, taskId, 'motion-' + model, usedKeyName]
       );
-      console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}`);
+      console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}, motion_room_id: ${motionRoomId}`);
     }
     
     res.json({

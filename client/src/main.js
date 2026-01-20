@@ -266,6 +266,7 @@ async function checkAuth() {
         fetchRooms();
         fetchXclipKeys();
         checkAdminStatus();
+        loadMotionSubscriptionStatus();
       });
     }
     
@@ -842,6 +843,122 @@ async function leaveRoom() {
     }
   } catch (error) {
     console.error('Leave room error:', error);
+  }
+}
+
+// ==================== MOTION ROOM MANAGER FUNCTIONS ====================
+
+async function loadMotionRooms() {
+  try {
+    state.motionRoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/motion/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.motionRoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Load motion rooms error:', error);
+    state.motionRoomManager.rooms = [];
+  } finally {
+    state.motionRoomManager.isLoading = false;
+    render();
+  }
+}
+
+async function loadMotionSubscriptionStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/motion/subscription/status`, { credentials: 'include' });
+    if (!response.ok) {
+      state.motionRoomManager.hasSubscription = false;
+      state.motionRoomManager.subscription = null;
+      return;
+    }
+    const data = await response.json();
+    state.motionRoomManager.hasSubscription = data.hasSubscription || false;
+    state.motionRoomManager.subscription = data.subscription || null;
+  } catch (error) {
+    console.error('Load motion subscription error:', error);
+    state.motionRoomManager.hasSubscription = false;
+    state.motionRoomManager.subscription = null;
+  }
+}
+
+async function joinMotionRoom(roomId) {
+  const apiKey = state.motionRoomManager.xclipApiKey;
+  
+  if (!apiKey) {
+    showToast('Masukkan Xclip API key terlebih dahulu', 'error');
+    return;
+  }
+  
+  try {
+    state.motionRoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/motion/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ xclipApiKey: apiKey })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(data.message || 'Berhasil bergabung ke motion room!', 'success');
+      state.motionRoomManager.showRoomModal = false;
+      await loadMotionSubscriptionStatus();
+      await loadMotionRooms();
+    } else {
+      showToast(data.error || 'Gagal bergabung ke room', 'error');
+    }
+  } catch (error) {
+    console.error('Join motion room error:', error);
+    showToast('Gagal bergabung ke room', 'error');
+  } finally {
+    state.motionRoomManager.isLoading = false;
+    render();
+  }
+}
+
+async function leaveMotionRoom() {
+  const apiKey = state.motionRoomManager.xclipApiKey;
+  
+  if (!apiKey) {
+    showToast('Masukkan Xclip API key untuk keluar dari room', 'error');
+    return;
+  }
+  
+  if (!confirm('Apakah Anda yakin ingin keluar dari motion room ini?')) {
+    return;
+  }
+  
+  try {
+    state.motionRoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/motion/rooms/leave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ xclipApiKey: apiKey })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(data.message || 'Berhasil keluar dari motion room', 'success');
+      await loadMotionSubscriptionStatus();
+      await loadMotionRooms();
+    } else {
+      showToast(data.error || 'Gagal keluar dari room', 'error');
+    }
+  } catch (error) {
+    console.error('Leave motion room error:', error);
+    showToast('Gagal keluar dari room', 'error');
+  } finally {
+    state.motionRoomManager.isLoading = false;
+    render();
   }
 }
 
@@ -1575,10 +1692,83 @@ function renderModals() {
     ${renderAuthModal()}
     ${renderRoomModal()}
     ${renderXmakerRoomModal()}
+    ${renderMotionRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
     ${renderPaymentModal()}
     ${renderMyPaymentsModal()}
+  `;
+}
+
+function renderMotionRoomModal() {
+  if (!state.motionRoomManager.showRoomModal) return '';
+  
+  return `
+    <div class="modal-overlay" id="motionRoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih Motion Room</h2>
+          <button class="modal-close" id="closeMotionRoomModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section" style="margin-bottom: 20px;">
+            <label class="setting-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Xclip API Key
+            </label>
+            <input 
+              type="password" 
+              id="motionRoomApiKeyInput" 
+              class="form-input"
+              placeholder="Masukkan Xclip API key Anda..."
+              value="${state.motionRoomManager.xclipApiKey}"
+            >
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses Motion Room</p>
+          </div>
+          
+          <div class="rooms-list">
+            ${state.motionRoomManager.isLoading ? `
+              <div class="loading-rooms">
+                <div class="spinner"></div>
+                <p>Memuat rooms...</p>
+              </div>
+            ` : state.motionRoomManager.rooms.length === 0 ? `
+              <div class="empty-rooms">
+                <p>Tidak ada motion room tersedia</p>
+              </div>
+            ` : state.motionRoomManager.rooms.map(room => `
+              <div class="room-item ${room.status !== 'open' ? 'maintenance' : ''}" data-motion-room-id="${room.id}">
+                <div class="room-info">
+                  <div class="room-name">${room.name}</div>
+                  <div class="room-stats">
+                    <span class="room-users">${room.active_users}/${room.max_users} users</span>
+                    <span class="room-slots">${room.available_slots} slot tersedia</span>
+                  </div>
+                </div>
+                <div class="room-status">
+                  ${room.status === 'open' ? `
+                    <span class="status-badge open">OPEN</span>
+                    ${room.available_slots > 0 ? `
+                      <button class="btn btn-sm btn-primary join-motion-room-btn" data-room-id="${room.id}">
+                        Join
+                      </button>
+                    ` : `
+                      <span class="status-badge full">FULL</span>
+                    `}
+                  ` : `
+                    <span class="status-badge maintenance">MAINTENANCE</span>
+                    ${room.maintenance_reason ? `<span class="maintenance-reason">${room.maintenance_reason}</span>` : ''}
+                  `}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -2438,31 +2628,34 @@ function renderMotionPage() {
               <path d="M8 12h8"/>
               <path d="M12 16l4-4-4-4"/>
             </svg>
-            <span>Motion Control</span>
+            <span>Motion Room</span>
           </div>
-          ${(state.roomManager.hasSubscription || state.admin.isAdmin) ? `
+          ${(state.motionRoomManager.hasSubscription || state.admin.isAdmin) ? `
             <div class="subscription-info">
-              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : 'Aktif'}</span>
-              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.roomManager.subscription?.expiredAt)}</span>
+              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : state.motionRoomManager.subscription?.roomName || 'Aktif'}</span>
+              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.motionRoomManager.subscription?.expiredAt)}</span>
             </div>
           ` : ''}
         </div>
         
         <div class="room-manager-content">
-          ${(!state.roomManager.hasSubscription && !state.admin.isAdmin) ? `
+          ${(!state.motionRoomManager.hasSubscription && !state.admin.isAdmin) ? `
             <div class="no-subscription">
-              <p>Anda belum memiliki paket aktif</p>
-              <button class="btn btn-primary" id="buyPackageBtn" ${state.roomManager.isLoading ? 'disabled' : ''}>
-                ${state.roomManager.isLoading ? 'Memproses...' : 'Beli Paket'}
+              <p>Bergabung ke Motion Room untuk menggunakan fitur ini</p>
+              <button class="btn btn-primary" id="openMotionRoomModalBtn" ${state.motionRoomManager.isLoading ? 'disabled' : ''}>
+                ${state.motionRoomManager.isLoading ? 'Memuat...' : 'Pilih Motion Room'}
               </button>
             </div>
           ` : `
             <div class="current-room">
               <div class="room-info">
-                <span class="room-label">Status:</span>
-                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : 'Subscription Active'}</span>
+                <span class="room-label">Room:</span>
+                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : state.motionRoomManager.subscription?.roomName}</span>
                 <span class="room-status-badge status-open">READY</span>
               </div>
+              ${!state.admin.isAdmin ? `
+              <button class="btn btn-sm btn-outline" id="leaveMotionRoomBtn">Leave Room</button>
+              ` : ''}
             </div>
           `}
         </div>
@@ -4024,6 +4217,53 @@ function attachMotionEventListeners() {
       state.auth.modalMode = 'login';
       render();
     });
+  }
+  
+  // Motion room event listeners
+  const openMotionRoomModalBtn = document.getElementById('openMotionRoomModalBtn');
+  if (openMotionRoomModalBtn) {
+    openMotionRoomModalBtn.addEventListener('click', async () => {
+      state.motionRoomManager.showRoomModal = true;
+      await loadMotionRooms();
+      render();
+    });
+  }
+  
+  const closeMotionRoomModal = document.getElementById('closeMotionRoomModal');
+  const motionRoomModalOverlay = document.getElementById('motionRoomModalOverlay');
+  if (closeMotionRoomModal) {
+    closeMotionRoomModal.addEventListener('click', () => {
+      state.motionRoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (motionRoomModalOverlay) {
+    motionRoomModalOverlay.addEventListener('click', (e) => {
+      if (e.target === motionRoomModalOverlay) {
+        state.motionRoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+  
+  const motionRoomApiKeyInput = document.getElementById('motionRoomApiKeyInput');
+  if (motionRoomApiKeyInput) {
+    motionRoomApiKeyInput.addEventListener('input', (e) => {
+      state.motionRoomManager.xclipApiKey = e.target.value;
+    });
+  }
+  
+  document.querySelectorAll('.join-motion-room-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const roomId = parseInt(btn.dataset.roomId);
+      joinMotionRoom(roomId);
+    });
+  });
+  
+  const leaveMotionRoomBtn = document.getElementById('leaveMotionRoomBtn');
+  if (leaveMotionRoomBtn) {
+    leaveMotionRoomBtn.addEventListener('click', leaveMotionRoom);
   }
 }
 
