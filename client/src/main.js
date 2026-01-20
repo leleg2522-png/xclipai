@@ -55,6 +55,18 @@ const state = {
     error: null,
     customApiKey: ''
   },
+  motion: {
+    characterImage: null,
+    referenceVideo: null,
+    prompt: '',
+    selectedModel: 'kling-v2.6-pro',
+    characterOrientation: 'video',
+    isGenerating: false,
+    isPolling: false,
+    tasks: [],
+    generatedVideos: [],
+    error: null
+  },
   roomManager: {
     rooms: [],
     xmakerRooms: [],
@@ -104,6 +116,11 @@ const state = {
     filter: 'pending'
   }
 };
+
+const MOTION_MODELS = [
+  { id: 'kling-v2.6-pro', name: 'Kling V2.6 Pro Motion', desc: 'Transfer motion berkualitas tinggi', icon: '🔥' },
+  { id: 'kling-v2.6-std', name: 'Kling V2.6 Std Motion', desc: 'Transfer motion hemat biaya', icon: '💰' }
+];
 
 const VIDEO_MODELS = [
   { id: 'kling-v2.6-pro', name: 'Kling V2.6 Pro', desc: '1080p HD + Audio, model terbaru', icon: '🔥' },
@@ -1436,6 +1453,14 @@ function renderNavMenu() {
       </svg>
       Video Gen
     </button>
+    <button class="nav-btn ${state.currentPage === 'motion' ? 'active' : ''}" data-page="motion">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 12h8"/>
+        <path d="M12 16l4-4-4-4"/>
+      </svg>
+      Motion
+    </button>
     <button class="nav-btn ${state.currentPage === 'chat' ? 'active' : ''}" data-page="chat">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -1531,6 +1556,7 @@ function renderMainContent() {
     ${state.currentPage === 'video' ? renderVideoPage() : 
       state.currentPage === 'xmaker' ? renderXMakerPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
+      state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
       state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
   `;
@@ -2371,6 +2397,288 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                   <p>Video yang di-generate akan muncul di sini</p>
                 </div>
               ` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMotionPage() {
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          Motion Control
+        </div>
+        <h1 class="hero-title">
+          <span class="gradient-text">Kling 2.6</span> Motion Control
+        </h1>
+        <p class="hero-subtitle">Transfer gerakan dari video referensi ke gambar karakter Anda dengan AI</p>
+      </div>
+      
+      ${state.auth.user ? `
+      <div class="room-manager-panel glass-card">
+        <div class="room-manager-header">
+          <div class="room-manager-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 12h8"/>
+              <path d="M12 16l4-4-4-4"/>
+            </svg>
+            <span>Motion Control</span>
+          </div>
+          ${(state.roomManager.hasSubscription || state.admin.isAdmin) ? `
+            <div class="subscription-info">
+              <span class="sub-badge active">${state.admin.isAdmin ? 'Admin' : 'Aktif'}</span>
+              <span class="sub-time">${state.admin.isAdmin ? 'Unlimited' : formatTimeRemaining(state.roomManager.subscription?.expiredAt)}</span>
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="room-manager-content">
+          ${(!state.roomManager.hasSubscription && !state.admin.isAdmin) ? `
+            <div class="no-subscription">
+              <p>Anda belum memiliki paket aktif</p>
+              <button class="btn btn-primary" id="buyPackageBtn" ${state.roomManager.isLoading ? 'disabled' : ''}>
+                ${state.roomManager.isLoading ? 'Memproses...' : 'Beli Paket'}
+              </button>
+            </div>
+          ` : `
+            <div class="current-room">
+              <div class="room-info">
+                <span class="room-label">Status:</span>
+                <span class="room-value">${state.admin.isAdmin ? 'Admin Access' : 'Subscription Active'}</span>
+                <span class="room-status-badge status-open">READY</span>
+              </div>
+            </div>
+          `}
+        </div>
+      </div>
+      ` : `
+      <div class="room-manager-panel glass-card login-prompt-panel">
+        <div class="login-prompt">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <h3>Login Diperlukan</h3>
+          <p>Silakan login untuk menggunakan Motion Control</p>
+          <button class="btn btn-primary" id="loginPromptBtn">Login Sekarang</button>
+        </div>
+      </div>
+      `}
+      
+      <div class="videogen-workspace">
+        <div class="videogen-left">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pengaturan Motion</h2>
+            </div>
+            <div class="card-body">
+              <div class="settings-group">
+                <label class="setting-label">Model AI</label>
+                <div class="model-select-grid">
+                  ${MOTION_MODELS.map(model => `
+                    <div class="model-option ${state.motion.selectedModel === model.id ? 'selected' : ''}" data-model="${model.id}">
+                      <span class="model-icon">${model.icon}</span>
+                      <div class="model-info">
+                        <span class="model-name">${model.name}</span>
+                        <span class="model-desc">${model.desc}</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+              
+              <div class="settings-group">
+                <label class="setting-label">Orientasi Karakter</label>
+                <div class="option-buttons">
+                  <button class="option-btn ${state.motion.characterOrientation === 'video' ? 'active' : ''}" data-orientation="video">
+                    <span class="option-icon">🎬</span>
+                    <span class="option-label">Video</span>
+                    <span class="option-desc">Ikuti orientasi video (max 30s)</span>
+                  </button>
+                  <button class="option-btn ${state.motion.characterOrientation === 'image' ? 'active' : ''}" data-orientation="image">
+                    <span class="option-icon">🖼️</span>
+                    <span class="option-label">Image</span>
+                    <span class="option-desc">Ikuti orientasi gambar (max 10s)</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="settings-group">
+                <label class="setting-label">Prompt (Opsional)</label>
+                <textarea class="form-textarea" id="motionPrompt" placeholder="Deskripsi tambahan untuk mengontrol hasil motion..." rows="2">${state.motion.prompt}</textarea>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Gambar Karakter</h2>
+            </div>
+            <div class="card-body">
+              <div class="upload-zone small-upload" id="motionImageUploadZone">
+                ${state.motion.characterImage ? `
+                  <div class="uploaded-preview">
+                    <img src="${state.motion.characterImage.preview}" alt="Character">
+                    <button class="remove-upload" id="removeMotionImage">×</button>
+                  </div>
+                ` : `
+                  <div class="upload-content">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Upload gambar karakter</span>
+                    <span class="upload-hint">JPG, PNG, WEBP (max 10MB)</span>
+                  </div>
+                `}
+                <input type="file" id="motionImageInput" accept="image/*" style="display: none">
+              </div>
+            </div>
+          </div>
+          
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Video Referensi Motion</h2>
+            </div>
+            <div class="card-body">
+              <div class="upload-zone small-upload" id="motionVideoUploadZone">
+                ${state.motion.referenceVideo ? `
+                  <div class="uploaded-preview video-preview-thumb">
+                    <video src="${state.motion.referenceVideo.preview}" muted></video>
+                    <div class="video-overlay-info">
+                      <span class="video-duration">${state.motion.referenceVideo.name}</span>
+                    </div>
+                    <button class="remove-upload" id="removeMotionVideo">×</button>
+                  </div>
+                ` : `
+                  <div class="upload-content">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <polygon points="23 7 16 12 23 17 23 7"/>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                    </svg>
+                    <span>Upload video referensi</span>
+                    <span class="upload-hint">MP4, MOV, WEBM (3-30 detik)</span>
+                  </div>
+                `}
+                <input type="file" id="motionVideoInput" accept="video/*" style="display: none">
+              </div>
+            </div>
+          </div>
+          
+          <button class="btn btn-primary btn-lg btn-full" id="generateMotionBtn" ${state.motion.isGenerating ? 'disabled' : ''}>
+            ${state.motion.isGenerating ? `
+              <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-dashoffset="20"/>
+              </svg>
+              Generating...
+            ` : `
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12h8"/>
+                <path d="M12 16l4-4-4-4"/>
+              </svg>
+              Generate Motion Video
+            `}
+          </button>
+          
+          ${state.motion.error ? `
+            <div class="error-message">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+              ${state.motion.error}
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="videogen-right">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Hasil Motion Video</h2>
+              ${state.motion.tasks.length > 0 ? `<span class="badge">${state.motion.tasks.length}</span>` : ''}
+            </div>
+            <div class="card-body">
+              ${state.motion.tasks.length > 0 ? `
+                <div class="task-list">
+                  ${state.motion.tasks.map((task, idx) => `
+                    <div class="task-item ${task.status}">
+                      <div class="task-header">
+                        <span class="task-model">${MOTION_MODELS.find(m => m.id === task.model)?.name || task.model}</span>
+                        <span class="task-status status-${task.status}">${task.status === 'processing' ? 'Processing...' : task.status === 'completed' ? 'Selesai' : task.status === 'failed' ? 'Gagal' : task.status}</span>
+                      </div>
+                      ${task.status === 'processing' ? `
+                        <div class="task-progress">
+                          <div class="progress-bar">
+                            <div class="progress-fill pulse" style="width: ${task.progress || 30}%"></div>
+                          </div>
+                          <span class="progress-text">${task.statusText || 'Generating motion video...'}</span>
+                        </div>
+                      ` : task.status === 'completed' && task.videoUrl ? `
+                        <div class="task-result">
+                          <video src="${task.videoUrl}" controls class="result-video"></video>
+                          <div class="task-actions">
+                            <a href="${task.videoUrl}" download="motion-${Date.now()}.mp4" class="btn btn-primary btn-sm">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                              </svg>
+                              Download
+                            </a>
+                          </div>
+                        </div>
+                      ` : task.status === 'failed' ? `
+                        <div class="task-error">${task.error || 'Generation failed'}</div>
+                      ` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `
+                <div class="empty-gallery">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 12h8"/>
+                    <path d="M12 16l4-4-4-4"/>
+                  </svg>
+                  <p>Motion video yang di-generate akan muncul di sini</p>
+                </div>
+              `}
             </div>
           </div>
         </div>
