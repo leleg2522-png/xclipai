@@ -1922,45 +1922,39 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     let freepikApiKey = null;
-    let usedKeyName = 'global';
+    let usedKeyName = null;
     let motionRoomId = null;
     
-    // Try to get API key from motion room first
-    const motionRoomResult = await getMotionRoomApiKey(xclipApiKey);
-    
-    if (motionRoomResult.apiKey) {
+    // Admin users can use any available motion room key without joining
+    if (keyInfo.is_admin) {
+      const motionKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM1_KEY_2', 'MOTION_ROOM1_KEY_3', 
+                          'MOTION_ROOM2_KEY_1', 'MOTION_ROOM2_KEY_2', 'MOTION_ROOM2_KEY_3',
+                          'MOTION_ROOM3_KEY_1', 'MOTION_ROOM3_KEY_2', 'MOTION_ROOM3_KEY_3'];
+      const availableKeys = motionKeys.filter(k => process.env[k]);
+      if (availableKeys.length > 0) {
+        const randomKey = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+        freepikApiKey = process.env[randomKey];
+        usedKeyName = randomKey;
+      }
+    } else {
+      // Non-admin users MUST join a motion room
+      const motionRoomResult = await getMotionRoomApiKey(xclipApiKey);
+      
+      if (motionRoomResult.error || !motionRoomResult.apiKey) {
+        return res.status(403).json({ 
+          error: motionRoomResult.error || 'Anda belum bergabung ke Motion Room. Silakan pilih Motion Room terlebih dahulu.',
+          requiresRoom: true 
+        });
+      }
+      
       freepikApiKey = motionRoomResult.apiKey;
       usedKeyName = motionRoomResult.keyName;
       motionRoomId = motionRoomResult.roomId;
-    } else if (motionRoomResult.error && !keyInfo.is_admin) {
-      // Personal API key fallback for non-admin users
-      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-        freepikApiKey = userResult.rows[0].freepik_api_key;
-        usedKeyName = 'personal';
-      }
-    }
-    
-    // Admin fallback - use any available motion room key
-    if (!freepikApiKey && keyInfo.is_admin) {
-      const motionKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM3_KEY_1'];
-      for (const keyName of motionKeys) {
-        if (process.env[keyName]) {
-          freepikApiKey = process.env[keyName];
-          usedKeyName = keyName;
-          break;
-        }
-      }
-    }
-    
-    // Global fallback
-    if (!freepikApiKey) {
-      freepikApiKey = process.env.FREEPIK_API_KEY;
-      usedKeyName = 'global';
     }
     
     if (!freepikApiKey) {
-      return res.status(500).json({ error: 'Tidak ada API key yang tersedia. Pastikan Anda sudah bergabung ke Motion Room.' });
+      // This should only be reached by admins when no MOTION_ROOM keys are configured
+      return res.status(500).json({ error: 'Tidak ada API key Motion Room yang dikonfigurasi. Hubungi admin.' });
     }
     
     const { model, characterImage, referenceVideo, prompt, characterOrientation } = req.body;
