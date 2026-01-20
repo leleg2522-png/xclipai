@@ -1,261 +1,7 @@
-# Xclip - AI-Powered Video Clipping, Image Generation, Video Generation & Chat Tool
+# Xclip - AI-Powered Creative Suite
 
 ## Overview
-Xclip is an AI-powered creative suite featuring four main tools:
-1. **Video Clipper** - Transform long videos into viral short clips
-2. **X Maker** - Generate consistent character images using AI with image-to-image support
-3. **Video Gen** - Generate videos from images using Freepik API (image-to-video)
-4. **AI Chat** - Chat with multiple LLM models from OpenRouter
-
-**Created by:** MANAZIL
-
-## Deployment
-
-This application can be deployed on any Node.js hosting platform (Railway, Render, Fly.io, etc.).
-
-### Railway Deployment Files
-- `Procfile` - Start command
-- `railway.toml` - Railway configuration
-- `nixpacks.toml` - FFmpeg installation
-- `DEPLOY.md` - Full deployment guide
-
-## Features
-
-### Video Clipper
-- Upload videos up to 1GB (MP4, MOV, AVI, MKV)
-- AI-powered viral content detection via OpenRouter API
-- Speech-to-text transcription via ElevenLabs API
-- Automatic subtitle translation to 12+ languages
-- Customizable output settings:
-  - Resolution: 1080p, 720p, 480p
-  - Aspect ratio: 9:16, 1:1, 4:5, 16:9
-  - Number of clips: 1-10
-  - Clip duration: 15-90 seconds
-- Video preview before processing
-- Viral score for each generated clip
-- Download clips directly
-
-### X Maker (Image Generator)
-- **Multiple AI Models** - High-quality AI image generation
-- **Image-to-Image**: Upload reference character for consistent generation (Mystic model only)
-- Generate up to 15 images at once
-- Requires subscription (separate XMaker rooms from Video Gen)
-- AI Models:
-  - Flux Pro v1.1 - Tercepat & kualitas terbaik (6x lebih cepat)
-  - Flux Dev - Iterasi cepat, bagus untuk testing
-  - Hyperflux - Konsisten untuk karakter & objek
-  - Seedream 4 - Kreatif dengan kualitas seimbang
-  - Classic Fast - Prototipe cepat, low latency
-  - Mystic - Fotorealistik 4K, support referensi gambar
-- Image Styles:
-  - Realistic, Anime, Cartoon, Cinematic, Fantasy, Portrait
-- Aspect Ratios: 1:1, 16:9, 9:16, 4:3
-- Gallery with download functionality
-- Room-based API key system (separate from Video Gen)
-- Indonesian language UI
-- Auto-kick inactive users from rooms after 5 minutes
-
-### Video Gen (Image to Video)
-- Convert static images to dynamic videos using Freepik API
-- **Real-time updates via Webhooks** - Instant notification when video is ready (no polling delay)
-- **Server-Sent Events (SSE)** - Live browser updates for instant video delivery
-- Multiple AI models available:
-  - Kling V2.5 Pro (1080p HD, best quality)
-  - Kling V2.1 Master (advanced motion control)
-  - Kling Pro V2.1 (professional quality)
-  - Kling Std V2.1 (budget friendly)
-  - Kling 1.6 Pro (stable classic model)
-  - MiniMax Hailuo 1080p/768p (with audio)
-  - Seedance Pro 1080p/720p (long duration)
-  - PixVerse V5 (transition effects)
-- Duration options: 5 or 10 seconds
-- Aspect ratios: 16:9, 9:16, 1:1
-- Optional motion prompt for controlling animation
-- Hybrid polling + webhook system for maximum reliability
-
-### AI Chat
-- Multiple LLM models from OpenRouter:
-  - OpenAI GPT-4o, GPT-4o Mini
-  - Anthropic Claude 3.5 Sonnet, Claude 3 Haiku
-  - Google Gemini Pro 1.5, Gemini Flash 1.5
-  - Meta Llama 3.1 70B
-  - Mistral Mixtral 8x7B
-  - Alibaba Qwen 2 72B
-  - DeepSeek Chat
-- File upload support for document analysis
-- Image upload support for vision capabilities
-- Real-time typing indicators
-- Message history with formatted responses
-- Code syntax highlighting in responses
-
-### User Authentication
-- User registration with username, email, password
-- Secure login with bcrypt password hashing
-- Session management with PostgreSQL-backed sessions
-- Personal API key storage for Video Gen
-- User dropdown menu with logout and API key management
-- Automatic API key loading on login
-
-### Subscription Pricing System
-- Multiple subscription packages:
-  - 1 Hari (Rp 15.000) - 24-hour access
-  - 3 Hari (Rp 35.000) - 3-day access
-  - 1 Minggu (Rp 65.000) - 7-day access
-  - 1 Bulan (Rp 199.000) - 30-day access
-- Feature locking: All features locked until user subscribes
-- Countdown timer showing remaining subscription time
-- Pricing modal with plan selection
-- Auto-expiration handling
-- Each user limited to 1 Xclip API key per lifetime
-
-## Architecture
-
-### Server (Port 5000)
-- Express.js combined server (frontend + API)
-- FFmpeg for video processing
-- Multer for file uploads
-- Integration with ElevenLabs and OpenRouter APIs
-
-### File Structure
-```
-/
-├── server.js           # Combined server (frontend + API on port 5000)
-├── client/
-│   ├── index.html      # Main HTML
-│   ├── src/
-│   │   └── main.js     # Frontend app logic (video + xmaker + chat)
-│   └── styles/
-│       └── main.css    # Premium CSS with animations
-├── uploads/            # Uploaded videos
-└── processed/          # Generated clips
-```
-
-## API Endpoints
-
-### Video Processing
-- `POST /api/upload` - Upload video file
-- `POST /api/process` - Start video processing
-- `GET /api/job/:jobId` - Get job status and clips
-
-### X Maker (Image Generation)
-- `POST /api/generate-image` - Generate character images (supports reference image for image-to-image)
-
-### Video Gen (Image to Video)
-- `POST /api/generate-video` - Start video generation from image
-- `GET /api/video-status/:model/:taskId` - Check video generation status
-
-### AI Chat
-- `POST /api/chat` - Send chat message with optional file/image attachments
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-- `POST /api/auth/logout` - Logout user
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/update-api-key` - Save user's Xclip API key
-- `GET /api/auth/get-api-key` - Get user's saved API key
-
-### Subscription & Room Manager
-- `GET /api/subscription/plans` - Get all subscription packages
-- `GET /api/subscription/status` - Get user subscription status with remaining time
-- `POST /api/subscription/buy` - Buy subscription package (requires planId)
-- `GET /api/rooms` - Get all rooms with status
-- `POST /api/room/select` - Join a room
-- `POST /api/room/leave` - Leave current room
-
-### Xclip API Keys
-- `POST /api/xclip-keys/create` - Create new Xclip API key
-- `GET /api/xclip-keys` - List user's active API keys
-- `POST /api/xclip-keys/:id/revoke` - Revoke/deactivate an API key
-- `POST /api/xclip-keys/:id/rename` - Rename an API key
-
-### Video Gen Proxy (External API)
-- `POST /api/videogen/proxy` - Generate video using Xclip API key (header: X-Xclip-Key)
-- `GET /api/videogen/tasks/:taskId` - Check video generation status using Xclip API key
-- `GET /api/xclip-keys/tasks` - List user's video generation tasks
-
-### QRIS Payment (Manual Verification)
-- `POST /api/payments/submit` - Submit payment with proof image (FormData: proof, planId)
-- `GET /api/payments/my` - Get user's payment history
-- `GET /api/subscription/my-status` - Get simplified subscription status from users table
-
-### Admin Dashboard
-- `GET /api/admin/check` - Check if current user is admin
-- `GET /api/admin/payments` - Get all payments (filter by ?status=pending|approved|rejected)
-- `POST /api/admin/payments/:id/approve` - Approve payment and activate subscription
-- `POST /api/admin/payments/:id/reject` - Reject payment with optional reason
-
-### Utility
-- `GET /api/health` - Health check
-
-## Environment Variables
-
-### Required
-- `DATABASE_URL` - PostgreSQL connection string
-- `SESSION_SECRET` - Secret key for session encryption
-
-### API Keys (for full functionality)
-- `ELEVENLABS_API_KEY` - For speech-to-text transcription
-- `OPENROUTER_API_KEY` - For viral content analysis, image generation, translation, and AI chat
-- `FREEPIK_API_KEY` - For image-to-video generation
-
-### Optional Configuration
-- `PORT` - Server port (default: 5000)
-- `APP_URL` - Application URL for API referer headers
-- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., "myapp.railway.app,mydomain.com")
-
-### Room API Keys (3 per room, rotated every 3 minutes)
-- `ROOM1_FREEPIK_KEY_1`, `ROOM1_FREEPIK_KEY_2`, `ROOM1_FREEPIK_KEY_3` - Room 1 Freepik API keys
-- `ROOM2_FREEPIK_KEY_1`, `ROOM2_FREEPIK_KEY_2`, `ROOM2_FREEPIK_KEY_3` - Room 2 Freepik API keys
-- `ROOM3_FREEPIK_KEY_1`, `ROOM3_FREEPIK_KEY_2`, `ROOM3_FREEPIK_KEY_3` - Room 3 Freepik API keys
-
-## Recent Changes
-- January 12, 2026: **DROPLET PROXY SYSTEM** - Added DigitalOcean droplet proxy support per room to prevent Freepik IP bans
-- January 12, 2026: Added admin API endpoints for droplet configuration (GET/POST /api/admin/rooms/droplets)
-- January 12, 2026: Created droplet-proxy/ folder with proxy server script and SETUP.md guide
-- January 12, 2026: Added database columns: droplet_ip, droplet_port, proxy_secret, use_proxy per room
-- January 12, 2026: **PERFORMANCE FIX** - Refactored render() to update only dynamic DOM areas (nav, header, main content, modals) instead of rebuilding entire DOM tree
-- January 12, 2026: Moved background animation (blur blobs) to static HTML to prevent expensive re-renders
-- January 12, 2026: Fixed fetchSubscriptionStatus() to properly check response.ok and reset state on errors
-- January 12, 2026: Improved error handling for subscription status API calls
-- January 8, 2026: **CRITICAL FIX** - Personal API key now prioritized over room pool (eliminates queue delay)
-- January 8, 2026: Added Kling V2.5 Turbo Pro model (40% faster than regular Pro)
-- January 8, 2026: Reduced status check timeout from 30s to 10s for faster response
-- January 8, 2026: Added cfg_scale: 0.3 optimization for faster video generation
-- January 8, 2026: Implemented real-time video generation updates via Webhooks and SSE
-- January 8, 2026: Added admin bypass for subscription checks in video/image generation
-- January 8, 2026: Improved Xclip API key validation with flexible subscription handling
-- January 8, 2026: Optimized video polling with aggressive 2-second intervals
-- January 6, 2026: Implemented manual QRIS payment system with payment proof upload
-- January 6, 2026: Added admin dashboard for payment verification (approve/reject)
-- January 6, 2026: Added is_admin column to users table for admin role management
-- January 6, 2026: Created payments table for tracking payment submissions
-- January 6, 2026: Updated subscription plans to 3 tiers (1 Hari Rp15.000, 7 Hari Rp80.000, 1 Bulan Rp270.000)
-- January 6, 2026: Added automatic MAINTENANCE mode for rooms without configured API keys
-- January 5, 2026: Complete premium UI redesign - modern SaaS-style design system with glassmorphism, improved typography, and smooth animations
-- January 5, 2026: Upgraded to futuristic dark theme with neon glow effects, cyber grid background, and animated logo
-- January 5, 2026: Updated logo to modern "X" monogram style with "PRO" badge and animated gradient border
-- January 5, 2026: Implemented API key rotation system - 3 keys per room rotating every 3 minutes
-- January 5, 2026: Refactored for platform-agnostic deployment (Railway, Render, etc.)
-- December 16, 2025: Initial creation with full feature set
-- December 16, 2025: Fixed upload error, combined servers, added premium UI animations
-- December 29, 2025: Added AI Chat feature with multiple LLM models and file/image upload support
-- December 29, 2025: Added X Maker image generator with consistent character generation
-- December 29, 2025: Added image-to-image feature to X Maker, increased max images to 15
-- December 30, 2025: Improved image generation with structured prompts for better accuracy
-- December 30, 2025: Added Video Gen feature with Freepik API for image-to-video generation
-- December 30, 2025: Added user authentication system with register, login, logout
-- December 30, 2025: Added personal API key storage for Video Gen feature
-- December 31, 2025: Added Room Manager system with subscription packages, room selection, and slot management
-- December 31, 2025: Added Xclip API Keys system for external API access to video generation with hidden Freepik keys
-- January 1, 2026: Implemented subscription pricing system with 4 tiers (1 day, 3 days, 1 week, 1 month)
-- January 1, 2026: Added feature lock overlay for non-subscribers and countdown timer in header
-- January 1, 2026: Fixed video generation URL extraction from Freepik API response
-- January 1, 2026: Updated X Maker to use Freepik Mystic API engines (Sharpy, Sparkle, Illusio, Automatic)
-- January 1, 2026: Added Room Manager system to X Maker with room selection (same as Video Gen)
-- January 1, 2026: X Maker now uses Xclip API Keys as proxy to room's hidden Freepik API key
-- January 1, 2026: Added Xclip API Key input field to X Maker for image generation
-- January 1, 2026: Separated rooms for Video Gen and X Maker to prevent request conflicts
+Xclip is an AI-powered creative suite designed to transform content creation. It features tools for video clipping, consistent character image generation, image-to-video conversion, motion transfer, and AI chat. The project aims to provide users with a comprehensive platform for leveraging AI in visual content production and communication.
 
 ## User Preferences
 - Clean, premium UI with white theme and gradient accents
@@ -263,3 +9,26 @@ This application can be deployed on any Node.js hosting platform (Railway, Rende
 - MANAZIL credit prominently displayed
 - Animated elements and glassmorphism effects
 - Navigation menu for switching between Video Clipper, X Maker, and AI Chat
+
+## System Architecture
+The application is built on a Node.js Express.js server, combining frontend and API functionalities. It uses FFmpeg for video processing and Multer for handling file uploads. The UI/UX features a modern SaaS-style design with a dark theme, neon glow effects, cyber grid background, and animated components. Key features include:
+
+- **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
+- **X Maker (Image Generator)**: Supports multiple AI models for high-quality image generation, including image-to-image consistency for characters, with various styles and aspect ratios. It includes a room-based API key system.
+- **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios.
+- **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation.
+- **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
+- **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
+- **Subscription System**: A tiered subscription model with feature locking, countdown timers, and manual QRIS payment verification.
+- **Admin Dashboard**: Provides functionalities for managing payments and user subscriptions.
+
+## External Dependencies
+- **Database**: PostgreSQL
+- **AI/ML APIs**:
+    - ElevenLabs API (for speech-to-text transcription)
+    - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
+    - Freepik API (for image-to-video generation and motion control with Kling models)
+- **Deployment & Utilities**:
+    - Multer (for file uploads)
+    - FFmpeg (for video processing)
+    - bcrypt (for password hashing)
