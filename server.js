@@ -1907,6 +1907,215 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
   }
 });
 
+app.post('/api/motion/generate', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    let freepikApiKey = null;
+    let keySource = 'none';
+    
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      freepikApiKey = userResult.rows[0].freepik_api_key;
+      keySource = 'personal';
+    }
+    
+    if (!freepikApiKey && keyInfo.room_id) {
+      const rotated = getRotatedApiKey(keyInfo);
+      freepikApiKey = rotated.key;
+      keySource = 'room';
+    }
+    
+    if (!freepikApiKey && keyInfo.is_admin) {
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
+      for (const keyName of roomKeys) {
+        if (process.env[keyName]) {
+          freepikApiKey = process.env[keyName];
+          keySource = 'admin';
+          break;
+        }
+      }
+    }
+    
+    if (!freepikApiKey) {
+      freepikApiKey = process.env.FREEPIK_API_KEY;
+      keySource = 'global';
+    }
+    
+    if (!freepikApiKey) {
+      return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
+    }
+    
+    const { model, characterImage, referenceVideo, prompt, characterOrientation } = req.body;
+    
+    if (!characterImage) {
+      return res.status(400).json({ error: 'Gambar karakter diperlukan' });
+    }
+    
+    if (!referenceVideo) {
+      return res.status(400).json({ error: 'Video referensi diperlukan' });
+    }
+    
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [keyInfo.id]
+    );
+    
+    const isPro = model === 'kling-v2.6-pro';
+    const endpoint = isPro 
+      ? '/v1/ai/video/kling-v2-6-motion-control-pro' 
+      : '/v1/ai/video/kling-v2-6-motion-control-std';
+    
+    const requestBody = {
+      image_url: characterImage,
+      video_url: referenceVideo,
+      character_orientation: characterOrientation || 'video'
+    };
+    
+    if (prompt && prompt.trim()) {
+      requestBody.prompt = prompt.trim();
+    }
+    
+    console.log(`[MOTION] Generating motion video with model: ${model}`);
+    console.log(`[MOTION] Request body:`, JSON.stringify({ ...requestBody, image_url: 'base64...', video_url: 'base64...' }));
+    
+    const response = await makeFreepikRequest(
+      'POST',
+      `https://api.freepik.com${endpoint}`,
+      freepikApiKey,
+      requestBody,
+      true
+    );
+    
+    const taskId = response.data?.data?.task_id || response.data?.task_id;
+    
+    console.log(`[MOTION] Task created: ${taskId}`);
+    
+    res.json({
+      success: true,
+      taskId: taskId,
+      model: model,
+      createdAt: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Motion generation error:', error.response?.data || error.message);
+    const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.message;
+    res.status(500).json({ error: 'Gagal memproses motion: ' + errorMsg });
+  }
+});
+
+app.get('/api/motion/tasks/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const { taskId } = req.params;
+    const { model } = req.query;
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    let freepikApiKey = null;
+    
+    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+      freepikApiKey = userResult.rows[0].freepik_api_key;
+    }
+    
+    if (!freepikApiKey && keyInfo.room_id) {
+      const rotated = getRotatedApiKey(keyInfo);
+      freepikApiKey = rotated.key;
+    }
+    
+    if (!freepikApiKey && keyInfo.is_admin) {
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
+      for (const keyName of roomKeys) {
+        if (process.env[keyName]) {
+          freepikApiKey = process.env[keyName];
+          break;
+        }
+      }
+    }
+    
+    if (!freepikApiKey) {
+      freepikApiKey = process.env.FREEPIK_API_KEY;
+    }
+    
+    if (!freepikApiKey) {
+      return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
+    }
+    
+    const isPro = model === 'kling-v2.6-pro';
+    const endpoint = isPro 
+      ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
+      : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+    
+    const response = await makeFreepikRequest(
+      'GET',
+      `https://api.freepik.com${endpoint}`,
+      freepikApiKey,
+      null,
+      true
+    );
+    
+    const data = response.data?.data || response.data;
+    console.log(`[MOTION] Poll ${taskId} | Status: ${data.status}`);
+    
+    let videoUrl = null;
+    if (data.generated && data.generated.length > 0) {
+      videoUrl = data.generated[0];
+    } else if (data.video_url) {
+      videoUrl = data.video_url;
+    } else if (data.video?.url) {
+      videoUrl = data.video.url;
+    } else if (data.result?.video_url) {
+      videoUrl = data.result.video_url;
+    } else if (data.url) {
+      videoUrl = data.url;
+    }
+    
+    const isCompleted = data.status === 'COMPLETED' || data.status === 'completed' || 
+                       data.status === 'SUCCESS' || data.status === 'success';
+    
+    if (isCompleted && videoUrl) {
+      return res.json({
+        status: 'completed',
+        progress: 100,
+        videoUrl: videoUrl,
+        taskId: taskId
+      });
+    }
+    
+    const normalizedStatus = (data.status || 'processing').toLowerCase();
+    res.json({
+      status: normalizedStatus,
+      progress: data.progress || 0,
+      videoUrl: videoUrl,
+      taskId: taskId
+    });
+    
+  } catch (error) {
+    console.error('Motion poll error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Gagal mengambil status motion task' });
+  }
+});
+
 app.get('/api/xclip-keys/tasks', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ error: 'Silakan login terlebih dahulu' });

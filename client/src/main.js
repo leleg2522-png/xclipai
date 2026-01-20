@@ -3594,6 +3594,8 @@ function attachEventListeners() {
     attachXMakerEventListeners();
   } else if (state.currentPage === 'videogen') {
     attachVideoGenEventListeners();
+  } else if (state.currentPage === 'motion') {
+    attachMotionEventListeners();
   }
 }
 
@@ -3925,6 +3927,303 @@ function attachVideoGenEventListeners() {
       render();
     });
   }
+}
+
+function attachMotionEventListeners() {
+  const imageUploadZone = document.getElementById('motionImageUploadZone');
+  const imageInput = document.getElementById('motionImageInput');
+  const videoUploadZone = document.getElementById('motionVideoUploadZone');
+  const videoInput = document.getElementById('motionVideoInput');
+  const removeImageBtn = document.getElementById('removeMotionImage');
+  const removeVideoBtn = document.getElementById('removeMotionVideo');
+  const generateBtn = document.getElementById('generateMotionBtn');
+  const promptInput = document.getElementById('motionPrompt');
+  
+  if (imageUploadZone && imageInput) {
+    imageUploadZone.addEventListener('click', (e) => {
+      if (!e.target.closest('.remove-upload')) {
+        imageInput.click();
+      }
+    });
+    
+    imageInput.addEventListener('change', handleMotionImageUpload);
+  }
+  
+  if (videoUploadZone && videoInput) {
+    videoUploadZone.addEventListener('click', (e) => {
+      if (!e.target.closest('.remove-upload')) {
+        videoInput.click();
+      }
+    });
+    
+    videoInput.addEventListener('change', handleMotionVideoUpload);
+  }
+  
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.motion.characterImage = null;
+      render();
+    });
+  }
+  
+  if (removeVideoBtn) {
+    removeVideoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.motion.referenceVideo = null;
+      render();
+    });
+  }
+  
+  document.querySelectorAll('.model-option[data-model]').forEach(option => {
+    option.addEventListener('click', () => {
+      const model = option.dataset.model;
+      if (MOTION_MODELS.find(m => m.id === model)) {
+        state.motion.selectedModel = model;
+        render();
+      }
+    });
+  });
+  
+  document.querySelectorAll('.option-btn[data-orientation]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.motion.characterOrientation = btn.dataset.orientation;
+      render();
+    });
+  });
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', (e) => {
+      state.motion.prompt = e.target.value;
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateMotion);
+  }
+  
+  const loginPromptBtn = document.getElementById('loginPromptBtn');
+  if (loginPromptBtn) {
+    loginPromptBtn.addEventListener('click', () => {
+      state.auth.showModal = true;
+      state.auth.modalMode = 'login';
+      render();
+    });
+  }
+}
+
+function handleMotionImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    showToast('Silakan upload file gambar', 'error');
+    return;
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 10MB', 'error');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.motion.characterImage = {
+      name: file.name,
+      type: file.type,
+      data: event.target.result,
+      preview: event.target.result
+    };
+    render();
+    showToast('Gambar karakter berhasil diupload!', 'success');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function handleMotionVideoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('video/')) {
+    showToast('Silakan upload file video', 'error');
+    return;
+  }
+  
+  if (file.size > 100 * 1024 * 1024) {
+    showToast('Ukuran video maksimal 100MB', 'error');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.motion.referenceVideo = {
+      name: file.name,
+      type: file.type,
+      data: event.target.result,
+      preview: URL.createObjectURL(file)
+    };
+    render();
+    showToast('Video referensi berhasil diupload!', 'success');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+async function generateMotion() {
+  if (!state.motion.characterImage) {
+    showToast('Silakan upload gambar karakter terlebih dahulu', 'error');
+    return;
+  }
+  
+  if (!state.motion.referenceVideo) {
+    showToast('Silakan upload video referensi terlebih dahulu', 'error');
+    return;
+  }
+  
+  if (!state.auth.user) {
+    showToast('Silakan login terlebih dahulu', 'error');
+    state.auth.showModal = true;
+    state.auth.modalMode = 'login';
+    render();
+    return;
+  }
+  
+  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
+    showToast('Anda perlu berlangganan untuk generate motion video', 'error');
+    state.pricing.showModal = true;
+    render();
+    return;
+  }
+  
+  const activeTasks = state.motion.tasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
+  if (activeTasks.length >= 2) {
+    showToast('Maksimal 2 motion task dapat diproses bersamaan', 'error');
+    return;
+  }
+  
+  state.motion.isGenerating = true;
+  state.motion.error = null;
+  render();
+  
+  try {
+    const requestBody = {
+      model: state.motion.selectedModel,
+      characterImage: state.motion.characterImage.data,
+      referenceVideo: state.motion.referenceVideo.data,
+      prompt: state.motion.prompt || '',
+      characterOrientation: state.motion.characterOrientation
+    };
+    
+    const headers = { 
+      'Content-Type': 'application/json',
+      'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
+    };
+    
+    const response = await fetch(`${API_URL}/api/motion/generate`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Gagal generate motion');
+    }
+    
+    const result = await response.json();
+    
+    state.motion.tasks.unshift({
+      taskId: result.taskId,
+      model: state.motion.selectedModel,
+      status: 'processing',
+      progress: 0,
+      statusText: 'Memulai motion generation...',
+      createdAt: new Date().toISOString()
+    });
+    
+    state.motion.isGenerating = false;
+    render();
+    
+    showToast('Motion generation dimulai!', 'success');
+    
+    pollMotionStatus(result.taskId, state.motion.selectedModel);
+    
+  } catch (error) {
+    console.error('Motion generation error:', error);
+    state.motion.isGenerating = false;
+    state.motion.error = error.message;
+    render();
+    showToast(error.message, 'error');
+  }
+}
+
+function pollMotionStatus(taskId, model) {
+  const maxAttempts = 180;
+  let attempts = 0;
+  
+  const poll = async () => {
+    try {
+      const task = state.motion.tasks.find(t => t.taskId === taskId);
+      if (!task) return;
+      
+      const headers = { 
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
+      };
+      
+      const response = await fetch(`${API_URL}/api/motion/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
+        method: 'GET',
+        headers: headers
+      });
+      
+      if (!response.ok) {
+        throw new Error('Gagal mengambil status task');
+      }
+      
+      const data = await response.json();
+      
+      task.status = data.status;
+      task.progress = data.progress || 0;
+      task.statusText = data.status === 'processing' ? 'Generating motion video...' : data.status;
+      
+      if (data.status === 'completed' && data.videoUrl) {
+        task.videoUrl = data.videoUrl;
+        showToast('Motion video selesai!', 'success');
+        render();
+        return;
+      }
+      
+      if (data.status === 'failed') {
+        task.error = 'Motion generation gagal';
+        showToast('Motion generation gagal', 'error');
+        render();
+        return;
+      }
+      
+      render();
+      
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 3000);
+      } else {
+        task.status = 'failed';
+        task.error = 'Timeout - motion generation terlalu lama';
+        render();
+      }
+      
+    } catch (error) {
+      console.error('Poll motion error:', error);
+      const task = state.motion.tasks.find(t => t.taskId === taskId);
+      if (task) {
+        task.status = 'failed';
+        task.error = error.message;
+        render();
+      }
+    }
+  };
+  
+  poll();
 }
 
 function handleVideoGenImageUpload(e) {
