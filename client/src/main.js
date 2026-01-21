@@ -4466,7 +4466,9 @@ function pollMotionStatus(taskId, model) {
       });
       
       if (!response.ok) {
-        throw new Error('Gagal mengambil status task');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Motion status error:', response.status, errorData);
+        throw new Error(errorData.error || `Gagal mengambil status task (${response.status})`);
       }
       
       const data = await response.json();
