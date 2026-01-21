@@ -2077,7 +2077,9 @@ app.post('/api/motion/generate', async (req, res) => {
       true
     );
     
-    const taskId = response.data?.data?.task_id || response.data?.task_id;
+    console.log(`[MOTION] Freepik response:`, JSON.stringify(response.data));
+    
+    const taskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
     
     console.log(`[MOTION] Task created: ${taskId}`);
     
