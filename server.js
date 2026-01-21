@@ -174,8 +174,21 @@ app.use(async (req, res, next) => {
 });
 
 app.use(express.static(path.join(__dirname, 'client')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  acceptRanges: true,
+  setHeaders: (res) => {
+    res.set('Accept-Ranges', 'bytes');
+  }
+}));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
+
+// Handle RangeNotSatisfiableError for missing files
+app.use((err, req, res, next) => {
+  if (err.status === 416) {
+    return res.status(404).json({ error: 'File tidak ditemukan atau sudah dihapus' });
+  }
+  next(err);
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
