@@ -1,0 +1,51 @@
+TION] Using endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Poll response: {"data":{"task_id":"7ae20629-0efd-4544-87f5-e9a496945a19","status":"CREATED","generated":[]}}
+[MOTION] Poll 7ae20629-0efd-4544-87f5-e9a496945a19 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM1_KEY_1, found: true
+[MOTION] Trying poll endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 142.111.48.253:7030
+[MOTION] Poll success with: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.95.150.145:6114
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 198.23.239.134:6540
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Using endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Poll response: {"data":{"task_id":"7ae20629-0efd-4544-87f5-e9a496945a19","status":"CREATED","generated":[]}}
+[MOTION] Poll 7ae20629-0efd-4544-87f5-e9a496945a19 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM1_KEY_1, found: true
+[MOTION] Trying poll endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 107.172.163.27:6543
+[MOTION] Poll success with: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 198.105.121.200:6462
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 64.137.96.74:6641
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Using endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Poll response: {"data":{"task_id":"7ae20629-0efd-4544-87f5-e9a496945a19","status":"CREATED","generated":[]}}
+[MOTION] Poll 7ae20629-0efd-4544-87f5-e9a496945a19 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM1_KEY_1, found: true
+[MOTION] Trying poll endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 84.247.60.125:6095
+[MOTION] Poll success with: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 216.10.27.159:6837
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6-motion-control-std/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Trying poll endpoint: /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.26.71.145:5628
+[MOTION] Poll endpoint /v1/ai/video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19 failed: Not found
+[MOTION] Using endpoint: /v1/ai/image-to-video/kling-v2-6/7ae20629-0efd-4544-87f5-e9a496945a19
+[MOTION] Poll response: {"data":{"task_id":"7ae20629-0efd-4544-87f5-e9a496945a19","status":"CREATED","generated":[]}}
+[MOTION] Poll 7ae20629-0efd-4544-87f5-e9a496945a19 | Status: CREATED | Generated: []
