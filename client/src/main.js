@@ -4457,7 +4457,7 @@ function pollMotionStatus(taskId, model) {
       
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
+        'X-Xclip-Key': state.motion.customApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey
       };
       
       const response = await fetch(`${API_URL}/api/motion/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
