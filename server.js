@@ -2224,8 +2224,9 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       true
     );
     
+    console.log(`[MOTION] Poll response:`, JSON.stringify(response.data));
     const data = response.data?.data || response.data;
-    console.log(`[MOTION] Poll ${taskId} | Status: ${data?.status || 'unknown'}`);
+    console.log(`[MOTION] Poll ${taskId} | Status: ${data?.status || 'unknown'} | Generated: ${JSON.stringify(data?.generated || [])}`);
     
     let videoUrl = null;
     if (data.generated && data.generated.length > 0) {
