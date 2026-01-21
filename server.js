@@ -2184,10 +2184,15 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
     }
     
-    const isPro = model === 'kling-v2.6-pro';
+    // Check if model from query matches stored model (stored as 'motion-kling-v2.6-pro')
+    const storedModel = savedTask.model || '';
+    const isPro = model === 'kling-v2.6-pro' || storedModel.includes('pro');
     const endpoint = isPro 
       ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
       : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+    
+    console.log(`[MOTION] Polling task ${taskId} | Model query: ${model} | Stored: ${storedModel} | isPro: ${isPro}`);
+    console.log(`[MOTION] Endpoint: ${endpoint}`);
     
     const response = await makeFreepikRequest(
       'GET',
@@ -2198,7 +2203,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     );
     
     const data = response.data?.data || response.data;
-    console.log(`[MOTION] Poll ${taskId} | Status: ${data.status}`);
+    console.log(`[MOTION] Poll ${taskId} | Status: ${data?.status || 'unknown'}`);
     
     let videoUrl = null;
     if (data.generated && data.generated.length > 0) {
