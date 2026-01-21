@@ -1,0 +1,54 @@
+Motion generation error: 
+        <!DOCTYPE html>
+        <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+[MOTION] Generating motion video with model: kling-v2.6-std
+            <title>Something is going on in the Universe...</title>
+[MOTION] Request body: {"image_url":"base64...","video_url":"base64...","character_orientation":"video","prompt":"buatkan dia mengikuti gerakan video refrensi"}
+            <link rel="icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon.ico">
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=0
+            <link rel="icon" type="image/png" href="https://fps.cdnpk.net/favicons/favicon-32x32.png" sizes="32x32">
+Fetched 10 proxies from Webshare
+            <link rel="icon" type="image/png" href="https://fps.cdnpk.net/favicons/favicon-16x16.png" sizes="16x16">
+            <link rel="shortcut icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon-96x96.png">
+            <link rel="icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon-96x96.png" sizes="96x96">
+            <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-57x57.png" sizes="57x57">
+            <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-72x72.png" sizes="72x72">
+            <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-114x114.png" sizes="114x114">
+            <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-144x144.png" sizes="144x144">
+            <link rel="preload" href="https://fps.cdnpk.net/common/error-image-left.png" as="image" fetchpriority="high">
+            <link rel="preload" href="https://fps.cdnpk.net/common/error-image-right.png" as="image" fetchpriority="high">
+            <link rel="preload" href="https://fps.cdnpk.net/static/inter-regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+            <link rel="preload" href="https://fps.cdnpk.net/static/inter-semibold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+            <link rel="preload" href="https://fps.cdnpk.net/static/inter-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+            <link rel="preload" href="https://fps.cdnpk.net/static/degular-semibold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+            <link rel="preload" href="https://fps.cdnpk.net/common/static-errors.css" as="style" crossorigin="">
+            <link rel="stylesheet" href="https://fps.cdnpk.net/common/static-errors.css" crossorigin="">
+          </head>
+          <body class="_otnfkq0">
+            <div class="_17lid5f4 _17lid5f1 _1286nb12il _1286nb128l _1286nb18l _1286nb12v3 _1286nb12uf _1286nb16os _1286nb12sl _1286nb124l _1286nb1255 _1286nb1241 _1286nb12dx _1286nb12nl _1286nb12nh _17lid5f3">
+              <div class="_1286nb1m _1286nb18l _1286nb12v3 _1286nb12t9 _1286nb12tx">
+                <h4 class="_17lid5f9 _1286nb12n9 _1286nb12mz _1286nb12r3 _1286nb111 _1286nb11ol">Error</h4>
+                <div class="_17lid5fi">
+                  <div class="_17lid5ft _17lid5fq _17lid5fr">
+                    <img alt="Space Man" fetchpriority="high" width="222" height="276" decoding="async" class="_1286nb1433 _1286nb1434 _1286nb143n _1286nb1446 _1286nb13jl _1286nb11ox" src="https://fps.cdnpk.net/common/error-image-left.png">
+                  </div>
+                  <span class="_17lid5ff _1286nb189 _1286nb12r9 _1286nb11ox">500</span>
+                  <div class="_17lid5fo">
+                    <div class="_17lid5ft _17lid5fq _17lid5fs">
+                      <img alt="Space Woman" fetchpriority="high" width="153" height="317" decoding="async" class="_1286nb1433 _1286nb1434 _1286nb143n _1286nb1446 _1286nb13jl _1286nb11ox" src="https://fps.cdnpk.net/common/error-image-right.png">
+                    </div>
+                  </div>
+                </div>
+                <h4 class="_17lid5f9 _1286nb12n9 _1286nb12mz _1286nb12r3 _1286nb11ox">Something is going on in the Universe...</h4>
+                <p>It seems like we’re having some difficulties with the server; please don’t abandon ship, we’re sending for help.</p>
+              </div>
+                <a class="_1286nb15nj _1286nb15op _1286nb12r3" href="mailto:support@freepik.com?subject=Error%20500">support@freepik.com</a>
+              <p class="_1286nb12nx _1286nb168j _1286nb11b9">
+              </p>
+                If the problem persists, contact our support team
+            </div>
+          </body>
+        </html>

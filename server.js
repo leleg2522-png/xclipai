@@ -1991,8 +1991,8 @@ app.post('/api/motion/generate', async (req, res) => {
       : '/v1/ai/video/kling-v2-6-motion-control-std';
     
     const requestBody = {
-      image_url: characterImage,
-      video_url: referenceVideo,
+      image: characterImage,
+      video: referenceVideo,
       character_orientation: characterOrientation || 'video'
     };
     
@@ -2001,7 +2001,7 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     console.log(`[MOTION] Generating motion video with model: ${model}`);
-    console.log(`[MOTION] Request body:`, JSON.stringify({ ...requestBody, image_url: 'base64...', video_url: 'base64...' }));
+    console.log(`[MOTION] Request body:`, JSON.stringify({ ...requestBody, image: 'base64...', video: 'base64...' }));
     
     const response = await makeFreepikRequest(
       'POST',
