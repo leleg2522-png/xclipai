@@ -2074,11 +2074,20 @@ app.post('/api/motion/generate', async (req, res) => {
     console.log(`[MOTION] Image URL: ${imageFile.publicUrl}`);
     console.log(`[MOTION] Video URL: ${videoFile.publicUrl}`);
     
+    // Get webhook URL for instant notifications
+    const webhookUrl = getWebhookUrl();
+    console.log(`[MOTION] Using webhook: ${webhookUrl}`);
+    
     const requestBody = {
       image_url: imageFile.publicUrl,
       video_url: videoFile.publicUrl,
       character_orientation: characterOrientation || 'video'
     };
+    
+    // Add webhook for instant completion notification
+    if (webhookUrl) {
+      requestBody.webhook_url = webhookUrl;
+    }
     
     if (prompt && prompt.trim()) {
       requestBody.prompt = prompt.trim();
