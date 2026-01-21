@@ -4488,6 +4488,15 @@ function pollMotionStatus(taskId, model, apiKey) {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Motion status error:', response.status, errorData);
+        
+        // If task not found (404) or expired, mark as failed and stop polling
+        if (response.status === 404 || errorData.message === 'Not found' || errorData.error?.includes('tidak ditemukan')) {
+          task.status = 'failed';
+          task.error = 'Task expired atau tidak ditemukan';
+          render();
+          return; // Stop polling
+        }
+        
         throw new Error(errorData.error || `Gagal mengambil status task (${response.status})`);
       }
       
