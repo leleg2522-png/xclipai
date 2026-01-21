@@ -2453,20 +2453,22 @@ app.post('/api/generate-image', async (req, res) => {
         return res.status(403).json({ error: 'Belum pilih XMaker Room. Silakan pilih room di X Maker terlebih dahulu.' });
       }
       
-      apiKey = getRotatedApiKey(keyData);
+      const rotatedKey = getRotatedApiKey(keyData);
+      apiKey = rotatedKey.key;
+      console.log(`[X Maker] Using room API key (index ${rotatedKey.keyIndex + 1}) via Xclip API key proxy`);
     } else if (req.session.userId) {
       const roomKey = await getRoomApiKey(req.session.userId, 'xmaker');
       if (roomKey) {
         apiKey = roomKey;
+        console.log(`[X Maker] Using room API key via session`);
       }
     }
     
     if (!apiKey) {
-      apiKey = process.env.FREEPIK_API_KEY;
-    }
-    
-    if (!apiKey) {
-      return res.status(500).json({ error: 'API key tidak tersedia. Hubungi admin.' });
+      return res.status(403).json({ 
+        error: 'Belum pilih XMaker Room atau room tidak memiliki API key aktif. Silakan pilih room di X Maker terlebih dahulu.',
+        requireRoom: true
+      });
     }
     
     const sceneDescription = prompt || 'portrait shot';
@@ -2498,75 +2500,67 @@ app.post('/api/generate-image', async (req, res) => {
     const freepikAspect = aspectRatioMap[aspectRatio] || 'square_1_1';
     
     const modelConfig = {
-      'mystic': { 
-        endpoint: 'https://api.freepik.com/v1/ai/mystic',
-        statusEndpoint: 'https://api.freepik.com/v1/ai/mystic',
-        isAsync: true,
+      'nano-banana': { 
+        model: 'nano-banana',
         supportsReference: true,
-        engine: 'magnific_sharpy'
+        desc: 'Gratis, tercepat, support Image Reference'
       },
-      'classic-fast': { 
-        endpoint: 'https://api.freepik.com/v1/ai/text-to-image/classic-fast',
-        isAsync: false,
-        supportsReference: false
+      'imagen-4-fast': { 
+        model: 'imagen-4-fast',
+        supportsReference: false,
+        desc: 'Cepat dengan detail bagus'
       },
-      'flux-dev': { 
-        endpoint: 'https://api.freepik.com/v1/ai/text-to-image/flux-dev',
-        isAsync: false,
-        supportsReference: false
+      'imagen-4': { 
+        model: 'imagen-4',
+        supportsReference: false,
+        desc: 'Kualitas seimbang'
       },
-      'flux-pro': { 
-        endpoint: 'https://api.freepik.com/v1/ai/text-to-image/flux-pro-v1-1',
-        isAsync: false,
-        supportsReference: false
-      },
-      'hyperflux': { 
-        endpoint: 'https://api.freepik.com/v1/ai/text-to-image/hyperflux',
-        isAsync: false,
-        supportsReference: false
-      },
-      'seedream': { 
-        endpoint: 'https://api.freepik.com/v1/ai/text-to-image/seedream-4',
-        isAsync: false,
-        supportsReference: false
+      'imagen-4-ultra': { 
+        model: 'imagen-4-ultra',
+        supportsReference: false,
+        desc: 'Kualitas tertinggi 2K'
       }
     };
     
-    const selectedModel = modelConfig[model] || modelConfig['flux-pro'];
+    const selectedModel = modelConfig[model] || modelConfig['nano-banana'];
     
     const images = [];
     console.log(`Generating ${totalImages} images with model: ${model} for: "${sceneDescription.substring(0, 50)}..."`);
     
+    const geminigenAspectMap = {
+      '1:1': '1:1',
+      '16:9': '16:9',
+      '9:16': '9:16',
+      '4:3': '4:3',
+      '3:4': '3:4'
+    };
+    const geminigenAspect = geminigenAspectMap[aspectRatio] || '1:1';
+    
     for (let i = 0; i < totalImages; i++) {
       try {
-        console.log(`Image ${i + 1}/${totalImages}`);
+        console.log(`Image ${i + 1}/${totalImages} - GeminiGen.AI ${selectedModel.model}`);
         
         const fullPrompt = sceneDescription + styleModifier;
         
         let requestBody = {
+          type: 'image',
           prompt: fullPrompt,
-          aspect_ratio: freepikAspect
+          model: selectedModel.model,
+          aspect_ratio: geminigenAspect,
+          style: style || 'creative'
         };
         
-        if (model === 'mystic') {
-          requestBody.resolution = '2k';
-          requestBody.engine = selectedModel.engine;
-          if (referenceImage) {
-            const base64Data = referenceImage.replace(/^data:image\/[^;]+;base64,/, '');
-            requestBody.structure_reference = base64Data;
-            requestBody.structure_strength = 60;
-          }
-        } else {
-          requestBody.num_images = 1;
-          requestBody.guidance_scale = 3.5;
+        if (selectedModel.supportsReference && referenceImage) {
+          const base64Data = referenceImage.replace(/^data:image\/[^;]+;base64,/, '');
+          requestBody.reference_image = base64Data;
         }
         
         const response = await axios.post(
-          selectedModel.endpoint,
+          'https://api.geminigen.ai/uapi/v1/generate',
           requestBody,
           {
             headers: {
-              'x-freepik-api-key': apiKey,
+              'x-api-key': apiKey,
               'Content-Type': 'application/json'
             },
             timeout: 120000
@@ -2575,63 +2569,29 @@ app.post('/api/generate-image', async (req, res) => {
         
         let imageUrl = null;
         
-        if (selectedModel.isAsync) {
-          const taskId = response.data?.data?.task_id;
-          if (!taskId) {
-            throw new Error('No task ID received');
-          }
-          
-          let attempts = 0;
-          const maxAttempts = 60;
-          
-          while (!imageUrl && attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            attempts++;
-            
-            try {
-              const statusResponse = await axios.get(
-                `${selectedModel.statusEndpoint}/${taskId}`,
-                {
-                  headers: {
-                    'x-freepik-api-key': apiKey
-                  }
-                }
-              );
-              
-              const status = statusResponse.data?.data?.status;
-              
-              if (status === 'COMPLETED') {
-                const generated = statusResponse.data?.data?.generated;
-                if (generated && generated.length > 0) {
-                  imageUrl = generated[0].url || generated[0];
-                }
-              } else if (status === 'FAILED') {
-                throw new Error('Image generation failed');
-              }
-            } catch (pollError) {
-              console.log(`Poll attempt ${attempts} error:`, pollError.message);
-            }
-          }
-        } else {
-          const data = response.data?.data || response.data;
-          if (data && data.length > 0) {
-            imageUrl = data[0].base64 ? `data:image/png;base64,${data[0].base64}` : data[0].url || data[0];
-          } else if (data?.base64) {
-            imageUrl = `data:image/png;base64,${data.base64}`;
-          } else if (typeof data === 'string') {
-            imageUrl = data;
-          }
+        const data = response.data?.data || response.data;
+        if (data?.image_url) {
+          imageUrl = data.image_url;
+        } else if (data?.url) {
+          imageUrl = data.url;
+        } else if (data?.base64) {
+          imageUrl = `data:image/png;base64,${data.base64}`;
+        } else if (Array.isArray(data) && data.length > 0) {
+          imageUrl = data[0].url || data[0].image_url || (data[0].base64 ? `data:image/png;base64,${data[0].base64}` : null);
+        } else if (typeof data === 'string' && (data.startsWith('http') || data.startsWith('data:'))) {
+          imageUrl = data;
         }
         
         if (imageUrl) {
           images.push({ url: imageUrl, index: i, scene: sceneDescription });
-          console.log(`Image ${i + 1} generated successfully`);
+          console.log(`Image ${i + 1} generated successfully via GeminiGen.AI`);
         } else {
+          console.log('Unexpected response format:', JSON.stringify(response.data).substring(0, 500));
           images.push({ 
-            url: `https://placehold.co/512x512/6366f1/ffffff?text=Timeout`, 
+            url: `https://placehold.co/512x512/6366f1/ffffff?text=No+Image`, 
             index: i,
             placeholder: true,
-            message: 'Generation timeout'
+            message: 'No image URL in response'
           });
         }
         
@@ -2641,7 +2601,7 @@ app.post('/api/generate-image', async (req, res) => {
           url: `https://placehold.co/512x512/ef4444/ffffff?text=Error`, 
           index: i,
           error: true,
-          message: imgError.response?.data?.error?.message || imgError.message
+          message: imgError.response?.data?.message || imgError.response?.data?.error || imgError.message
         });
       }
     }

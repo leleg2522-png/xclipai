@@ -38,7 +38,7 @@ const state = {
     aspectRatio: '1:1',
     isGenerating: false,
     generatedImages: [],
-    selectedModel: 'flux-pro',
+    selectedModel: 'nano-banana',
     referenceImage: null,
     xclipApiKey: ''
   },
@@ -160,12 +160,10 @@ const VIDEO_MODELS = [
 ];
 
 const IMAGE_MODELS = [
-  { id: 'flux-pro', name: 'Flux Pro v1.1', provider: 'Xclip AI', icon: '⚡', desc: 'Tercepat & kualitas terbaik (6x lebih cepat)' },
-  { id: 'flux-dev', name: 'Flux Dev', provider: 'Xclip AI', icon: '🛠️', desc: 'Iterasi cepat, bagus untuk testing' },
-  { id: 'hyperflux', name: 'Hyperflux', provider: 'Xclip AI', icon: '🚀', desc: 'Konsisten untuk karakter & objek' },
-  { id: 'seedream', name: 'Seedream 4', provider: 'Xclip AI', icon: '🌱', desc: 'Kreatif dengan kualitas seimbang' },
-  { id: 'classic-fast', name: 'Classic Fast', provider: 'Xclip AI', icon: '💨', desc: 'Prototipe cepat, low latency' },
-  { id: 'mystic', name: 'Mystic', provider: 'Xclip AI', icon: '✨', desc: 'Fotorealistik 4K, support referensi gambar' }
+  { id: 'nano-banana', name: 'Nano Banana', provider: 'GeminiGen AI', icon: '🍌', desc: 'Gratis, tercepat, support Image Reference', supportsReference: true },
+  { id: 'imagen-4-fast', name: 'Imagen 4 Fast', provider: 'GeminiGen AI', icon: '⚡', desc: 'Cepat dengan detail bagus' },
+  { id: 'imagen-4', name: 'Imagen 4 Standard', provider: 'GeminiGen AI', icon: '🎨', desc: 'Kualitas seimbang untuk semua kebutuhan' },
+  { id: 'imagen-4-ultra', name: 'Imagen 4 Ultra', provider: 'GeminiGen AI', icon: '👑', desc: 'Kualitas tertinggi, 2K resolution, text rendering' }
 ];
 
 const IMAGE_STYLES = [
