@@ -2132,8 +2132,10 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const savedTask = taskResult.rows[0];
     let freepikApiKey = null;
     
+    // First try to use the exact key that was used for generation
     if (savedTask.used_key_name && savedTask.used_key_name !== 'personal' && savedTask.used_key_name !== 'global') {
       freepikApiKey = process.env[savedTask.used_key_name];
+      console.log(`[MOTION] Using saved key: ${savedTask.used_key_name}, found: ${!!freepikApiKey}`);
     }
     
     if (!freepikApiKey && savedTask.used_key_name === 'personal') {
@@ -2143,13 +2145,29 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       }
     }
     
+    // For motion tasks, try motion room keys
+    if (!freepikApiKey && savedTask.motion_room) {
+      const motionRoomKeys = [
+        `MOTION_ROOM${savedTask.motion_room}_KEY_1`,
+        `MOTION_ROOM${savedTask.motion_room}_KEY_2`,
+        `MOTION_ROOM${savedTask.motion_room}_KEY_3`
+      ];
+      for (const keyName of motionRoomKeys) {
+        if (process.env[keyName]) {
+          freepikApiKey = process.env[keyName];
+          console.log(`[MOTION] Using motion room key: ${keyName}`);
+          break;
+        }
+      }
+    }
+    
     if (!freepikApiKey && keyInfo.room_id) {
       const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
       freepikApiKey = rotated.key;
     }
     
     if (!freepikApiKey && keyInfo.is_admin) {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
+      const roomKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM3_KEY_1', 'ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
       for (const keyName of roomKeys) {
         if (process.env[keyName]) {
           freepikApiKey = process.env[keyName];
