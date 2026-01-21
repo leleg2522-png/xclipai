@@ -1,0 +1,58 @@
+[MOTION] Room 3 available keys: MOTION_ROOM3_KEY_1
+[MOTION] Checking env vars: MOTION_ROOM3_KEY_1=SET, MOTION_ROOM3_KEY_2=NOT SET, MOTION_ROOM3_KEY_3=NOT SET
+[MOTION] Selected key: MOTION_ROOM3_KEY_1
+[MOTION] Saving files to public storage, base URL: https://web-production-0531a.up.railway.app
+[MOTION] Image URL: https://web-production-0531a.up.railway.app/uploads/motion/a73874b1-d706-4502-8a26-1cfbd92bdd51.jpg
+[MOTION] Video URL: https://web-production-0531a.up.railway.app/uploads/motion/050a8507-4569-4af8-b3b6-a86614c9f60a.mp4
+[MOTION] Using webhook: https://web-production-0531a.up.railway.app/api/webhook/freepik
+[MOTION] Generating motion video with model: kling-v2.6-std
+[MOTION] Request body: {"image_url":"https://web-production-0531a.up.railway.app/uploads/motion/a73874b1-d706-4502-8a26-1cfbd92bdd51.jpg","video_url":"https://web-production-0531a.up.railway.app/uploads/motion/050a8507-4569-4af8-b3b6-a86614c9f60a.mp4","character_orientation":"video","webhook_url":"https://web-production-0531a.up.railway.app/api/webhook/freepik"}
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+Fetched 10 proxies from Webshare
+[PROXY] Using Webshare: 64.137.96.74:6641
+[MOTION] Freepik response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Task created: 8942a3dd-791b-4069-863e-d5c2ad038d48
+[MOTION] Task 8942a3dd-791b-4069-863e-d5c2ad038d48 saved with key_name: MOTION_ROOM3_KEY_1, motion_room: 3
+[VERY SLOW REQUEST] POST /api/motion/generate took 66944ms
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 84.247.60.125:6095
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 216.10.27.159:6837
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.26.71.145:5628
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.27.208.120:5830
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 142.111.48.253:7030
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.95.150.145:6114
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []
+[MOTION] Using saved key: MOTION_ROOM3_KEY_1, found: true
+[MOTION] Polling task 8942a3dd-791b-4069-863e-d5c2ad038d48 via /v1/ai/image-to-video/kling-v2-6/8942a3dd-791b-4069-863e-d5c2ad038d48
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 198.23.239.134:6540
+[MOTION] Poll response: {"data":{"task_id":"8942a3dd-791b-4069-863e-d5c2ad038d48","status":"CREATED","generated":[]}}
+[MOTION] Poll 8942a3dd-791b-4069-863e-d5c2ad038d48 | Status: CREATED | Generated: []

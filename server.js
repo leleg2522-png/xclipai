@@ -2213,29 +2213,53 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
     }
     
-    // Use the correct polling endpoint from Freepik docs
-    // https://docs.freepik.com/api-reference/video/kling-v2-6-motion-control-task-by-id
-    const pollEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
+    // Try multiple polling endpoints
+    // Docs say /v1/ai/image-to-video/kling-v2-6/{task-id} but task created via /v1/ai/video/
+    const storedModel = savedTask.model || '';
+    const isPro = storedModel.includes('pro');
     
-    console.log(`[MOTION] Polling task ${taskId} via ${pollEndpoint}`);
+    const pollEndpoints = [
+      `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
+      isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
+      `/v1/ai/video/kling-v2-6/${taskId}`
+    ];
     
     let response = null;
-    try {
-      response = await makeFreepikRequest(
-        'GET',
-        `https://api.freepik.com${pollEndpoint}`,
-        freepikApiKey,
-        null,
-        true
-      );
-    } catch (pollError) {
-      console.log(`[MOTION] Poll error:`, pollError.response?.data || pollError.message);
-      return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
+    let successEndpoint = null;
+    
+    for (const endpoint of pollEndpoints) {
+      try {
+        console.log(`[MOTION] Trying poll endpoint: ${endpoint}`);
+        const pollResponse = await makeFreepikRequest(
+          'GET',
+          `https://api.freepik.com${endpoint}`,
+          freepikApiKey,
+          null,
+          true
+        );
+        
+        if (pollResponse.data && !pollResponse.data?.message?.includes('Not found')) {
+          response = pollResponse;
+          successEndpoint = endpoint;
+          console.log(`[MOTION] Poll success with: ${endpoint}`);
+          
+          // If this endpoint shows different status than CREATED, use it
+          const status = pollResponse.data?.data?.status || pollResponse.data?.status;
+          if (status && status !== 'CREATED') {
+            console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
+            break;
+          }
+        }
+      } catch (err) {
+        console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
+      }
     }
     
     if (!response || !response.data) {
       return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
     }
+    
+    console.log(`[MOTION] Using endpoint: ${successEndpoint}`)
     
     console.log(`[MOTION] Poll response:`, JSON.stringify(response.data));
     const data = response.data?.data || response.data;
