@@ -2011,13 +2011,18 @@ app.post('/api/motion/generate', async (req, res) => {
     
     // Get room's API keys from environment
     const roomKeyPrefix = `MOTION_ROOM${selectedRoomId}_KEY_`;
-    const roomKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+    const allPossibleKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`);
+    const roomKeys = allPossibleKeys.filter(k => process.env[k]);
+    
+    console.log(`[MOTION] Room ${selectedRoomId} available keys: ${roomKeys.length > 0 ? roomKeys.join(', ') : 'NONE'}`);
+    console.log(`[MOTION] Checking env vars: ${allPossibleKeys.map(k => `${k}=${process.env[k] ? 'SET' : 'NOT SET'}`).join(', ')}`);
     
     if (roomKeys.length > 0) {
       // Round-robin selection
       const randomKey = roomKeys[Math.floor(Math.random() * roomKeys.length)];
       freepikApiKey = process.env[randomKey];
       usedKeyName = randomKey;
+      console.log(`[MOTION] Selected key: ${randomKey}`);
     }
     
     if (!freepikApiKey) {
