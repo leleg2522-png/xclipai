@@ -4449,18 +4449,26 @@ async function generateMotion() {
 }
 
 function pollMotionStatus(taskId, model, apiKey) {
+  console.log('[MOTION POLL] Starting polling for task:', taskId, 'with apiKey:', apiKey ? 'present' : 'missing');
+  
   const maxAttempts = 180;
   let attempts = 0;
   
   const poll = async () => {
     try {
       const task = state.motion.tasks.find(t => t.taskId === taskId);
-      if (!task) return;
+      if (!task) {
+        console.log('[MOTION POLL] Task not found in state, stopping poll');
+        return;
+      }
       
       // Use the API key passed to this function, or fall back to task's stored key, or state
       const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey;
       
+      console.log('[MOTION POLL] Polling attempt', attempts + 1, 'for task:', taskId, 'key:', xclipKey ? 'present' : 'missing');
+      
       if (!xclipKey) {
+        console.error('[MOTION POLL] No API key available');
         task.status = 'failed';
         task.error = 'Xclip API key diperlukan';
         render();
