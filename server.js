@@ -1329,6 +1329,58 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
   }
 });
 
+// Helper function to save base64 data to file and return public URL
+async function saveBase64ToFile(base64Data, type, baseUrl) {
+  const uploadsDir = path.join(__dirname, 'uploads', 'motion');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  
+  // Strip data URI prefix if present
+  let cleanData = base64Data;
+  let ext = type === 'image' ? 'png' : 'mp4';
+  
+  if (base64Data.includes(',')) {
+    const parts = base64Data.split(',');
+    cleanData = parts[1];
+    // Extract extension from data URI
+    const mimeMatch = parts[0].match(/data:(\w+)\/(\w+)/);
+    if (mimeMatch) {
+      ext = mimeMatch[2] === 'jpeg' ? 'jpg' : mimeMatch[2];
+    }
+  }
+  
+  const filename = `${uuidv4()}.${ext}`;
+  const filepath = path.join(uploadsDir, filename);
+  
+  // Save file
+  fs.writeFileSync(filepath, Buffer.from(cleanData, 'base64'));
+  
+  // Return public URL
+  const publicUrl = `${baseUrl}/uploads/motion/${filename}`;
+  return { filepath, publicUrl, filename };
+}
+
+// Cleanup old motion files (older than 1 hour)
+function cleanupMotionFiles() {
+  const uploadsDir = path.join(__dirname, 'uploads', 'motion');
+  if (!fs.existsSync(uploadsDir)) return;
+  
+  const files = fs.readdirSync(uploadsDir);
+  const oneHourAgo = Date.now() - (60 * 60 * 1000);
+  
+  files.forEach(file => {
+    const filepath = path.join(uploadsDir, file);
+    const stats = fs.statSync(filepath);
+    if (stats.mtimeMs < oneHourAgo) {
+      fs.unlinkSync(filepath);
+    }
+  });
+}
+
+// Run cleanup every 30 minutes
+setInterval(cleanupMotionFiles, 30 * 60 * 1000);
+
 async function validateXclipApiKey(apiKey) {
   // First check if the API key exists and is active
   const keyResult = await pool.query(
@@ -1990,17 +2042,23 @@ app.post('/api/motion/generate', async (req, res) => {
       ? '/v1/ai/video/kling-v2-6-motion-control-pro' 
       : '/v1/ai/video/kling-v2-6-motion-control-std';
     
-    // Strip data URI prefix if present (data:image/png;base64,xxx -> xxx)
-    const cleanImage = characterImage.includes(',') 
-      ? characterImage.split(',')[1] 
-      : characterImage;
-    const cleanVideo = referenceVideo.includes(',') 
-      ? referenceVideo.split(',')[1] 
-      : referenceVideo;
+    // Get base URL for public file access
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+    
+    console.log(`[MOTION] Saving files to public storage, base URL: ${baseUrl}`);
+    
+    // Save image and video to public files
+    const imageFile = await saveBase64ToFile(characterImage, 'image', baseUrl);
+    const videoFile = await saveBase64ToFile(referenceVideo, 'video', baseUrl);
+    
+    console.log(`[MOTION] Image URL: ${imageFile.publicUrl}`);
+    console.log(`[MOTION] Video URL: ${videoFile.publicUrl}`);
     
     const requestBody = {
-      image_url: cleanImage,
-      video_url: cleanVideo,
+      image_url: imageFile.publicUrl,
+      video_url: videoFile.publicUrl,
       character_orientation: characterOrientation || 'video'
     };
     
@@ -2009,8 +2067,7 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     console.log(`[MOTION] Generating motion video with model: ${model}`);
-    console.log(`[MOTION] Request body keys:`, Object.keys(requestBody));
-    console.log(`[MOTION] Image length: ${cleanImage?.length}, Video length: ${cleanVideo?.length}`);
+    console.log(`[MOTION] Request body:`, JSON.stringify(requestBody));
     
     const response = await makeFreepikRequest(
       'POST',
