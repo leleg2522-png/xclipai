@@ -2208,21 +2208,44 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const storedModel = savedTask.model || '';
     const isPro = model === 'kling-v2.6-pro' || storedModel.includes('pro');
     
-    // Try same endpoint as create with task ID appended
-    const endpoint = isPro 
-      ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
-      : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+    // Try multiple endpoint patterns for motion control
+    const endpoints = [
+      `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
+      `/v1/ai/video/kling-v2-6/${taskId}`,
+      isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`
+    ];
     
     console.log(`[MOTION] Polling task ${taskId} | Model query: ${model} | Stored: ${storedModel} | isPro: ${isPro}`);
-    console.log(`[MOTION] Endpoint: ${endpoint}`);
     
-    const response = await makeFreepikRequest(
-      'GET',
-      `https://api.freepik.com${endpoint}`,
-      freepikApiKey,
-      null,
-      true
-    );
+    let response = null;
+    let successEndpoint = null;
+    
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`[MOTION] Trying endpoint: ${endpoint}`);
+        response = await makeFreepikRequest(
+          'GET',
+          `https://api.freepik.com${endpoint}`,
+          freepikApiKey,
+          null,
+          true
+        );
+        
+        // If we get here without error, this endpoint works
+        if (response.data && !response.data.message?.includes('Not found')) {
+          successEndpoint = endpoint;
+          console.log(`[MOTION] Success with endpoint: ${endpoint}`);
+          break;
+        }
+      } catch (endpointError) {
+        console.log(`[MOTION] Endpoint ${endpoint} failed:`, endpointError.response?.data?.message || endpointError.message);
+        continue;
+      }
+    }
+    
+    if (!response || !successEndpoint) {
+      return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
+    }
     
     console.log(`[MOTION] Poll response:`, JSON.stringify(response.data));
     const data = response.data?.data || response.data;
