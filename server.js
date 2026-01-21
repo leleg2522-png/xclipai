@@ -2213,46 +2213,27 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
     }
     
-    // Check if model from query matches stored model (stored as 'motion-kling-v2.6-pro')
-    const storedModel = savedTask.model || '';
-    const isPro = model === 'kling-v2.6-pro' || storedModel.includes('pro');
+    // Use the correct polling endpoint from Freepik docs
+    // https://docs.freepik.com/api-reference/video/kling-v2-6-motion-control-task-by-id
+    const pollEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
     
-    // Try multiple endpoint patterns for motion control
-    const endpoints = [
-      `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
-      `/v1/ai/video/kling-v2-6/${taskId}`,
-      isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`
-    ];
-    
-    console.log(`[MOTION] Polling task ${taskId} | Model query: ${model} | Stored: ${storedModel} | isPro: ${isPro}`);
+    console.log(`[MOTION] Polling task ${taskId} via ${pollEndpoint}`);
     
     let response = null;
-    let successEndpoint = null;
-    
-    for (const endpoint of endpoints) {
-      try {
-        console.log(`[MOTION] Trying endpoint: ${endpoint}`);
-        response = await makeFreepikRequest(
-          'GET',
-          `https://api.freepik.com${endpoint}`,
-          freepikApiKey,
-          null,
-          true
-        );
-        
-        // If we get here without error, this endpoint works
-        if (response.data && !response.data.message?.includes('Not found')) {
-          successEndpoint = endpoint;
-          console.log(`[MOTION] Success with endpoint: ${endpoint}`);
-          break;
-        }
-      } catch (endpointError) {
-        console.log(`[MOTION] Endpoint ${endpoint} failed:`, endpointError.response?.data?.message || endpointError.message);
-        continue;
-      }
+    try {
+      response = await makeFreepikRequest(
+        'GET',
+        `https://api.freepik.com${pollEndpoint}`,
+        freepikApiKey,
+        null,
+        true
+      );
+    } catch (pollError) {
+      console.log(`[MOTION] Poll error:`, pollError.response?.data || pollError.message);
+      return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
     }
     
-    if (!response || !successEndpoint) {
+    if (!response || !response.data) {
       return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
     }
     
