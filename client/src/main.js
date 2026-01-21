@@ -4378,7 +4378,8 @@ async function generateMotion() {
     return;
   }
   
-  if (!state.motion.customApiKey && !state.admin.isAdmin) {
+  const motionApiKey = state.motion.customApiKey || state.motionRoomManager.xclipApiKey;
+  if (!motionApiKey && !state.admin.isAdmin) {
     showToast('Masukkan Xclip API key terlebih dahulu', 'error');
     return;
   }
@@ -4405,7 +4406,7 @@ async function generateMotion() {
     
     const headers = { 
       'Content-Type': 'application/json',
-      'X-Xclip-Key': state.motion.customApiKey
+      'X-Xclip-Key': motionApiKey
     };
     
     const response = await fetch(`${API_URL}/api/motion/generate`, {
@@ -4457,7 +4458,7 @@ function pollMotionStatus(taskId, model) {
       
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Xclip-Key': state.motion.customApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey
+        'X-Xclip-Key': state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey
       };
       
       const response = await fetch(`${API_URL}/api/motion/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
