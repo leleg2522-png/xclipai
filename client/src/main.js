@@ -4454,6 +4454,10 @@ function pollMotionStatus(taskId, model, apiKey) {
   const maxAttempts = 180;
   let attempts = 0;
   
+  // Delay first poll by 5 seconds to let Freepik register the task
+  console.log('[MOTION POLL] Waiting 5 seconds before first poll...');
+  setTimeout(() => poll(), 5000);
+  
   const poll = async () => {
     try {
       const task = state.motion.tasks.find(t => t.taskId === taskId);
