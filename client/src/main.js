@@ -33,6 +33,8 @@ const state = {
   },
   xmaker: {
     characterDescription: '',
+    scenes: [{ id: 1, description: '' }],
+    multiSceneMode: false,
     style: 'realistic',
     imageCount: 1,
     aspectRatio: '1:1',
@@ -2260,36 +2262,110 @@ function renderXMakerPage() {
               </div>
               
               <div class="character-input-section">
-                <label class="setting-label">Deskripsi Scene</label>
-                <textarea 
-                  id="characterDescription" 
-                  class="character-textarea"
-                  placeholder="Tulis deskripsi scene yang ingin digenerate.
+                <div class="multi-scene-toggle">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="multiSceneModeToggle" ${state.xmaker.multiSceneMode ? 'checked' : ''}>
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="toggle-label">Mode Multi-Scene (Karakter Konsisten)</span>
+                </div>
+                
+                ${state.xmaker.multiSceneMode ? `
+                  <div class="multi-scene-container">
+                    <div class="character-lock-notice ${state.xmaker.referenceImage ? 'locked' : 'unlocked'}">
+                      ${state.xmaker.referenceImage ? `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        <span>Karakter terkunci - Akan konsisten di semua scene</span>
+                      ` : `
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                        </svg>
+                        <span>Upload karakter referensi untuk konsistensi</span>
+                      `}
+                    </div>
+                    
+                    <label class="setting-label">Daftar Scene (${state.xmaker.scenes.length} scene)</label>
+                    <div class="scenes-list">
+                      ${state.xmaker.scenes.map((scene, index) => `
+                        <div class="scene-item" data-scene-id="${scene.id}">
+                          <div class="scene-header">
+                            <span class="scene-number">Scene ${index + 1}</span>
+                            ${state.xmaker.scenes.length > 1 ? `
+                              <button class="btn-remove-scene" data-scene-id="${scene.id}" title="Hapus scene">×</button>
+                            ` : ''}
+                          </div>
+                          <textarea 
+                            class="scene-textarea"
+                            data-scene-id="${scene.id}"
+                            placeholder="Contoh: Karakter sedang membaca buku di perpustakaan, pencahayaan hangat"
+                            rows="2"
+                          >${scene.description}</textarea>
+                        </div>
+                      `).join('')}
+                    </div>
+                    
+                    <button class="btn btn-secondary btn-add-scene" id="addSceneBtn">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                      Tambah Scene
+                    </button>
+                  </div>
+                ` : `
+                  <label class="setting-label">Deskripsi Scene</label>
+                  <textarea 
+                    id="characterDescription" 
+                    class="character-textarea"
+                    placeholder="Tulis deskripsi scene yang ingin digenerate.
 
 Contoh:
 Karakter wanita cantik dengan rambut panjang, berdiri di taman bunga yang indah, tersenyum bahagia"
-                  rows="4"
-                >${state.xmaker.characterDescription}</textarea>
+                    rows="4"
+                  >${state.xmaker.characterDescription}</textarea>
+                `}
                 
                 <div class="prompt-tips">
                   <div class="tip-item">
                     <span class="tip-icon">💡</span>
-                    <span>Semakin detail deskripsi, semakin konsisten hasilnya</span>
+                    <span>${state.xmaker.multiSceneMode ? 'Gunakan Nano Banana untuk karakter konsisten dengan referensi' : 'Semakin detail deskripsi, semakin konsisten hasilnya'}</span>
                   </div>
                 </div>
               </div>
               
-              <button class="btn btn-primary btn-full btn-generate" id="generateBtn" ${state.xmaker.isGenerating ? 'disabled' : ''}>
-                ${state.xmaker.isGenerating ? `
-                  <div class="spinner"></div>
-                  <span>Generating...</span>
-                ` : `
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              ${state.xmaker.multiSceneMode && !state.xmaker.referenceImage ? `
+                <div class="generate-blocked-notice">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
                   </svg>
-                  <span>Generate ${state.xmaker.imageCount || 1} Gambar</span>
-                `}
-              </button>
+                  <span>Upload karakter referensi untuk mengaktifkan Multi-Scene</span>
+                </div>
+                <button class="btn btn-primary btn-full btn-generate" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                  </svg>
+                  <span>Memerlukan Karakter Referensi</span>
+                </button>
+              ` : `
+                <button class="btn btn-primary btn-full btn-generate" id="generateBtn" ${state.xmaker.isGenerating ? 'disabled' : ''}>
+                  ${state.xmaker.isGenerating ? `
+                    <div class="spinner"></div>
+                    <span>Generating...</span>
+                  ` : `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                    <span>Generate ${state.xmaker.multiSceneMode ? state.xmaker.scenes.length + ' Scene' : (state.xmaker.imageCount || 1) + ' Gambar'}</span>
+                  `}
+                </button>
+              `}
             </div>
           </div>
           
@@ -4059,6 +4135,44 @@ function attachXMakerEventListeners() {
       render();
     });
   }
+  
+  const multiSceneModeToggle = document.getElementById('multiSceneModeToggle');
+  if (multiSceneModeToggle) {
+    multiSceneModeToggle.addEventListener('change', (e) => {
+      state.xmaker.multiSceneMode = e.target.checked;
+      if (e.target.checked) {
+        state.xmaker.selectedModel = 'nano-banana';
+      }
+      render();
+    });
+  }
+  
+  const addSceneBtn = document.getElementById('addSceneBtn');
+  if (addSceneBtn) {
+    addSceneBtn.addEventListener('click', () => {
+      const newId = Math.max(...state.xmaker.scenes.map(s => s.id)) + 1;
+      state.xmaker.scenes.push({ id: newId, description: '' });
+      render();
+    });
+  }
+  
+  document.querySelectorAll('.btn-remove-scene').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const sceneId = parseInt(e.target.dataset.sceneId);
+      state.xmaker.scenes = state.xmaker.scenes.filter(s => s.id !== sceneId);
+      render();
+    });
+  });
+  
+  document.querySelectorAll('.scene-textarea').forEach(textarea => {
+    textarea.addEventListener('input', (e) => {
+      const sceneId = parseInt(e.target.dataset.sceneId);
+      const scene = state.xmaker.scenes.find(s => s.id === sceneId);
+      if (scene) {
+        scene.description = e.target.value;
+      }
+    });
+  });
 }
 
 function handleReferenceUpload(e) {
@@ -4801,6 +4915,14 @@ function loadGeneratedVideosFromStorage() {
 window.removeGeneratedVideo = removeGeneratedVideo;
 
 async function generateImages() {
+  if (state.xmaker.multiSceneMode) {
+    await generateMultiSceneImages();
+  } else {
+    await generateSingleImage();
+  }
+}
+
+async function generateSingleImage() {
   const description = state.xmaker.characterDescription.trim();
   
   if (!description && !state.xmaker.referenceImage) {
@@ -4866,6 +4988,105 @@ async function generateImages() {
   
   state.xmaker.isGenerating = false;
   render();
+}
+
+async function generateMultiSceneImages() {
+  const validScenes = state.xmaker.scenes.filter(s => s.description.trim());
+  
+  if (validScenes.length === 0) {
+    showToast('Silakan masukkan minimal 1 deskripsi scene', 'error');
+    return;
+  }
+  
+  if (!state.xmaker.referenceImage) {
+    showToast('Mode Multi-Scene memerlukan karakter referensi untuk konsistensi', 'error');
+    return;
+  }
+  
+  if (!state.auth.user) {
+    showToast('Silakan login terlebih dahulu', 'error');
+    state.auth.showModal = true;
+    state.auth.modalMode = 'login';
+    render();
+    return;
+  }
+  
+  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
+    showToast('Anda perlu berlangganan untuk generate gambar', 'error');
+    state.pricing.showModal = true;
+    render();
+    return;
+  }
+  
+  if (!state.xmaker.xclipApiKey) {
+    showToast('Masukkan Xclip API Key terlebih dahulu', 'error');
+    return;
+  }
+  
+  state.xmaker.isGenerating = true;
+  render();
+  
+  const referenceImage = state.xmaker.referenceImage ? state.xmaker.referenceImage.data : null;
+  let successCount = 0;
+  let errorCount = 0;
+  
+  for (let i = 0; i < validScenes.length; i++) {
+    const scene = validScenes[i];
+    showToast(`Generating scene ${i + 1}/${validScenes.length}...`, 'info');
+    
+    try {
+      const response = await fetch(`${API_URL}/api/generate-image`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Xclip-Key': state.xmaker.xclipApiKey
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          model: 'nano-banana',
+          prompt: scene.description,
+          imageCount: 1,
+          style: state.xmaker.style,
+          aspectRatio: state.xmaker.aspectRatio,
+          referenceImage: referenceImage,
+          multiSceneMode: true,
+          sceneIndex: i + 1,
+          totalScenes: validScenes.length
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate scene');
+      }
+      
+      const data = await response.json();
+      
+      if (data.images && data.images.length > 0) {
+        data.images.forEach(img => {
+          img.sceneNumber = i + 1;
+          img.scene = scene.description;
+        });
+        state.xmaker.generatedImages = [...state.xmaker.generatedImages, ...data.images];
+        successCount++;
+      }
+      
+      render();
+      
+    } catch (error) {
+      console.error(`Scene ${i + 1} error:`, error);
+      errorCount++;
+    }
+  }
+  
+  state.xmaker.isGenerating = false;
+  render();
+  
+  if (successCount > 0) {
+    showToast(`Berhasil generate ${successCount} scene!${errorCount > 0 ? ` (${errorCount} gagal)` : ''}`, 'success');
+  } else {
+    showToast('Gagal generate semua scene', 'error');
+  }
 }
 
 function handleFileAttachment(e) {
