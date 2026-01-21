@@ -4428,7 +4428,8 @@ async function generateMotion() {
       status: 'processing',
       progress: 0,
       statusText: 'Memulai motion generation...',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      apiKey: motionApiKey  // Store API key with task for polling
     });
     
     state.motion.isGenerating = false;
@@ -4436,7 +4437,7 @@ async function generateMotion() {
     
     showToast('Motion generation dimulai!', 'success');
     
-    pollMotionStatus(result.taskId, state.motion.selectedModel);
+    pollMotionStatus(result.taskId, state.motion.selectedModel, motionApiKey);
     
   } catch (error) {
     console.error('Motion generation error:', error);
@@ -4447,7 +4448,7 @@ async function generateMotion() {
   }
 }
 
-function pollMotionStatus(taskId, model) {
+function pollMotionStatus(taskId, model, apiKey) {
   const maxAttempts = 180;
   let attempts = 0;
   
@@ -4456,9 +4457,19 @@ function pollMotionStatus(taskId, model) {
       const task = state.motion.tasks.find(t => t.taskId === taskId);
       if (!task) return;
       
+      // Use the API key passed to this function, or fall back to task's stored key, or state
+      const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey;
+      
+      if (!xclipKey) {
+        task.status = 'failed';
+        task.error = 'Xclip API key diperlukan';
+        render();
+        return;
+      }
+      
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Xclip-Key': state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey
+        'X-Xclip-Key': xclipKey
       };
       
       const response = await fetch(`${API_URL}/api/motion/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
