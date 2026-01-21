@@ -2145,12 +2145,12 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       }
     }
     
-    // For motion tasks, try motion room keys
-    if (!freepikApiKey && savedTask.motion_room) {
+    // For motion tasks, try motion room keys (motion tasks store room_id as the motion room number)
+    if (!freepikApiKey && savedTask.room_id && savedTask.model?.startsWith('motion-')) {
       const motionRoomKeys = [
-        `MOTION_ROOM${savedTask.motion_room}_KEY_1`,
-        `MOTION_ROOM${savedTask.motion_room}_KEY_2`,
-        `MOTION_ROOM${savedTask.motion_room}_KEY_3`
+        `MOTION_ROOM${savedTask.room_id}_KEY_1`,
+        `MOTION_ROOM${savedTask.room_id}_KEY_2`,
+        `MOTION_ROOM${savedTask.room_id}_KEY_3`
       ];
       for (const keyName of motionRoomKeys) {
         if (process.env[keyName]) {
