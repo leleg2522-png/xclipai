@@ -1,0 +1,25 @@
+[MOTION] Generating motion video with model: kling-v2.6-std
+[MOTION] Request body: {"image_url":"https://web-production-0531a.up.railway.app/uploads/motion/dfcb5254-64c0-478b-a0d1-15f5ed8a84c2.jpg","video_url":"https://web-production-0531a.up.railway.app/uploads/motion/f5833123-7150-41d4-a145-4a763043df9d.mp4","character_orientation":"video"}
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=0
+[MOTION] Saving files to public storage, base URL: https://web-production-0531a.up.railway.app
+[MOTION] Image URL: https://web-production-0531a.up.railway.app/uploads/motion/dfcb5254-64c0-478b-a0d1-15f5ed8a84c2.jpg
+[MOTION] Video URL: https://web-production-0531a.up.railway.app/uploads/motion/f5833123-7150-41d4-a145-4a763043df9d.mp4
+Fetched 10 proxies from Webshare
+[PROXY] Using Webshare: 142.111.48.253:7030
+}
+[VERY SLOW REQUEST] POST /api/motion/generate took 6081ms
+Motion generation error: {
+  message: "You've hit your daily limit for this service. Please try again later. Need more capacity? For a custom solution, reach out to us at https://www.freepik.com/api#contact"
+SSE disconnected: user 1
+SSE connected: user 1, total connections: 1
+[MOTION] Saving files to public storage, base URL: https://web-production-0531a.up.railway.app
+[MOTION] Image URL: https://web-production-0531a.up.railway.app/uploads/motion/5b734d8e-032b-4170-954c-8e3908d1bc5b.jpg
+[MOTION] Video URL: https://web-production-0531a.up.railway.app/uploads/motion/49f64a51-7f26-44ff-b6f7-c8b88bb0734d.mp4
+[MOTION] Generating motion video with model: kling-v2.6-std
+[MOTION] Request body: {"image_url":"https://web-production-0531a.up.railway.app/uploads/motion/5b734d8e-032b-4170-954c-8e3908d1bc5b.jpg","video_url":"https://web-production-0531a.up.railway.app/uploads/motion/49f64a51-7f26-44ff-b6f7-c8b88bb0734d.mp4","character_orientation":"video"}
+[PROXY DEBUG] useProxy=true, hasWebshareKey=true, proxyCount=10
+[PROXY] Using Webshare: 23.95.150.145:6114
+Motion generation error: {
+  message: "You've hit your daily limit for this service. Please try again later. Need more capacity? For a custom solution, reach out to us at https://www.freepik.com/api#contact"
+}
+[VERY SLOW REQUEST] POST /api/motion/generate 
