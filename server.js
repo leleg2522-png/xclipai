@@ -1861,10 +1861,10 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       // Kling 2.5
       'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
-      // Kling 2.1
+      // Kling 2.1 (all use shared endpoint kling-v2-1)
       'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
-      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1-pro/',
-      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1-std/',
+      'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1/',
+      'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1/',
       // Kling Elements
       'kling-elements-pro': '/v1/ai/image-to-video/kling-elements-pro/',
       'kling-elements-std': '/v1/ai/image-to-video/kling-elements-std/',
