@@ -1881,14 +1881,14 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1/',
       // Kling v2 (older)
       'kling-v2': '/v1/ai/image-to-video/kling-v2/',
-      // Kling Elements
-      'kling-elements-pro': '/v1/ai/image-to-video/kling-elements-pro/',
-      'kling-elements-std': '/v1/ai/image-to-video/kling-elements-std/',
-      // Kling 1.6 - uses kling-pro/kling-std endpoint
-      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-pro/',
-      'kling-v1.6-std': '/v1/ai/image-to-video/kling-std/',
-      'kling-pro': '/v1/ai/image-to-video/kling-pro/',
-      'kling-std': '/v1/ai/image-to-video/kling-std/',
+      // Kling Elements - SHARED status endpoint (kling-elements)
+      'kling-elements-pro': '/v1/ai/image-to-video/kling-elements/',
+      'kling-elements-std': '/v1/ai/image-to-video/kling-elements/',
+      // Kling 1.6 - SHARED status endpoint (kling)
+      'kling-v1.6-pro': '/v1/ai/image-to-video/kling/',
+      'kling-v1.6-std': '/v1/ai/image-to-video/kling/',
+      'kling-pro': '/v1/ai/image-to-video/kling/',
+      'kling-std': '/v1/ai/image-to-video/kling/',
       // Wan 2.6
       'wan-v2.6-1080p': '/v1/ai/image-to-video/wan-v2-6-1080p/',
       'wan-v2.6-720p': '/v1/ai/image-to-video/wan-v2-6-720p/',
