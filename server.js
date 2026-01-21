@@ -1540,41 +1540,53 @@ app.post('/api/videogen/proxy', async (req, res) => {
       [keyInfo.id]
     );
     
+    // Model configs - based on Freepik API docs (verified January 2026)
     const modelConfigs = {
-      // Kling 2.6 (NEW - with audio support)
+      // Kling 2.6 (with audio support)
       'kling-v2.6-pro': { api: 'kling26', endpoint: '/v1/ai/image-to-video/kling-v2-6-pro' },
-      // Kling O1 (NEW)
+      'kling-v2.6-std': { api: 'kling26', endpoint: '/v1/ai/image-to-video/kling-v2-6-std' },
+      // Kling O1
       'kling-o1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-pro' },
       'kling-o1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-o1-std' },
-      // Kling 2.5
-      'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-turbo-pro' },
+      // Kling 2.5 (turbo is same as pro according to docs)
+      'kling-v2.5-turbo': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
       'kling-v2.5-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-5-pro' },
       // Kling 2.1
       'kling-v2.1-master': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-master' },
       'kling-v2.1-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-pro' },
       'kling-v2.1-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2-1-std' },
+      // Kling v2 (older)
+      'kling-v2': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v2' },
       // Kling Elements
       'kling-elements-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-pro' },
       'kling-elements-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-elements-std' },
-      // Kling 1.6
-      'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-v1-6-pro' },
-      // Wan 2.6 (NEW - uses 'size' parameter)
+      // Kling 1.6 (uses kling-pro/kling-std)
+      'kling-v1.6-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-pro' },
+      'kling-v1.6-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-std' },
+      'kling-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-pro' },
+      'kling-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-std' },
+      // Wan 2.6 (uses 'size' parameter)
       'wan-v2.6-1080p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p' },
       'wan-v2.6-720p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-720p' },
       // Wan 2.2 (uses 'aspect_ratio' parameter)
       'wan-v2.2-720p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
       'wan-v2.2-580p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
       'wan-v2.2-480p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-480p' },
-      // MiniMax Hailuo 2.3 (NEW)
+      // MiniMax Hailuo 2.3
       'minimax-hailuo-2.3-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p' },
       'minimax-hailuo-2.3-1080p-fast': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p-fast' },
+      'minimax-hailuo-2.3-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-768p' },
       'minimax-hailuo-2.3-768p-fast': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-2-3-768p-fast' },
       // MiniMax Hailuo 02
       'minimax-hailuo-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-1080p' },
       'minimax-hailuo-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-768p' },
+      'minimax-hailuo-02-1080p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-1080p' },
+      'minimax-hailuo-02-768p': { api: 'minimax', endpoint: '/v1/ai/image-to-video/minimax-hailuo-02-768p' },
       // Seedance
-      'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-1080p' },
-      'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-1-0-pro-720p' },
+      'seedance-pro-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-pro-1080p' },
+      'seedance-pro-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-pro-720p' },
+      'seedance-lite-1080p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-lite-1080p' },
+      'seedance-lite-720p': { api: 'seedance', endpoint: '/v1/ai/image-to-video/seedance-lite-720p' },
       // PixVerse
       'pixverse-v5': { api: 'pixverse', endpoint: '/v1/ai/image-to-video/pixverse-v5' }
     };
@@ -1851,42 +1863,54 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     console.log(`[STATUS] Checking task ${taskId} with key: ${keySource}, saved_key_name: ${savedTask.used_key_name}`);
     
-    // Status endpoints - based on Freepik API docs
+    // Status endpoints - based on Freepik API docs (verified January 2026)
+    // https://docs.freepik.com/llms.txt
     const statusEndpoints = {
-      // Kling 2.6 (status uses kling-v2-6 without -pro suffix)
+      // Kling 2.6 - shared endpoint for all 2.6 models
       'kling-v2.6-pro': '/v1/ai/image-to-video/kling-v2-6/',
-      // Kling O1 (shared status endpoint)
+      'kling-v2.6-std': '/v1/ai/image-to-video/kling-v2-6/',
+      // Kling O1 - shared endpoint
       'kling-o1-pro': '/v1/ai/image-to-video/kling-o1/',
       'kling-o1-std': '/v1/ai/image-to-video/kling-o1/',
-      // Kling 2.5
-      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-turbo-pro/',
+      // Kling 2.5 - uses kling-v2-5-pro (turbo is same as pro)
+      'kling-v2.5-turbo': '/v1/ai/image-to-video/kling-v2-5-pro/',
       'kling-v2.5-pro': '/v1/ai/image-to-video/kling-v2-5-pro/',
-      // Kling 2.1 (all use shared endpoint kling-v2-1)
+      // Kling 2.1 - pro/std use shared kling-v2-1, master has own endpoint
       'kling-v2.1-master': '/v1/ai/image-to-video/kling-v2-1-master/',
       'kling-v2.1-pro': '/v1/ai/image-to-video/kling-v2-1/',
       'kling-v2.1-std': '/v1/ai/image-to-video/kling-v2-1/',
+      // Kling v2 (older)
+      'kling-v2': '/v1/ai/image-to-video/kling-v2/',
       // Kling Elements
       'kling-elements-pro': '/v1/ai/image-to-video/kling-elements-pro/',
       'kling-elements-std': '/v1/ai/image-to-video/kling-elements-std/',
-      // Kling 1.6
-      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-v1-6-pro/',
-      // Wan 2.6 (NEW)
+      // Kling 1.6 - uses kling-pro/kling-std endpoint
+      'kling-v1.6-pro': '/v1/ai/image-to-video/kling-pro/',
+      'kling-v1.6-std': '/v1/ai/image-to-video/kling-std/',
+      'kling-pro': '/v1/ai/image-to-video/kling-pro/',
+      'kling-std': '/v1/ai/image-to-video/kling-std/',
+      // Wan 2.6
       'wan-v2.6-1080p': '/v1/ai/image-to-video/wan-v2-6-1080p/',
       'wan-v2.6-720p': '/v1/ai/image-to-video/wan-v2-6-720p/',
       // Wan 2.2
       'wan-v2.2-720p': '/v1/ai/image-to-video/wan-v2-2-720p/',
       'wan-v2.2-580p': '/v1/ai/image-to-video/wan-v2-2-580p/',
       'wan-v2.2-480p': '/v1/ai/image-to-video/wan-v2-2-480p/',
-      // MiniMax Hailuo 2.3 (NEW)
+      // MiniMax Hailuo 2.3
       'minimax-hailuo-2.3-1080p': '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p/',
       'minimax-hailuo-2.3-1080p-fast': '/v1/ai/image-to-video/minimax-hailuo-2-3-1080p-fast/',
+      'minimax-hailuo-2.3-768p': '/v1/ai/image-to-video/minimax-hailuo-2-3-768p/',
       'minimax-hailuo-2.3-768p-fast': '/v1/ai/image-to-video/minimax-hailuo-2-3-768p-fast/',
       // MiniMax Hailuo 02
       'minimax-hailuo-1080p': '/v1/ai/image-to-video/minimax-hailuo-02-1080p/',
       'minimax-hailuo-768p': '/v1/ai/image-to-video/minimax-hailuo-02-768p/',
+      'minimax-hailuo-02-1080p': '/v1/ai/image-to-video/minimax-hailuo-02-1080p/',
+      'minimax-hailuo-02-768p': '/v1/ai/image-to-video/minimax-hailuo-02-768p/',
       // Seedance
-      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-1-0-pro-1080p/',
-      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-1-0-pro-720p/',
+      'seedance-pro-1080p': '/v1/ai/image-to-video/seedance-pro-1080p/',
+      'seedance-pro-720p': '/v1/ai/image-to-video/seedance-pro-720p/',
+      'seedance-lite-1080p': '/v1/ai/image-to-video/seedance-lite-1080p/',
+      'seedance-lite-720p': '/v1/ai/image-to-video/seedance-lite-720p/',
       // PixVerse
       'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5/'
     };
