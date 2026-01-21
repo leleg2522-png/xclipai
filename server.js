@@ -2189,9 +2189,11 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     // Check if model from query matches stored model (stored as 'motion-kling-v2.6-pro')
     const storedModel = savedTask.model || '';
     const isPro = model === 'kling-v2.6-pro' || storedModel.includes('pro');
+    
+    // Try image-to-video endpoint first (Freepik's standard pattern)
     const endpoint = isPro 
-      ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
-      : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+      ? `/v1/ai/image-to-video/kling-v2-6-motion-control-pro/${taskId}` 
+      : `/v1/ai/image-to-video/kling-v2-6-motion-control-std/${taskId}`;
     
     console.log(`[MOTION] Polling task ${taskId} | Model query: ${model} | Stored: ${storedModel} | isPro: ${isPro}`);
     console.log(`[MOTION] Endpoint: ${endpoint}`);
