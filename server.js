@@ -2195,10 +2195,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const storedModel = savedTask.model || '';
     const isPro = model === 'kling-v2.6-pro' || storedModel.includes('pro');
     
-    // Use same endpoint as generate (video, not image-to-video)
-    const endpoint = isPro 
-      ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
-      : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+    // Use Freepik's documented kling-v2-6 task status endpoint
+    const endpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
     
     console.log(`[MOTION] Polling task ${taskId} | Model query: ${model} | Stored: ${storedModel} | isPro: ${isPro}`);
     console.log(`[MOTION] Endpoint: ${endpoint}`);
