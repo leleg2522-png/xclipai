@@ -2375,6 +2375,37 @@ app.get('/api/xclip-keys/tasks', async (req, res) => {
   }
 });
 
+// Get video generation history for current user
+app.get('/api/videogen/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `SELECT task_id, model, status, video_url, created_at, completed_at
+       FROM video_generation_tasks 
+       WHERE user_id = $1 AND video_url IS NOT NULL AND status = 'completed'
+       ORDER BY completed_at DESC NULLS LAST, created_at DESC
+       LIMIT 20`,
+      [req.session.userId]
+    );
+    
+    res.json({ 
+      videos: result.rows.map(row => ({
+        taskId: row.task_id,
+        model: row.model,
+        url: row.video_url,
+        createdAt: row.completed_at || row.created_at
+      }))
+    });
+    
+  } catch (error) {
+    console.error('Get video history error:', error);
+    res.status(500).json({ error: 'Gagal mengambil history video' });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   try {
     const { model, messages } = req.body;

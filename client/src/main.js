@@ -4927,6 +4927,34 @@ function loadGeneratedVideosFromStorage() {
   }
 }
 
+async function fetchVideoHistory() {
+  try {
+    const response = await fetch(`${API_URL}/api/videogen/history`, { credentials: 'include' });
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    if (data.videos && data.videos.length > 0) {
+      const existingTaskIds = new Set(state.videogen.generatedVideos.map(v => v.taskId));
+      
+      data.videos.forEach(video => {
+        if (!existingTaskIds.has(video.taskId)) {
+          state.videogen.generatedVideos.push({
+            url: video.url,
+            taskId: video.taskId,
+            createdAt: new Date(video.createdAt).getTime()
+          });
+        }
+      });
+      
+      state.videogen.generatedVideos.sort((a, b) => b.createdAt - a.createdAt);
+      saveGeneratedVideosToStorage();
+      render();
+    }
+  } catch (error) {
+    console.log('Failed to fetch video history:', error);
+  }
+}
+
 window.removeGeneratedVideo = removeGeneratedVideo;
 
 async function generateImages() {
@@ -5498,6 +5526,8 @@ async function initApp() {
   // Connect SSE after auth check completes
   if (state.auth.user) {
     connectSSE();
+    // Fetch video history from database
+    fetchVideoHistory();
   }
 }
 
