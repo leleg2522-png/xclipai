@@ -3396,9 +3396,13 @@ app.get('/api/rooms', async (req, res) => {
     }
     
     const rooms = result.rows.map(room => {
-      const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
-      const hasApiKeys = keyNames.some(name => process.env[name]) || 
-                         (room.provider_key_name && process.env[room.provider_key_name]);
+      // Determine status based on active_users vs max_users
+      let roomStatus = room.status;
+      if (room.active_users >= room.max_users && roomStatus === 'OPEN') {
+        roomStatus = 'FULL';
+      } else if (room.active_users < room.max_users && roomStatus === 'FULL') {
+        roomStatus = 'OPEN';
+      }
       
       return {
         id: room.id,
@@ -3406,9 +3410,8 @@ app.get('/api/rooms', async (req, res) => {
         provider: room.provider,
         max_users: room.max_users,
         active_users: room.active_users,
-        status: hasApiKeys ? room.status : 'MAINTENANCE',
-        available_slots: room.available_slots,
-        maintenance_reason: hasApiKeys ? null : 'API key belum dikonfigurasi'
+        status: roomStatus,
+        available_slots: room.available_slots
       };
     });
     
