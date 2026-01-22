@@ -3414,8 +3414,15 @@ textarea.form-input {
 /* Aspect Grid */
 .aspect-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+
+.aspect-grid-large .aspect-option {
+  min-width: 60px;
+  flex: 1 1 calc(25% - var(--space-2));
+  font-size: 12px;
 }
 
 .aspect-btn {

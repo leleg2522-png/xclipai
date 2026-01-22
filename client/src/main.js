@@ -35,7 +35,7 @@ const state = {
     characterDescription: '',
     scenes: [{ id: 1, description: '' }],
     multiSceneMode: false,
-    style: 'realistic',
+    style: 'photorealistic',
     imageCount: 1,
     aspectRatio: '1:1',
     isGenerating: false,
@@ -169,12 +169,27 @@ const IMAGE_MODELS = [
 ];
 
 const IMAGE_STYLES = [
-  { id: 'realistic', name: 'Realistis', desc: 'Foto nyata berkualitas tinggi' },
+  { id: 'photorealistic', name: 'Fotorealistis', desc: 'Foto nyata berkualitas tinggi' },
   { id: 'anime', name: 'Anime', desc: 'Gaya ilustrasi Jepang' },
-  { id: 'cartoon', name: 'Kartun', desc: 'Gaya kartun colorful' },
-  { id: 'cinematic', name: 'Sinematik', desc: 'Seperti adegan film' },
+  { id: 'cinematic', name: 'Sinematik', desc: 'Seperti adegan film Hollywood' },
+  { id: 'digital-art', name: 'Digital Art', desc: 'Ilustrasi digital modern' },
+  { id: '3d-render', name: '3D Render', desc: 'Gaya render 3D realistis' },
+  { id: 'oil-painting', name: 'Lukisan Minyak', desc: 'Gaya lukisan klasik' },
+  { id: 'watercolor', name: 'Cat Air', desc: 'Gaya cat air artistik' },
+  { id: 'sketch', name: 'Sketsa', desc: 'Gaya sketsa pensil' },
   { id: 'fantasy', name: 'Fantasi', desc: 'Magis dan imajinatif' },
-  { id: 'portrait', name: 'Potret', desc: 'Fokus pada wajah/karakter' }
+  { id: 'cyberpunk', name: 'Cyberpunk', desc: 'Futuristik neon' }
+];
+
+const ASPECT_RATIOS = [
+  { id: '1:1', name: '1:1', desc: 'Persegi' },
+  { id: '16:9', name: '16:9', desc: 'Landscape lebar' },
+  { id: '9:16', name: '9:16', desc: 'Portrait/Story' },
+  { id: '4:3', name: '4:3', desc: 'Landscape standar' },
+  { id: '3:4', name: '3:4', desc: 'Portrait standar' },
+  { id: '3:2', name: '3:2', desc: 'Foto landscape' },
+  { id: '2:3', name: '2:3', desc: 'Foto portrait' },
+  { id: '21:9', name: '21:9', desc: 'Ultrawide/Cinematic' }
 ];
 
 const LLM_MODELS = [
@@ -2204,10 +2219,10 @@ function renderXMakerPage() {
               
               <div class="setting-group">
                 <label class="setting-label">Aspect Ratio</label>
-                <div class="aspect-grid">
-                  ${['1:1', '16:9', '9:16', '4:3'].map(ratio => `
-                    <div class="aspect-option ${ratio === state.xmaker.aspectRatio ? 'active' : ''}" data-ratio="${ratio}">
-                      ${ratio}
+                <div class="aspect-grid aspect-grid-large">
+                  ${ASPECT_RATIOS.map(ratio => `
+                    <div class="aspect-option ${ratio.id === state.xmaker.aspectRatio ? 'active' : ''}" data-ratio="${ratio.id}" title="${ratio.desc}">
+                      ${ratio.name}
                     </div>
                   `).join('')}
                 </div>
