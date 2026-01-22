@@ -3431,6 +3431,38 @@ textarea.form-input {
   flex-shrink: 0;
 }
 
+/* API Key Section */
+.api-key-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.api-key-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.api-key-header svg {
+  color: var(--primary);
+}
+
+.api-key-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.api-key-input-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
 /* API Key Input */
 .api-key-input {
   width: 100%;
