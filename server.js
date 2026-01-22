@@ -142,10 +142,21 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, xmaker_room_id
     `, [cutoffTime]);
     
+    // Update active_users in rooms table (Video Gen)
     await pool.query(`
       UPDATE rooms r SET active_users = (
         SELECT COUNT(*) FROM subscriptions s 
-        WHERE (s.room_id = r.id OR s.xmaker_room_id = r.id) 
+        WHERE s.room_id = r.id
+        AND s.status = 'active' 
+        AND s.expired_at > NOW()
+      )
+    `);
+    
+    // Update active_users in xmaker_rooms table (X Maker)
+    await pool.query(`
+      UPDATE xmaker_rooms r SET active_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.xmaker_room_id = r.id
         AND s.status = 'active' 
         AND s.expired_at > NOW()
       )
@@ -2436,11 +2447,11 @@ app.post('/api/generate-image', async (req, res) => {
     
     if (xclipKey) {
       const keyResult = await pool.query(`
-        SELECT xk.id, xk.user_id, s.xmaker_room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
+        SELECT xk.id, xk.user_id, s.xmaker_room_id, r.key_name_1, r.key_name_2, r.key_name_3
         FROM xclip_api_keys xk
         JOIN users u ON xk.user_id = u.id
         LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' AND s.expired_at > NOW()
-        LEFT JOIN rooms r ON s.xmaker_room_id = r.id
+        LEFT JOIN xmaker_rooms r ON s.xmaker_room_id = r.id
         WHERE xk.api_key = $1 AND xk.status = 'active'
       `, [xclipKey]);
       
@@ -3362,22 +3373,27 @@ app.get('/api/rooms', async (req, res) => {
     await cleanupInactiveUsers();
     
     const { feature } = req.query;
-    let whereClause = '';
+    let result;
     
     if (feature === 'xmaker') {
-      whereClause = "WHERE name LIKE 'XMaker%'";
-    } else if (feature === 'videogen') {
-      whereClause = "WHERE name NOT LIKE 'XMaker%'";
+      // Use separate xmaker_rooms table
+      result = await pool.query(`
+        SELECT id, name, provider, max_users, active_users, status,
+               key_name_1, key_name_2, key_name_3,
+               (max_users - active_users) as available_slots
+        FROM xmaker_rooms 
+        ORDER BY id
+      `);
+    } else {
+      // Use main rooms table for videogen
+      result = await pool.query(`
+        SELECT id, name, provider, max_users, active_users, status,
+               key_name_1, key_name_2, key_name_3, provider_key_name,
+               (max_users - active_users) as available_slots
+        FROM rooms 
+        ORDER BY id
+      `);
     }
-    
-    const result = await pool.query(`
-      SELECT id, name, provider, max_users, active_users, status,
-             key_name_1, key_name_2, key_name_3, provider_key_name,
-             (max_users - active_users) as available_slots
-      FROM rooms 
-      ${whereClause}
-      ORDER BY id
-    `);
     
     const rooms = result.rows.map(room => {
       const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
@@ -3441,7 +3457,7 @@ app.get('/api/subscription/status', async (req, res) => {
              EXTRACT(EPOCH FROM (s.expired_at - NOW())) as remaining_seconds
       FROM subscriptions s
       LEFT JOIN rooms r ON s.room_id = r.id
-      LEFT JOIN rooms xr ON s.xmaker_room_id = xr.id
+      LEFT JOIN xmaker_rooms xr ON s.xmaker_room_id = xr.id
       LEFT JOIN subscription_plans p ON s.plan_id = p.id
       WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW()
       ORDER BY s.expired_at DESC
@@ -3571,18 +3587,19 @@ app.post('/api/room/select', async (req, res) => {
     
     const subscription = subResult.rows[0];
     const currentRoomId = feature === 'xmaker' ? subscription.xmaker_room_id : subscription.room_id;
+    const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
     
     // If already in a room, leave it first
     if (currentRoomId) {
       await pool.query(`
-        UPDATE rooms SET active_users = GREATEST(active_users - 1, 0) WHERE id = $1
+        UPDATE ${roomTable} SET active_users = GREATEST(active_users - 1, 0) WHERE id = $1
       `, [currentRoomId]);
     }
     
     // Check room availability
     const roomResult = await pool.query(`
-      SELECT id, name, max_users, active_users, status, provider_key_name
-      FROM rooms WHERE id = $1
+      SELECT id, name, max_users, active_users, status, key_name_1
+      FROM ${roomTable} WHERE id = $1
     `, [roomId]);
     
     if (roomResult.rows.length === 0) {
@@ -3601,7 +3618,7 @@ app.post('/api/room/select', async (req, res) => {
     
     // Join the room
     await pool.query(`
-      UPDATE rooms SET active_users = active_users + 1,
+      UPDATE ${roomTable} SET active_users = active_users + 1,
                        status = CASE WHEN active_users + 1 >= max_users THEN 'FULL' ELSE status END
       WHERE id = $1
     `, [roomId]);
@@ -3634,6 +3651,7 @@ app.post('/api/room/leave', async (req, res) => {
     
     const { feature } = req.body;
     const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
+    const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
     
     const subResult = await pool.query(`
       SELECT id, room_id, xmaker_room_id FROM subscriptions 
@@ -3650,7 +3668,7 @@ app.post('/api/room/leave', async (req, res) => {
     
     // Leave the room
     await pool.query(`
-      UPDATE rooms SET active_users = GREATEST(active_users - 1, 0),
+      UPDATE ${roomTable} SET active_users = GREATEST(active_users - 1, 0),
                        status = CASE WHEN status = 'FULL' THEN 'OPEN' ELSE status END
       WHERE id = $1
     `, [currentRoomId]);
@@ -3669,11 +3687,12 @@ app.post('/api/room/leave', async (req, res) => {
 // Helper: Get API key for user's room with 3-minute rotation
 async function getRoomApiKey(userId, feature = 'videogen') {
   const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
+  const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
   
   const result = await pool.query(`
-    SELECT r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name 
+    SELECT r.key_name_1, r.key_name_2, r.key_name_3 
     FROM subscriptions s
-    JOIN rooms r ON s.${roomColumn} = r.id
+    JOIN ${roomTable} r ON s.${roomColumn} = r.id
     WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.${roomColumn} IS NOT NULL
   `, [userId]);
   
