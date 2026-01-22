@@ -1,0 +1,95 @@
+2026-01-22 19:31:17.121 UTC [14726] ERROR:  insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+2026-01-22 19:31:17.121 UTC [14726] DETAIL:  Key (xmaker_room_id)=(4) is not present in table "rooms".
+2026-01-22 19:31:17.121 UTC [14726] STATEMENT:  
+	      UPDATE subscriptions SET xmaker_room_id = $1 WHERE id = $2
+	    
+2026-01-22 19:31:18.353 UTC [14727] ERROR:  insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+2026-01-22 19:31:18.353 UTC [14727] DETAIL:  Key (xmaker_room_id)=(4) is not present in table "rooms".
+2026-01-22 19:31:18.353 UTC [14727] STATEMENT:  
+	      UPDATE subscriptions SET xmaker_room_id = $1 WHERE id = $2
+	    
+2026-01-22 19:32:48.691 UTC [76] LOG:  checkpoint starting: time
+2026-01-22 19:32:50.063 UTC [76] LOG:  checkpoint complete: wrote 14 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.326 s, sync=0.011 s, total=1.373 s; sync files=11, longest=0.008 s, average=0.001 s; distance=50 kB, estimate=98 kB; lsn=0/853AA30, redo lsn=0/853A9A0
+Select room error: error: insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  table: 'subscriptions',
+    at async /app/server.js:3629:5 {
+  length: 295,
+  column: undefined,
+  severity: 'ERROR',
+  code: '23503',
+  dataType: undefined,
+  detail: 'Key (xmaker_room_id)=(4) is not present in table "rooms".',
+  constraint: 'subscriptions_xmaker_room_id_fkey',
+  hint: undefined,
+  position: undefined,
+  file: 'ri_triggers.c',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  line: '2599',
+  where: undefined,
+  schema: 'public',
+  routine: 'ri_ReportViolation'
+}
+Select room error: error: insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/server.js:3629:5 {
+  length: 295,
+  severity: 'ERROR',
+  code: '23503',
+  detail: 'Key (xmaker_room_id)=(4) is not present in table "rooms".',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'subscriptions',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'subscriptions_xmaker_room_id_fkey',
+  file: 'ri_triggers.c',
+  line: '2599',
+  routine: 'ri_ReportViolation'
+}
+Select room error: error: insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/server.js:3629:5 {
+  length: 295,
+  severity: 'ERROR',
+  code: '23503',
+  detail: 'Key (xmaker_room_id)=(4) is not present in table "rooms".',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'subscriptions',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'subscriptions_xmaker_room_id_fkey',
+  file: 'ri_triggers.c',
+  line: '2599',
+  routine: 'ri_ReportViolation'
+}
+2026-01-22 19:33:30.502 UTC [14749] ERROR:  insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+2026-01-22 19:33:30.502 UTC [14749] DETAIL:  Key (xmaker_room_id)=(4) is not present in table "rooms".
+2026-01-22 19:33:30.502 UTC [14749] STATEMENT:  
+	      UPDATE subscriptions SET xmaker_room_id = $1 WHERE id = $2
+	    
+2026-01-22 19:33:31.439 UTC [14750] ERROR:  insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+2026-01-22 19:33:31.439 UTC [14750] DETAIL:  Key (xmaker_room_id)=(4) is not present in table "rooms".
+2026-01-22 19:33:31.439 UTC [14750] STATEMENT:  
+	      UPDATE subscriptions SET xmaker_room_id = $1 WHERE id = $2
+	    
+2026-01-22 19:33:32.067 UTC [14752] ERROR:  insert or update on table "subscriptions" violates foreign key constraint "subscriptions_xmaker_room_id_fkey"
+2026-01-22 19:33:32.067 UTC [14752] DETAIL:  Key (xmaker_room_id)=(4) is not present in table "rooms".
+2026-01-22 19:33:32.067 UTC [14752] STATEMENT:  
+	      UPDATE subscriptions SET xmaker_room_id = $1 WHERE id = $2
+	    
+2026-01-22 19:37:48.163 UTC [76] LOG:  checkpoint starting: time
+2026-01-22 19:37:50.034 UTC [76] LOG:  checkpoint complete: wrote 19 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.814 s, sync=0.025 s, total=1.872 s; sync files=12, longest=0.014 s, average=0.003 s; distance=93 kB, estimate=98 kB; lsn=0/8552198, redo lsn=0/8552140
