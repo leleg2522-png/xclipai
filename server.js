@@ -3200,12 +3200,13 @@ app.get('/api/rooms', async (req, res) => {
   try {
     await cleanupInactiveUsers();
     
-    // Only videogen rooms (xmaker will be rebuilt separately)
+    // Only videogen rooms (freepik provider), not xmaker rooms
     const result = await pool.query(`
       SELECT id, name, provider, max_users, active_users, status,
              key_name_1, key_name_2, key_name_3, provider_key_name,
              (max_users - active_users) as available_slots
       FROM rooms 
+      WHERE provider = 'freepik'
       ORDER BY id
     `);
     

@@ -3398,7 +3398,11 @@ function attachEventListeners() {
   // Room Manager event listeners
   const buyPackageBtn = document.getElementById('buyPackageBtn');
   if (buyPackageBtn) {
-    buyPackageBtn.addEventListener('click', buySubscription);
+    buyPackageBtn.addEventListener('click', async () => {
+      await fetchSubscriptionPlans();
+      state.pricing.showModal = true;
+      render();
+    });
   }
   
   const openRoomModalBtn = document.getElementById('openRoomModalBtn');
