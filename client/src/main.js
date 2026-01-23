@@ -112,6 +112,25 @@ const state = {
     payments: [],
     isLoading: false,
     filter: 'pending'
+  },
+  xmaker: {
+    selectedModel: 'nano-banana',
+    style: 'photorealistic',
+    aspectRatio: '1:1',
+    referenceImage: null,
+    scenes: [{ id: 1, description: '' }],
+    generatedImages: [],
+    isGenerating: false,
+    currentSceneIndex: 0,
+    multiSceneMode: false
+  },
+  xmakerRoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
   }
 };
 
@@ -1548,6 +1567,14 @@ function renderNavMenu() {
       </svg>
       Video Gen
     </button>
+    <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      X Maker
+    </button>
     <button class="nav-btn ${state.currentPage === 'motion' ? 'active' : ''}" data-page="motion">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -1650,6 +1677,7 @@ function renderMainContent() {
     ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
     ${state.currentPage === 'video' ? renderVideoPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
+      state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
       state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
@@ -1661,6 +1689,7 @@ function renderModals() {
     ${renderAuthModal()}
     ${renderRoomModal()}
     ${renderMotionRoomModal()}
+    ${renderXMakerRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
     ${renderPaymentModal()}
@@ -2017,7 +2046,216 @@ function formatMessageContent(content) {
   return formatted;
 }
 
-// X Maker function removed - will be rebuilt
+function renderXMakerPage() {
+  const hasRoom = state.xmakerRoomManager.subscription !== null;
+  
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          AI Image Generator
+        </div>
+        <h1>X Maker - Multi-Scene Image Gen</h1>
+        <p>Generate konsisten karakter di berbagai scene dengan AI</p>
+      </div>
+      
+      ${!hasRoom ? `
+        <div class="room-required-notice">
+          <div class="notice-icon">🔑</div>
+          <h3>Join Room Diperlukan</h3>
+          <p>Untuk menggunakan X Maker, Anda perlu bergabung ke salah satu room terlebih dahulu.</p>
+          <button class="btn-primary" id="showXMakerRoomModal">
+            <span>Pilih Room</span>
+          </button>
+        </div>
+      ` : `
+        <div class="room-status-bar">
+          <div class="room-info">
+            <span class="room-badge">🏠 ${state.xmakerRoomManager.subscription.roomName}</span>
+            <span class="room-expiry">Expired: ${new Date(state.xmakerRoomManager.subscription.expiredAt).toLocaleDateString('id-ID')}</span>
+          </div>
+          <button class="btn-outline btn-small" id="leaveXMakerRoom">Keluar Room</button>
+        </div>
+      `}
+      
+      <div class="xmaker-layout">
+        <div class="xmaker-settings">
+          <div class="settings-section">
+            <h3>📷 Karakter Referensi</h3>
+            <p class="section-desc">Upload gambar karakter untuk konsistensi</p>
+            <div class="reference-upload-area" id="xmakerReferenceUpload">
+              ${state.xmaker.referenceImage ? `
+                <div class="reference-preview">
+                  <img src="${state.xmaker.referenceImage.preview}" alt="Reference">
+                  <button class="btn-remove-ref" id="removeXMakerReference">×</button>
+                </div>
+              ` : `
+                <div class="upload-placeholder">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <span>Klik untuk upload karakter</span>
+                </div>
+              `}
+              <input type="file" id="xmakerReferenceInput" accept="image/*" hidden>
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>🤖 Model AI</h3>
+            <div class="model-grid">
+              ${IMAGE_MODELS.map(model => `
+                <div class="model-option ${state.xmaker.selectedModel === model.id ? 'selected' : ''}" data-model="${model.id}">
+                  <span class="model-icon">${model.icon}</span>
+                  <div class="model-info">
+                    <span class="model-name">${model.name}</span>
+                    <span class="model-desc">${model.desc}</span>
+                  </div>
+                  ${model.supportsReference ? '<span class="badge-ref">Ref</span>' : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>🎨 Style</h3>
+            <div class="style-grid">
+              ${IMAGE_STYLES.map(style => `
+                <div class="style-option ${state.xmaker.style === style.id ? 'selected' : ''}" data-style="${style.id}">
+                  <span class="style-name">${style.name}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>📐 Aspect Ratio</h3>
+            <div class="aspect-grid">
+              ${ASPECT_RATIOS.slice(0, 5).map(ar => `
+                <div class="aspect-option ${state.xmaker.aspectRatio === ar.id ? 'selected' : ''}" data-ratio="${ar.id}">
+                  <span>${ar.name}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>🎬 Scene Descriptions</h3>
+            <p class="section-desc">Masukkan deskripsi untuk setiap scene yang ingin di-generate</p>
+            <div class="scenes-container">
+              ${state.xmaker.scenes.map((scene, idx) => `
+                <div class="scene-item">
+                  <div class="scene-header">
+                    <span class="scene-number">Scene ${idx + 1}</span>
+                    ${state.xmaker.scenes.length > 1 ? `
+                      <button class="btn-remove-scene" data-scene-id="${scene.id}">×</button>
+                    ` : ''}
+                  </div>
+                  <textarea class="scene-textarea" data-scene-id="${scene.id}" placeholder="Contoh: Karakter sedang duduk di kafe sambil minum kopi...">${scene.description}</textarea>
+                </div>
+              `).join('')}
+            </div>
+            <button class="btn-add-scene" id="addXMakerScene">
+              <span>+ Tambah Scene</span>
+            </button>
+          </div>
+          
+          <button class="btn-generate ${state.xmaker.isGenerating || !hasRoom ? 'disabled' : ''}" id="generateXMakerImages" ${state.xmaker.isGenerating || !hasRoom ? 'disabled' : ''}>
+            ${state.xmaker.isGenerating ? `
+              <span class="spinner"></span>
+              <span>Generating Scene ${state.xmaker.currentSceneIndex + 1}/${state.xmaker.scenes.length}...</span>
+            ` : `
+              <span>🚀 Generate ${state.xmaker.scenes.filter(s => s.description.trim()).length} Scene</span>
+            `}
+          </button>
+        </div>
+        
+        <div class="xmaker-preview">
+          <div class="preview-header">
+            <h3>🖼️ Generated Images</h3>
+            ${state.xmaker.generatedImages.length > 0 ? `
+              <button class="btn-clear-gallery" id="clearXMakerGallery">Clear All</button>
+            ` : ''}
+          </div>
+          <div class="image-gallery">
+            ${state.xmaker.generatedImages.length === 0 ? `
+              <div class="empty-gallery">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <p>Hasil generate akan muncul di sini</p>
+              </div>
+            ` : `
+              ${state.xmaker.generatedImages.map((img, idx) => `
+                <div class="gallery-item">
+                  <img src="${img.imageUrl || img.result_image_url}" alt="Generated ${idx + 1}" loading="lazy">
+                  <div class="gallery-overlay">
+                    <span class="scene-label">Scene ${img.sceneNumber || img.scene_number || idx + 1}</span>
+                    <div class="gallery-actions">
+                      <a href="${img.imageUrl || img.result_image_url}" download class="btn-download">⬇️</a>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            `}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderXMakerRoomModal() {
+  if (!state.xmakerRoomManager.showRoomModal) return '';
+  
+  return `
+    <div class="modal-overlay" id="xmakerRoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih X Maker Room</h2>
+          <button class="modal-close" id="closeXMakerRoomModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section">
+            <label>Xclip API Key</label>
+            <input type="password" id="xmakerXclipApiKey" placeholder="Masukkan Xclip API Key..." 
+                   value="${state.xmakerRoomManager.xclipApiKey}" class="form-input">
+            <p class="input-hint">Dapatkan API key dari menu Kelola API Key</p>
+          </div>
+          
+          <div class="rooms-grid">
+            ${state.xmakerRoomManager.rooms.map(room => `
+              <div class="room-card ${room.current_users >= room.max_users ? 'room-full' : ''}">
+                <div class="room-header">
+                  <span class="room-name">${room.name}</span>
+                  <span class="room-slots">${room.availableSlots}/${room.max_users} slot</span>
+                </div>
+                <div class="room-status">
+                  <div class="status-bar">
+                    <div class="status-fill" style="width: ${(room.current_users / room.max_users) * 100}%"></div>
+                  </div>
+                </div>
+                <button class="btn-join-room" data-room-id="${room.id}" 
+                        ${room.current_users >= room.max_users ? 'disabled' : ''}>
+                  ${room.current_users >= room.max_users ? 'Penuh' : 'Join Room'}
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 function renderVideoGenPage() {
   return `
@@ -3456,6 +3694,8 @@ function attachEventListeners() {
     attachChatEventListeners();
   } else if (state.currentPage === 'videogen') {
     attachVideoGenEventListeners();
+  } else if (state.currentPage === 'xmaker') {
+    attachXMakerEventListeners();
   } else if (state.currentPage === 'motion') {
     attachMotionEventListeners();
   }
@@ -3613,7 +3853,306 @@ function attachChatEventListeners() {
   });
 }
 
-// X Maker event listeners removed - will be rebuilt
+function attachXMakerEventListeners() {
+  const showRoomModalBtn = document.getElementById('showXMakerRoomModal');
+  if (showRoomModalBtn) {
+    showRoomModalBtn.addEventListener('click', async () => {
+      await fetchXMakerRooms();
+      state.xmakerRoomManager.showRoomModal = true;
+      render();
+    });
+  }
+  
+  const closeRoomModal = document.getElementById('closeXMakerRoomModal');
+  const roomModalOverlay = document.getElementById('xmakerRoomModalOverlay');
+  if (closeRoomModal) {
+    closeRoomModal.addEventListener('click', () => {
+      state.xmakerRoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (roomModalOverlay) {
+    roomModalOverlay.addEventListener('click', (e) => {
+      if (e.target === roomModalOverlay) {
+        state.xmakerRoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+  
+  const apiKeyInput = document.getElementById('xmakerXclipApiKey');
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+      state.xmakerRoomManager.xclipApiKey = e.target.value;
+    });
+  }
+  
+  document.querySelectorAll('#xmakerRoomModalOverlay .btn-join-room').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const roomId = btn.dataset.roomId;
+      await joinXMakerRoom(roomId);
+    });
+  });
+  
+  const leaveRoomBtn = document.getElementById('leaveXMakerRoom');
+  if (leaveRoomBtn) {
+    leaveRoomBtn.addEventListener('click', leaveXMakerRoom);
+  }
+  
+  const refUpload = document.getElementById('xmakerReferenceUpload');
+  const refInput = document.getElementById('xmakerReferenceInput');
+  if (refUpload && refInput) {
+    refUpload.addEventListener('click', (e) => {
+      if (!e.target.closest('.btn-remove-ref')) {
+        refInput.click();
+      }
+    });
+    refInput.addEventListener('change', handleXMakerReferenceUpload);
+  }
+  
+  const removeRef = document.getElementById('removeXMakerReference');
+  if (removeRef) {
+    removeRef.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.xmaker.referenceImage = null;
+      render();
+    });
+  }
+  
+  document.querySelectorAll('.xmaker-settings .model-option').forEach(item => {
+    item.addEventListener('click', () => {
+      state.xmaker.selectedModel = item.dataset.model;
+      render();
+    });
+  });
+  
+  document.querySelectorAll('.xmaker-settings .style-option').forEach(item => {
+    item.addEventListener('click', () => {
+      state.xmaker.style = item.dataset.style;
+      render();
+    });
+  });
+  
+  document.querySelectorAll('.xmaker-settings .aspect-option').forEach(item => {
+    item.addEventListener('click', () => {
+      state.xmaker.aspectRatio = item.dataset.ratio;
+      render();
+    });
+  });
+  
+  document.querySelectorAll('.scene-textarea').forEach(textarea => {
+    textarea.addEventListener('input', (e) => {
+      const sceneId = parseInt(e.target.dataset.sceneId);
+      const scene = state.xmaker.scenes.find(s => s.id === sceneId);
+      if (scene) scene.description = e.target.value;
+    });
+  });
+  
+  document.querySelectorAll('.btn-remove-scene').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sceneId = parseInt(btn.dataset.sceneId);
+      state.xmaker.scenes = state.xmaker.scenes.filter(s => s.id !== sceneId);
+      render();
+    });
+  });
+  
+  const addSceneBtn = document.getElementById('addXMakerScene');
+  if (addSceneBtn) {
+    addSceneBtn.addEventListener('click', () => {
+      const newId = Math.max(...state.xmaker.scenes.map(s => s.id), 0) + 1;
+      state.xmaker.scenes.push({ id: newId, description: '' });
+      render();
+    });
+  }
+  
+  const generateBtn = document.getElementById('generateXMakerImages');
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateXMakerImages);
+  }
+  
+  const clearGallery = document.getElementById('clearXMakerGallery');
+  if (clearGallery) {
+    clearGallery.addEventListener('click', () => {
+      state.xmaker.generatedImages = [];
+      render();
+    });
+  }
+}
+
+function handleXMakerReferenceUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    showToast('Silakan upload file gambar', 'error');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.xmaker.referenceImage = {
+      name: file.name,
+      type: file.type,
+      data: event.target.result,
+      preview: event.target.result
+    };
+    render();
+    showToast('Karakter referensi berhasil diupload!', 'success');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+async function fetchXMakerRooms() {
+  try {
+    const response = await fetch(`${API_URL}/api/xmaker/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.xmakerRoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Fetch xmaker rooms error:', error);
+  }
+}
+
+async function fetchXMakerSubscription() {
+  try {
+    const response = await fetch(`${API_URL}/api/xmaker/subscription`, { credentials: 'include' });
+    const data = await response.json();
+    state.xmakerRoomManager.subscription = data.subscription;
+    state.xmakerRoomManager.hasSubscription = data.subscription !== null;
+  } catch (error) {
+    console.error('Fetch xmaker subscription error:', error);
+  }
+}
+
+async function joinXMakerRoom(roomId) {
+  const apiKey = state.xmakerRoomManager.xclipApiKey;
+  if (!apiKey) {
+    showToast('Masukkan Xclip API Key terlebih dahulu', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${API_URL}/api/xmaker/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': apiKey
+      },
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      showToast(data.error || 'Gagal join room', 'error');
+      return;
+    }
+    
+    state.xmakerRoomManager.subscription = data.subscription;
+    state.xmakerRoomManager.hasSubscription = true;
+    state.xmakerRoomManager.showRoomModal = false;
+    showToast(data.message, 'success');
+    render();
+  } catch (error) {
+    console.error('Join xmaker room error:', error);
+    showToast('Gagal join room', 'error');
+  }
+}
+
+async function leaveXMakerRoom() {
+  const apiKey = state.xmakerRoomManager.xclipApiKey;
+  if (!apiKey) {
+    showToast('Xclip API Key diperlukan', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${API_URL}/api/xmaker/rooms/leave`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': apiKey
+      },
+      credentials: 'include'
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      showToast(data.error || 'Gagal keluar room', 'error');
+      return;
+    }
+    
+    state.xmakerRoomManager.subscription = null;
+    state.xmakerRoomManager.hasSubscription = false;
+    showToast(data.message, 'success');
+    render();
+  } catch (error) {
+    console.error('Leave xmaker room error:', error);
+    showToast('Gagal keluar room', 'error');
+  }
+}
+
+async function generateXMakerImages() {
+  const validScenes = state.xmaker.scenes.filter(s => s.description.trim());
+  
+  if (validScenes.length === 0) {
+    showToast('Masukkan minimal 1 deskripsi scene', 'error');
+    return;
+  }
+  
+  if (!state.xmakerRoomManager.xclipApiKey) {
+    showToast('Xclip API Key diperlukan', 'error');
+    return;
+  }
+  
+  state.xmaker.isGenerating = true;
+  state.xmaker.currentSceneIndex = 0;
+  render();
+  
+  for (let i = 0; i < validScenes.length; i++) {
+    state.xmaker.currentSceneIndex = i;
+    render();
+    
+    const scene = validScenes[i];
+    showToast(`Generating scene ${i + 1}/${validScenes.length}...`, 'info');
+    
+    try {
+      const response = await fetch(`${API_URL}/api/xmaker/generate`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Xclip-Key': state.xmakerRoomManager.xclipApiKey
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          prompt: scene.description,
+          model: state.xmaker.selectedModel,
+          style: state.xmaker.style,
+          aspectRatio: state.xmaker.aspectRatio,
+          referenceImage: state.xmaker.referenceImage?.data,
+          sceneNumber: i + 1
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Gagal generate');
+      }
+      
+      showToast(`Scene ${i + 1} submitted! Task ID: ${data.taskId}`, 'success');
+      
+    } catch (error) {
+      console.error(`Scene ${i + 1} error:`, error);
+      showToast(`Scene ${i + 1} gagal: ${error.message}`, 'error');
+    }
+  }
+  
+  state.xmaker.isGenerating = false;
+  render();
+  showToast('Semua scene telah disubmit. Hasil akan muncul ketika selesai.', 'success');
+}
 
 function attachVideoGenEventListeners() {
   const uploadZone = document.getElementById('videoGenUploadZone');
@@ -4756,6 +5295,8 @@ async function initApp() {
     connectSSE();
     // Fetch video history from database
     fetchVideoHistory();
+    // Fetch X Maker subscription
+    fetchXMakerSubscription();
   }
 }
 
