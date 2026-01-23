@@ -134,14 +134,6 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, room_id
     `, [cutoffTime]);
     
-    const inactiveXMaker = await pool.query(`
-      UPDATE subscriptions 
-      SET xmaker_room_id = NULL 
-      WHERE xmaker_room_id IS NOT NULL 
-      AND (last_active IS NULL OR last_active < $1)
-      RETURNING user_id, xmaker_room_id
-    `, [cutoffTime]);
-    
     // Update active_users in rooms table (Video Gen)
     await pool.query(`
       UPDATE rooms r SET active_users = (
@@ -152,17 +144,7 @@ async function cleanupInactiveUsers() {
       )
     `);
     
-    // Update active_users in xmaker_rooms table (X Maker)
-    await pool.query(`
-      UPDATE xmaker_rooms r SET active_users = (
-        SELECT COUNT(*) FROM subscriptions s 
-        WHERE s.xmaker_room_id = r.id
-        AND s.status = 'active' 
-        AND s.expired_at > NOW()
-      )
-    `);
-    
-    const totalCleaned = inactiveVideoGen.rowCount + inactiveXMaker.rowCount;
+    const totalCleaned = inactiveVideoGen.rowCount;
     if (totalCleaned > 0) {
       console.log(`Cleaned up ${totalCleaned} inactive users from rooms`);
     }
@@ -2469,192 +2451,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.post('/api/generate-image', async (req, res) => {
-  try {
-    const { model, prompt, imageCount, style, aspectRatio, referenceImage } = req.body;
-    const xclipKey = req.headers['x-xclip-key'];
-    
-    let apiKey = null;
-    
-    if (xclipKey) {
-      const keyResult = await pool.query(`
-        SELECT xk.id, xk.user_id, s.xmaker_room_id, r.key_name_1, r.key_name_2, r.key_name_3
-        FROM xclip_api_keys xk
-        JOIN users u ON xk.user_id = u.id
-        LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' AND s.expired_at > NOW()
-        LEFT JOIN xmaker_rooms r ON s.xmaker_room_id = r.id
-        WHERE xk.api_key = $1 AND xk.status = 'active'
-      `, [xclipKey]);
-      
-      if (keyResult.rows.length === 0) {
-        return res.status(401).json({ error: 'Xclip API key tidak valid atau sudah tidak aktif' });
-      }
-      
-      const keyData = keyResult.rows[0];
-      if (!keyData.xmaker_room_id) {
-        return res.status(403).json({ error: 'Belum pilih XMaker Room. Silakan pilih room di X Maker terlebih dahulu.' });
-      }
-      
-      const rotatedKey = getRotatedApiKey(keyData);
-      apiKey = rotatedKey.key;
-      console.log(`[X Maker] Using room API key (index ${rotatedKey.keyIndex + 1}) via Xclip API key proxy`);
-    } else if (req.session.userId) {
-      const roomKey = await getRoomApiKey(req.session.userId, 'xmaker');
-      if (roomKey) {
-        apiKey = roomKey;
-        console.log(`[X Maker] Using room API key via session`);
-      }
-    }
-    
-    if (!apiKey) {
-      return res.status(403).json({ 
-        error: 'Belum pilih XMaker Room atau room tidak memiliki API key aktif. Silakan pilih room di X Maker terlebih dahulu.',
-        requireRoom: true
-      });
-    }
-    
-    const sceneDescription = prompt || 'portrait shot';
-    const totalImages = Math.min(Math.max(imageCount || 1, 1), 15);
-    
-    if (!sceneDescription && !referenceImage) {
-      return res.status(400).json({ error: 'Scene description is required' });
-    }
-    
-    const stylePrompts = {
-      realistic: ', photorealistic, high quality, detailed, 8k',
-      anime: ', anime style, vibrant colors, japanese animation',
-      cartoon: ', cartoon style, colorful, illustrated, pixar style',
-      cinematic: ', cinematic lighting, dramatic, movie scene, film grain',
-      fantasy: ', fantasy art, magical, ethereal, mystical',
-      portrait: ', portrait photography, studio lighting, professional'
-    };
-    
-    const styleModifier = stylePrompts[style] || stylePrompts.realistic;
-    
-    const aspectRatioMap = {
-      '1:1': 'square_1_1',
-      '16:9': 'widescreen_16_9',
-      '9:16': 'social_story_9_16',
-      '4:3': 'classic_4_3',
-      '3:4': 'traditional_3_4'
-    };
-    
-    const freepikAspect = aspectRatioMap[aspectRatio] || 'square_1_1';
-    
-    const modelConfig = {
-      'nano-banana': { 
-        model: 'nano-banana',
-        supportsReference: true,
-        desc: 'Gratis, tercepat, support Image Reference'
-      },
-      'imagen-4-fast': { 
-        model: 'imagen-4-fast',
-        supportsReference: false,
-        desc: 'Cepat dengan detail bagus'
-      },
-      'imagen-4': { 
-        model: 'imagen-4',
-        supportsReference: false,
-        desc: 'Kualitas seimbang'
-      },
-      'imagen-4-ultra': { 
-        model: 'imagen-4-ultra',
-        supportsReference: false,
-        desc: 'Kualitas tertinggi 2K'
-      }
-    };
-    
-    const selectedModel = modelConfig[model] || modelConfig['nano-banana'];
-    
-    const images = [];
-    console.log(`Generating ${totalImages} images with model: ${model} for: "${sceneDescription.substring(0, 50)}..."`);
-    
-    const geminigenAspectMap = {
-      '1:1': '1:1',
-      '16:9': '16:9',
-      '9:16': '9:16',
-      '4:3': '4:3',
-      '3:4': '3:4'
-    };
-    const geminigenAspect = geminigenAspectMap[aspectRatio] || '1:1';
-    
-    for (let i = 0; i < totalImages; i++) {
-      try {
-        console.log(`Image ${i + 1}/${totalImages} - GeminiGen.AI ${selectedModel.model}`);
-        
-        const fullPrompt = sceneDescription + styleModifier;
-        
-        let requestBody = {
-          type: 'image',
-          prompt: fullPrompt,
-          model: selectedModel.model,
-          aspect_ratio: geminigenAspect,
-          style: style || 'creative'
-        };
-        
-        if (selectedModel.supportsReference && referenceImage) {
-          const base64Data = referenceImage.replace(/^data:image\/[^;]+;base64,/, '');
-          requestBody.reference_image = base64Data;
-        }
-        
-        const response = await axios.post(
-          'https://api.geminigen.ai/uapi/v1/generate',
-          requestBody,
-          {
-            headers: {
-              'x-api-key': apiKey,
-              'Content-Type': 'application/json'
-            },
-            timeout: 120000
-          }
-        );
-        
-        let imageUrl = null;
-        
-        const data = response.data?.data || response.data;
-        if (data?.image_url) {
-          imageUrl = data.image_url;
-        } else if (data?.url) {
-          imageUrl = data.url;
-        } else if (data?.base64) {
-          imageUrl = `data:image/png;base64,${data.base64}`;
-        } else if (Array.isArray(data) && data.length > 0) {
-          imageUrl = data[0].url || data[0].image_url || (data[0].base64 ? `data:image/png;base64,${data[0].base64}` : null);
-        } else if (typeof data === 'string' && (data.startsWith('http') || data.startsWith('data:'))) {
-          imageUrl = data;
-        }
-        
-        if (imageUrl) {
-          images.push({ url: imageUrl, index: i, scene: sceneDescription });
-          console.log(`Image ${i + 1} generated successfully via GeminiGen.AI`);
-        } else {
-          console.log('Unexpected response format:', JSON.stringify(response.data).substring(0, 500));
-          images.push({ 
-            url: `https://placehold.co/512x512/6366f1/ffffff?text=No+Image`, 
-            index: i,
-            placeholder: true,
-            message: 'No image URL in response'
-          });
-        }
-        
-      } catch (imgError) {
-        console.error(`Image ${i + 1} generation error:`, imgError.response?.data || imgError.message);
-        images.push({ 
-          url: `https://placehold.co/512x512/ef4444/ffffff?text=Error`, 
-          index: i,
-          error: true,
-          message: imgError.response?.data?.message || imgError.response?.data?.error || imgError.message
-        });
-      }
-    }
-    
-    res.json({ images, count: images.length });
-    
-  } catch (error) {
-    console.error('Generate image error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to generate images: ' + (error.response?.data?.error?.message || error.message) });
-  }
-});
+// X Maker route removed - will be rebuilt
 
 app.post('/api/generate-image-legacy', async (req, res) => {
   try {
@@ -3403,28 +3200,14 @@ app.get('/api/rooms', async (req, res) => {
   try {
     await cleanupInactiveUsers();
     
-    const { feature } = req.query;
-    let result;
-    
-    if (feature === 'xmaker') {
-      // Use separate xmaker_rooms table
-      result = await pool.query(`
-        SELECT id, name, provider, max_users, active_users, status,
-               key_name_1, key_name_2, key_name_3,
-               (max_users - active_users) as available_slots
-        FROM xmaker_rooms 
-        ORDER BY id
-      `);
-    } else {
-      // Use main rooms table for videogen
-      result = await pool.query(`
-        SELECT id, name, provider, max_users, active_users, status,
-               key_name_1, key_name_2, key_name_3, provider_key_name,
-               (max_users - active_users) as available_slots
-        FROM rooms 
-        ORDER BY id
-      `);
-    }
+    // Only videogen rooms (xmaker will be rebuilt separately)
+    const result = await pool.query(`
+      SELECT id, name, provider, max_users, active_users, status,
+             key_name_1, key_name_2, key_name_3, provider_key_name,
+             (max_users - active_users) as available_slots
+      FROM rooms 
+      ORDER BY id
+    `);
     
     const rooms = result.rows.map(room => {
       // Determine status based on active_users vs max_users
@@ -3486,12 +3269,10 @@ app.get('/api/subscription/status', async (req, res) => {
     const result = await pool.query(`
       SELECT s.*, 
              r.name as room_name, r.status as room_status,
-             xr.name as xmaker_room_name, xr.status as xmaker_room_status,
              p.name as plan_name, p.duration_days, p.price_idr,
              EXTRACT(EPOCH FROM (s.expired_at - NOW())) as remaining_seconds
       FROM subscriptions s
       LEFT JOIN rooms r ON s.room_id = r.id
-      LEFT JOIN xmaker_rooms xr ON s.xmaker_room_id = xr.id
       LEFT JOIN subscription_plans p ON s.plan_id = p.id
       WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW()
       ORDER BY s.expired_at DESC
@@ -3510,9 +3291,6 @@ app.get('/api/subscription/status', async (req, res) => {
         roomId: sub.room_id,
         roomName: sub.room_name,
         roomStatus: sub.room_status,
-        xmakerRoomId: sub.xmaker_room_id,
-        xmakerRoomName: sub.xmaker_room_name,
-        xmakerRoomStatus: sub.xmaker_room_status,
         planName: sub.plan_name,
         durationDays: sub.duration_days,
         startedAt: sub.started_at,
@@ -3585,15 +3363,14 @@ app.post('/api/subscription/buy', async (req, res) => {
   }
 });
 
-// Select/join a room (feature: videogen or xmaker)
+// Select/join a room (for videogen - xmaker will be rebuilt separately)
 app.post('/api/room/select', async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.status(401).json({ error: 'Please login first' });
     }
     
-    const { roomId, feature } = req.body;
-    const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
+    const { roomId } = req.body;
     
     // Check if user is admin (admin can bypass subscription)
     const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.session.userId]);
@@ -3601,7 +3378,7 @@ app.post('/api/room/select', async (req, res) => {
     
     // Check active subscription
     let subResult = await pool.query(`
-      SELECT id, room_id, xmaker_room_id FROM subscriptions 
+      SELECT id, room_id FROM subscriptions 
       WHERE user_id = $1 AND status = 'active' AND expired_at > NOW()
     `, [req.session.userId]);
     
@@ -3610,7 +3387,7 @@ app.post('/api/room/select', async (req, res) => {
       const tempSub = await pool.query(`
         INSERT INTO subscriptions (user_id, status, expired_at)
         VALUES ($1, 'active', NOW() + INTERVAL '1 year')
-        RETURNING id, room_id, xmaker_room_id
+        RETURNING id, room_id
       `, [req.session.userId]);
       subResult = tempSub;
     }
@@ -3620,20 +3397,19 @@ app.post('/api/room/select', async (req, res) => {
     }
     
     const subscription = subResult.rows[0];
-    const currentRoomId = feature === 'xmaker' ? subscription.xmaker_room_id : subscription.room_id;
-    const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
+    const currentRoomId = subscription.room_id;
     
     // If already in a room, leave it first
     if (currentRoomId) {
       await pool.query(`
-        UPDATE ${roomTable} SET active_users = GREATEST(active_users - 1, 0) WHERE id = $1
+        UPDATE rooms SET active_users = GREATEST(active_users - 1, 0) WHERE id = $1
       `, [currentRoomId]);
     }
     
     // Check room availability
     const roomResult = await pool.query(`
       SELECT id, name, max_users, active_users, status, key_name_1
-      FROM ${roomTable} WHERE id = $1
+      FROM rooms WHERE id = $1
     `, [roomId]);
     
     if (roomResult.rows.length === 0) {
@@ -3652,13 +3428,13 @@ app.post('/api/room/select', async (req, res) => {
     
     // Join the room
     await pool.query(`
-      UPDATE ${roomTable} SET active_users = active_users + 1,
+      UPDATE rooms SET active_users = active_users + 1,
                        status = CASE WHEN active_users + 1 >= max_users THEN 'FULL' ELSE status END
       WHERE id = $1
     `, [roomId]);
     
     await pool.query(`
-      UPDATE subscriptions SET ${roomColumn} = $1 WHERE id = $2
+      UPDATE subscriptions SET room_id = $1 WHERE id = $2
     `, [roomId, subscription.id]);
     
     res.json({
@@ -3676,23 +3452,19 @@ app.post('/api/room/select', async (req, res) => {
   }
 });
 
-// Leave current room (feature: videogen or xmaker)
+// Leave current room (for videogen - xmaker will be rebuilt separately)
 app.post('/api/room/leave', async (req, res) => {
   try {
     if (!req.session.userId) {
       return res.status(401).json({ error: 'Please login first' });
     }
     
-    const { feature } = req.body;
-    const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
-    const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
-    
     const subResult = await pool.query(`
-      SELECT id, room_id, xmaker_room_id FROM subscriptions 
+      SELECT id, room_id FROM subscriptions 
       WHERE user_id = $1 AND status = 'active' AND expired_at > NOW()
     `, [req.session.userId]);
     
-    const currentRoomId = feature === 'xmaker' ? subResult.rows[0]?.xmaker_room_id : subResult.rows[0]?.room_id;
+    const currentRoomId = subResult.rows[0]?.room_id;
     
     if (subResult.rows.length === 0 || !currentRoomId) {
       return res.json({ success: true, message: 'Not in any room' });
@@ -3702,13 +3474,13 @@ app.post('/api/room/leave', async (req, res) => {
     
     // Leave the room
     await pool.query(`
-      UPDATE ${roomTable} SET active_users = GREATEST(active_users - 1, 0),
+      UPDATE rooms SET active_users = GREATEST(active_users - 1, 0),
                        status = CASE WHEN status = 'FULL' THEN 'OPEN' ELSE status END
       WHERE id = $1
     `, [currentRoomId]);
     
     await pool.query(`
-      UPDATE subscriptions SET ${roomColumn} = NULL WHERE id = $1
+      UPDATE subscriptions SET room_id = NULL WHERE id = $1
     `, [subscription.id]);
     
     res.json({ success: true, message: 'Left room successfully' });
@@ -3718,16 +3490,13 @@ app.post('/api/room/leave', async (req, res) => {
   }
 });
 
-// Helper: Get API key for user's room with 3-minute rotation
-async function getRoomApiKey(userId, feature = 'videogen') {
-  const roomColumn = feature === 'xmaker' ? 'xmaker_room_id' : 'room_id';
-  const roomTable = feature === 'xmaker' ? 'xmaker_rooms' : 'rooms';
-  
+// Helper: Get API key for user's room with 3-minute rotation (videogen only)
+async function getRoomApiKey(userId) {
   const result = await pool.query(`
     SELECT r.key_name_1, r.key_name_2, r.key_name_3 
     FROM subscriptions s
-    JOIN ${roomTable} r ON s.${roomColumn} = r.id
-    WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.${roomColumn} IS NOT NULL
+    JOIN rooms r ON s.room_id = r.id
+    WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.room_id IS NOT NULL
   `, [userId]);
   
   if (result.rows.length === 0) {
