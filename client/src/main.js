@@ -31,19 +31,6 @@ const state = {
     selectedModel: 'openai/gpt-4o-mini',
     attachments: []
   },
-  xmaker: {
-    characterDescription: '',
-    scenes: [{ id: 1, description: '' }],
-    multiSceneMode: false,
-    style: 'photorealistic',
-    imageCount: 1,
-    aspectRatio: '1:1',
-    isGenerating: false,
-    generatedImages: [],
-    selectedModel: 'nano-banana',
-    referenceImage: null,
-    xclipApiKey: ''
-  },
   videogen: {
     sourceImage: null,
     prompt: '',
@@ -74,12 +61,10 @@ const state = {
   },
   roomManager: {
     rooms: [],
-    xmakerRooms: [],
     subscription: null,
     hasSubscription: false,
     isLoading: false,
     showRoomModal: false,
-    showXmakerRoomModal: false
   },
   motionRoomManager: {
     rooms: [],
@@ -608,9 +593,7 @@ async function handleLogout() {
     state.roomManager.hasSubscription = false;
     state.roomManager.subscription = null;
     state.roomManager.rooms = [];
-    state.roomManager.xmakerRooms = [];
     state.roomManager.currentRoom = null;
-    state.roomManager.xmakerCurrentRoom = null;
     state.pricing.remainingSeconds = 0;
     state.xclipKeys.keys = [];
     state.xclipKeys.tasks = [];
@@ -621,7 +604,6 @@ async function handleLogout() {
     state.payment.selectedPlan = null;
     state.payment.proofFile = null;
     state.chat.messages = [];
-    state.xmaker.generatedImages = [];
     state.currentPage = 'video';
     
     // Clear countdown timer
@@ -667,15 +649,11 @@ async function handleSaveApiKey(apiKey) {
 
 // ==================== ROOM MANAGER FUNCTIONS ====================
 
-async function fetchRooms(feature = 'videogen') {
+async function fetchRooms() {
   try {
-    const response = await fetch(`${API_URL}/api/rooms?feature=${feature}`, { credentials: 'include' });
+    const response = await fetch(`${API_URL}/api/rooms`, { credentials: 'include' });
     const data = await response.json();
-    if (feature === 'xmaker') {
-      state.roomManager.xmakerRooms = data.rooms || [];
-    } else {
-      state.roomManager.rooms = data.rooms || [];
-    }
+    state.roomManager.rooms = data.rooms || [];
   } catch (error) {
     console.error('Fetch rooms error:', error);
   }
@@ -1018,38 +996,6 @@ function renderRoomModal() {
                 <span>${room.active_users}/${room.max_users} Users</span>
               </div>
               ${room.status === 'OPEN' ? `<button class="btn btn-primary btn-sm select-room-btn" data-room-id="${room.id}">Pilih</button>` : ''}
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderXmakerRoomModal() {
-  if (!state.roomManager.showXmakerRoomModal) return '';
-  
-  return `
-    <div class="modal-overlay" id="xmakerRoomModalOverlay">
-      <div class="auth-modal room-modal">
-        <button class="modal-close" id="closeXmakerRoomModal">&times;</button>
-        <div class="auth-header">
-          <h2>Pilih XMaker Room</h2>
-          <p>Pilih room yang tersedia untuk generate gambar</p>
-        </div>
-        <div class="room-list">
-          ${state.roomManager.xmakerRooms.map(room => `
-            <div class="room-card ${room.status === 'FULL' ? 'room-full' : ''} ${room.status === 'MAINTENANCE' ? 'room-maintenance' : ''}" 
-                 data-room-id="${room.id}" ${room.status !== 'OPEN' ? 'disabled' : ''}>
-              <div class="room-header">
-                <span class="room-name">${room.name}</span>
-                <span class="room-status status-${room.status.toLowerCase()}">${room.status}</span>
-              </div>
-              <div class="room-slots">
-                <span class="slot-icon">👥</span>
-                <span>${room.active_users}/${room.max_users} Users</span>
-              </div>
-              ${room.status === 'OPEN' ? `<button class="btn btn-primary btn-sm select-xmaker-room-btn" data-room-id="${room.id}">Pilih</button>` : ''}
             </div>
           `).join('')}
         </div>
@@ -1589,14 +1535,6 @@ function renderNavMenu() {
       </svg>
       Video Clipper
     </button>
-    <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-      X Maker
-    </button>
     <button class="nav-btn ${state.currentPage === 'videogen' ? 'active' : ''}" data-page="videogen">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
@@ -1711,7 +1649,6 @@ function renderMainContent() {
   return `
     ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
     ${state.currentPage === 'video' ? renderVideoPage() : 
-      state.currentPage === 'xmaker' ? renderXMakerPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
@@ -1723,7 +1660,6 @@ function renderModals() {
   return `
     ${renderAuthModal()}
     ${renderRoomModal()}
-    ${renderXmakerRoomModal()}
     ${renderMotionRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
@@ -2081,357 +2017,7 @@ function formatMessageContent(content) {
   return formatted;
 }
 
-function renderXMakerPage() {
-  const currentModel = IMAGE_MODELS.find(m => m.id === state.xmaker.selectedModel);
-  const currentStyle = IMAGE_STYLES.find(s => s.id === state.xmaker.style);
-  
-  return `
-    <div class="container xmaker-container">
-      <div class="hero">
-        <div class="hero-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
-          </svg>
-          AI Image Generator
-        </div>
-        <h1 class="hero-title">
-          <span class="gradient-text">X Maker</span> Image Generator
-        </h1>
-        <p class="hero-subtitle">Generate gambar dengan karakter konsisten menggunakan AI. Buat multiple gambar sekaligus!</p>
-      </div>
-      
-      ${state.auth.user ? `
-      <div class="room-manager-panel glass-card xmaker-room-panel">
-        <div class="room-manager-header">
-          <div class="room-manager-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            <span>Room Manager - X Maker</span>
-          </div>
-          ${state.roomManager.hasSubscription && state.roomManager.subscription ? `
-            <div class="subscription-info">
-              <span class="sub-badge active">Aktif</span>
-              <span class="sub-time">${formatTimeRemaining(state.roomManager.subscription.expiredAt)}</span>
-            </div>
-          ` : ''}
-        </div>
-        
-        <div class="room-manager-content">
-          ${!state.roomManager.hasSubscription ? `
-            <div class="no-subscription">
-              <p>Anda belum memiliki paket aktif untuk generate gambar</p>
-              <button class="btn btn-primary" id="buyXmakerPackageBtn" ${state.roomManager.isLoading ? 'disabled' : ''}>
-                ${state.roomManager.isLoading ? 'Memproses...' : 'Beli Paket Langganan'}
-              </button>
-            </div>
-          ` : state.roomManager.subscription && !state.roomManager.subscription.xmakerRoomId ? `
-            <div class="select-room-prompt">
-              <p>Pilih XMaker Room untuk mulai generate gambar</p>
-              <button class="btn btn-primary" id="openXmakerRoomModalBtn">Pilih XMaker Room</button>
-            </div>
-          ` : `
-            <div class="current-room">
-              <div class="room-info">
-                <span class="room-label">XMaker Room:</span>
-                <span class="room-value">${state.roomManager.subscription?.xmakerRoomName || 'Unknown'}</span>
-                <span class="room-status-badge status-${(state.roomManager.subscription?.xmakerRoomStatus || 'open').toLowerCase()}">${state.roomManager.subscription?.xmakerRoomStatus || 'OPEN'}</span>
-              </div>
-              <button class="btn btn-secondary btn-sm" id="changeXmakerRoomBtn">Ganti Room</button>
-            </div>
-          `}
-        </div>
-        
-        ${state.roomManager.hasSubscription && state.roomManager.subscription?.xmakerRoomId ? `
-        <div class="api-key-section">
-          <div class="api-key-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-            </svg>
-            <span>Xclip API Key</span>
-          </div>
-          <p class="api-key-desc">Masukkan Xclip API Key untuk generate gambar.</p>
-          <div class="api-key-input-group">
-            <input type="password" 
-              id="xmakerXclipKeyInput" 
-              class="api-key-input" 
-              placeholder="Masukkan Xclip API Key..."
-              value="${state.xmaker.xclipApiKey || ''}"
-            >
-          </div>
-        </div>
-        ` : ''}
-      </div>
-      ` : `
-      <div class="room-manager-panel glass-card login-prompt-panel">
-        <p>Login untuk menggunakan Room Manager dan fitur generate gambar</p>
-        <button class="btn btn-primary" id="loginForXmakerBtn">Login</button>
-      </div>
-      `}
-      
-      <div class="xmaker-layout">
-        <div class="xmaker-sidebar">
-          <div class="card glass-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-              </div>
-              <h3 class="card-title">Pengaturan</h3>
-            </div>
-            <div class="card-body">
-              <div class="setting-group">
-                <label class="setting-label">Model AI</label>
-                <div class="model-select-mini">
-                  ${IMAGE_MODELS.map(model => `
-                    <div class="model-option ${model.id === state.xmaker.selectedModel ? 'active' : ''}" data-model="${model.id}">
-                      <span class="model-icon">${model.icon}</span>
-                      <span>${model.name}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-              
-              <div class="setting-group">
-                <label class="setting-label">Gaya Gambar</label>
-                <div class="style-grid">
-                  ${IMAGE_STYLES.map(style => `
-                    <div class="style-option ${style.id === state.xmaker.style ? 'active' : ''}" data-style="${style.id}">
-                      <span class="style-name">${style.name}</span>
-                      <span class="style-desc">${style.desc}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-              
-              <div class="setting-group">
-                <label class="setting-label">Jumlah Gambar: <span class="count-value">${state.xmaker.imageCount || 1}</span></label>
-                <input type="range" id="imageCountSlider" class="slider" min="1" max="15" value="${state.xmaker.imageCount || 1}">
-                <p class="setting-hint">Pilih 1-15 gambar yang akan digenerate</p>
-              </div>
-              
-              <div class="setting-group">
-                <label class="setting-label">Aspect Ratio</label>
-                <div class="aspect-grid aspect-grid-large">
-                  ${ASPECT_RATIOS.map(ratio => `
-                    <div class="aspect-option ${ratio.id === state.xmaker.aspectRatio ? 'active' : ''}" data-ratio="${ratio.id}" title="${ratio.desc}">
-                      ${ratio.name}
-                    </div>
-                  `).join('')}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="xmaker-main">
-          <div class="card glass-card">
-            <div class="card-header">
-              <div class="card-icon pulse">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                  <path d="M2 2l7.586 7.586"/>
-                  <circle cx="11" cy="11" r="2"/>
-                </svg>
-              </div>
-              <h3 class="card-title">Deskripsi Karakter</h3>
-            </div>
-            <div class="card-body">
-              <div class="reference-upload-section">
-                <label class="setting-label">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                  </svg>
-                  Upload Karakter Referensi (Opsional)
-                </label>
-                <div class="reference-upload-area" id="referenceUploadArea">
-                  ${state.xmaker.referenceImage ? `
-                    <div class="reference-preview">
-                      <img src="${state.xmaker.referenceImage.preview}" alt="Reference">
-                      <button class="reference-remove" id="removeReference">×</button>
-                      <span class="reference-label">Karakter Referensi</span>
-                    </div>
-                  ` : `
-                    <div class="upload-placeholder">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
-                      </svg>
-                      <span>Klik untuk upload gambar karakter</span>
-                      <span class="upload-hint">Karakter akan konsisten di semua hasil generate</span>
-                    </div>
-                  `}
-                </div>
-                <input type="file" id="referenceImageInput" accept="image/*" style="display: none">
-              </div>
-              
-              <div class="character-input-section">
-                <div class="multi-scene-toggle">
-                  <label class="toggle-switch">
-                    <input type="checkbox" id="multiSceneModeToggle" ${state.xmaker.multiSceneMode ? 'checked' : ''}>
-                    <span class="toggle-slider"></span>
-                  </label>
-                  <span class="toggle-label">Mode Multi-Scene (Karakter Konsisten)</span>
-                </div>
-                
-                ${state.xmaker.multiSceneMode ? `
-                  <div class="multi-scene-container">
-                    <div class="character-lock-notice ${state.xmaker.referenceImage ? 'locked' : 'unlocked'}">
-                      ${state.xmaker.referenceImage ? `
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                        </svg>
-                        <span>Karakter terkunci - Akan konsisten di semua scene</span>
-                      ` : `
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
-                        </svg>
-                        <span>Upload karakter referensi untuk konsistensi</span>
-                      `}
-                    </div>
-                    
-                    <label class="setting-label">Daftar Scene (${state.xmaker.scenes.length} scene)</label>
-                    <div class="scenes-list">
-                      ${state.xmaker.scenes.map((scene, index) => `
-                        <div class="scene-item" data-scene-id="${scene.id}">
-                          <div class="scene-header">
-                            <span class="scene-number">Scene ${index + 1}</span>
-                            ${state.xmaker.scenes.length > 1 ? `
-                              <button class="btn-remove-scene" data-scene-id="${scene.id}" title="Hapus scene">×</button>
-                            ` : ''}
-                          </div>
-                          <textarea 
-                            class="scene-textarea"
-                            data-scene-id="${scene.id}"
-                            placeholder="Contoh: Karakter sedang membaca buku di perpustakaan, pencahayaan hangat"
-                            rows="2"
-                          >${scene.description}</textarea>
-                        </div>
-                      `).join('')}
-                    </div>
-                    
-                    <button class="btn btn-secondary btn-add-scene" id="addSceneBtn">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                      </svg>
-                      Tambah Scene
-                    </button>
-                  </div>
-                ` : `
-                  <label class="setting-label">Deskripsi Scene</label>
-                  <textarea 
-                    id="characterDescription" 
-                    class="character-textarea"
-                    placeholder="Tulis deskripsi scene yang ingin digenerate.
-
-Contoh:
-Karakter wanita cantik dengan rambut panjang, berdiri di taman bunga yang indah, tersenyum bahagia"
-                    rows="4"
-                  >${state.xmaker.characterDescription}</textarea>
-                `}
-                
-                <div class="prompt-tips">
-                  <div class="tip-item">
-                    <span class="tip-icon">💡</span>
-                    <span>${state.xmaker.multiSceneMode ? 'Gunakan Nano Banana untuk karakter konsisten dengan referensi' : 'Semakin detail deskripsi, semakin konsisten hasilnya'}</span>
-                  </div>
-                </div>
-              </div>
-              
-              ${state.xmaker.multiSceneMode && !state.xmaker.referenceImage ? `
-                <div class="generate-blocked-notice">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span>Upload karakter referensi untuk mengaktifkan Multi-Scene</span>
-                </div>
-                <button class="btn btn-primary btn-full btn-generate" disabled>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
-                  </svg>
-                  <span>Memerlukan Karakter Referensi</span>
-                </button>
-              ` : `
-                <button class="btn btn-primary btn-full btn-generate" id="generateBtn" ${state.xmaker.isGenerating ? 'disabled' : ''}>
-                  ${state.xmaker.isGenerating ? `
-                    <div class="spinner"></div>
-                    <span>Generating...</span>
-                  ` : `
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                    </svg>
-                    <span>Generate ${state.xmaker.multiSceneMode ? state.xmaker.scenes.length + ' Scene' : (state.xmaker.imageCount || 1) + ' Gambar'}</span>
-                  `}
-                </button>
-              `}
-            </div>
-          </div>
-          
-          ${state.xmaker.generatedImages.length > 0 ? `
-            <div class="card glass-card">
-              <div class="card-header">
-                <div class="card-icon success">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                  </svg>
-                </div>
-                <h3 class="card-title">Hasil Generate</h3>
-                <span class="card-badge">${state.xmaker.generatedImages.length} gambar</span>
-              </div>
-              <div class="card-body">
-                <div class="generated-gallery">
-                  ${state.xmaker.generatedImages.map((img, i) => `
-                    <div class="gallery-item">
-                      <img src="${img.url}" alt="Generated image ${i + 1}">
-                      ${img.scene ? `<div class="scene-label">${img.scene.substring(0, 50)}${img.scene.length > 50 ? '...' : ''}</div>` : ''}
-                      <div class="gallery-overlay">
-                        <a href="${img.url}" download="xmaker-${Date.now()}-${i}.png" class="btn btn-small btn-download">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                          </svg>
-                          Download
-                        </a>
-                      </div>
-                    </div>
-                  `).join('')}
-                </div>
-                
-                <button class="btn btn-secondary btn-full" id="clearGallery">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                  </svg>
-                  Hapus Semua Gambar
-                </button>
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-    </div>
-  `;
-}
+// X Maker function removed - will be rebuilt
 
 function renderVideoGenPage() {
   return `
@@ -3621,31 +3207,6 @@ function attachEventListeners() {
     });
   }
   
-  const openXmakerRoomModalBtn = document.getElementById('openXmakerRoomModalBtn');
-  if (openXmakerRoomModalBtn) {
-    openXmakerRoomModalBtn.addEventListener('click', async () => {
-      await fetchRooms('xmaker');
-      state.roomManager.showXmakerRoomModal = true;
-      render();
-    });
-  }
-  
-  const changeXmakerRoomBtn = document.getElementById('changeXmakerRoomBtn');
-  if (changeXmakerRoomBtn) {
-    changeXmakerRoomBtn.addEventListener('click', async () => {
-      await fetchRooms('xmaker');
-      state.roomManager.showXmakerRoomModal = true;
-      render();
-    });
-  }
-  
-  const xmakerXclipKeyInput = document.getElementById('xmakerXclipKeyInput');
-  if (xmakerXclipKeyInput) {
-    xmakerXclipKeyInput.addEventListener('input', (e) => {
-      state.xmaker.xclipApiKey = e.target.value;
-    });
-  }
-  
   const closeRoomModal = document.getElementById('closeRoomModal');
   const roomModalOverlay = document.getElementById('roomModalOverlay');
   if (closeRoomModal) {
@@ -3667,31 +3228,6 @@ function attachEventListeners() {
     btn.addEventListener('click', (e) => {
       const roomId = parseInt(e.currentTarget.dataset.roomId);
       selectRoom(roomId, 'videogen');
-    });
-  });
-  
-  // XMaker Room Modal event listeners
-  const closeXmakerRoomModal = document.getElementById('closeXmakerRoomModal');
-  const xmakerRoomModalOverlay = document.getElementById('xmakerRoomModalOverlay');
-  if (closeXmakerRoomModal) {
-    closeXmakerRoomModal.addEventListener('click', () => {
-      state.roomManager.showXmakerRoomModal = false;
-      render();
-    });
-  }
-  if (xmakerRoomModalOverlay) {
-    xmakerRoomModalOverlay.addEventListener('click', (e) => {
-      if (e.target === xmakerRoomModalOverlay) {
-        state.roomManager.showXmakerRoomModal = false;
-        render();
-      }
-    });
-  }
-  
-  document.querySelectorAll('.select-xmaker-room-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const roomId = parseInt(e.currentTarget.dataset.roomId);
-      selectRoom(roomId, 'xmaker');
     });
   });
   
@@ -3918,8 +3454,6 @@ function attachEventListeners() {
     attachVideoEventListeners();
   } else if (state.currentPage === 'chat') {
     attachChatEventListeners();
-  } else if (state.currentPage === 'xmaker') {
-    attachXMakerEventListeners();
   } else if (state.currentPage === 'videogen') {
     attachVideoGenEventListeners();
   } else if (state.currentPage === 'motion') {
@@ -4079,140 +3613,7 @@ function attachChatEventListeners() {
   });
 }
 
-function attachXMakerEventListeners() {
-  document.querySelectorAll('.model-option').forEach(item => {
-    item.addEventListener('click', () => {
-      state.xmaker.selectedModel = item.dataset.model;
-      render();
-    });
-  });
-  
-  document.querySelectorAll('.style-option').forEach(item => {
-    item.addEventListener('click', () => {
-      state.xmaker.style = item.dataset.style;
-      render();
-    });
-  });
-  
-  document.querySelectorAll('.aspect-option').forEach(item => {
-    item.addEventListener('click', () => {
-      state.xmaker.aspectRatio = item.dataset.ratio;
-      render();
-    });
-  });
-  
-  const characterDesc = document.getElementById('characterDescription');
-  if (characterDesc) {
-    characterDesc.addEventListener('input', (e) => {
-      state.xmaker.characterDescription = e.target.value;
-    });
-  }
-  
-  const generateBtn = document.getElementById('generateBtn');
-  if (generateBtn) {
-    generateBtn.addEventListener('click', generateImages);
-  }
-  
-  const imageCountSlider = document.getElementById('imageCountSlider');
-  if (imageCountSlider) {
-    imageCountSlider.addEventListener('input', (e) => {
-      state.xmaker.imageCount = parseInt(e.target.value);
-      render();
-    });
-  }
-  
-  const clearGallery = document.getElementById('clearGallery');
-  if (clearGallery) {
-    clearGallery.addEventListener('click', () => {
-      state.xmaker.generatedImages = [];
-      render();
-    });
-  }
-  
-  const referenceUploadArea = document.getElementById('referenceUploadArea');
-  const referenceImageInput = document.getElementById('referenceImageInput');
-  
-  if (referenceUploadArea && referenceImageInput) {
-    referenceUploadArea.addEventListener('click', (e) => {
-      if (e.target.id !== 'removeReference') {
-        referenceImageInput.click();
-      }
-    });
-    
-    referenceImageInput.addEventListener('change', handleReferenceUpload);
-  }
-  
-  const removeReference = document.getElementById('removeReference');
-  if (removeReference) {
-    removeReference.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.xmaker.referenceImage = null;
-      render();
-    });
-  }
-  
-  const multiSceneModeToggle = document.getElementById('multiSceneModeToggle');
-  if (multiSceneModeToggle) {
-    multiSceneModeToggle.addEventListener('change', (e) => {
-      state.xmaker.multiSceneMode = e.target.checked;
-      if (e.target.checked) {
-        state.xmaker.selectedModel = 'nano-banana';
-      }
-      render();
-    });
-  }
-  
-  const addSceneBtn = document.getElementById('addSceneBtn');
-  if (addSceneBtn) {
-    addSceneBtn.addEventListener('click', () => {
-      const newId = Math.max(...state.xmaker.scenes.map(s => s.id)) + 1;
-      state.xmaker.scenes.push({ id: newId, description: '' });
-      render();
-    });
-  }
-  
-  document.querySelectorAll('.btn-remove-scene').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const sceneId = parseInt(e.target.dataset.sceneId);
-      state.xmaker.scenes = state.xmaker.scenes.filter(s => s.id !== sceneId);
-      render();
-    });
-  });
-  
-  document.querySelectorAll('.scene-textarea').forEach(textarea => {
-    textarea.addEventListener('input', (e) => {
-      const sceneId = parseInt(e.target.dataset.sceneId);
-      const scene = state.xmaker.scenes.find(s => s.id === sceneId);
-      if (scene) {
-        scene.description = e.target.value;
-      }
-    });
-  });
-}
-
-function handleReferenceUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  
-  if (!file.type.startsWith('image/')) {
-    showToast('Silakan upload file gambar', 'error');
-    return;
-  }
-  
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    state.xmaker.referenceImage = {
-      name: file.name,
-      type: file.type,
-      data: event.target.result,
-      preview: event.target.result
-    };
-    render();
-    showToast('Karakter referensi berhasil diupload!', 'success');
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
-}
+// X Maker event listeners removed - will be rebuilt
 
 function attachVideoGenEventListeners() {
   const uploadZone = document.getElementById('videoGenUploadZone');
@@ -4594,7 +3995,7 @@ function pollMotionStatus(taskId, model, apiKey) {
       }
       
       // Use the API key passed to this function, or fall back to task's stored key, or state
-      const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey || state.xmaker.xclipApiKey;
+      const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey;
       
       console.log('[MOTION POLL] Polling attempt', attempts + 1, 'for task:', taskId, 'key:', xclipKey ? 'present' : 'missing');
       
@@ -4812,7 +4213,7 @@ async function pollVideoStatus(taskId, model) {
       
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Xclip-Key': state.videogen.customApiKey || state.xmaker.xclipApiKey
+        'X-Xclip-Key': state.videogen.customApiKey
       };
       
       const response = await fetch(`${API_URL}/api/videogen/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
@@ -4957,180 +4358,7 @@ async function fetchVideoHistory() {
 
 window.removeGeneratedVideo = removeGeneratedVideo;
 
-async function generateImages() {
-  if (state.xmaker.multiSceneMode) {
-    await generateMultiSceneImages();
-  } else {
-    await generateSingleImage();
-  }
-}
-
-async function generateSingleImage() {
-  const description = state.xmaker.characterDescription.trim();
-  
-  if (!description && !state.xmaker.referenceImage) {
-    showToast('Silakan upload karakter referensi atau masukkan deskripsi', 'error');
-    return;
-  }
-  
-  if (!state.auth.user) {
-    showToast('Silakan login terlebih dahulu', 'error');
-    state.auth.showModal = true;
-    state.auth.modalMode = 'login';
-    render();
-    return;
-  }
-  
-  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
-    showToast('Anda perlu berlangganan untuk generate gambar', 'error');
-    state.pricing.showModal = true;
-    render();
-    return;
-  }
-  
-  if (!state.xmaker.xclipApiKey) {
-    showToast('Masukkan Xclip API Key terlebih dahulu', 'error');
-    return;
-  }
-  
-  state.xmaker.isGenerating = true;
-  render();
-  
-  try {
-    const response = await fetch(`${API_URL}/api/generate-image`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Xclip-Key': state.xmaker.xclipApiKey
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        model: state.xmaker.selectedModel,
-        prompt: description || 'portrait shot',
-        imageCount: state.xmaker.imageCount || 1,
-        style: state.xmaker.style,
-        aspectRatio: state.xmaker.aspectRatio,
-        referenceImage: state.xmaker.referenceImage ? state.xmaker.referenceImage.data : null
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to generate images');
-    }
-    
-    const data = await response.json();
-    
-    state.xmaker.generatedImages = [...state.xmaker.generatedImages, ...data.images];
-    showToast(`Berhasil generate ${data.images.length} gambar!`, 'success');
-    
-  } catch (error) {
-    console.error('Generate error:', error);
-    showToast('Gagal generate gambar: ' + error.message, 'error');
-  }
-  
-  state.xmaker.isGenerating = false;
-  render();
-}
-
-async function generateMultiSceneImages() {
-  const validScenes = state.xmaker.scenes.filter(s => s.description.trim());
-  
-  if (validScenes.length === 0) {
-    showToast('Silakan masukkan minimal 1 deskripsi scene', 'error');
-    return;
-  }
-  
-  if (!state.xmaker.referenceImage) {
-    showToast('Mode Multi-Scene memerlukan karakter referensi untuk konsistensi', 'error');
-    return;
-  }
-  
-  if (!state.auth.user) {
-    showToast('Silakan login terlebih dahulu', 'error');
-    state.auth.showModal = true;
-    state.auth.modalMode = 'login';
-    render();
-    return;
-  }
-  
-  if (!state.roomManager.hasSubscription && !state.admin.isAdmin) {
-    showToast('Anda perlu berlangganan untuk generate gambar', 'error');
-    state.pricing.showModal = true;
-    render();
-    return;
-  }
-  
-  if (!state.xmaker.xclipApiKey) {
-    showToast('Masukkan Xclip API Key terlebih dahulu', 'error');
-    return;
-  }
-  
-  state.xmaker.isGenerating = true;
-  render();
-  
-  const referenceImage = state.xmaker.referenceImage ? state.xmaker.referenceImage.data : null;
-  let successCount = 0;
-  let errorCount = 0;
-  
-  for (let i = 0; i < validScenes.length; i++) {
-    const scene = validScenes[i];
-    showToast(`Generating scene ${i + 1}/${validScenes.length}...`, 'info');
-    
-    try {
-      const response = await fetch(`${API_URL}/api/generate-image`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Xclip-Key': state.xmaker.xclipApiKey
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          model: 'nano-banana',
-          prompt: scene.description,
-          imageCount: 1,
-          style: state.xmaker.style,
-          aspectRatio: state.xmaker.aspectRatio,
-          referenceImage: referenceImage,
-          multiSceneMode: true,
-          sceneIndex: i + 1,
-          totalScenes: validScenes.length
-        })
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate scene');
-      }
-      
-      const data = await response.json();
-      
-      if (data.images && data.images.length > 0) {
-        data.images.forEach(img => {
-          img.sceneNumber = i + 1;
-          img.scene = scene.description;
-        });
-        state.xmaker.generatedImages = [...state.xmaker.generatedImages, ...data.images];
-        successCount++;
-      }
-      
-      render();
-      
-    } catch (error) {
-      console.error(`Scene ${i + 1} error:`, error);
-      errorCount++;
-    }
-  }
-  
-  state.xmaker.isGenerating = false;
-  render();
-  
-  if (successCount > 0) {
-    showToast(`Berhasil generate ${successCount} scene!${errorCount > 0 ? ` (${errorCount} gagal)` : ''}`, 'success');
-  } else {
-    showToast('Gagal generate semua scene', 'error');
-  }
-}
+// X Maker generate functions removed - will be rebuilt
 
 function handleFileAttachment(e) {
   const files = Array.from(e.target.files);
