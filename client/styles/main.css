@@ -2153,15 +2153,21 @@ body {
 /* ===== MODAL STYLES ===== */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
   background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: 9999;
   padding: var(--space-4);
   animation: modal-overlay-in 0.2s var(--ease-out);
+  overflow-y: auto;
 }
 
 @keyframes modal-overlay-in {
@@ -2911,12 +2917,18 @@ select option {
 }
 
 /* Room Modal */
-.room-modal { max-width: 500px; }
+.room-modal { 
+  max-width: 500px; 
+  max-height: 90vh;
+  overflow-y: auto;
+}
 
 .room-list {
   display: grid;
   gap: var(--space-3);
   margin-bottom: var(--space-5);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 /* Room Card Styles */
