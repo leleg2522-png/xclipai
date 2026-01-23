@@ -4784,7 +4784,11 @@ async function pollVideoStatus(taskId, model) {
       if (isCompleted && data.videoUrl) {
         task.status = 'completed';
         task.videoUrl = data.videoUrl;
-        state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
+        // Check if video with this taskId already exists (prevent duplicates from SSE)
+        const alreadyExists = state.videogen.generatedVideos.some(v => v.taskId === taskId);
+        if (!alreadyExists) {
+          state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
+        }
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
         // Clear polling flag if no more active tasks
         if (state.videogen.tasks.length === 0) {
@@ -5246,11 +5250,15 @@ function handleSSEEvent(data) {
       if (completedTask) {
         completedTask.status = 'completed';
         completedTask.videoUrl = data.videoUrl;
-        state.videogen.generatedVideos.unshift({ 
-          url: data.videoUrl, 
-          createdAt: Date.now(), 
-          taskId: data.taskId 
-        });
+        // Check if video with this taskId already exists (prevent duplicates from polling)
+        const videoExists = state.videogen.generatedVideos.some(v => v.taskId === data.taskId);
+        if (!videoExists) {
+          state.videogen.generatedVideos.unshift({ 
+            url: data.videoUrl, 
+            createdAt: Date.now(), 
+            taskId: data.taskId 
+          });
+        }
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
         showToast('Video berhasil di-generate! (via webhook)', 'success');
         render();
