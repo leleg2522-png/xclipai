@@ -1670,7 +1670,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy',
         enable_prompt_expansion: false,
         shot_type: 'single',
-        seed: -1
+        seed: -1,
+        generate_audio: true  // Enable native audio generation
       };
     } else if (config.api === 'wan22') {
       // Wan 2.2 uses 'aspect_ratio' parameter
