@@ -3868,6 +3868,432 @@ async function getMotionRoomApiKey(xclipApiKey) {
   };
 }
 
+// ==================== X MAKER ROUTES ====================
+
+// Get all X Maker rooms
+app.get('/api/xmaker/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, current_users, is_active
+      FROM xmaker_rooms 
+      WHERE is_active = true
+      ORDER BY id
+    `);
+    
+    const rooms = result.rows.map(room => ({
+      ...room,
+      availableSlots: room.max_users - room.current_users
+    }));
+    
+    res.json({ rooms });
+  } catch (error) {
+    console.error('Get xmaker rooms error:', error);
+    res.status(500).json({ error: 'Failed to get xmaker rooms' });
+  }
+});
+
+// Get user's X Maker subscription
+app.get('/api/xmaker/subscription', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ subscription: null });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT xs.*, xr.name as room_name
+      FROM xmaker_subscriptions xs
+      JOIN xmaker_rooms xr ON xs.xmaker_room_id = xr.id
+      WHERE xs.user_id = $1 AND xs.is_active = true AND xs.expired_at > NOW()
+      ORDER BY xs.created_at DESC
+      LIMIT 1
+    `, [req.session.userId]);
+    
+    if (result.rows.length === 0) {
+      return res.json({ subscription: null });
+    }
+    
+    const sub = result.rows[0];
+    res.json({
+      subscription: {
+        roomId: sub.xmaker_room_id,
+        roomName: sub.room_name,
+        expiredAt: sub.expired_at
+      }
+    });
+  } catch (error) {
+    console.error('Get xmaker subscription error:', error);
+    res.status(500).json({ error: 'Failed to get subscription' });
+  }
+});
+
+// Join X Maker room
+app.post('/api/xmaker/rooms/:roomId/join', async (req, res) => {
+  const { roomId } = req.params;
+  const xclipApiKey = req.headers['x-xclip-key'];
+  
+  if (!xclipApiKey) {
+    return res.status(400).json({ error: 'Xclip API key diperlukan' });
+  }
+  
+  try {
+    // Validate Xclip API key
+    const keyResult = await pool.query(
+      'SELECT user_id FROM xclip_api_keys WHERE api_key = $1 AND is_active = true',
+      [xclipApiKey]
+    );
+    
+    if (keyResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const userId = keyResult.rows[0].user_id;
+    
+    // Check room exists and has capacity
+    const roomResult = await pool.query(
+      'SELECT * FROM xmaker_rooms WHERE id = $1',
+      [roomId]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    
+    if (room.current_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room sudah penuh, silakan pilih room lain' });
+    }
+    
+    // Check existing subscription
+    const existingSub = await pool.query(`
+      SELECT xs.*, xr.name as room_name
+      FROM xmaker_subscriptions xs
+      JOIN xmaker_rooms xr ON xs.xmaker_room_id = xr.id
+      WHERE xs.user_id = $1 AND xs.is_active = true AND xs.expired_at > NOW()
+    `, [userId]);
+    
+    if (existingSub.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `Anda sudah bergabung di ${existingSub.rows[0].room_name}. Keluar dulu sebelum pindah room.`
+      });
+    }
+    
+    // Create subscription (30 days)
+    const expiredAt = new Date();
+    expiredAt.setDate(expiredAt.getDate() + 30);
+    
+    await pool.query(
+      'INSERT INTO xmaker_subscriptions (user_id, xmaker_room_id, expired_at, is_active) VALUES ($1, $2, $3, true)',
+      [userId, roomId, expiredAt]
+    );
+    
+    // Increment room users
+    await pool.query(
+      'UPDATE xmaker_rooms SET current_users = current_users + 1 WHERE id = $1',
+      [roomId]
+    );
+    
+    res.json({
+      success: true,
+      message: `Berhasil bergabung ke ${room.name}`,
+      subscription: {
+        roomId: room.id,
+        roomName: room.name,
+        expiredAt: expiredAt
+      }
+    });
+  } catch (error) {
+    console.error('Join xmaker room error:', error);
+    res.status(500).json({ error: 'Gagal bergabung ke room' });
+  }
+});
+
+// Leave X Maker room
+app.post('/api/xmaker/rooms/leave', async (req, res) => {
+  const xclipApiKey = req.headers['x-xclip-key'];
+  
+  if (!xclipApiKey) {
+    return res.status(400).json({ error: 'Xclip API key diperlukan' });
+  }
+  
+  try {
+    const keyResult = await pool.query(
+      'SELECT user_id FROM xclip_api_keys WHERE api_key = $1 AND is_active = true',
+      [xclipApiKey]
+    );
+    
+    if (keyResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const userId = keyResult.rows[0].user_id;
+    
+    const subResult = await pool.query(`
+      SELECT xs.*, xr.name as room_name
+      FROM xmaker_subscriptions xs
+      JOIN xmaker_rooms xr ON xs.xmaker_room_id = xr.id
+      WHERE xs.user_id = $1 AND xs.is_active = true AND xs.expired_at > NOW()
+    `, [userId]);
+    
+    if (subResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Anda tidak memiliki subscription X Maker aktif' });
+    }
+    
+    const sub = subResult.rows[0];
+    
+    await pool.query(
+      'UPDATE xmaker_subscriptions SET is_active = false WHERE id = $1',
+      [sub.id]
+    );
+    
+    await pool.query(
+      'UPDATE xmaker_rooms SET current_users = GREATEST(0, current_users - 1) WHERE id = $1',
+      [sub.xmaker_room_id]
+    );
+    
+    res.json({
+      success: true,
+      message: `Berhasil keluar dari ${sub.room_name}`
+    });
+  } catch (error) {
+    console.error('Leave xmaker room error:', error);
+    res.status(500).json({ error: 'Gagal keluar dari room' });
+  }
+});
+
+// Get X Maker room API key (internal helper)
+async function getXMakerRoomApiKey(xclipApiKey) {
+  const keyResult = await pool.query(
+    'SELECT user_id FROM xclip_api_keys WHERE api_key = $1 AND is_active = true',
+    [xclipApiKey]
+  );
+  
+  if (keyResult.rows.length === 0) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  const userId = keyResult.rows[0].user_id;
+  
+  const subResult = await pool.query(`
+    SELECT xs.xmaker_room_id, xr.key_name
+    FROM xmaker_subscriptions xs
+    JOIN xmaker_rooms xr ON xs.xmaker_room_id = xr.id
+    WHERE xs.user_id = $1 AND xs.is_active = true AND xs.expired_at > NOW()
+  `, [userId]);
+  
+  if (subResult.rows.length === 0) {
+    return { error: 'Anda belum bergabung ke X Maker room. Silakan join room terlebih dahulu.' };
+  }
+  
+  const room = subResult.rows[0];
+  const keyName = room.key_name;
+  
+  if (!keyName || !process.env[keyName]) {
+    return { error: 'Room tidak memiliki API key yang valid' };
+  }
+  
+  return { 
+    apiKey: process.env[keyName], 
+    keyName: keyName,
+    roomId: room.xmaker_room_id
+  };
+}
+
+// Generate image with GeminiGen.AI
+app.post('/api/xmaker/generate', async (req, res) => {
+  const xclipApiKey = req.headers['x-xclip-key'];
+  const { prompt, model, style, aspectRatio, referenceImage, sceneNumber } = req.body;
+  
+  if (!xclipApiKey) {
+    return res.status(400).json({ error: 'Xclip API key diperlukan' });
+  }
+  
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt diperlukan' });
+  }
+  
+  try {
+    // Get room API key
+    const roomKeyResult = await getXMakerRoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    const geminiGenApiKey = roomKeyResult.apiKey;
+    
+    // Build form data for GeminiGen API
+    const formData = new FormData();
+    formData.append('prompt', prompt);
+    formData.append('model', model || 'nano-banana');
+    
+    if (style) formData.append('style', style);
+    if (aspectRatio) formData.append('aspect_ratio', aspectRatio);
+    
+    // Handle reference image (base64)
+    if (referenceImage && model === 'nano-banana') {
+      // Convert base64 to buffer
+      const base64Data = referenceImage.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Buffer.from(base64Data, 'base64');
+      formData.append('reference_image', imageBuffer, {
+        filename: 'reference.png',
+        contentType: 'image/png'
+      });
+    }
+    
+    console.log(`[XMAKER] Generating image with model: ${model || 'nano-banana'}, room: ${roomKeyResult.roomId}`);
+    
+    // Call GeminiGen API
+    const response = await axios.post(
+      'https://api.geminigen.ai/uapi/v1/generate_image',
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Accept': 'application/json',
+          'x-api-key': geminiGenApiKey
+        },
+        timeout: 120000
+      }
+    );
+    
+    console.log('[XMAKER] API Response:', response.data);
+    
+    // Save task to database
+    const keyResult = await pool.query(
+      'SELECT user_id FROM xclip_api_keys WHERE api_key = $1',
+      [xclipApiKey]
+    );
+    const userId = keyResult.rows[0]?.user_id;
+    
+    if (userId) {
+      await pool.query(`
+        INSERT INTO xmaker_tasks (user_id, room_id, task_uuid, prompt, model, style, aspect_ratio, status, scene_number)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+      `, [userId, roomKeyResult.roomId, response.data.uuid, prompt, model || 'nano-banana', style, aspectRatio, sceneNumber || 1]);
+    }
+    
+    res.json({
+      success: true,
+      taskId: response.data.uuid,
+      status: 'pending',
+      message: 'Gambar sedang di-generate. Tunggu beberapa saat...'
+    });
+    
+  } catch (error) {
+    console.error('[XMAKER] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.message || 'Gagal generate gambar' 
+    });
+  }
+});
+
+// Poll task status
+app.get('/api/xmaker/tasks/:taskId', async (req, res) => {
+  const { taskId } = req.params;
+  const xclipApiKey = req.headers['x-xclip-key'];
+  
+  if (!xclipApiKey) {
+    return res.status(400).json({ error: 'Xclip API key diperlukan' });
+  }
+  
+  try {
+    const roomKeyResult = await getXMakerRoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    // Check local database first
+    const localTask = await pool.query(
+      'SELECT * FROM xmaker_tasks WHERE task_uuid = $1',
+      [taskId]
+    );
+    
+    if (localTask.rows.length > 0 && localTask.rows[0].status === 'completed') {
+      return res.json({
+        status: 'completed',
+        imageUrl: localTask.rows[0].result_image_url
+      });
+    }
+    
+    // Poll GeminiGen API for status
+    // Note: GeminiGen uses webhooks, so we might need to implement that
+    // For now, return pending status
+    res.json({
+      status: 'pending',
+      message: 'Gambar masih dalam proses...'
+    });
+    
+  } catch (error) {
+    console.error('[XMAKER] Poll error:', error);
+    res.status(500).json({ error: 'Gagal check status' });
+  }
+});
+
+// Webhook for GeminiGen.AI callbacks
+app.post('/api/xmaker/webhook', async (req, res) => {
+  try {
+    const { event_name, event_uuid, data } = req.body;
+    
+    console.log('[XMAKER WEBHOOK] Received:', event_name, data?.uuid);
+    
+    if (event_name === 'IMAGE_GENERATION_COMPLETED' && data) {
+      // Update task in database
+      await pool.query(`
+        UPDATE xmaker_tasks 
+        SET status = 'completed', result_image_url = $1, updated_at = NOW()
+        WHERE task_uuid = $2
+      `, [data.media_url, data.uuid]);
+      
+      // Get user_id for SSE notification
+      const taskResult = await pool.query(
+        'SELECT user_id FROM xmaker_tasks WHERE task_uuid = $1',
+        [data.uuid]
+      );
+      
+      if (taskResult.rows.length > 0) {
+        const userId = taskResult.rows[0].user_id;
+        // Send SSE notification
+        const userConnections = sseConnections.get(userId);
+        if (userConnections) {
+          userConnections.forEach(res => {
+            res.write(`data: ${JSON.stringify({
+              type: 'xmaker_complete',
+              taskId: data.uuid,
+              imageUrl: data.media_url
+            })}\n\n`);
+          });
+        }
+      }
+    }
+    
+    res.json({ received: true });
+  } catch (error) {
+    console.error('[XMAKER WEBHOOK] Error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Get X Maker history
+app.get('/api/xmaker/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ images: [] });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT * FROM xmaker_tasks 
+      WHERE user_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.session.userId]);
+    
+    res.json({ images: result.rows });
+  } catch (error) {
+    console.error('Get xmaker history error:', error);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
 // Catch-all route - must be last
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'index.html'));
