@@ -1558,9 +1558,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
       'kling-v1.6-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-std' },
       'kling-pro': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-pro' },
       'kling-std': { api: 'kling-ai', endpoint: '/v1/ai/image-to-video/kling-std' },
-      // Wan 2.6 (uses 'size' parameter) - naming: wan-2-6 (no 'v')
-      'wan-v2.6-1080p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-2-6-1080p' },
-      'wan-v2.6-720p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-2-6-720p' },
+      // Wan 2.6 (uses 'size' parameter) - naming: wan-v2-6 (with 'v')
+      'wan-v2.6-1080p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p' },
+      'wan-v2.6-720p': { api: 'wan26', endpoint: '/v1/ai/image-to-video/wan-v2-6-720p' },
       // Wan 2.2 (uses 'aspect_ratio' parameter)
       'wan-v2.2-720p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-720p' },
       'wan-v2.2-580p': { api: 'wan22', endpoint: '/v1/ai/image-to-video/wan-v2-2-580p' },
@@ -1882,9 +1882,9 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       'kling-v1.6-std': '/v1/ai/image-to-video/kling/',
       'kling-pro': '/v1/ai/image-to-video/kling/',
       'kling-std': '/v1/ai/image-to-video/kling/',
-      // Wan 2.6 (naming: wan-2-6 without 'v')
-      'wan-v2.6-1080p': '/v1/ai/image-to-video/wan-2-6-1080p/',
-      'wan-v2.6-720p': '/v1/ai/image-to-video/wan-2-6-720p/',
+      // Wan 2.6 (naming: wan-v2-6 with 'v')
+      'wan-v2.6-1080p': '/v1/ai/image-to-video/wan-v2-6-1080p/',
+      'wan-v2.6-720p': '/v1/ai/image-to-video/wan-v2-6-720p/',
       // Wan 2.2
       'wan-v2.2-720p': '/v1/ai/image-to-video/wan-v2-2-720p/',
       'wan-v2.2-580p': '/v1/ai/image-to-video/wan-v2-2-580p/',
