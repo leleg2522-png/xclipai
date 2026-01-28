@@ -5787,16 +5787,28 @@ textarea.form-input {
   100% { transform: translateX(400%); }
 }
 
-/* Vidgen2 Video Gallery */
+/* Vidgen2 Video Gallery - SOLID backgrounds to prevent gradient bleed */
 .xmaker-preview .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: #14141e !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 .xmaker-preview .card-body {
-  background: var(--bg-dark);
+  background: #0a0a0f !important;
   min-height: auto;
+}
+
+.xmaker-preview .card {
+  background: #14141e !important;
+}
+
+.video-card {
+  background: #14141e !important;
+}
+
+.video-wrapper {
+  background: #0a0a0f !important;
 }
 
 .generated-videos-section {
