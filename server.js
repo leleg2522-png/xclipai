@@ -4423,17 +4423,25 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
-    // Model mapping for GeminiGen.ai (correct model names from their API docs)
-    const modelMap = {
-      'sora-10s': 'sora-2',       // Sora 2 - 10 second videos
-      'sora-15s': 'sora-2',       // Sora 2 - 15 second videos (duration param controls length)
-      'grok': 'grok'              // Grok model by xAI
+    // Model and endpoint mapping for GeminiGen.ai (from official docs)
+    // Sora: https://api.geminigen.ai/uapi/v1/video-gen/sora
+    // Grok: https://api.geminigen.ai/uapi/v1/video-gen/grok
+    const isGrok = model === 'grok';
+    const geminigenModel = isGrok ? 'grok-3' : 'sora-2';
+    const videoDuration = isGrok ? 6 : (model === 'sora-15s' ? 15 : 10);
+    const apiEndpoint = isGrok 
+      ? 'https://api.geminigen.ai/uapi/v1/video-gen/grok'
+      : 'https://api.geminigen.ai/uapi/v1/video-gen/sora';
+    
+    // Convert aspect ratio format: 16:9 -> landscape, 9:16 -> portrait
+    const aspectRatioMap = {
+      '16:9': 'landscape',
+      '9:16': 'portrait',
+      '1:1': 'square'
     };
+    const geminigenAspectRatio = aspectRatioMap[aspectRatio] || 'landscape';
     
-    const geminigenModel = modelMap[model] || 'sora-2';
-    const videoDuration = model === 'sora-15s' ? 15 : 10;
-    
-    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, duration: ${videoDuration}s`);
+    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, duration: ${videoDuration}s, endpoint: ${apiEndpoint}`);
     
     // Prepare request to GeminiGen.ai
     const FormData = require('form-data');
@@ -4441,9 +4449,14 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     formData.append('prompt', prompt || '');
     formData.append('model', geminigenModel);
     formData.append('duration', videoDuration.toString());
+    formData.append('aspect_ratio', geminigenAspectRatio);
     
-    if (aspectRatio) {
-      formData.append('aspect_ratio', aspectRatio);
+    // Resolution: small = 720p, large = 1080p (Sora only, Grok uses 720p/1080p directly)
+    if (isGrok) {
+      formData.append('resolution', '720p');
+      formData.append('mode', 'custom');
+    } else {
+      formData.append('resolution', 'small'); // 720p for Sora
     }
     
     if (image) {
@@ -4451,18 +4464,14 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       if (image.startsWith('data:')) {
         const base64Data = image.split(',')[1];
         const buffer = Buffer.from(base64Data, 'base64');
-        formData.append('image', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
+        formData.append('files', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
       } else {
-        formData.append('image_url', image);
+        formData.append('file_urls', image);
       }
     }
     
-    // Get webhook URL for callbacks
-    const webhookUrl = getWebhookUrl().replace('/webhook', '/vidgen2/webhook');
-    formData.append('webhook_url', webhookUrl);
-    
     const response = await axios.post(
-      'https://api.geminigen.ai/uapi/v1/generate_video',
+      apiEndpoint,
       formData,
       {
         headers: {

@@ -2141,7 +2141,7 @@ function renderVidgen2Page() {
   const models = [
     { id: 'sora-10s', name: 'Sora 10s', desc: 'Video 10 detik HD', badge: 'POPULAR', icon: '🎬' },
     { id: 'sora-15s', name: 'Sora 15s', desc: 'Video 15 detik HD', badge: 'LONGER', icon: '🎥' },
-    { id: 'grok', name: 'Grok', desc: 'AI Video by xAI', badge: 'NEW', icon: '🚀' }
+    { id: 'grok', name: 'Grok', desc: 'Video 6 detik by xAI', badge: 'FAST', icon: '🚀' }
   ];
   
   return `
