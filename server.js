@@ -4320,11 +4320,11 @@ async function getVidgen2RoomApiKey(xclipApiKey) {
   const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
-    // Fallback to global key
-    if (process.env.GEMINIGEN_API_KEY) {
+    // Fallback to global Poyo.ai key
+    if (process.env.POYO_API_KEY) {
       return { 
-        apiKey: process.env.GEMINIGEN_API_KEY, 
-        keyName: 'GEMINIGEN_API_KEY',
+        apiKey: process.env.POYO_API_KEY, 
+        keyName: 'POYO_API_KEY',
         roomId: vidgen2RoomId,
         userId: keyInfo.user_id,
         keyInfoId: keyInfo.id
@@ -4428,58 +4428,60 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
-    // Model mapping for GeminiGen.ai (based on official demo)
-    // Models: veo-3, veo-3-fast, veo-2
-    // Endpoint: https://api.geminigen.ai/uapi/v1/generate_video
+    // Model mapping for Poyo.ai
+    // Models: sora-2, sora-2-pro, veo-3.1, veo-3.1-fast, wan-2.1, hailuo-02
+    // Endpoint: https://api.poyo.ai/api/generate/submit
     const modelMap = {
-      'veo-3': 'veo-3',
-      'veo-3-fast': 'veo-3-fast',
-      'veo-2': 'veo-2'
+      'sora-2': 'sora-2',
+      'sora-2-pro': 'sora-2-pro',
+      'veo-3.1': 'veo-3.1',
+      'veo-3.1-fast': 'veo-3.1-fast',
+      'hailuo-02': 'hailuo-02'
     };
-    const geminigenModel = modelMap[model] || 'veo-3';
-    const apiEndpoint = 'https://api.geminigen.ai/uapi/v1/generate_video';
+    const poyoModel = modelMap[model] || 'sora-2';
+    const apiEndpoint = 'https://api.poyo.ai/api/generate/submit';
     
-    // Aspect ratio: use raw format (16:9, 9:16)
-    const geminigenAspectRatio = aspectRatio || '16:9';
+    // Duration: 10 or 15 seconds for sora-2
+    const videoDuration = model === 'sora-2-pro' ? 15 : (duration || 10);
     
-    // Resolution: 720p or 1080p
-    const geminigenResolution = '720p';
+    // Aspect ratio: 16:9 or 9:16
+    const poyoAspectRatio = aspectRatio || '16:9';
     
-    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, aspect: ${geminigenAspectRatio}, endpoint: ${apiEndpoint}`);
+    console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
     
-    // Prepare request to GeminiGen.ai
-    const FormData = require('form-data');
-    const formData = new FormData();
-    formData.append('prompt', prompt || '');
-    formData.append('model', geminigenModel);
-    formData.append('aspect_ratio', geminigenAspectRatio);
-    formData.append('resolution', geminigenResolution);
+    // Prepare request to Poyo.ai
+    const requestBody = {
+      model: poyoModel,
+      input: {
+        prompt: prompt || 'Generate video from image',
+        duration: videoDuration,
+        aspect_ratio: poyoAspectRatio
+      }
+    };
     
+    // Add image reference if provided
     if (image) {
-      // If image is base64, convert it
+      // If image is base64, use it directly
       if (image.startsWith('data:')) {
-        const base64Data = image.split(',')[1];
-        const buffer = Buffer.from(base64Data, 'base64');
-        formData.append('files', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
+        requestBody.input.image = image;
       } else {
-        formData.append('file_urls', image);
+        requestBody.input.image = image;
       }
     }
     
     const response = await axios.post(
       apiEndpoint,
-      formData,
+      requestBody,
       {
         headers: {
-          ...formData.getHeaders(),
-          'Accept': 'application/json',
-          'x-api-key': roomKeyResult.apiKey
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${roomKeyResult.apiKey}`
         },
         timeout: 60000
       }
     );
     
-    const taskId = response.data.uuid || response.data.id;
+    const taskId = response.data.data?.task_id || response.data.task_id;
     
     // Save task to database
     await pool.query(`
@@ -4552,30 +4554,29 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // Poll GeminiGen.ai for status using history endpoint
-    // Docs: https://docs.geminigen.ai/resources/history-apis#get-specific-generation-history
+    // Poll Poyo.ai for status
+    // Docs: https://docs.poyo.ai/api-manual/overview
     const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
     if (!roomKeyResult.error) {
       try {
         const statusResponse = await axios.get(
-          `https://api.geminigen.ai/uapi/v1/history/${taskId}`,
+          `https://api.poyo.ai/api/generate/status/${taskId}`,
           {
             headers: {
-              'Accept': 'application/json',
-              'x-api-key': roomKeyResult.apiKey
+              'Authorization': `Bearer ${roomKeyResult.apiKey}`
             },
             timeout: 30000
           }
         );
         
-        const data = statusResponse.data;
+        const data = statusResponse.data.data || statusResponse.data;
         
-        // Status: 1 = Processing, 2 = Completed, 3 = Failed
-        if (data.status === 2) {
-          // Get video URL from generated_video array or generate_result
-          let videoUrl = data.generate_result;
-          if (data.generated_video && data.generated_video.length > 0) {
-            videoUrl = data.generated_video[0].video_url || data.generated_video[0].video_uri;
+        // Status: not_started, running, finished, failed
+        if (data.status === 'finished') {
+          // Get video URL from files array
+          let videoUrl = null;
+          if (data.files && data.files.length > 0) {
+            videoUrl = data.files[0].file_url || data.files[0].url;
           }
           
           // Update local database
@@ -4591,7 +4592,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           });
         }
         
-        if (data.status === 3 || data.error_message) {
+        if (data.status === 'failed') {
           await pool.query(
             'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
             ['failed', data.error_message || 'Generation failed', taskId]
@@ -4603,11 +4604,11 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           });
         }
         
-        // Status 1 = Processing
+        // Status: not_started or running
         return res.json({
           status: 'processing',
-          progress: data.status_percentage || 0,
-          message: data.status_desc || 'Video sedang diproses...'
+          progress: data.progress || 0,
+          message: data.status === 'running' ? 'Video sedang diproses...' : 'Menunggu antrian...'
         });
         
       } catch (pollError) {

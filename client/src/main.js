@@ -77,7 +77,7 @@ const state = {
   vidgen2: {
     sourceImage: null,
     prompt: '',
-    selectedModel: 'veo-3',
+    selectedModel: 'sora-2',
     aspectRatio: '16:9',
     isGenerating: false,
     isPolling: false,
@@ -2139,9 +2139,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen2Page() {
   const models = [
-    { id: 'veo-3', name: 'Veo 3', desc: 'Kualitas sinematik terbaik', badge: 'BEST', icon: '🎬' },
-    { id: 'veo-3-fast', name: 'Veo 3 Fast', desc: 'Lebih cepat, kualitas tinggi', badge: 'FAST', icon: '⚡' },
-    { id: 'veo-2', name: 'Veo 2', desc: 'Model stabil & terpercaya', badge: 'STABLE', icon: '🎥' }
+    { id: 'sora-2', name: 'Sora 2', desc: 'Video 10-15 detik, 720p', badge: 'POPULAR', icon: '🎬' },
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Kualitas premium 1080p', badge: 'PRO', icon: '⭐' },
+    { id: 'hailuo-02', name: 'Hailuo 02', desc: 'Video cepat & efisien', badge: 'FAST', icon: '⚡' }
   ];
   
   return `
