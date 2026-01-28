@@ -132,6 +132,14 @@ body {
 #app {
   min-height: 100vh;
   position: relative;
+  z-index: 1;
+}
+
+/* Main content covers background animation */
+main, .main-content, section {
+  position: relative;
+  z-index: 2;
+  background: #0a0a0f;
 }
 
 /* ===== FUTURISTIC ANIMATED BACKGROUND ===== */
