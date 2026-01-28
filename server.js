@@ -4427,7 +4427,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     const modelMap = {
       'sora-10s': 'sora-2',       // Sora 2 - 10 second videos
       'sora-15s': 'sora-2',       // Sora 2 - 15 second videos (duration param controls length)
-      'grok': 'veo-3.1-fast'      // Using Veo 3.1 Fast as alternative (Grok not available)
+      'grok': 'grok'              // Grok model by xAI
     };
     
     const geminigenModel = modelMap[model] || 'sora-2';
