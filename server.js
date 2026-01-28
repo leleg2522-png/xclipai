@@ -4449,17 +4449,19 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
     
     // Prepare request to Poyo.ai
-    // API format: model, prompt, image_url, duration, aspect_ratio
+    // API format: model + input wrapper with image_url, prompt, duration, aspect_ratio
     const requestBody = {
       model: poyoModel,
-      prompt: prompt || 'Generate natural motion video from image',
-      duration: videoDuration,
-      aspect_ratio: poyoAspectRatio
+      input: {
+        prompt: prompt || 'Generate natural motion video from image',
+        duration: videoDuration,
+        aspect_ratio: poyoAspectRatio
+      }
     };
     
-    // Add image reference if provided (field name: image_url)
+    // Add image reference if provided (field name: image_url inside input)
     if (image) {
-      requestBody.image_url = image;
+      requestBody.input.image_url = image;
     }
     
     const response = await axios.post(
