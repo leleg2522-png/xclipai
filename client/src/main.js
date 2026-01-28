@@ -74,6 +74,27 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  vidgen2: {
+    sourceImage: null,
+    prompt: '',
+    selectedModel: 'sora-10s',
+    aspectRatio: '16:9',
+    isGenerating: false,
+    isPolling: false,
+    tasks: [],
+    generatedVideos: [],
+    error: null,
+    customApiKey: '',
+    selectedRoom: null
+  },
+  vidgen2RoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
   pricing: {
     plans: [],
     isLoading: false,
@@ -991,6 +1012,67 @@ async function leaveMotionRoom() {
   }
 }
 
+// ==================== VIDGEN2 ROOM MANAGER FUNCTIONS ====================
+
+async function loadVidgen2Rooms() {
+  try {
+    state.vidgen2RoomManager.isLoading = true;
+    const response = await fetch(`${API_URL}/api/vidgen2/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.vidgen2RoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Load vidgen2 rooms error:', error);
+    state.vidgen2RoomManager.rooms = [];
+  } finally {
+    state.vidgen2RoomManager.isLoading = false;
+  }
+}
+
+async function loadVidgen2History() {
+  try {
+    const response = await fetch(`${API_URL}/api/vidgen2/history`, { credentials: 'include' });
+    const data = await response.json();
+    if (data.videos) {
+      state.vidgen2.generatedVideos = data.videos.map(v => ({
+        url: v.video_url,
+        model: v.model,
+        createdAt: new Date(v.created_at)
+      }));
+    }
+  } catch (error) {
+    console.error('Load vidgen2 history error:', error);
+  }
+}
+
+async function joinVidgen2Room(roomId) {
+  try {
+    state.vidgen2RoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/vidgen2/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ roomId })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('Berhasil bergabung ke Vidgen2 room!', 'success');
+      state.vidgen2RoomManager.showRoomModal = false;
+    } else {
+      showToast(data.error || 'Gagal bergabung ke room', 'error');
+    }
+  } catch (error) {
+    console.error('Join vidgen2 room error:', error);
+    showToast('Gagal bergabung ke room', 'error');
+  } finally {
+    state.vidgen2RoomManager.isLoading = false;
+    render();
+  }
+}
+
 function renderRoomModal() {
   if (!state.roomManager.showRoomModal) return '';
   
@@ -1567,6 +1649,13 @@ function renderNavMenu() {
       </svg>
       Video Gen
     </button>
+    <button class="nav-btn ${state.currentPage === 'vidgen2' ? 'active' : ''}" data-page="vidgen2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+        <circle cx="19" cy="12" r="2" fill="currentColor"/>
+      </svg>
+      Vidgen2
+    </button>
     <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1677,6 +1766,7 @@ function renderMainContent() {
     ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
     ${state.currentPage === 'video' ? renderVideoPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
+      state.currentPage === 'vidgen2' ? renderVidgen2Page() :
       state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
@@ -2044,6 +2134,177 @@ function formatMessageContent(content) {
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>');
   return formatted;
+}
+
+// ============ VIDGEN2 PAGE ============
+function renderVidgen2Page() {
+  const models = [
+    { id: 'sora-10s', name: 'Sora 10s', desc: 'Video 10 detik HD', badge: 'POPULAR' },
+    { id: 'sora-15s', name: 'Sora 15s', desc: 'Video 15 detik HD', badge: 'LONGER' },
+    { id: 'grok', name: 'Grok', desc: 'AI Video by Grok', badge: 'NEW' }
+  ];
+  
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Vidgen2 - GeminiGen AI
+        </div>
+        <h1 class="hero-title">
+          <span class="gradient-text">AI Video Generator</span>
+        </h1>
+        <p class="hero-subtitle">Generate stunning videos with Sora & Grok models powered by GeminiGen.ai</p>
+      </div>
+
+      <div class="videogen-workspace">
+        <div class="videogen-left">
+          <div class="card upload-card">
+            <div class="card-header">
+              <h3>Source Image</h3>
+              <p>Upload gambar untuk dijadikan video</p>
+            </div>
+            <div class="card-content">
+              <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
+                ${state.vidgen2.sourceImage ? `
+                  <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
+                  <button class="remove-reference" id="removeVidgen2Image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <p>Drop image atau klik untuk upload</p>
+                `}
+              </div>
+              <input type="file" id="vidgen2ImageInput" accept="image/*" style="display: none">
+            </div>
+          </div>
+
+          <div class="card settings-card">
+            <div class="card-header">
+              <h3>Video Settings</h3>
+            </div>
+            <div class="card-content">
+              <div class="setting-group">
+                <label class="setting-label">Model AI</label>
+                <div class="model-grid">
+                  ${models.map(model => `
+                    <div class="model-option ${state.vidgen2.selectedModel === model.id ? 'active' : ''}" data-vidgen2-model="${model.id}">
+                      <div class="model-name">${model.name}</div>
+                      <div class="model-desc">${model.desc}</div>
+                      ${model.badge ? `<span class="model-badge">${model.badge}</span>` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+              
+              <div class="setting-group">
+                <label class="setting-label">Aspect Ratio</label>
+                <div class="aspect-options">
+                  ${['16:9', '9:16', '1:1'].map(ratio => `
+                    <button class="aspect-btn ${state.vidgen2.aspectRatio === ratio ? 'active' : ''}" data-vidgen2-ratio="${ratio}">
+                      ${ratio}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+              
+              <div class="setting-group">
+                <label class="setting-label">Prompt (Opsional)</label>
+                <textarea 
+                  class="prompt-input" 
+                  id="vidgen2Prompt" 
+                  placeholder="Deskripsikan gerakan atau aksi yang diinginkan..."
+                  rows="3"
+                >${state.vidgen2.prompt}</textarea>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Vidgen2 Room</label>
+                <div class="room-select-wrapper">
+                  <select class="input-field" id="vidgen2RoomSelect">
+                    <option value="">-- Pilih Room --</option>
+                    ${state.vidgen2RoomManager.rooms.map(room => `
+                      <option value="${room.id}" ${state.vidgen2.selectedRoom == room.id ? 'selected' : ''}>
+                        ${room.name} (${room.active_users}/${room.max_users} users)
+                      </option>
+                    `).join('')}
+                  </select>
+                </div>
+                <p class="setting-hint" style="margin-top:4px;font-size:11px;">Pilih room untuk mengakses API key Vidgen2</p>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Xclip API Key</label>
+                <input 
+                  type="text" 
+                  class="input-field" 
+                  id="vidgen2ApiKey" 
+                  placeholder="Masukkan Xclip API key..."
+                  value="${state.vidgen2.customApiKey}"
+                >
+                <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses Vidgen2</p>
+              </div>
+
+              <button class="btn btn-primary btn-full btn-generate" id="generateVidgen2Btn" ${state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 ? 'disabled' : ''}>
+                ${state.vidgen2.isGenerating ? `
+                  <div class="spinner"></div>
+                  <span>Generating...</span>
+                ` : `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span>Generate Video ${state.vidgen2.tasks.length > 0 ? '(' + state.vidgen2.tasks.length + '/3 aktif)' : ''}</span>
+                `}
+              </button>
+              ${!state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:8px;">Upload gambar terlebih dahulu</p>' : ''}
+              ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint" style="text-align:center;margin-top:8px;color:var(--warning);">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="videogen-right">
+          <div class="card results-card">
+            <div class="card-header">
+              <h3>Generated Videos</h3>
+              <p>Video yang berhasil digenerate</p>
+            </div>
+            <div class="card-content">
+              ${renderVidgen2Tasks()}
+              ${renderVidgen2Videos()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVidgen2Tasks() {
+  if (state.vidgen2.tasks.length === 0) return '';
+  return '<div class="active-tasks"><p class="tasks-header">Sedang diproses (' + state.vidgen2.tasks.length + '/3):</p>' +
+    state.vidgen2.tasks.map(function(task) {
+      return '<div class="task-item"><div class="task-info"><span class="task-model">' + task.model + '</span><span class="task-status processing">Processing...</span></div><div class="task-progress"><div class="progress-bar indeterminate"></div></div></div>';
+    }).join('') + '</div>';
+}
+
+function renderVidgen2Videos() {
+  if (state.vidgen2.generatedVideos.length > 0) {
+    return '<div class="video-gallery">' +
+      state.vidgen2.generatedVideos.map(function(video) {
+        return '<div class="video-item"><video src="' + video.url + '" controls></video><div class="video-actions"><a href="' + video.url + '" download class="btn btn-sm">Download</a></div></div>';
+      }).join('') + '</div>';
+  } else if (state.vidgen2.tasks.length === 0) {
+    return '<div class="empty-state"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg><p>Belum ada video. Upload gambar dan generate!</p></div>';
+  }
+  return '';
 }
 
 function renderXMakerPage() {
@@ -3698,6 +3959,8 @@ function attachEventListeners() {
     attachChatEventListeners();
   } else if (state.currentPage === 'videogen') {
     attachVideoGenEventListeners();
+  } else if (state.currentPage === 'vidgen2') {
+    attachVidgen2EventListeners();
   } else if (state.currentPage === 'xmaker') {
     attachXMakerEventListeners();
   } else if (state.currentPage === 'motion') {
@@ -4237,6 +4500,236 @@ function attachVideoGenEventListeners() {
       render();
     });
   }
+}
+
+// ============ VIDGEN2 EVENT LISTENERS ============
+function attachVidgen2EventListeners() {
+  // Load history and rooms on page load
+  Promise.all([
+    loadVidgen2History(),
+    loadVidgen2Rooms()
+  ]).then(() => render());
+  
+  const uploadZone = document.getElementById('vidgen2UploadZone');
+  const imageInput = document.getElementById('vidgen2ImageInput');
+  const removeImageBtn = document.getElementById('removeVidgen2Image');
+  const generateBtn = document.getElementById('generateVidgen2Btn');
+  const promptInput = document.getElementById('vidgen2Prompt');
+  const apiKeyInput = document.getElementById('vidgen2ApiKey');
+  
+  if (uploadZone && imageInput) {
+    uploadZone.addEventListener('click', () => imageInput.click());
+    
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('drag-over');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleVidgen2ImageUpload({ target: { files: e.dataTransfer.files } });
+      }
+    });
+    
+    imageInput.addEventListener('change', handleVidgen2ImageUpload);
+  }
+  
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen2.sourceImage = null;
+      render();
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateVidgen2Video);
+  }
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', (e) => {
+      state.vidgen2.prompt = e.target.value;
+    });
+  }
+  
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+      state.vidgen2.customApiKey = e.target.value;
+    });
+  }
+  
+  // Model selection
+  document.querySelectorAll('[data-vidgen2-model]').forEach(el => {
+    el.addEventListener('click', () => {
+      state.vidgen2.selectedModel = el.dataset.vidgen2Model;
+      render();
+    });
+  });
+  
+  // Aspect ratio selection
+  document.querySelectorAll('[data-vidgen2-ratio]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.vidgen2.aspectRatio = btn.dataset.vidgen2Ratio;
+      render();
+    });
+  });
+  
+  // Room selection
+  const roomSelect = document.getElementById('vidgen2RoomSelect');
+  if (roomSelect) {
+    roomSelect.addEventListener('change', async (e) => {
+      const roomId = e.target.value;
+      if (roomId) {
+        state.vidgen2.selectedRoom = parseInt(roomId);
+        await joinVidgen2Room(parseInt(roomId));
+      } else {
+        state.vidgen2.selectedRoom = null;
+      }
+    });
+  }
+}
+
+function handleVidgen2ImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    alert('Hanya file gambar yang diperbolehkan');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.vidgen2.sourceImage = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateVidgen2Video() {
+  if (!state.vidgen2.sourceImage) {
+    alert('Upload gambar terlebih dahulu');
+    return;
+  }
+  
+  if (!state.vidgen2.customApiKey) {
+    alert('Masukkan Xclip API Key');
+    return;
+  }
+  
+  if (state.vidgen2.tasks.length >= 3) {
+    alert('Maks 3 video bersamaan. Tunggu salah satu selesai.');
+    return;
+  }
+  
+  state.vidgen2.isGenerating = true;
+  state.vidgen2.error = null;
+  render();
+  
+  try {
+    const response = await fetch(`${API_URL}/api/vidgen2/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': state.vidgen2.customApiKey
+      },
+      body: JSON.stringify({
+        model: state.vidgen2.selectedModel,
+        prompt: state.vidgen2.prompt,
+        image: state.vidgen2.sourceImage.data,
+        aspectRatio: state.vidgen2.aspectRatio,
+        roomId: state.vidgen2.selectedRoom
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Gagal generate video');
+    }
+    
+    // Add task to tracking
+    state.vidgen2.tasks.push({
+      taskId: data.taskId,
+      model: state.vidgen2.selectedModel,
+      startTime: Date.now()
+    });
+    
+    // Start polling for this task
+    pollVidgen2Task(data.taskId);
+    
+  } catch (error) {
+    console.error('Vidgen2 error:', error);
+    state.vidgen2.error = error.message;
+    alert(error.message);
+  } finally {
+    state.vidgen2.isGenerating = false;
+    render();
+  }
+}
+
+async function pollVidgen2Task(taskId) {
+  const maxAttempts = 120; // 10 minutes max
+  let attempts = 0;
+  
+  const poll = async () => {
+    if (attempts >= maxAttempts) {
+      // Remove task from list
+      state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+      render();
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/vidgen2/tasks/${taskId}`, {
+        headers: {
+          'X-Xclip-Key': state.vidgen2.customApiKey
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'completed' && data.videoUrl) {
+        // Remove from tasks, add to generated videos
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+        state.vidgen2.generatedVideos.unshift({
+          url: data.videoUrl,
+          model: data.model,
+          createdAt: new Date()
+        });
+        render();
+        return;
+      }
+      
+      if (data.status === 'failed') {
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+        state.vidgen2.error = data.error || 'Video generation failed';
+        render();
+        return;
+      }
+      
+      // Still processing, poll again
+      attempts++;
+      setTimeout(poll, 5000);
+      
+    } catch (error) {
+      console.error('Poll error:', error);
+      attempts++;
+      setTimeout(poll, 5000);
+    }
+  };
+  
+  poll();
 }
 
 function attachMotionEventListeners() {

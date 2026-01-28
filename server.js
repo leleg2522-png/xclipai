@@ -4295,6 +4295,395 @@ app.get('/api/xmaker/history', async (req, res) => {
   }
 });
 
+// ============ VIDGEN2 (GEMINIGEN.AI) API ============
+
+// Helper: Get Vidgen2 room API key
+async function getVidgen2RoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  // Get user's vidgen2 room from subscription
+  const subResult = await pool.query(`
+    SELECT s.vidgen2_room_id 
+    FROM subscriptions s 
+    WHERE s.user_id = $1 AND s.status = 'active' 
+    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    ORDER BY s.created_at DESC LIMIT 1
+  `, [keyInfo.user_id]);
+  
+  const vidgen2RoomId = subResult.rows[0]?.vidgen2_room_id || 1;
+  
+  // Get room keys from environment
+  const roomKeyPrefix = `VIDGEN2_ROOM${vidgen2RoomId}_KEY_`;
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+  
+  if (availableKeys.length === 0) {
+    // Fallback to global key
+    if (process.env.GEMINIGEN_API_KEY) {
+      return { 
+        apiKey: process.env.GEMINIGEN_API_KEY, 
+        keyName: 'GEMINIGEN_API_KEY',
+        roomId: vidgen2RoomId,
+        userId: keyInfo.user_id,
+        keyInfoId: keyInfo.id
+      };
+    }
+    return { error: 'Tidak ada API key Vidgen2 yang tersedia. Hubungi admin.' };
+  }
+  
+  // Random key rotation
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { 
+    apiKey: process.env[randomKeyName], 
+    keyName: randomKeyName,
+    roomId: vidgen2RoomId,
+    userId: keyInfo.user_id,
+    keyInfoId: keyInfo.id
+  };
+}
+
+// Join Vidgen2 Room
+app.post('/api/vidgen2/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId } = req.body;
+    const targetRoom = roomId || 1;
+    
+    // Check room availability
+    const roomResult = await pool.query(
+      'SELECT * FROM vidgen2_rooms WHERE id = $1',
+      [targetRoom]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN' || room.active_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room penuh atau tutup' });
+    }
+    
+    // Update user subscription with vidgen2_room_id
+    await pool.query(`
+      UPDATE subscriptions SET vidgen2_room_id = $1
+      WHERE user_id = $2 AND status = 'active'
+    `, [targetRoom, req.session.userId]);
+    
+    // Update room active users
+    await pool.query(
+      'UPDATE vidgen2_rooms SET active_users = active_users + 1 WHERE id = $1',
+      [targetRoom]
+    );
+    
+    res.json({ success: true, roomId: targetRoom, roomName: room.name });
+  } catch (error) {
+    console.error('[VIDGEN2] Join room error:', error);
+    res.status(500).json({ error: 'Gagal join room' });
+  }
+});
+
+// Get available Vidgen2 rooms
+app.get('/api/vidgen2/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, active_users, status 
+      FROM vidgen2_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN2] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal load rooms' });
+  }
+});
+
+// Generate video with Vidgen2 (GeminiGen.ai)
+app.post('/api/vidgen2/generate', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    const { model, prompt, image, aspectRatio, duration } = req.body;
+    
+    if (!prompt && !image) {
+      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    }
+    
+    // Model mapping for GeminiGen.ai
+    const modelMap = {
+      'sora-10s': 'sora-2-hd',
+      'sora-15s': 'sora-2-hd-15s',
+      'grok': 'grok-3'
+    };
+    
+    const geminigenModel = modelMap[model] || 'sora-2-hd';
+    const videoDuration = model === 'sora-15s' ? 15 : 10;
+    
+    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, duration: ${videoDuration}s`);
+    
+    // Prepare request to GeminiGen.ai
+    const FormData = require('form-data');
+    const formData = new FormData();
+    formData.append('prompt', prompt || '');
+    formData.append('model', geminigenModel);
+    formData.append('duration', videoDuration.toString());
+    
+    if (aspectRatio) {
+      formData.append('aspect_ratio', aspectRatio);
+    }
+    
+    if (image) {
+      // If image is base64, convert it
+      if (image.startsWith('data:')) {
+        const base64Data = image.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        formData.append('image', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
+      } else {
+        formData.append('image_url', image);
+      }
+    }
+    
+    // Get webhook URL for callbacks
+    const webhookUrl = getWebhookUrl().replace('/webhook', '/vidgen2/webhook');
+    formData.append('webhook_url', webhookUrl);
+    
+    const response = await axios.post(
+      'https://api.geminigen.ai/uapi/v1/generate_video',
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Accept': 'application/json',
+          'x-api-key': roomKeyResult.apiKey
+        },
+        timeout: 60000
+      }
+    );
+    
+    const taskId = response.data.uuid || response.data.id;
+    
+    // Save task to database
+    await pool.query(`
+      INSERT INTO vidgen2_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt, roomKeyResult.keyName]);
+    
+    // Update request count
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [roomKeyResult.keyInfoId]
+    );
+    
+    console.log(`[VIDGEN2] Task created: ${taskId}`);
+    
+    res.json({
+      success: true,
+      taskId: taskId,
+      model: model,
+      message: 'Video generation dimulai'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN2] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.message || 'Gagal generate video' 
+    });
+  }
+});
+
+// Check Vidgen2 task status
+app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const { taskId } = req.params;
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    // Check local database first
+    const localTask = await pool.query(
+      'SELECT * FROM vidgen2_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+      [taskId, keyInfo.id]
+    );
+    
+    if (localTask.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan' });
+    }
+    
+    const task = localTask.rows[0];
+    
+    if (task.status === 'completed') {
+      return res.json({
+        status: 'completed',
+        videoUrl: task.video_url,
+        model: task.model
+      });
+    }
+    
+    if (task.status === 'failed') {
+      return res.json({
+        status: 'failed',
+        error: task.error_message || 'Video generation failed'
+      });
+    }
+    
+    // Poll GeminiGen.ai for status
+    const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
+    if (!roomKeyResult.error) {
+      try {
+        const statusResponse = await axios.get(
+          `https://api.geminigen.ai/uapi/v1/status/${taskId}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'x-api-key': roomKeyResult.apiKey
+            },
+            timeout: 30000
+          }
+        );
+        
+        const data = statusResponse.data;
+        
+        if (data.status === 2 || data.status_desc === 'completed') {
+          // Update local database
+          await pool.query(
+            'UPDATE vidgen2_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+            ['completed', data.media_url || data.video_url, taskId]
+          );
+          
+          return res.json({
+            status: 'completed',
+            videoUrl: data.media_url || data.video_url,
+            model: task.model
+          });
+        }
+        
+        if (data.status === -1 || data.error_message) {
+          await pool.query(
+            'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+            ['failed', data.error_message, taskId]
+          );
+          
+          return res.json({
+            status: 'failed',
+            error: data.error_message || 'Generation failed'
+          });
+        }
+        
+        return res.json({
+          status: 'processing',
+          progress: data.status_percentage || 0,
+          message: 'Video sedang diproses...'
+        });
+        
+      } catch (pollError) {
+        console.error('[VIDGEN2] Poll error:', pollError.message);
+      }
+    }
+    
+    res.json({
+      status: 'pending',
+      message: 'Video sedang diproses...'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN2] Status check error:', error);
+    res.status(500).json({ error: 'Gagal check status' });
+  }
+});
+
+// Webhook for Vidgen2 (GeminiGen.ai) callbacks
+app.post('/api/vidgen2/webhook', async (req, res) => {
+  try {
+    const { event_name, event_uuid, data } = req.body;
+    
+    console.log('[VIDGEN2 WEBHOOK] Received:', event_name, data?.uuid);
+    
+    if (event_name === 'VIDEO_GENERATION_COMPLETED' && data) {
+      // Update task in database
+      await pool.query(`
+        UPDATE vidgen2_tasks 
+        SET status = 'completed', video_url = $1, completed_at = NOW()
+        WHERE task_id = $2
+      `, [data.media_url || data.video_url, data.uuid]);
+      
+      // Get user_id for SSE notification
+      const taskResult = await pool.query(
+        'SELECT user_id FROM vidgen2_tasks WHERE task_id = $1',
+        [data.uuid]
+      );
+      
+      if (taskResult.rows.length > 0) {
+        const userId = taskResult.rows[0].user_id;
+        const userConnections = sseConnections.get(userId);
+        if (userConnections) {
+          userConnections.forEach(res => {
+            res.write(`data: ${JSON.stringify({
+              type: 'vidgen2_complete',
+              taskId: data.uuid,
+              videoUrl: data.media_url || data.video_url
+            })}\n\n`);
+          });
+        }
+      }
+    }
+    
+    if (event_name === 'VIDEO_GENERATION_FAILED' && data) {
+      await pool.query(`
+        UPDATE vidgen2_tasks 
+        SET status = 'failed', error_message = $1, completed_at = NOW()
+        WHERE task_id = $2
+      `, [data.error_message || 'Generation failed', data.uuid]);
+    }
+    
+    res.json({ received: true });
+  } catch (error) {
+    console.error('[VIDGEN2 WEBHOOK] Error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Get Vidgen2 history
+app.get('/api/vidgen2/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ videos: [] });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT * FROM vidgen2_tasks 
+      WHERE user_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.session.userId]);
+    
+    res.json({ videos: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN2] Get history error:', error);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
 // Catch-all route - must be last
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'index.html'));
@@ -4342,6 +4731,58 @@ async function initDatabase() {
           ('1 Bulan', 30, 199000, 'Akses semua fitur selama 30 hari')
       `);
       console.log('Subscription plans seeded');
+    }
+    
+    // Create vidgen2_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen2_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100)
+      )
+    `);
+    
+    // Create vidgen2_tasks table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen2_tasks (
+        id SERIAL PRIMARY KEY,
+        xclip_api_key_id INTEGER,
+        user_id INTEGER,
+        room_id INTEGER,
+        task_id VARCHAR(255) UNIQUE,
+        model VARCHAR(100),
+        prompt TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        video_url TEXT,
+        error_message TEXT,
+        key_index INTEGER,
+        used_key_name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    
+    // Add vidgen2_room_id to subscriptions
+    await pool.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS vidgen2_room_id INTEGER
+    `).catch(() => {});
+    
+    // Seed vidgen2 rooms if empty
+    const existingVidgen2Rooms = await pool.query('SELECT COUNT(*) FROM vidgen2_rooms');
+    if (parseInt(existingVidgen2Rooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO vidgen2_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('Vidgen2 Room 1', 10, 'OPEN', 'VIDGEN2_ROOM1_KEY_1', 'VIDGEN2_ROOM1_KEY_2', 'VIDGEN2_ROOM1_KEY_3'),
+          ('Vidgen2 Room 2', 10, 'OPEN', 'VIDGEN2_ROOM2_KEY_1', 'VIDGEN2_ROOM2_KEY_2', 'VIDGEN2_ROOM2_KEY_3'),
+          ('Vidgen2 Room 3', 10, 'OPEN', 'VIDGEN2_ROOM3_KEY_1', 'VIDGEN2_ROOM3_KEY_2', 'VIDGEN2_ROOM3_KEY_3')
+      `);
+      console.log('Vidgen2 rooms seeded');
     }
     
     console.log('Database initialized');
