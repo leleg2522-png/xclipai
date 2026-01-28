@@ -4406,16 +4406,21 @@ app.get('/api/vidgen2/rooms', async (req, res) => {
 // Generate video with Vidgen2 (GeminiGen.ai)
 app.post('/api/vidgen2/generate', async (req, res) => {
   try {
+    console.log('[VIDGEN2] Generate request received');
     const xclipApiKey = req.headers['x-xclip-key'];
     
     if (!xclipApiKey) {
+      console.log('[VIDGEN2] No API key provided');
       return res.status(401).json({ error: 'Xclip API key diperlukan' });
     }
     
+    console.log('[VIDGEN2] Getting room API key...');
     const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
     if (roomKeyResult.error) {
+      console.log('[VIDGEN2] Room key error:', roomKeyResult.error);
       return res.status(400).json({ error: roomKeyResult.error });
     }
+    console.log('[VIDGEN2] Got room API key:', roomKeyResult.keyName);
     
     const { model, prompt, image, aspectRatio, duration } = req.body;
     
