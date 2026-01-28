@@ -33,3 +33,17 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - Multer (for file uploads)
     - FFmpeg (for video processing)
     - bcrypt (for password hashing)
+
+## Replit Environment Setup
+- **Runtime**: Node.js 20
+- **Database**: PostgreSQL (Replit built-in via DATABASE_URL)
+- **Port**: 5000 (Express server serves both API and static frontend)
+- **Workflow**: `npm start` runs server.js
+- **Deployment**: Configured for autoscale deployment
+
+## Running the Application
+The application starts with `npm start` which runs `node server.js`. The server:
+- Listens on 0.0.0.0:5000
+- Serves static files from the `client/` directory
+- Provides API endpoints for all features
+- Uses PostgreSQL for sessions, users, subscriptions, and payments
