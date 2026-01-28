@@ -144,6 +144,16 @@ async function cleanupInactiveUsers() {
       )
     `);
     
+    // Update active_users in vidgen2_rooms table
+    await pool.query(`
+      UPDATE vidgen2_rooms r SET active_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.vidgen2_room_id = r.id
+        AND s.status = 'active' 
+        AND s.expired_at > NOW()
+      )
+    `);
+    
     const totalCleaned = inactiveVideoGen.rowCount;
     if (totalCleaned > 0) {
       console.log(`Cleaned up ${totalCleaned} inactive users from rooms`);
