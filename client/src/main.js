@@ -2151,12 +2151,12 @@ function renderVidgen2Page() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          Vidgen2 - GeminiGen AI
+          Vidgen2 - AI Video
         </div>
         <h1 class="hero-title">
           <span class="gradient-text">AI Video</span> Generator
         </h1>
-        <p class="hero-subtitle">Generate video menakjubkan dengan Sora & Grok models powered by GeminiGen.ai</p>
+        <p class="hero-subtitle">Generate video menakjubkan dengan AI models terbaik</p>
       </div>
 
       <div class="xmaker-layout">
