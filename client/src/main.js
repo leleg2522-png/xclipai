@@ -2139,9 +2139,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen2Page() {
   const models = [
-    { id: 'sora-10s', name: 'Sora 10s', desc: 'Video 10 detik HD', badge: 'POPULAR' },
-    { id: 'sora-15s', name: 'Sora 15s', desc: 'Video 15 detik HD', badge: 'LONGER' },
-    { id: 'grok', name: 'Grok', desc: 'AI Video by Grok', badge: 'NEW' }
+    { id: 'sora-10s', name: 'Sora 10s', desc: 'Video 10 detik HD', badge: 'POPULAR', icon: '🎬' },
+    { id: 'sora-15s', name: 'Sora 15s', desc: 'Video 15 detik HD', badge: 'LONGER', icon: '🎥' },
+    { id: 'grok', name: 'Grok', desc: 'AI Video by Grok', badge: 'NEW', icon: '🚀' }
   ];
   
   return `
@@ -2154,63 +2154,93 @@ function renderVidgen2Page() {
           Vidgen2 - GeminiGen AI
         </div>
         <h1 class="hero-title">
-          <span class="gradient-text">AI Video Generator</span>
+          <span class="gradient-text">AI Video</span> Generator
         </h1>
-        <p class="hero-subtitle">Generate stunning videos with Sora & Grok models powered by GeminiGen.ai</p>
+        <p class="hero-subtitle">Generate video menakjubkan dengan Sora & Grok models powered by GeminiGen.ai</p>
       </div>
 
-      <div class="videogen-workspace">
-        <div class="videogen-left">
-          <div class="card upload-card">
+      <div class="xmaker-layout">
+        <div class="xmaker-settings">
+          <div class="card glass-card">
             <div class="card-header">
-              <h3>Source Image</h3>
-              <p>Upload gambar untuk dijadikan video</p>
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Upload Gambar</h2>
             </div>
-            <div class="card-content">
+            <div class="card-body">
               <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
                 ${state.vidgen2.sourceImage ? `
                   <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
                   <button class="remove-reference" id="removeVidgen2Image">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
                     </svg>
                   </button>
                 ` : `
-                  <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  <p>Drop image atau klik untuk upload</p>
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Klik untuk upload gambar</span>
+                    <span class="upload-hint">JPG, PNG (max 10MB)</span>
+                  </div>
                 `}
               </div>
               <input type="file" id="vidgen2ImageInput" accept="image/*" style="display: none">
             </div>
           </div>
 
-          <div class="card settings-card">
+          <div class="card glass-card">
             <div class="card-header">
-              <h3>Video Settings</h3>
-            </div>
-            <div class="card-content">
-              <div class="setting-group">
-                <label class="setting-label">Model AI</label>
-                <div class="model-grid">
-                  ${models.map(model => `
-                    <div class="model-option ${state.vidgen2.selectedModel === model.id ? 'active' : ''}" data-vidgen2-model="${model.id}">
-                      <div class="model-name">${model.name}</div>
-                      <div class="model-desc">${model.desc}</div>
-                      ${model.badge ? `<span class="model-badge">${model.badge}</span>` : ''}
-                    </div>
-                  `).join('')}
-                </div>
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
               </div>
-              
+              <h2 class="card-title">Pilih Model</h2>
+            </div>
+            <div class="card-body">
+              <div class="model-selector-grid">
+                ${models.map(model => `
+                  <div class="model-card ${state.vidgen2.selectedModel === model.id ? 'active' : ''}" data-vidgen2-model="${model.id}">
+                    <div class="model-card-icon">${model.icon}</div>
+                    <div class="model-card-info">
+                      <div class="model-card-name">${model.name}</div>
+                      <div class="model-card-desc">${model.desc}</div>
+                    </div>
+                    ${model.badge ? `<span class="model-card-badge ${model.badge.toLowerCase()}">${model.badge}</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pengaturan Video</h2>
+            </div>
+            <div class="card-body">
               <div class="setting-group">
                 <label class="setting-label">Aspect Ratio</label>
-                <div class="aspect-options">
+                <div class="aspect-ratio-selector">
                   ${['16:9', '9:16', '1:1'].map(ratio => `
                     <button class="aspect-btn ${state.vidgen2.aspectRatio === ratio ? 'active' : ''}" data-vidgen2-ratio="${ratio}">
-                      ${ratio}
+                      <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
+                      <span>${ratio}</span>
                     </button>
                   `).join('')}
                 </div>
@@ -2219,7 +2249,7 @@ function renderVidgen2Page() {
               <div class="setting-group">
                 <label class="setting-label">Prompt (Opsional)</label>
                 <textarea 
-                  class="prompt-input" 
+                  class="form-textarea" 
                   id="vidgen2Prompt" 
                   placeholder="Deskripsikan gerakan atau aksi yang diinginkan..."
                   rows="3"
@@ -2227,33 +2257,44 @@ function renderVidgen2Page() {
               </div>
 
               <div class="setting-group">
-                <label class="setting-label">Vidgen2 Room</label>
-                <div class="room-select-wrapper">
-                  <select class="input-field" id="vidgen2RoomSelect">
-                    <option value="">-- Pilih Room --</option>
-                    ${state.vidgen2RoomManager.rooms.map(room => `
-                      <option value="${room.id}" ${state.vidgen2.selectedRoom == room.id ? 'selected' : ''}>
-                        ${room.name} (${room.active_users}/${room.max_users} users)
-                      </option>
-                    `).join('')}
-                  </select>
-                </div>
-                <p class="setting-hint" style="margin-top:4px;font-size:11px;">Pilih room untuk mengakses API key Vidgen2</p>
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  Room
+                </label>
+                <select class="form-select" id="vidgen2RoomSelect">
+                  <option value="">-- Pilih Room --</option>
+                  ${state.vidgen2RoomManager.rooms.map(room => `
+                    <option value="${room.id}" ${state.vidgen2.selectedRoom == room.id ? 'selected' : ''}>
+                      ${room.name} (${room.active_users}/${room.max_users} users)
+                    </option>
+                  `).join('')}
+                </select>
               </div>
 
               <div class="setting-group">
-                <label class="setting-label">Xclip API Key</label>
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Xclip API Key
+                </label>
                 <input 
-                  type="text" 
-                  class="input-field" 
+                  type="password" 
+                  class="form-input" 
                   id="vidgen2ApiKey" 
                   placeholder="Masukkan Xclip API key..."
                   value="${state.vidgen2.customApiKey}"
                 >
-                <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses Vidgen2</p>
+                <p class="setting-hint">Buat Xclip API key di panel "Xclip Keys"</p>
               </div>
 
-              <button class="btn btn-primary btn-full btn-generate" id="generateVidgen2Btn" ${state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 ? 'disabled' : ''}>
+              <button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 ? 'disabled' : ''}>
                 ${state.vidgen2.isGenerating ? `
                   <div class="spinner"></div>
                   <span>Generating...</span>
@@ -2261,22 +2302,27 @@ function renderVidgen2Page() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
-                  <span>Generate Video ${state.vidgen2.tasks.length > 0 ? '(' + state.vidgen2.tasks.length + '/3 aktif)' : ''}</span>
+                  <span>Generate Video${state.vidgen2.tasks.length > 0 ? ' (' + state.vidgen2.tasks.length + '/3)' : ''}</span>
                 `}
               </button>
-              ${!state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:8px;">Upload gambar terlebih dahulu</p>' : ''}
-              ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint" style="text-align:center;margin-top:8px;color:var(--warning);">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
+              ${!state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Upload gambar terlebih dahulu</p>' : ''}
+              ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
           </div>
         </div>
 
-        <div class="videogen-right">
-          <div class="card results-card">
+        <div class="xmaker-preview">
+          <div class="card glass-card">
             <div class="card-header">
-              <h3>Generated Videos</h3>
-              <p>Video yang berhasil digenerate</p>
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Hasil Video</h2>
             </div>
-            <div class="card-content">
+            <div class="card-body">
               ${renderVidgen2Tasks()}
               ${renderVidgen2Videos()}
             </div>
@@ -2289,20 +2335,46 @@ function renderVidgen2Page() {
 
 function renderVidgen2Tasks() {
   if (state.vidgen2.tasks.length === 0) return '';
-  return '<div class="active-tasks"><p class="tasks-header">Sedang diproses (' + state.vidgen2.tasks.length + '/3):</p>' +
-    state.vidgen2.tasks.map(function(task) {
-      return '<div class="task-item"><div class="task-info"><span class="task-model">' + task.model + '</span><span class="task-status processing">Processing...</span></div><div class="task-progress"><div class="progress-bar indeterminate"></div></div></div>';
-    }).join('') + '</div>';
+  
+  let html = '<div class="processing-tasks">';
+  html += '<div class="tasks-header"><span class="pulse-dot"></span> Sedang Diproses (' + state.vidgen2.tasks.length + '/3)</div>';
+  html += '<div class="tasks-list">';
+  
+  state.vidgen2.tasks.forEach(function(task) {
+    html += '<div class="task-card">';
+    html += '<div class="task-card-header">';
+    html += '<span class="task-model-badge">' + task.model.toUpperCase() + '</span>';
+    html += '<span class="task-status-badge processing">Processing</span>';
+    html += '</div>';
+    html += '<div class="task-progress-bar"><div class="task-progress-fill indeterminate"></div></div>';
+    html += '</div>';
+  });
+  
+  html += '</div></div>';
+  return html;
 }
 
 function renderVidgen2Videos() {
   if (state.vidgen2.generatedVideos.length > 0) {
-    return '<div class="video-gallery">' +
-      state.vidgen2.generatedVideos.map(function(video) {
-        return '<div class="video-item"><video src="' + video.url + '" controls></video><div class="video-actions"><a href="' + video.url + '" download class="btn btn-sm">Download</a></div></div>';
-      }).join('') + '</div>';
+    let html = '<div class="generated-videos-section">';
+    html += '<div class="videos-header">Video yang Dihasilkan (' + state.vidgen2.generatedVideos.length + ')</div>';
+    html += '<div class="videos-grid">';
+    
+    state.vidgen2.generatedVideos.forEach(function(video) {
+      html += '<div class="video-card">';
+      html += '<div class="video-wrapper"><video src="' + video.url + '" controls></video></div>';
+      html += '<div class="video-card-footer">';
+      html += '<span class="video-model-tag">' + (video.model || 'AI').toUpperCase() + '</span>';
+      html += '<a href="' + video.url + '" download class="btn btn-sm btn-secondary">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      html += ' Download</a>';
+      html += '</div></div>';
+    });
+    
+    html += '</div></div>';
+    return html;
   } else if (state.vidgen2.tasks.length === 0) {
-    return '<div class="empty-state"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg><p>Belum ada video. Upload gambar dan generate!</p></div>';
+    return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg></div><h3>Belum Ada Video</h3><p>Upload gambar dan klik Generate untuk membuat video AI</p></div>';
   }
   return '';
 }
