@@ -4576,11 +4576,17 @@ function attachVideoGenEventListeners() {
 
 // ============ VIDGEN2 EVENT LISTENERS ============
 function attachVidgen2EventListeners() {
-  // Load history and rooms on page load
-  Promise.all([
-    loadVidgen2History(),
-    loadVidgen2Rooms()
-  ]).then(() => render());
+  // Load history and rooms on page load (only once)
+  if (!state.vidgen2._initialized) {
+    state.vidgen2._initialized = true;
+    Promise.all([
+      loadVidgen2History(),
+      loadVidgen2Rooms()
+    ]).then(() => {
+      state.vidgen2._initialized = false; // Allow reload on next visit
+      render();
+    });
+  }
   
   const uploadZone = document.getElementById('vidgen2UploadZone');
   const imageInput = document.getElementById('vidgen2ImageInput');
@@ -4636,21 +4642,28 @@ function attachVidgen2EventListeners() {
     });
   }
   
-  // Model selection
-  document.querySelectorAll('[data-vidgen2-model]').forEach(el => {
-    el.addEventListener('click', () => {
-      state.vidgen2.selectedModel = el.dataset.vidgen2Model;
-      render();
+  // Model selection and aspect ratio - use event delegation (only attach once)
+  if (!window._vidgen2DelegationAttached) {
+    window._vidgen2DelegationAttached = true;
+    
+    document.addEventListener('click', function(e) {
+      // Model selection
+      const modelCard = e.target.closest('[data-vidgen2-model]');
+      if (modelCard && state.currentPage === 'vidgen2') {
+        state.vidgen2.selectedModel = modelCard.dataset.vidgen2Model;
+        render();
+        return;
+      }
+      
+      // Aspect ratio selection
+      const ratioBtn = e.target.closest('[data-vidgen2-ratio]');
+      if (ratioBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.aspectRatio = ratioBtn.dataset.vidgen2Ratio;
+        render();
+        return;
+      }
     });
-  });
-  
-  // Aspect ratio selection
-  document.querySelectorAll('[data-vidgen2-ratio]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.vidgen2.aspectRatio = btn.dataset.vidgen2Ratio;
-      render();
-    });
-  });
+  }
   
   // Room selection
   const roomSelect = document.getElementById('vidgen2RoomSelect');
