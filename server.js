@@ -4429,12 +4429,12 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     }
     
     // Model mapping for Poyo.ai
-    // Models: sora-2 (10s/15s), veo-3.1-fast
+    // Models: sora-2, sora-2-pro, veo3.1, veo3.1-fast
     // Endpoint: https://api.poyo.ai/api/generate/submit
     const modelConfig = {
       'sora-2-10s': { apiModel: 'sora-2', duration: 10 },
       'sora-2-15s': { apiModel: 'sora-2', duration: 15 },
-      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 }
+      'veo-3.1-fast': { apiModel: 'veo3.1-fast', duration: 8 }
     };
     const config = modelConfig[model] || modelConfig['sora-2-10s'];
     const poyoModel = config.apiModel;
