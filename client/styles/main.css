@@ -5788,6 +5788,12 @@ textarea.form-input {
 }
 
 /* Vidgen2 Video Gallery */
+.xmaker-preview .glass-card {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .xmaker-preview .card-body {
   background: var(--bg-dark);
   min-height: auto;
