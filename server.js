@@ -4423,14 +4423,14 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
-    // Model mapping for GeminiGen.ai
+    // Model mapping for GeminiGen.ai (correct model names from their API docs)
     const modelMap = {
-      'sora-10s': 'sora-2-hd',
-      'sora-15s': 'sora-2-hd-15s',
-      'grok': 'grok-3'
+      'sora-10s': 'sora-2',       // Sora 2 - 10 second videos
+      'sora-15s': 'sora-2',       // Sora 2 - 15 second videos (duration param controls length)
+      'grok': 'veo-3.1-fast'      // Using Veo 3.1 Fast as alternative (Grok not available)
     };
     
-    const geminigenModel = modelMap[model] || 'sora-2-hd';
+    const geminigenModel = modelMap[model] || 'sora-2';
     const videoDuration = model === 'sora-15s' ? 15 : 10;
     
     console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, duration: ${videoDuration}s`);
