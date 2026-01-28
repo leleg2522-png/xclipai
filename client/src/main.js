@@ -77,7 +77,7 @@ const state = {
   vidgen2: {
     sourceImage: null,
     prompt: '',
-    selectedModel: 'sora-10s',
+    selectedModel: 'veo-3',
     aspectRatio: '16:9',
     isGenerating: false,
     isPolling: false,
@@ -2139,9 +2139,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen2Page() {
   const models = [
-    { id: 'sora-10s', name: 'Sora 10s', desc: 'Video 10 detik HD', badge: 'POPULAR', icon: '🎬' },
-    { id: 'sora-15s', name: 'Sora 15s', desc: 'Video 15 detik HD', badge: 'LONGER', icon: '🎥' },
-    { id: 'grok', name: 'Grok', desc: 'Video 6 detik by xAI', badge: 'FAST', icon: '🚀' }
+    { id: 'veo-3', name: 'Veo 3', desc: 'Kualitas sinematik terbaik', badge: 'BEST', icon: '🎬' },
+    { id: 'veo-3-fast', name: 'Veo 3 Fast', desc: 'Lebih cepat, kualitas tinggi', badge: 'FAST', icon: '⚡' },
+    { id: 'veo-2', name: 'Veo 2', desc: 'Model stabil & terpercaya', badge: 'STABLE', icon: '🎥' }
   ];
   
   return `

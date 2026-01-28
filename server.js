@@ -4428,41 +4428,32 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
-    // Model and endpoint mapping for GeminiGen.ai (from official docs)
-    // Sora: https://api.geminigen.ai/uapi/v1/video-gen/sora
-    // Grok: https://api.geminigen.ai/uapi/v1/video-gen/grok
-    const isGrok = model === 'grok';
-    const geminigenModel = isGrok ? 'grok-3' : 'sora-2';
-    const videoDuration = isGrok ? 6 : (model === 'sora-15s' ? 15 : 10);
-    const apiEndpoint = isGrok 
-      ? 'https://api.geminigen.ai/uapi/v1/video-gen/grok'
-      : 'https://api.geminigen.ai/uapi/v1/video-gen/sora';
-    
-    // Convert aspect ratio format: 16:9 -> landscape, 9:16 -> portrait
-    const aspectRatioMap = {
-      '16:9': 'landscape',
-      '9:16': 'portrait',
-      '1:1': 'square'
+    // Model mapping for GeminiGen.ai (based on official demo)
+    // Models: veo-3, veo-3-fast, veo-2
+    // Endpoint: https://api.geminigen.ai/uapi/v1/generate_video
+    const modelMap = {
+      'veo-3': 'veo-3',
+      'veo-3-fast': 'veo-3-fast',
+      'veo-2': 'veo-2'
     };
-    const geminigenAspectRatio = aspectRatioMap[aspectRatio] || 'landscape';
+    const geminigenModel = modelMap[model] || 'veo-3';
+    const apiEndpoint = 'https://api.geminigen.ai/uapi/v1/generate_video';
     
-    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, duration: ${videoDuration}s, endpoint: ${apiEndpoint}`);
+    // Aspect ratio: use raw format (16:9, 9:16)
+    const geminigenAspectRatio = aspectRatio || '16:9';
+    
+    // Resolution: 720p or 1080p
+    const geminigenResolution = '720p';
+    
+    console.log(`[VIDGEN2] Generating with model: ${geminigenModel}, aspect: ${geminigenAspectRatio}, endpoint: ${apiEndpoint}`);
     
     // Prepare request to GeminiGen.ai
     const FormData = require('form-data');
     const formData = new FormData();
     formData.append('prompt', prompt || '');
     formData.append('model', geminigenModel);
-    formData.append('duration', videoDuration.toString());
     formData.append('aspect_ratio', geminigenAspectRatio);
-    
-    // Resolution: small = 720p, large = 1080p (Sora only, Grok uses 720p/1080p directly)
-    if (isGrok) {
-      formData.append('resolution', '720p');
-      formData.append('mode', 'custom');
-    } else {
-      formData.append('resolution', 'small'); // 720p for Sora
-    }
+    formData.append('resolution', geminigenResolution);
     
     if (image) {
       // If image is base64, convert it
