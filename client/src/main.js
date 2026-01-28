@@ -4576,16 +4576,15 @@ function attachVideoGenEventListeners() {
 
 // ============ VIDGEN2 EVENT LISTENERS ============
 function attachVidgen2EventListeners() {
-  // Load history and rooms on page load (only once)
-  if (!state.vidgen2._initialized) {
-    state.vidgen2._initialized = true;
-    Promise.all([
-      loadVidgen2History(),
-      loadVidgen2Rooms()
-    ]).then(() => {
-      state.vidgen2._initialized = false; // Allow reload on next visit
-      render();
-    });
+  // Load rooms if not loaded yet
+  if (state.vidgen2RoomManager.rooms.length === 0 && !state.vidgen2RoomManager.isLoading) {
+    loadVidgen2Rooms().then(() => render());
+  }
+  
+  // Load history if not loaded yet
+  if (state.vidgen2.generatedVideos.length === 0 && !state.vidgen2._historyLoaded) {
+    state.vidgen2._historyLoaded = true;
+    loadVidgen2History().then(() => render());
   }
   
   const uploadZone = document.getElementById('vidgen2UploadZone');
