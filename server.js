@@ -4556,12 +4556,13 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // Poll GeminiGen.ai for status
+    // Poll GeminiGen.ai for status using history endpoint
+    // Docs: https://docs.geminigen.ai/resources/history-apis#get-specific-generation-history
     const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
     if (!roomKeyResult.error) {
       try {
         const statusResponse = await axios.get(
-          `https://api.geminigen.ai/uapi/v1/status/${taskId}`,
+          `https://api.geminigen.ai/uapi/v1/history/${taskId}`,
           {
             headers: {
               'Accept': 'application/json',
@@ -4573,24 +4574,31 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
         
         const data = statusResponse.data;
         
-        if (data.status === 2 || data.status_desc === 'completed') {
+        // Status: 1 = Processing, 2 = Completed, 3 = Failed
+        if (data.status === 2) {
+          // Get video URL from generated_video array or generate_result
+          let videoUrl = data.generate_result;
+          if (data.generated_video && data.generated_video.length > 0) {
+            videoUrl = data.generated_video[0].video_url || data.generated_video[0].video_uri;
+          }
+          
           // Update local database
           await pool.query(
             'UPDATE vidgen2_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
-            ['completed', data.media_url || data.video_url, taskId]
+            ['completed', videoUrl, taskId]
           );
           
           return res.json({
             status: 'completed',
-            videoUrl: data.media_url || data.video_url,
+            videoUrl: videoUrl,
             model: task.model
           });
         }
         
-        if (data.status === -1 || data.error_message) {
+        if (data.status === 3 || data.error_message) {
           await pool.query(
             'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-            ['failed', data.error_message, taskId]
+            ['failed', data.error_message || 'Generation failed', taskId]
           );
           
           return res.json({
@@ -4599,10 +4607,11 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           });
         }
         
+        // Status 1 = Processing
         return res.json({
           status: 'processing',
           progress: data.status_percentage || 0,
-          message: 'Video sedang diproses...'
+          message: data.status_desc || 'Video sedang diproses...'
         });
         
       } catch (pollError) {
