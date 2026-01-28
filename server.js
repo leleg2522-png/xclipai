@@ -4429,20 +4429,19 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     }
     
     // Model mapping for Poyo.ai
-    // Models: sora-2, sora-2-pro, veo-3.1, veo-3.1-fast, wan-2.1, hailuo-02
+    // Models: sora-2 (10s/15s), veo-3.1-fast
     // Endpoint: https://api.poyo.ai/api/generate/submit
-    const modelMap = {
-      'sora-2': 'sora-2',
-      'sora-2-pro': 'sora-2-pro',
-      'veo-3.1': 'veo-3.1',
-      'veo-3.1-fast': 'veo-3.1-fast',
-      'hailuo-02': 'hailuo-02'
+    const modelConfig = {
+      'sora-2-10s': { apiModel: 'sora-2', duration: 10 },
+      'sora-2-15s': { apiModel: 'sora-2', duration: 15 },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 }
     };
-    const poyoModel = modelMap[model] || 'sora-2';
+    const config = modelConfig[model] || modelConfig['sora-2-10s'];
+    const poyoModel = config.apiModel;
     const apiEndpoint = 'https://api.poyo.ai/api/generate/submit';
     
-    // Duration: 10 or 15 seconds for sora-2
-    const videoDuration = model === 'sora-2-pro' ? 15 : (duration || 10);
+    // Duration based on model selection
+    const videoDuration = config.duration;
     
     // Aspect ratio: 16:9 or 9:16
     const poyoAspectRatio = aspectRatio || '16:9';

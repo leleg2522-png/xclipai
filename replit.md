@@ -18,7 +18,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
 - **Vidgen2 (Poyo.ai Video Generator)**: Video generation feature using Poyo.ai API with Sora 2, Sora 2 Pro, and Hailuo 02 models. Uses POYO_API_KEY or room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}). Features include:
   - Image-to-video conversion with AI models (text-to-video and image reference support)
-  - Models: Sora 2 (10-15s 720p), Sora 2 Pro (premium 1080p), Hailuo 02 (fast)
+  - Models: Sora 2 (10s), Sora 2 (15s), Veo 3.1 Fast (8s)
   - Aspect ratios: 16:9 (landscape), 9:16 (portrait)
   - Video history persistence in database
   - Real-time task status polling via Poyo.ai status API
