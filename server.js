@@ -4480,7 +4480,15 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       }
     );
     
-    const taskId = response.data.data?.task_id || response.data.task_id;
+    console.log(`[VIDGEN2] Poyo.ai response:`, JSON.stringify(response.data));
+    
+    // Handle various response formats from Poyo.ai
+    const taskId = response.data?.data?.task_id || 
+                   response.data?.task_id || 
+                   response.data?.data?.id || 
+                   response.data?.id ||
+                   response.data?.data?.uuid ||
+                   response.data?.uuid;
     
     // Save task to database
     await pool.query(`
