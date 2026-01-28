@@ -5788,6 +5788,11 @@ textarea.form-input {
 }
 
 /* Vidgen2 Video Gallery */
+.xmaker-preview .card-body {
+  background: var(--bg-dark);
+  min-height: auto;
+}
+
 .generated-videos-section {
   margin-top: var(--space-4);
 }
