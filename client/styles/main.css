@@ -5796,9 +5796,29 @@ textarea.form-input {
 }
 
 /* Vidgen2 Video Gallery - SOLID backgrounds to prevent gradient bleed */
-.xmaker-preview {
+/* Cover the entire page background with solid color */
+.container {
+  background: #0a0a0f !important;
   position: relative;
   z-index: 10;
+}
+
+.xmaker-layout {
+  background: #0a0a0f !important;
+  position: relative;
+  z-index: 11;
+}
+
+.xmaker-settings {
+  background: #0a0a0f !important;
+}
+
+.xmaker-preview {
+  background: #0a0a0f !important;
+  position: relative;
+  z-index: 10;
+  padding: 8px;
+  border-radius: 12px;
 }
 
 .xmaker-preview .glass-card,
@@ -5819,6 +5839,11 @@ textarea.form-input {
 
 .xmaker-preview .card-header {
   background: #14141e !important;
+}
+
+/* Empty preview state needs solid background too */
+.empty-preview {
+  background: #0a0a0f !important;
 }
 
 .video-card {
