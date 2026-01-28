@@ -2595,9 +2595,9 @@ select option {
 /* Xclip AI Animation */
 .xclip-ai-animation {
   position: relative;
-  width: 100px;
-  height: 100px;
-  margin: 0 auto var(--space-4);
+  width: 60px;
+  height: 60px;
+  margin: 0 auto var(--space-3);
 }
 
 .ai-logo-container {
@@ -2610,28 +2610,28 @@ select option {
 }
 
 .ai-core {
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   background: linear-gradient(135deg, var(--primary), var(--pink));
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 14px;
   font-weight: 900;
   color: white;
   z-index: 10;
-  box-shadow: 0 0 30px var(--primary-glow), 0 0 60px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(139, 92, 246, 0.3);
   animation: coreGlow 4s ease-in-out infinite;
 }
 
 @keyframes coreGlow {
   0%, 100% {
-    box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 25px var(--primary-glow), 0 0 50px rgba(139, 92, 246, 0.3);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 60px var(--primary-glow), 0 0 100px rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 35px var(--primary-glow), 0 0 60px rgba(139, 92, 246, 0.5);
     transform: scale(1.05);
   }
 }
@@ -2639,28 +2639,28 @@ select option {
 .ai-ring {
   position: absolute;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
 }
 
 .ai-ring.ring-1 {
-  width: 64px;
-  height: 64px;
+  width: 38px;
+  height: 38px;
   border-color: var(--primary);
   opacity: 0.6;
   animation: ringRotate 4s linear infinite, ringPulse 2s ease-in-out infinite;
 }
 
 .ai-ring.ring-2 {
-  width: 80px;
-  height: 80px;
+  width: 48px;
+  height: 48px;
   border-color: var(--accent);
   opacity: 0.4;
   animation: ringRotate 6s linear infinite reverse, ringPulse 2.5s ease-in-out infinite 0.5s;
 }
 
 .ai-ring.ring-3 {
-  width: 96px;
-  height: 96px;
+  width: 58px;
+  height: 58px;
   border-color: var(--pink);
   opacity: 0.3;
   animation: ringRotate 8s linear infinite, ringPulse 3s ease-in-out infinite 1s;
