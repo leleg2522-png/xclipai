@@ -1068,6 +1068,54 @@ async function loadVidgen2History() {
   }
 }
 
+// Load Video Gen history from database
+async function loadVideoGenHistory() {
+  try {
+    const response = await fetch(`${API_URL}/api/videogen/history`, { credentials: 'include' });
+    const data = await response.json();
+    
+    // Load completed videos (merge with existing, avoid duplicates)
+    if (data.videos && data.videos.length > 0) {
+      const existingTaskIds = new Set(state.videogen.generatedVideos.map(v => v.taskId));
+      data.videos.forEach(v => {
+        if (!existingTaskIds.has(v.taskId)) {
+          state.videogen.generatedVideos.push({
+            taskId: v.taskId,
+            url: v.url,
+            model: v.model,
+            createdAt: new Date(v.createdAt).getTime()
+          });
+        }
+      });
+      // Sort by createdAt desc
+      state.videogen.generatedVideos.sort((a, b) => b.createdAt - a.createdAt);
+    }
+    
+    // Load and resume polling for processing videos
+    if (data.processing && data.processing.length > 0) {
+      data.processing.forEach(task => {
+        // Check if already in tasks list
+        const existingTask = state.videogen.tasks.find(t => t.taskId === task.taskId);
+        if (!existingTask) {
+          // Add to tasks
+          const newTask = {
+            taskId: task.taskId,
+            model: task.model,
+            status: 'processing',
+            progress: 0,
+            createdAt: new Date(task.createdAt).getTime()
+          };
+          state.videogen.tasks.push(newTask);
+          // Resume polling for this task
+          pollVideoStatus(task.taskId, task.model);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Load videogen history error:', error);
+  }
+}
+
 async function joinVidgen2Room(roomId) {
   try {
     state.vidgen2RoomManager.isLoading = true;
@@ -4551,6 +4599,12 @@ async function generateXMakerImages() {
 }
 
 function attachVideoGenEventListeners() {
+  // Load history if not loaded yet
+  if (!state.videogen._historyLoaded) {
+    state.videogen._historyLoaded = true;
+    loadVideoGenHistory().then(() => render());
+  }
+  
   const uploadZone = document.getElementById('videoGenUploadZone');
   const fileInput = document.getElementById('videoGenImageInput');
   const removeBtn = document.getElementById('removeVideoGenImage');

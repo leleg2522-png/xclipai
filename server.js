@@ -2370,11 +2370,12 @@ app.get('/api/xclip-keys/tasks', async (req, res) => {
 // Get video generation history for current user
 app.get('/api/videogen/history', async (req, res) => {
   if (!req.session.userId) {
-    return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    return res.json({ videos: [], processing: [] });
   }
   
   try {
-    const result = await pool.query(
+    // Get completed videos
+    const completedResult = await pool.query(
       `SELECT task_id, model, status, video_url, created_at, completed_at
        FROM video_generation_tasks 
        WHERE user_id = $1 AND video_url IS NOT NULL AND status = 'completed'
@@ -2383,12 +2384,27 @@ app.get('/api/videogen/history', async (req, res) => {
       [req.session.userId]
     );
     
+    // Get processing videos (within last 30 minutes)
+    const processingResult = await pool.query(
+      `SELECT task_id, model, status, created_at
+       FROM video_generation_tasks 
+       WHERE user_id = $1 AND status = 'processing'
+       AND created_at > NOW() - INTERVAL '30 minutes'
+       ORDER BY created_at DESC`,
+      [req.session.userId]
+    );
+    
     res.json({ 
-      videos: result.rows.map(row => ({
+      videos: completedResult.rows.map(row => ({
         taskId: row.task_id,
         model: row.model,
         url: row.video_url,
         createdAt: row.completed_at || row.created_at
+      })),
+      processing: processingResult.rows.map(row => ({
+        taskId: row.task_id,
+        model: row.model,
+        createdAt: row.created_at
       }))
     });
     
