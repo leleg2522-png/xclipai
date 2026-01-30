@@ -2374,7 +2374,7 @@ app.get('/api/videogen/history', async (req, res) => {
   }
   
   try {
-    // Get completed videos
+    // Get completed videos (exclude deleted)
     const completedResult = await pool.query(
       `SELECT task_id, model, status, video_url, created_at, completed_at
        FROM video_generation_tasks 
@@ -2384,7 +2384,7 @@ app.get('/api/videogen/history', async (req, res) => {
       [req.session.userId]
     );
     
-    // Get processing videos (within last 30 minutes)
+    // Get processing videos (within last 30 minutes, exclude deleted)
     const processingResult = await pool.query(
       `SELECT task_id, model, status, created_at
        FROM video_generation_tasks 
@@ -2411,6 +2411,30 @@ app.get('/api/videogen/history', async (req, res) => {
   } catch (error) {
     console.error('Get video history error:', error);
     res.status(500).json({ error: 'Gagal mengambil history video' });
+  }
+});
+
+// Delete video from history (mark as deleted)
+app.delete('/api/videogen/history/:taskId', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+  }
+  
+  try {
+    const { taskId } = req.params;
+    
+    // Mark as deleted instead of actually deleting (soft delete)
+    await pool.query(
+      `UPDATE video_generation_tasks 
+       SET status = 'deleted' 
+       WHERE task_id = $1 AND user_id = $2`,
+      [taskId, req.session.userId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete video history error:', error);
+    res.status(500).json({ error: 'Gagal menghapus video' });
   }
 });
 

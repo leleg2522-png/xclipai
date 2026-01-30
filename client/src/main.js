@@ -5534,9 +5534,24 @@ async function pollVideoStatus(taskId, model) {
   setTimeout(poll, 1000);
 }
 
-function removeGeneratedVideo(index) {
+async function removeGeneratedVideo(index) {
+  const video = state.videogen.generatedVideos[index];
+  
+  // Remove from local state immediately
   state.videogen.generatedVideos.splice(index, 1);
   render();
+  
+  // Also delete from database if has taskId
+  if (video && video.taskId) {
+    try {
+      await fetch(`${API_URL}/api/videogen/history/${video.taskId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Failed to delete video from database:', error);
+    }
+  }
 }
 
 function saveGeneratedVideosToStorage() {
