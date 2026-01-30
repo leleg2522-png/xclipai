@@ -1654,11 +1654,31 @@ window.downloadVideo = async function(url, filename) {
   try {
     // Check if iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const safeName = (filename || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
     
     if (isIOS) {
-      // iOS: Open in new tab - user can long press to save
-      window.open(url, '_blank');
-      showToast('Tekan tahan video untuk menyimpan ke galeri', 'info');
+      // iOS: Use server proxy with proper download headers
+      showToast('Mempersiapkan download...', 'info');
+      const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
+      
+      // Create invisible iframe to trigger download without leaving page
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = proxyUrl;
+      document.body.appendChild(iframe);
+      
+      // Also open in new tab as backup
+      setTimeout(() => {
+        window.open(proxyUrl, '_blank');
+        showToast('File sedang diunduh. Cek folder Downloads.', 'success');
+      }, 500);
+      
+      // Clean up iframe after delay
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+      }, 10000);
       return;
     }
     
@@ -1673,7 +1693,7 @@ window.downloadVideo = async function(url, filename) {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = filename || 'video.mp4';
+        a.download = safeName + '.mp4';
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
@@ -1685,26 +1705,27 @@ window.downloadVideo = async function(url, filename) {
         return;
       }
     } catch (fetchError) {
-      console.log('Fetch failed, trying direct link method:', fetchError);
+      console.log('Fetch failed, trying proxy method:', fetchError);
     }
     
-    // Method 2: Direct link click (fallback for CORS-restricted URLs)
+    // Method 2: Use server proxy (for CORS-restricted URLs)
+    const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'video.mp4';
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.href = proxyUrl;
+    a.download = safeName + '.mp4';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => document.body.removeChild(a), 100);
-    showToast('Download dimulai! Jika tidak jalan, klik kanan video > Save Video As', 'info');
+    showToast('Download dimulai!', 'success');
     
   } catch (error) {
     console.error('Download error:', error);
-    // Final fallback: open in new tab
-    window.open(url, '_blank');
-    showToast('Tekan tahan video untuk menyimpan', 'info');
+    // Final fallback: use proxy in new tab
+    const safeName = (filename || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
+    window.open(proxyUrl, '_blank');
+    showToast('Cek folder Downloads', 'info');
   }
 };
 

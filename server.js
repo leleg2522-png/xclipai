@@ -2426,6 +2426,53 @@ app.get('/api/videogen/history', async (req, res) => {
   }
 });
 
+// Proxy download endpoint for iOS (streams video through server with proper headers)
+app.get('/api/download-video', async (req, res) => {
+  const { url, filename } = req.query;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'URL diperlukan' });
+  }
+  
+  try {
+    const axios = require('axios');
+    const response = await axios({
+      method: 'GET',
+      url: decodeURIComponent(url),
+      responseType: 'stream',
+      timeout: 60000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
+      }
+    });
+    
+    const safeName = (filename || 'video').replace(/[^a-zA-Z0-9_-]/g, '_') + '.mp4';
+    
+    // Set headers for download
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    // Pipe the video stream to response
+    response.data.pipe(res);
+    
+    response.data.on('error', (err) => {
+      console.error('Stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Gagal download video' });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Download proxy error:', error.message);
+    res.status(500).json({ error: 'Gagal download video: ' + error.message });
+  }
+});
+
 // Delete video from history (mark as deleted)
 app.delete('/api/videogen/history/:taskId', async (req, res) => {
   if (!req.session.userId) {
