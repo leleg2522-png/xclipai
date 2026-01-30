@@ -1645,7 +1645,7 @@ function formatSize(bytes) {
   return mb < 1000 ? `${mb.toFixed(1)} MB` : `${(mb / 1024).toFixed(2)} GB`;
 }
 
-// Download video function that works on iOS Safari
+// Download video function that works on all devices
 window.downloadVideo = async function(url, filename) {
   try {
     // Check if iOS
@@ -1655,24 +1655,50 @@ window.downloadVideo = async function(url, filename) {
       // iOS: Open in new tab - user can long press to save
       window.open(url, '_blank');
       showToast('Tekan tahan video untuk menyimpan ke galeri', 'info');
-    } else {
-      // Desktop/Android: Try fetch + blob download
-      showToast('Memulai download...', 'info');
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'video.mp4';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      showToast('Download dimulai!', 'success');
+      return;
     }
+    
+    // Desktop/Android: Try multiple download methods
+    showToast('Memulai download...', 'info');
+    
+    // Method 1: Try fetch + blob (works for same-origin and CORS-enabled URLs)
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'video.mp4';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 100);
+        showToast('Download berhasil!', 'success');
+        return;
+      }
+    } catch (fetchError) {
+      console.log('Fetch failed, trying direct link method:', fetchError);
+    }
+    
+    // Method 2: Direct link click (fallback for CORS-restricted URLs)
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'video.mp4';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => document.body.removeChild(a), 100);
+    showToast('Download dimulai! Jika tidak jalan, klik kanan video > Save Video As', 'info');
+    
   } catch (error) {
     console.error('Download error:', error);
-    // Fallback: open in new tab
+    // Final fallback: open in new tab
     window.open(url, '_blank');
     showToast('Tekan tahan video untuk menyimpan', 'info');
   }
