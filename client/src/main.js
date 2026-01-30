@@ -5989,24 +5989,34 @@ function handleSSEEvent(data) {
       break;
       
     case 'video_completed':
-      // Instantly update UI when video is ready
+      console.log('[SSE] Video completed event received:', data.taskId, data.videoUrl);
+      // ALWAYS add to generated videos (even if task not in state - handles refresh scenario)
+      const videoExists = state.videogen.generatedVideos.some(v => v.taskId === data.taskId);
+      if (!videoExists && data.videoUrl) {
+        state.videogen.generatedVideos.unshift({ 
+          url: data.videoUrl, 
+          createdAt: Date.now(), 
+          taskId: data.taskId,
+          model: data.model || 'unknown'
+        });
+        console.log('[SSE] Added video to generatedVideos:', data.taskId);
+      }
+      
+      // Also update/remove from tasks array if exists
       const completedTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
       if (completedTask) {
         completedTask.status = 'completed';
         completedTask.videoUrl = data.videoUrl;
-        // Check if video with this taskId already exists (prevent duplicates from polling)
-        const videoExists = state.videogen.generatedVideos.some(v => v.taskId === data.taskId);
-        if (!videoExists) {
-          state.videogen.generatedVideos.unshift({ 
-            url: data.videoUrl, 
-            createdAt: Date.now(), 
-            taskId: data.taskId 
-          });
-        }
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
-        showToast('Video berhasil di-generate! (via webhook)', 'success');
-        render();
       }
+      
+      // Clear polling flag if no more active tasks
+      if (state.videogen.tasks.length === 0) {
+        state.videogen.isPolling = false;
+      }
+      
+      showToast('Video berhasil di-generate!', 'success');
+      render(true); // Force full re-render
       break;
       
     case 'video_failed':
