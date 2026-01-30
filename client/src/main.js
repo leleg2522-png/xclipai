@@ -2861,16 +2861,16 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                 <div class="generated-videos-list">
                   ${state.videogen.generatedVideos.map((video, idx) => `
                     <div class="video-result">
-                      <video src="${video.url}" controls class="generated-video" ${idx === 0 ? 'autoplay' : ''} loop></video>
+                      <video src="${video.url}" controls playsinline class="generated-video" ${idx === 0 ? 'autoplay' : ''} loop></video>
                       <div class="video-actions">
-                        <a href="${video.url}" download="xclip-video-${video.createdAt}.mp4" class="btn btn-primary btn-sm">
+                        <button onclick="downloadVideo('${video.url}', 'xclip-video-${idx}.mp4')" class="btn btn-primary btn-sm">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="7 10 12 15 17 10"/>
                             <line x1="12" y1="15" x2="12" y2="3"/>
                           </svg>
                           Download
-                        </a>
+                        </button>
                         <button class="btn btn-secondary btn-sm" onclick="removeGeneratedVideo(${idx})">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"/>
