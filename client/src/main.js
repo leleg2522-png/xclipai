@@ -1093,10 +1093,12 @@ async function loadVideoGenHistory() {
     
     // Load and resume polling for processing videos
     if (data.processing && data.processing.length > 0) {
+      console.log('[HISTORY] Found processing tasks:', data.processing);
       data.processing.forEach(task => {
         // Check if already in tasks list
         const existingTask = state.videogen.tasks.find(t => t.taskId === task.taskId);
         if (!existingTask) {
+          console.log('[HISTORY] Resuming poll for task:', task.taskId, task.model);
           // Add to tasks
           const newTask = {
             taskId: task.taskId,
@@ -1110,6 +1112,8 @@ async function loadVideoGenHistory() {
           pollVideoStatus(task.taskId, task.model);
         }
       });
+    } else {
+      console.log('[HISTORY] No processing tasks to resume');
     }
   } catch (error) {
     console.error('Load videogen history error:', error);
@@ -5466,7 +5470,12 @@ async function pollVideoStatus(taskId, model) {
   const poll = async () => {
     try {
       const task = state.videogen.tasks.find(t => t.taskId === taskId);
-      if (!task) return;
+      if (!task) {
+        console.log(`[POLL] Task ${taskId} not found in state, stopping polling`);
+        return;
+      }
+      
+      console.log(`[POLL] Checking task ${taskId}, attempt ${attempts + 1}/${maxAttempts}`);
       
       const headers = { 
         'Content-Type': 'application/json'
@@ -5494,6 +5503,7 @@ async function pollVideoStatus(taskId, model) {
       }
       
       const data = await response.json();
+      console.log(`[POLL] Response for ${taskId}:`, data);
       
       const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
       task.elapsed = elapsedSec;
