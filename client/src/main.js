@@ -1032,12 +1032,36 @@ async function loadVidgen2History() {
   try {
     const response = await fetch(`${API_URL}/api/vidgen2/history`, { credentials: 'include' });
     const data = await response.json();
+    
+    // Load completed videos
     if (data.videos) {
       state.vidgen2.generatedVideos = data.videos.map(v => ({
+        id: v.id,
+        taskId: v.task_id,
         url: v.video_url,
         model: v.model,
+        prompt: v.prompt,
         createdAt: new Date(v.created_at)
       }));
+    }
+    
+    // Load and resume polling for processing videos
+    if (data.processing && data.processing.length > 0) {
+      data.processing.forEach(task => {
+        // Check if already in tasks list
+        const existingTask = state.vidgen2.tasks.find(t => t.taskId === task.task_id);
+        if (!existingTask) {
+          // Add to tasks and resume polling
+          state.vidgen2.tasks.push({
+            taskId: task.task_id,
+            model: task.model,
+            prompt: task.prompt,
+            createdAt: new Date(task.created_at)
+          });
+          // Resume polling for this task
+          pollVidgen2Task(task.task_id);
+        }
+      });
     }
   } catch (error) {
     console.error('Load vidgen2 history error:', error);

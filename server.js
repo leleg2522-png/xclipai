@@ -4697,18 +4697,30 @@ app.post('/api/vidgen2/webhook', async (req, res) => {
 // Get Vidgen2 history
 app.get('/api/vidgen2/history', async (req, res) => {
   if (!req.session.userId) {
-    return res.json({ videos: [] });
+    return res.json({ videos: [], processing: [] });
   }
   
   try {
-    const result = await pool.query(`
+    // Get completed videos
+    const completedResult = await pool.query(`
       SELECT * FROM vidgen2_tasks 
       WHERE user_id = $1 AND status = 'completed'
       ORDER BY created_at DESC
       LIMIT 50
     `, [req.session.userId]);
     
-    res.json({ videos: result.rows });
+    // Get processing videos (within last 30 minutes to avoid stale entries)
+    const processingResult = await pool.query(`
+      SELECT * FROM vidgen2_tasks 
+      WHERE user_id = $1 AND status = 'processing' 
+      AND created_at > NOW() - INTERVAL '30 minutes'
+      ORDER BY created_at DESC
+    `, [req.session.userId]);
+    
+    res.json({ 
+      videos: completedResult.rows,
+      processing: processingResult.rows
+    });
   } catch (error) {
     console.error('[VIDGEN2] Get history error:', error);
     res.status(500).json({ error: 'Failed to get history' });
