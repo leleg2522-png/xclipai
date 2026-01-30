@@ -1573,6 +1573,39 @@ function formatSize(bytes) {
   return mb < 1000 ? `${mb.toFixed(1)} MB` : `${(mb / 1024).toFixed(2)} GB`;
 }
 
+// Download video function that works on iOS Safari
+window.downloadVideo = async function(url, filename) {
+  try {
+    // Check if iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS) {
+      // iOS: Open in new tab - user can long press to save
+      window.open(url, '_blank');
+      showToast('Tekan tahan video untuk menyimpan ke galeri', 'info');
+    } else {
+      // Desktop/Android: Try fetch + blob download
+      showToast('Memulai download...', 'info');
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'video.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      showToast('Download dimulai!', 'success');
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    // Fallback: open in new tab
+    window.open(url, '_blank');
+    showToast('Tekan tahan video untuk menyimpan', 'info');
+  }
+};
+
 function showToast(message, type = 'info') {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -2360,14 +2393,14 @@ function renderVidgen2Videos() {
     html += '<div class="videos-header">Video yang Dihasilkan (' + state.vidgen2.generatedVideos.length + ')</div>';
     html += '<div class="videos-grid">';
     
-    state.vidgen2.generatedVideos.forEach(function(video) {
+    state.vidgen2.generatedVideos.forEach(function(video, index) {
       html += '<div class="video-card">';
-      html += '<div class="video-wrapper"><video src="' + video.url + '" controls></video></div>';
+      html += '<div class="video-wrapper"><video src="' + video.url + '" controls playsinline></video></div>';
       html += '<div class="video-card-footer">';
       html += '<span class="video-model-tag">' + (video.model || 'AI').toUpperCase() + '</span>';
-      html += '<a href="' + video.url + '" download class="btn btn-sm btn-secondary">';
+      html += '<button onclick="downloadVideo(\'' + video.url + '\', \'vidgen2-' + index + '.mp4\')" class="btn btn-sm btn-secondary">';
       html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-      html += ' Download</a>';
+      html += ' Download</button>';
       html += '</div></div>';
     });
     
