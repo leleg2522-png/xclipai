@@ -5469,13 +5469,18 @@ async function pollVideoStatus(taskId, model) {
       if (!task) return;
       
       const headers = { 
-        'Content-Type': 'application/json',
-        'X-Xclip-Key': state.videogen.customApiKey
+        'Content-Type': 'application/json'
       };
+      
+      // Add API key if available
+      if (state.videogen.customApiKey) {
+        headers['X-Xclip-Key'] = state.videogen.customApiKey;
+      }
       
       const response = await fetch(`${API_URL}/api/videogen/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        credentials: 'include' // Allow session-based auth as fallback
       });
       
       if (!response.ok) {

@@ -1806,23 +1806,32 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     const { taskId } = req.params;
     const { model } = req.query;
     
-    if (!xclipApiKey) {
-      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    let keyInfo = null;
+    let taskResult = null;
+    
+    // Try API key authentication first
+    if (xclipApiKey) {
+      keyInfo = await validateXclipApiKey(xclipApiKey);
+      if (keyInfo) {
+        taskResult = await pool.query(
+          'SELECT * FROM video_generation_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+          [taskId, keyInfo.id]
+        );
+      }
     }
     
-    const keyInfo = await validateXclipApiKey(xclipApiKey);
-    
-    if (!keyInfo) {
-      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    // Fallback to session authentication (for resumed polling after refresh)
+    if (!taskResult || taskResult.rows.length === 0) {
+      if (req.session.userId) {
+        taskResult = await pool.query(
+          'SELECT * FROM video_generation_tasks WHERE task_id = $1 AND user_id = $2',
+          [taskId, req.session.userId]
+        );
+      }
     }
     
-    const taskResult = await pool.query(
-      'SELECT * FROM video_generation_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
-      [taskId, keyInfo.id]
-    );
-    
-    if (taskResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Task tidak ditemukan atau bukan milik API key ini' });
+    if (!taskResult || taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan' });
     }
     
     const savedTask = taskResult.rows[0];
@@ -1835,8 +1844,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       keySource = savedTask.used_key_name;
     }
     
-    // PRIORITY 2: Fallback to room keys using saved index
-    if (!freepikApiKey && keyInfo.room_id) {
+    // PRIORITY 2: Fallback to room keys using saved index (only if keyInfo available)
+    if (!freepikApiKey && keyInfo && keyInfo.room_id) {
       const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
       const keys = keyNames.map(name => ({ key: process.env[name], name })).filter(k => k.key);
       
@@ -1851,10 +1860,13 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // PRIORITY 3: User's personal API key
     if (!freepikApiKey) {
-      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-        freepikApiKey = userResult.rows[0].freepik_api_key;
-        keySource = 'personal';
+      const userId = keyInfo?.user_id || savedTask.user_id || req.session.userId;
+      if (userId) {
+        const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [userId]);
+        if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+          freepikApiKey = userResult.rows[0].freepik_api_key;
+          keySource = 'personal';
+        }
       }
     }
     
