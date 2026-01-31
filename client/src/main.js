@@ -5781,85 +5781,22 @@ async function uploadVideo(file) {
     return;
   }
   
-  console.log('[UPLOAD] Starting upload:', file.name, 'size:', (file.size / 1024 / 1024).toFixed(2) + 'MB');
-  
-  const formData = new FormData();
-  formData.append('video', file);
+  const fileSizeMB = file.size / 1024 / 1024;
+  console.log('[UPLOAD] Starting upload:', file.name, 'size:', fileSizeMB.toFixed(2) + 'MB');
   
   state.uploadProgress = 0;
   state.isUploading = true;
   render();
   
   try {
-    const xhr = new XMLHttpRequest();
-    
-    // Set longer timeout for large files (5 minutes)
-    xhr.timeout = 300000;
-    
-    const uploadPromise = new Promise((resolve, reject) => {
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          state.uploadProgress = Math.round((e.loaded / e.total) * 100);
-          console.log('[UPLOAD] Progress:', state.uploadProgress + '%');
-          updateUploadProgressUI();
-        }
-      });
-      
-      xhr.addEventListener('load', () => {
-        console.log('[UPLOAD] Load event, status:', xhr.status);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText));
-          } catch (e) {
-            console.error('[UPLOAD] Parse error:', e, 'Response:', xhr.responseText);
-            reject(new Error('Server response invalid'));
-          }
-        } else {
-          console.error('[UPLOAD] Error status:', xhr.status, 'Response:', xhr.responseText);
-          let errorMsg = 'Upload failed';
-          try {
-            const errData = JSON.parse(xhr.responseText);
-            errorMsg = errData.error || errData.message || errorMsg;
-          } catch (e) {
-            errorMsg = xhr.responseText || 'Upload failed (status ' + xhr.status + ')';
-          }
-          reject(new Error(errorMsg));
-        }
-      });
-      
-      xhr.addEventListener('error', (e) => {
-        console.error('[UPLOAD] XHR error event:', e);
-        reject(new Error('Koneksi terputus. Coba lagi.'));
-      });
-      xhr.addEventListener('abort', () => {
-        console.log('[UPLOAD] Aborted');
-        reject(new Error('Upload dibatalkan'));
-      });
-      xhr.addEventListener('timeout', () => {
-        console.error('[UPLOAD] Timeout');
-        reject(new Error('Upload timeout. Coba file yang lebih kecil.'));
-      });
-    });
-    
-    xhr.open('POST', `${API_URL}/api/upload`);
-    xhr.withCredentials = true; // Send cookies for session
-    xhr.send(formData);
-    
-    const data = await uploadPromise;
-    console.log('[UPLOAD] Success:', data);
-    
-    state.video = {
-      url: data.videoUrl,
-      filename: data.filename,
-      metadata: data.metadata
-    };
-    state.jobId = data.jobId;
-    state.status = 'uploaded';
-    state.isUploading = false;
-    state.uploadProgress = 0;
-    
-    showToast('Video uploaded successfully!', 'success');
-    render();
+    // Use chunked upload for files > 20MB
+    if (file.size > 20 * 1024 * 1024) {
+      console.log('[UPLOAD] Using chunked upload');
+      await uploadVideoChunked(file);
+    } else {
+      console.log('[UPLOAD] Using single upload');
+      await uploadVideoSingle(file);
+    }
   } catch (error) {
     console.error('[UPLOAD] Error:', error);
     state.isUploading = false;
@@ -5867,6 +5804,154 @@ async function uploadVideo(file) {
     showToast('Gagal upload: ' + error.message, 'error');
     render();
   }
+}
+
+async function uploadVideoChunked(file) {
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  
+  console.log('[CHUNK] Total chunks:', totalChunks);
+  
+  // Initialize upload
+  const initRes = await fetch(`${API_URL}/api/upload/init`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      filename: file.name,
+      fileSize: file.size,
+      totalChunks
+    })
+  });
+  
+  if (!initRes.ok) {
+    throw new Error('Gagal memulai upload');
+  }
+  
+  const { uploadId } = await initRes.json();
+  console.log('[CHUNK] Upload ID:', uploadId);
+  
+  // Upload chunks sequentially
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+    
+    const formData = new FormData();
+    formData.append('chunk', chunk, `chunk_${i}`);
+    formData.append('uploadId', uploadId);
+    formData.append('chunkIndex', i.toString());
+    
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const res = await fetch(`${API_URL}/api/upload/chunk`, {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+        
+        if (!res.ok) {
+          throw new Error(`Chunk ${i} gagal`);
+        }
+        
+        const result = await res.json();
+        state.uploadProgress = result.progress;
+        console.log('[CHUNK] Progress:', result.progress + '%');
+        updateUploadProgressUI();
+        break;
+      } catch (err) {
+        retries--;
+        if (retries === 0) throw err;
+        console.log(`[CHUNK] Retry chunk ${i}, remaining:`, retries);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+  }
+  
+  // Complete upload
+  const completeRes = await fetch(`${API_URL}/api/upload/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ uploadId })
+  });
+  
+  if (!completeRes.ok) {
+    const err = await completeRes.json();
+    throw new Error(err.error || 'Gagal menyelesaikan upload');
+  }
+  
+  const data = await completeRes.json();
+  console.log('[CHUNK] Complete:', data);
+  
+  state.video = {
+    url: data.videoUrl,
+    filename: data.filename,
+    metadata: data.metadata
+  };
+  state.jobId = data.jobId;
+  state.status = 'uploaded';
+  state.isUploading = false;
+  state.uploadProgress = 0;
+  
+  showToast('Video uploaded successfully!', 'success');
+  render();
+}
+
+async function uploadVideoSingle(file) {
+  const formData = new FormData();
+  formData.append('video', file);
+  
+  const xhr = new XMLHttpRequest();
+  xhr.timeout = 60000; // 1 minute for small files
+  
+  const uploadPromise = new Promise((resolve, reject) => {
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        state.uploadProgress = Math.round((e.loaded / e.total) * 100);
+        console.log('[UPLOAD] Progress:', state.uploadProgress + '%');
+        updateUploadProgressUI();
+      }
+    });
+    
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        let errorMsg = 'Upload failed';
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          errorMsg = errData.error || errorMsg;
+        } catch (e) {}
+        reject(new Error(errorMsg));
+      }
+    });
+    
+    xhr.addEventListener('error', () => reject(new Error('Koneksi terputus')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload dibatalkan')));
+    xhr.addEventListener('timeout', () => reject(new Error('Timeout')));
+  });
+  
+  xhr.open('POST', `${API_URL}/api/upload`);
+  xhr.withCredentials = true;
+  xhr.send(formData);
+  
+  const data = await uploadPromise;
+  console.log('[UPLOAD] Success:', data);
+  
+  state.video = {
+    url: data.videoUrl,
+    filename: data.filename,
+    metadata: data.metadata
+  };
+  state.jobId = data.jobId;
+  state.status = 'uploaded';
+  state.isUploading = false;
+  state.uploadProgress = 0;
+  
+  showToast('Video uploaded successfully!', 'success');
+  render();
 }
 
 function updateUploadProgressUI() {

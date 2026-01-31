@@ -416,6 +416,151 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
   }
 }
 
+// Chunked upload storage
+const chunkedUploads = new Map();
+
+// Initialize chunked upload
+app.post('/api/upload/init', async (req, res) => {
+  try {
+    const { filename, fileSize, totalChunks } = req.body;
+    const uploadId = uuidv4();
+    const ext = path.extname(filename);
+    const tempFilename = `${uploadId}${ext}`;
+    const uploadDir = path.join(__dirname, 'uploads');
+    
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    chunkedUploads.set(uploadId, {
+      filename,
+      tempFilename,
+      fileSize,
+      totalChunks,
+      receivedChunks: new Set(),
+      filePath: path.join(uploadDir, tempFilename),
+      createdAt: Date.now()
+    });
+    
+    console.log(`[CHUNK] Init upload: ${uploadId}, size: ${(fileSize/1024/1024).toFixed(2)}MB, chunks: ${totalChunks}`);
+    
+    res.json({ uploadId });
+  } catch (error) {
+    console.error('Chunk init error:', error);
+    res.status(500).json({ error: 'Failed to initialize upload' });
+  }
+});
+
+// Receive chunk
+app.post('/api/upload/chunk', upload.single('chunk'), async (req, res) => {
+  try {
+    const { uploadId, chunkIndex } = req.body;
+    const upload = chunkedUploads.get(uploadId);
+    
+    if (!upload) {
+      return res.status(404).json({ error: 'Upload not found' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No chunk data' });
+    }
+    
+    // Read chunk and append to file
+    const chunkData = fs.readFileSync(req.file.path);
+    const chunkNum = parseInt(chunkIndex);
+    
+    // Write chunk at correct position
+    const fd = fs.openSync(upload.filePath, chunkNum === 0 ? 'w' : 'r+');
+    const chunkSize = 5 * 1024 * 1024; // 5MB
+    fs.writeSync(fd, chunkData, 0, chunkData.length, chunkNum * chunkSize);
+    fs.closeSync(fd);
+    
+    // Delete temp chunk file
+    fs.unlinkSync(req.file.path);
+    
+    upload.receivedChunks.add(chunkNum);
+    
+    console.log(`[CHUNK] Received ${chunkNum + 1}/${upload.totalChunks} for ${uploadId}`);
+    
+    res.json({ 
+      received: chunkNum,
+      total: upload.totalChunks,
+      progress: Math.round((upload.receivedChunks.size / upload.totalChunks) * 100)
+    });
+  } catch (error) {
+    console.error('Chunk upload error:', error);
+    res.status(500).json({ error: 'Failed to upload chunk' });
+  }
+});
+
+// Complete chunked upload
+app.post('/api/upload/complete', async (req, res) => {
+  try {
+    const { uploadId } = req.body;
+    const upload = chunkedUploads.get(uploadId);
+    
+    if (!upload) {
+      return res.status(404).json({ error: 'Upload not found' });
+    }
+    
+    if (upload.receivedChunks.size !== upload.totalChunks) {
+      return res.status(400).json({ 
+        error: `Missing chunks: ${upload.receivedChunks.size}/${upload.totalChunks}` 
+      });
+    }
+    
+    // Truncate file to actual size (remove padding from last chunk)
+    fs.truncateSync(upload.filePath, upload.fileSize);
+    
+    const jobId = uuidv4();
+    const videoUrl = `/uploads/${upload.tempFilename}`;
+    
+    const metadata = await getVideoMetadata(upload.filePath);
+    
+    jobs.set(jobId, {
+      id: jobId,
+      status: 'uploaded',
+      videoPath: upload.filePath,
+      videoUrl,
+      filename: upload.filename,
+      metadata,
+      clips: [],
+      progress: 0
+    });
+    
+    chunkedUploads.delete(uploadId);
+    
+    console.log(`[CHUNK] Complete: ${uploadId} -> job ${jobId}`);
+    
+    res.json({
+      jobId,
+      videoUrl,
+      filename: upload.filename,
+      metadata
+    });
+  } catch (error) {
+    console.error('Chunk complete error:', error);
+    res.status(500).json({ error: 'Failed to complete upload: ' + error.message });
+  }
+});
+
+// Cleanup old chunked uploads (older than 1 hour)
+setInterval(() => {
+  const now = Date.now();
+  for (const [uploadId, upload] of chunkedUploads) {
+    if (now - upload.createdAt > 3600000) {
+      try {
+        if (fs.existsSync(upload.filePath)) {
+          fs.unlinkSync(upload.filePath);
+        }
+      } catch (e) {}
+      chunkedUploads.delete(uploadId);
+      console.log(`[CHUNK] Cleaned up stale upload: ${uploadId}`);
+    }
+  }
+}, 300000);
+
+// Original single upload (kept for small files)
 app.post('/api/upload', upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
