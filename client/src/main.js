@@ -5781,6 +5781,8 @@ async function uploadVideo(file) {
     return;
   }
   
+  console.log('[UPLOAD] Starting upload:', file.name, 'size:', (file.size / 1024 / 1024).toFixed(2) + 'MB');
+  
   const formData = new FormData();
   formData.append('video', file);
   
@@ -5791,30 +5793,60 @@ async function uploadVideo(file) {
   try {
     const xhr = new XMLHttpRequest();
     
+    // Set longer timeout for large files (5 minutes)
+    xhr.timeout = 300000;
+    
     const uploadPromise = new Promise((resolve, reject) => {
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           state.uploadProgress = Math.round((e.loaded / e.total) * 100);
+          console.log('[UPLOAD] Progress:', state.uploadProgress + '%');
           updateUploadProgressUI();
         }
       });
       
       xhr.addEventListener('load', () => {
+        console.log('[UPLOAD] Load event, status:', xhr.status);
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText));
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            console.error('[UPLOAD] Parse error:', e, 'Response:', xhr.responseText);
+            reject(new Error('Server response invalid'));
+          }
         } else {
-          reject(new Error(xhr.responseText || 'Upload failed'));
+          console.error('[UPLOAD] Error status:', xhr.status, 'Response:', xhr.responseText);
+          let errorMsg = 'Upload failed';
+          try {
+            const errData = JSON.parse(xhr.responseText);
+            errorMsg = errData.error || errData.message || errorMsg;
+          } catch (e) {
+            errorMsg = xhr.responseText || 'Upload failed (status ' + xhr.status + ')';
+          }
+          reject(new Error(errorMsg));
         }
       });
       
-      xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-      xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+      xhr.addEventListener('error', (e) => {
+        console.error('[UPLOAD] XHR error event:', e);
+        reject(new Error('Koneksi terputus. Coba lagi.'));
+      });
+      xhr.addEventListener('abort', () => {
+        console.log('[UPLOAD] Aborted');
+        reject(new Error('Upload dibatalkan'));
+      });
+      xhr.addEventListener('timeout', () => {
+        console.error('[UPLOAD] Timeout');
+        reject(new Error('Upload timeout. Coba file yang lebih kecil.'));
+      });
     });
     
     xhr.open('POST', `${API_URL}/api/upload`);
+    xhr.withCredentials = true; // Send cookies for session
     xhr.send(formData);
     
     const data = await uploadPromise;
+    console.log('[UPLOAD] Success:', data);
     
     state.video = {
       url: data.videoUrl,
@@ -5829,10 +5861,10 @@ async function uploadVideo(file) {
     showToast('Video uploaded successfully!', 'success');
     render();
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('[UPLOAD] Error:', error);
     state.isUploading = false;
     state.uploadProgress = 0;
-    showToast('Failed to upload video: ' + error.message, 'error');
+    showToast('Gagal upload: ' + error.message, 'error');
     render();
   }
 }
