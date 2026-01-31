@@ -187,9 +187,13 @@ app.use('/processed', express.static(path.join(__dirname, 'processed')));
 
 // Handle common HTTP errors gracefully
 app.use((err, req, res, next) => {
-  // Range error for missing files
-  if (err.status === 416) {
-    return res.status(404).json({ error: 'File tidak ditemukan atau sudah dihapus' });
+  // Range error for missing/deleted files - don't spam logs
+  if (err.status === 416 || err.name === 'RangeNotSatisfiableError') {
+    console.log('File not found or range error (normal for deleted clips)');
+    if (!res.headersSent) {
+      return res.status(404).json({ error: 'File tidak ditemukan atau sudah dihapus' });
+    }
+    return;
   }
   
   // Request aborted - this is normal when client cancels, don't log as error
