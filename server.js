@@ -185,11 +185,19 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 }));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
 
-// Handle RangeNotSatisfiableError for missing files
+// Handle common HTTP errors gracefully
 app.use((err, req, res, next) => {
+  // Range error for missing files
   if (err.status === 416) {
     return res.status(404).json({ error: 'File tidak ditemukan atau sudah dihapus' });
   }
+  
+  // Request aborted - this is normal when client cancels, don't log as error
+  if (err.type === 'request.aborted' || err.code === 'ECONNRESET' || err.message === 'request aborted') {
+    console.log('Request aborted by client (normal)');
+    return; // Don't send response, connection is already closed
+  }
+  
   next(err);
 });
 
