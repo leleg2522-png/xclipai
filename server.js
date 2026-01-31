@@ -2434,13 +2434,24 @@ app.get('/api/download-video', async (req, res) => {
     return res.status(400).json({ error: 'URL diperlukan' });
   }
   
+  let streamClosed = false;
+  
+  // Handle client disconnect gracefully
+  req.on('close', () => {
+    streamClosed = true;
+  });
+  
+  res.on('close', () => {
+    streamClosed = true;
+  });
+  
   try {
     const axios = require('axios');
     const response = await axios({
       method: 'GET',
       url: decodeURIComponent(url),
       responseType: 'stream',
-      timeout: 60000,
+      timeout: 120000, // 2 minutes for large videos
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
       }
@@ -2452,6 +2463,7 @@ app.get('/api/download-video', async (req, res) => {
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
     
     if (response.headers['content-length']) {
       res.setHeader('Content-Length', response.headers['content-length']);
@@ -2461,15 +2473,33 @@ app.get('/api/download-video', async (req, res) => {
     response.data.pipe(res);
     
     response.data.on('error', (err) => {
-      console.error('Stream error:', err);
+      // Ignore ECONNRESET - it's normal when client cancels download
+      if (err.code === 'ECONNRESET' || err.code === 'EPIPE' || streamClosed) {
+        console.log('Download cancelled by client (normal)');
+        return;
+      }
+      console.error('Stream error:', err.message);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Gagal download video' });
       }
     });
     
+    response.data.on('end', () => {
+      if (!streamClosed) {
+        console.log('Download completed successfully');
+      }
+    });
+    
   } catch (error) {
+    // Ignore connection reset errors
+    if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || streamClosed) {
+      console.log('Download request cancelled');
+      return;
+    }
     console.error('Download proxy error:', error.message);
-    res.status(500).json({ error: 'Gagal download video: ' + error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Gagal download video: ' + error.message });
+    }
   }
 });
 
