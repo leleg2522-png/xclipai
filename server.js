@@ -519,16 +519,9 @@ async function processVideoAsync(job) {
     job.status = 'analyzing_viral';
     
     let viralScores = [];
-    if (process.env.OPENROUTER_API_KEY && segments.length > 0) {
-      try {
-        viralScores = await analyzeViralPotential(segments, settings.targetLanguage);
-      } catch (e) {
-        console.log('Viral analysis failed:', e.message);
-        viralScores = segments.map((_, i) => ({ index: i, score: 50 + Math.random() * 50 }));
-      }
-    } else {
-      viralScores = segments.map((_, i) => ({ index: i, score: 50 + Math.random() * 50 }));
-    }
+    // Skip viral analysis - use basic scoring instead (saves API credits)
+    console.log('Using basic viral scoring (OpenRouter disabled to save credits)');
+    viralScores = segments.map((_, i) => ({ index: i, score: 50 + Math.random() * 50 }));
     
     const sortedSegments = segments.map((seg, i) => ({
       ...seg,
