@@ -6186,3 +6186,166 @@ textarea.form-input {
   min-width: 40px;
   text-align: center;
 }
+
+/* X Image Enhanced UI */
+.ximage-hero {
+  text-align: center;
+  padding: var(--space-6) 0;
+}
+
+.gradient-badge {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradient-title {
+  background: linear-gradient(135deg, #8B5CF6, #EC4899, #06B6D4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 3rem;
+  font-weight: 800;
+  margin: var(--space-4) 0;
+}
+
+.hero-subtitle {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+/* X Image Model Cards Grid */
+.ximage-models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.ximage-model-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.ximage-model-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.ximage-model-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(138, 43, 226, 0.2);
+}
+
+.ximage-model-card:hover::before {
+  opacity: 1;
+}
+
+.ximage-model-card.active {
+  border-color: var(--primary);
+  background: rgba(138, 43, 226, 0.1);
+}
+
+.ximage-model-card.active::before {
+  opacity: 1;
+}
+
+.ximage-model-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ximage-model-card.disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.ximage-model-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--space-3);
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(236, 72, 153, 0.2));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.ximage-model-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ximage-model-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.ximage-model-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge-popular {
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: white;
+}
+
+.badge-pro {
+  background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+  color: white;
+}
+
+.badge-4k {
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: white;
+}
+
+.badge-ultra {
+  background: linear-gradient(135deg, #EC4899, #DB2777);
+  color: white;
+}
+
+.badge-fast {
+  background: linear-gradient(135deg, #06B6D4, #0891B2);
+  color: white;
+}
+
+.badge-new {
+  background: linear-gradient(135deg, #EF4444, #DC2626);
+  color: white;
+}
+
+.ximage-model-disabled-text {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
