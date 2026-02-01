@@ -12,6 +12,7 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const https = require('https');
 require('dotenv').config();
 
 const app = express();
@@ -319,7 +320,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     if (proxy) {
       const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
       console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
-      config.httpsAgent = new HttpsProxyAgent(proxyUrl);
+      // Bypass SSL verification to avoid certificate mismatch errors with proxy
+      config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
       config.proxy = false; // Disable axios built-in proxy when using agent
     } else {
       console.log(`[PROXY] No proxy available, using direct connection`);
@@ -351,6 +353,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
       
       if (proxy) {
         console.log(`Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         const response = await axios({
           method,
           url: freepikUrl,
@@ -360,14 +363,8 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
           },
           data: body,
           timeout: 120000,
-          proxy: {
-            host: proxy.proxy_address,
-            port: proxy.port,
-            auth: {
-              username: proxy.username,
-              password: proxy.password
-            }
-          }
+          httpsAgent: new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false }),
+          proxy: false
         });
         return response.data;
       }
@@ -4808,7 +4805,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       if (proxy) {
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         console.log(`[VIDGEN2] Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
-        requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+        requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
         requestConfig.proxy = false;
       }
     }
@@ -4837,7 +4834,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
             const newProxy = getNextWebshareProxy();
             if (newProxy) {
               const proxyUrl = `http://${newProxy.username}:${newProxy.password}@${newProxy.proxy_address}:${newProxy.port}`;
-              requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+              requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
               console.log(`[VIDGEN2] Rotated to proxy: ${newProxy.proxy_address}:${newProxy.port}`);
             }
           }
@@ -4949,7 +4946,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           const proxy = getNextWebshareProxy();
           if (proxy) {
             const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-            statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+            statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
             statusConfig.proxy = false;
           }
         }
