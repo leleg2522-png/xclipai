@@ -5273,7 +5273,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    const { model, prompt, image, aspectRatio, mode } = req.body;
+    const { model, prompt, image, aspectRatio, mode, resolution, numberOfImages } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -5288,7 +5288,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: `Model ${XIMAGE_MODELS[model].name} tidak mendukung image-to-image` });
     }
     
-    console.log(`[XIMAGE] Generating with model: ${model}, mode: ${mode || 'text-to-image'}`);
+    console.log(`[XIMAGE] Generating with model: ${model}, mode: ${mode || 'text-to-image'}, resolution: ${resolution || 'default'}, n: ${numberOfImages || 1}`);
     
     // If image-to-image mode, upload image to Poyo storage first
     let imageUrl = null;
@@ -5339,14 +5339,14 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
     };
     
-    // Add n parameter for OpenAI models
-    if (model.startsWith('gpt-')) {
-      requestBody.input.n = 1;
+    // Add n parameter for models that support it (GPT, Nano Banana, Seedream)
+    if (['gpt-image-1.5', 'gpt-4o-image', 'nano-banana', 'nano-banana-2', 'seedream-4.5'].includes(model)) {
+      requestBody.input.n = numberOfImages || 1;
     }
     
     // Add resolution for models that support it (nano-banana-2, flux-2-pro)
-    if (modelConfig.supportsResolution) {
-      requestBody.input.resolution = '1K';
+    if (modelConfig.supportsResolution && resolution) {
+      requestBody.input.resolution = resolution;
     }
     
     // Add image for image-to-image mode

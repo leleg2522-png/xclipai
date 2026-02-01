@@ -109,7 +109,9 @@ const state = {
     customApiKey: '',
     selectedRoom: null,
     models: [],
-    _historyLoaded: false
+    _historyLoaded: false,
+    resolution: '1K',
+    numberOfImages: 1
   },
   ximageRoomManager: {
     rooms: [],
@@ -2572,17 +2574,18 @@ function renderVidgen2Videos() {
 // ============ X IMAGE PAGE ============
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'gpt-image-1.5', name: 'GPT Image 1.5', provider: 'OpenAI', price: '$0.01', supportsI2I: true, badge: 'MURAH' },
-    { id: 'gpt-4o-image', name: 'GPT-4o Image', provider: 'OpenAI', price: '$0.02', supportsI2I: true },
-    { id: 'nano-banana', name: 'Nano Banana', provider: 'Google', price: '$0.03', supportsI2I: true },
-    { id: 'nano-banana-2', name: 'Nano Banana Pro', provider: 'Google', price: '$0.03', supportsI2I: true, badge: '4K' },
-    { id: 'seedream-4.5', name: 'Seedream 4.5', provider: 'ByteDance', price: '$0.03', supportsI2I: true, badge: '4K' },
-    { id: 'flux-2-pro', name: 'FLUX.2', provider: 'Black Forest', price: '$0.03', supportsI2I: true },
-    { id: 'z-image', name: 'Z-Image', provider: 'Alibaba', price: '$0.01', supportsI2I: false, badge: 'MURAH' },
-    { id: 'grok-imagine-image', name: 'Grok Imagine', provider: 'xAI', price: '$0.03', supportsI2I: true }
+    { id: 'gpt-image-1.5', name: 'GPT Image 1.5', provider: 'OpenAI', price: '$0.01', supportsI2I: true, badge: 'MURAH', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'gpt-4o-image', name: 'GPT-4o Image', provider: 'OpenAI', price: '$0.02', supportsI2I: true, hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'nano-banana', name: 'Nano Banana', provider: 'Google', price: '$0.03', supportsI2I: true, hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'nano-banana-2', name: 'Nano Banana Pro', provider: 'Google', price: '$0.03', supportsI2I: true, badge: '4K', hasN: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', provider: 'ByteDance', price: '$0.03', supportsI2I: true, badge: '4K', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'flux-2-pro', name: 'FLUX.2', provider: 'Black Forest', price: '$0.03', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 8, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'z-image', name: 'Z-Image', provider: 'Alibaba', price: '$0.01', supportsI2I: false, badge: 'MURAH', sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'grok-imagine-image', name: 'Grok Imagine', provider: 'xAI', price: '$0.03', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '2:3', '3:2'] }
   ];
   
-  var aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+  var currentModelConfig = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; }) || ximageModels[0];
+  var aspectRatios = currentModelConfig.sizes || ['1:1', '16:9', '9:16', '4:3', '3:4'];
   
   var html = '<div class="container">';
   html += '<div class="hero">';
@@ -2639,14 +2642,36 @@ function renderXImagePage() {
   html += '<textarea id="ximagePrompt" class="prompt-input" placeholder="' + (state.ximage.mode === 'image-to-image' ? 'Deskripsikan perubahan yang diinginkan...' : 'Deskripsikan gambar yang ingin dibuat...') + '" rows="4">' + state.ximage.prompt + '</textarea>';
   html += '</div>';
   
-  // Aspect Ratio
+  // Size (Aspect Ratio) - like Poyo Playground
   html += '<div class="section-card">';
-  html += '<h3 class="section-title">Aspect Ratio</h3>';
+  html += '<h3 class="section-title">Size</h3>';
   html += '<div class="aspect-buttons">';
   aspectRatios.forEach(function(ratio) {
     html += '<button class="aspect-btn ' + (state.ximage.aspectRatio === ratio ? 'active' : '') + '" data-ximage-ratio="' + ratio + '">' + ratio + '</button>';
   });
   html += '</div></div>';
+  
+  // Resolution - only for models that support it (nano-banana-2, flux-2-pro)
+  if (currentModelConfig.hasResolution) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Resolution</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.resolutions.forEach(function(res) {
+      html += '<button class="aspect-btn ' + (state.ximage.resolution === res ? 'active' : '') + '" data-ximage-resolution="' + res + '">' + res + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  // Number of Images - only for models that support it
+  if (currentModelConfig.hasN) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Number of Images</h3>';
+    html += '<div class="number-input-wrapper">';
+    html += '<button class="num-btn" data-ximage-num-action="decrease" ' + (state.ximage.numberOfImages <= 1 ? 'disabled' : '') + '>-</button>';
+    html += '<span class="num-value">' + state.ximage.numberOfImages + '</span>';
+    html += '<button class="num-btn" data-ximage-num-action="increase" ' + (state.ximage.numberOfImages >= 4 ? 'disabled' : '') + '>+</button>';
+    html += '</div></div>';
+  }
   
   // API Key
   html += '<div class="section-card">';
@@ -5303,6 +5328,27 @@ function attachXImageEventListeners() {
         render();
         return;
       }
+      
+      // Resolution selection
+      var resBtn = e.target.closest('[data-ximage-resolution]');
+      if (resBtn && state.currentPage === 'ximage') {
+        state.ximage.resolution = resBtn.dataset.ximageResolution;
+        render();
+        return;
+      }
+      
+      // Number of images
+      var numBtn = e.target.closest('[data-ximage-num-action]');
+      if (numBtn && state.currentPage === 'ximage') {
+        var action = numBtn.dataset.ximageNumAction;
+        if (action === 'increase' && state.ximage.numberOfImages < 4) {
+          state.ximage.numberOfImages++;
+        } else if (action === 'decrease' && state.ximage.numberOfImages > 1) {
+          state.ximage.numberOfImages--;
+        }
+        render();
+        return;
+      }
     });
   }
 }
@@ -5365,7 +5411,9 @@ async function generateXImage() {
       model: state.ximage.selectedModel,
       prompt: state.ximage.prompt,
       aspectRatio: state.ximage.aspectRatio,
-      mode: state.ximage.mode
+      mode: state.ximage.mode,
+      resolution: state.ximage.resolution,
+      numberOfImages: state.ximage.numberOfImages
     };
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
