@@ -4738,8 +4738,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
     
     // Prepare request to Poyo.ai
-    // Sora 2: text-to-video only (no image reference support)
-    // Veo 3.1: supports imageUrls for image-to-video
+    // VEO 3.1 image-to-video: image_urls inside input, generation_type: 'reference'
+    // Sora 2: also supports image-to-video via image_urls
     const requestBody = {
       model: poyoModel,
       input: {
@@ -4749,15 +4749,12 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       }
     };
     
-    // Add image for image-to-video generation (Veo 3.1 only)
-    if (image && !poyoModel.startsWith('sora')) {
-      // Veo 3.1 uses imageUrls (camelCase)
-      requestBody.imageUrls = [image];
-    }
-    
-    // Warning if trying image-to-video with Sora 2
-    if (image && poyoModel.startsWith('sora')) {
-      console.log(`[VIDGEN2] Warning: Sora 2 does not support image-to-video, using text prompt only`);
+    // Add image for image-to-video generation
+    if (image) {
+      // Both Sora 2 and Veo 3.1 use image_urls inside input object
+      requestBody.input.image_urls = [image];
+      requestBody.input.generation_type = 'reference';
+      console.log(`[VIDGEN2] Image-to-video mode enabled with reference image`);
     }
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
