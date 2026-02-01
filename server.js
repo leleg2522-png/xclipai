@@ -4854,6 +4854,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
     const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
     if (!roomKeyResult.error) {
       try {
+        console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
         const statusResponse = await axios.get(
           `https://api.poyo.ai/api/generate/status/${taskId}`,
           {
@@ -4864,15 +4865,30 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           }
         );
         
-        const data = statusResponse.data.data || statusResponse.data;
+        console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
         
-        // Status: not_started, running, finished, failed
-        if (data.status === 'finished') {
-          // Get video URL from files array
+        const data = statusResponse.data.data || statusResponse.data;
+        const status = data.status || data.state;
+        
+        console.log(`[VIDGEN2] Parsed status: ${status}, data keys:`, Object.keys(data));
+        
+        // Status: not_started, running, finished, failed, completed, success
+        if (status === 'finished' || status === 'completed' || status === 'success') {
+          // Get video URL from various possible fields
           let videoUrl = null;
           if (data.files && data.files.length > 0) {
-            videoUrl = data.files[0].file_url || data.files[0].url;
+            videoUrl = data.files[0].file_url || data.files[0].url || data.files[0].video_url;
+          } else if (data.output?.video_url) {
+            videoUrl = data.output.video_url;
+          } else if (data.video_url) {
+            videoUrl = data.video_url;
+          } else if (data.result?.video_url) {
+            videoUrl = data.result.video_url;
+          } else if (data.media_url) {
+            videoUrl = data.media_url;
           }
+          
+          console.log(`[VIDGEN2] Video URL found: ${videoUrl}`);
           
           // Update local database
           await pool.query(
@@ -4887,27 +4903,31 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           });
         }
         
-        if (data.status === 'failed') {
+        if (status === 'failed' || status === 'error') {
+          const errorMsg = data.error_message || data.error || data.message || 'Generation failed';
+          console.log(`[VIDGEN2] Task failed: ${errorMsg}`);
+          
           await pool.query(
             'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-            ['failed', data.error_message || 'Generation failed', taskId]
+            ['failed', errorMsg, taskId]
           );
           
           return res.json({
             status: 'failed',
-            error: data.error_message || 'Generation failed'
+            error: errorMsg
           });
         }
         
-        // Status: not_started or running
+        // Status: not_started, running, pending, processing
+        const progress = data.progress || data.percent || 0;
         return res.json({
           status: 'processing',
-          progress: data.progress || 0,
-          message: data.status === 'running' ? 'Video sedang diproses...' : 'Menunggu antrian...'
+          progress: progress,
+          message: status === 'running' ? 'Video sedang diproses...' : 'Menunggu antrian...'
         });
         
       } catch (pollError) {
-        console.error('[VIDGEN2] Poll error:', pollError.message);
+        console.error('[VIDGEN2] Poll error:', pollError.response?.data || pollError.message);
       }
     }
     
