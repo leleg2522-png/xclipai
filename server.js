@@ -4759,17 +4759,28 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
     
-    const response = await axios.post(
-      apiEndpoint,
-      requestBody,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${roomKeyResult.apiKey}`
-        },
-        timeout: 60000
+    // Setup request config with optional Webshare proxy
+    const requestConfig = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${roomKeyResult.apiKey}`
+      },
+      timeout: 60000
+    };
+    
+    // Add Webshare proxy if available
+    if (process.env.WEBSHARE_API_KEY) {
+      await fetchWebshareProxies();
+      const proxy = getNextWebshareProxy();
+      if (proxy) {
+        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
+        console.log(`[VIDGEN2] Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+        requestConfig.proxy = false;
       }
-    );
+    }
+    
+    const response = await axios.post(apiEndpoint, requestBody, requestConfig);
     
     console.log(`[VIDGEN2] Poyo.ai response:`, JSON.stringify(response.data));
     
@@ -4858,14 +4869,29 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
     if (!roomKeyResult.error) {
       try {
         console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
+        
+        // Setup request config with optional Webshare proxy
+        const statusConfig = {
+          headers: {
+            'Authorization': `Bearer ${roomKeyResult.apiKey}`
+          },
+          timeout: 30000
+        };
+        
+        // Add Webshare proxy if available
+        if (process.env.WEBSHARE_API_KEY) {
+          await fetchWebshareProxies();
+          const proxy = getNextWebshareProxy();
+          if (proxy) {
+            const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
+            statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+            statusConfig.proxy = false;
+          }
+        }
+        
         const statusResponse = await axios.get(
           `https://api.poyo.ai/api/generate/status/${taskId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${roomKeyResult.apiKey}`
-            },
-            timeout: 30000
-          }
+          statusConfig
         );
         
         console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
