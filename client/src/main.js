@@ -5261,7 +5261,7 @@ async function generateMotion() {
 function pollMotionStatus(taskId, model, apiKey) {
   console.log('[MOTION POLL] Starting polling for task:', taskId, 'with apiKey:', apiKey ? 'present' : 'missing');
   
-  const maxAttempts = 400; // ~20 minutes with 3s intervals (increased from 180 = 9 min)
+  const maxAttempts = 1200; // ~1 jam dengan interval 3 detik
   let attempts = 0;
   
   // Delay first poll by 5 seconds to let Freepik register the task
