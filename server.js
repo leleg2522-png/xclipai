@@ -4780,7 +4780,39 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       }
     }
     
-    const response = await axios.post(apiEndpoint, requestBody, requestConfig);
+    // Retry logic for rate limiting
+    let response;
+    let retries = 0;
+    const maxRetries = 3;
+    
+    while (retries < maxRetries) {
+      try {
+        response = await axios.post(apiEndpoint, requestBody, requestConfig);
+        break; // Success, exit loop
+      } catch (retryError) {
+        const isRateLimit = retryError.response?.status === 429 || 
+                            retryError.response?.data?.message?.includes('Too many requests');
+        
+        if (isRateLimit && retries < maxRetries - 1) {
+          retries++;
+          const waitTime = Math.pow(2, retries) * 10000; // 20s, 40s, 80s
+          console.log(`[VIDGEN2] Rate limited, waiting ${waitTime/1000}s before retry ${retries}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          // Rotate to different proxy for retry
+          if (process.env.WEBSHARE_API_KEY) {
+            const newProxy = getNextWebshareProxy();
+            if (newProxy) {
+              const proxyUrl = `http://${newProxy.username}:${newProxy.password}@${newProxy.proxy_address}:${newProxy.port}`;
+              requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl);
+              console.log(`[VIDGEN2] Rotated to proxy: ${newProxy.proxy_address}:${newProxy.port}`);
+            }
+          }
+        } else {
+          throw retryError; // Not rate limit or max retries reached
+        }
+      }
+    }
     
     console.log(`[VIDGEN2] Poyo.ai response:`, JSON.stringify(response.data));
     
