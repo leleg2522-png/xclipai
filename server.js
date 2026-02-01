@@ -5203,6 +5203,39 @@ app.get('/api/ximage/rooms', async (req, res) => {
   }
 });
 
+// X Image Subscription Status
+app.get('/api/ximage/subscription-status', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT s.ximage_room_id, r.name as room_name
+      FROM subscriptions s
+      LEFT JOIN ximage_rooms r ON r.id = s.ximage_room_id
+      WHERE s.user_id = $1 AND s.status = 'active'
+      AND (s.expired_at IS NULL OR s.expired_at > NOW())
+      ORDER BY s.created_at DESC LIMIT 1
+    `, [req.session.userId]);
+    
+    if (result.rows.length > 0 && result.rows[0].ximage_room_id) {
+      res.json({
+        hasSubscription: true,
+        subscription: {
+          roomId: result.rows[0].ximage_room_id,
+          roomName: result.rows[0].room_name
+        }
+      });
+    } else {
+      res.json({ hasSubscription: false, subscription: null });
+    }
+  } catch (error) {
+    console.error('[XIMAGE] Subscription status error:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan status subscription' });
+  }
+});
+
 // Join X Image Room
 app.post('/api/ximage/join-room', async (req, res) => {
   if (!req.session.userId) {

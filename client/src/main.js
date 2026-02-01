@@ -95,6 +95,14 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  ximageRoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
   ximage: {
     sourceImage: null,
     prompt: '',
@@ -1038,6 +1046,80 @@ async function leaveMotionRoom() {
   }
 }
 
+// ==================== X IMAGE ROOM MANAGER FUNCTIONS ====================
+
+async function loadXImageRooms() {
+  try {
+    state.ximageRoomManager.isLoading = true;
+    const response = await fetch(`${API_URL}/api/ximage/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.ximageRoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Load ximage rooms error:', error);
+    state.ximageRoomManager.rooms = [];
+  } finally {
+    state.ximageRoomManager.isLoading = false;
+    render();
+  }
+}
+
+async function loadXImageSubscriptionStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/ximage/subscription-status`, { credentials: 'include' });
+    if (!response.ok) {
+      state.ximageRoomManager.hasSubscription = false;
+      state.ximageRoomManager.subscription = null;
+      return;
+    }
+    const data = await response.json();
+    state.ximageRoomManager.hasSubscription = data.hasSubscription || false;
+    state.ximageRoomManager.subscription = data.subscription || null;
+  } catch (error) {
+    console.error('Load ximage subscription error:', error);
+    state.ximageRoomManager.hasSubscription = false;
+    state.ximageRoomManager.subscription = null;
+  }
+}
+
+async function joinXImageRoom(roomId) {
+  const apiKey = state.ximageRoomManager.xclipApiKey;
+  
+  if (!apiKey) {
+    showToast('Masukkan Xclip API key terlebih dahulu', 'error');
+    return;
+  }
+  
+  try {
+    state.ximageRoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/ximage/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ xclipApiKey: apiKey, roomId: roomId })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(data.message || 'Berhasil bergabung ke X Image room!', 'success');
+      state.ximageRoomManager.showRoomModal = false;
+      state.ximage.customApiKey = apiKey;
+      await loadXImageSubscriptionStatus();
+      await loadXImageRooms();
+    } else {
+      showToast(data.error || 'Gagal bergabung ke room', 'error');
+    }
+  } catch (error) {
+    console.error('Join ximage room error:', error);
+    showToast('Gagal bergabung ke room', 'error');
+  } finally {
+    state.ximageRoomManager.isLoading = false;
+    render();
+  }
+}
+
 // ==================== VIDGEN2 ROOM MANAGER FUNCTIONS ====================
 
 async function loadVidgen2Rooms() {
@@ -1971,6 +2053,7 @@ function renderModals() {
     ${renderAuthModal()}
     ${renderRoomModal()}
     ${renderMotionRoomModal()}
+    ${renderXImageRoomModal()}
     ${renderXMakerRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
@@ -2040,6 +2123,77 @@ function renderMotionRoomModal() {
                   ` : `
                     <span class="status-badge maintenance">MAINTENANCE</span>
                     ${room.maintenance_reason ? `<span class="maintenance-reason">${room.maintenance_reason}</span>` : ''}
+                  `}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderXImageRoomModal() {
+  if (!state.ximageRoomManager.showRoomModal) return '';
+  
+  return `
+    <div class="modal-overlay" id="ximageRoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih X Image Room</h2>
+          <button class="modal-close" id="closeXimageRoomModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section" style="margin-bottom: 20px;">
+            <label class="setting-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Xclip API Key
+            </label>
+            <input 
+              type="password" 
+              id="ximageRoomApiKeyInput" 
+              class="form-input"
+              placeholder="Masukkan Xclip API key Anda..."
+              value="${state.ximageRoomManager.xclipApiKey}"
+            >
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses X Image Room</p>
+          </div>
+          
+          <div class="rooms-list">
+            ${state.ximageRoomManager.isLoading ? `
+              <div class="loading-rooms">
+                <div class="spinner"></div>
+                <p>Memuat rooms...</p>
+              </div>
+            ` : state.ximageRoomManager.rooms.length === 0 ? `
+              <div class="empty-rooms">
+                <p>Tidak ada X Image room tersedia</p>
+              </div>
+            ` : state.ximageRoomManager.rooms.map(room => `
+              <div class="room-item ${room.status !== 'OPEN' ? 'maintenance' : ''}" data-ximage-room-id="${room.id}">
+                <div class="room-info">
+                  <div class="room-name">${room.name}</div>
+                  <div class="room-stats">
+                    <span class="room-users">${room.current_users || 0}/${room.max_users} users</span>
+                    <span class="room-slots">${(room.max_users - (room.current_users || 0))} slot tersedia</span>
+                  </div>
+                </div>
+                <div class="room-status">
+                  ${room.status === 'OPEN' ? `
+                    <span class="status-badge open">OPEN</span>
+                    ${(room.max_users - (room.current_users || 0)) > 0 ? `
+                      <button class="btn btn-sm btn-primary join-ximage-room-btn" data-room-id="${room.id}">
+                        Join
+                      </button>
+                    ` : `
+                      <span class="status-badge full">FULL</span>
+                    `}
+                  ` : `
+                    <span class="status-badge maintenance">MAINTENANCE</span>
                   `}
                 </div>
               </div>
@@ -2686,7 +2840,26 @@ function renderXImagePage() {
     html += '</div></div>';
   }
   
-  // API Key
+  // Room & API Key Section
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">X Image Room</h3>';
+  if (state.ximageRoomManager.subscription && state.ximageRoomManager.subscription.roomName) {
+    html += '<div class="room-status-card active">';
+    html += '<div class="room-status-info">';
+    html += '<span class="room-status-label">Room Aktif:</span>';
+    html += '<span class="room-status-name">' + state.ximageRoomManager.subscription.roomName + '</span>';
+    html += '</div>';
+    html += '<button class="btn btn-sm btn-outline" id="changeXimageRoom">Ganti Room</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="room-status-card">';
+    html += '<p class="room-status-text">Belum bergabung ke room. Pilih room untuk menggunakan X Image.</p>';
+    html += '<button class="btn btn-primary" id="openXimageRoomModal">Pilih Room</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  
+  // API Key (shown when room is selected)
   html += '<div class="section-card">';
   html += '<h3 class="section-title">Xclip API Key</h3>';
   html += '<input type="password" id="ximageApiKey" class="api-key-input" placeholder="Masukkan Xclip API Key" value="' + state.ximage.customApiKey + '"/>';
@@ -5232,9 +5405,15 @@ async function pollVidgen2Task(taskId) {
 
 // ============ X IMAGE EVENT HANDLERS ============
 function attachXImageEventListeners() {
-  // Load history on first visit
+  // Load history and subscription status on first visit
   if (state.ximage.generatedImages.length === 0 && !state.ximage._historyLoaded) {
     loadXImageHistory().then(function() { render(); });
+  }
+  
+  // Load subscription status
+  if (!state.ximageRoomManager._statusLoaded) {
+    state.ximageRoomManager._statusLoaded = true;
+    loadXImageSubscriptionStatus().then(function() { render(); });
   }
   
   var uploadZone = document.getElementById('ximageUploadZone');
@@ -5681,6 +5860,56 @@ function attachMotionEventListeners() {
       state.motion.customApiKey = e.target.value;
     });
   }
+  
+  // X Image Room modal event listeners
+  const openXimageRoomModal = document.getElementById('openXimageRoomModal');
+  const changeXimageRoom = document.getElementById('changeXimageRoom');
+  if (openXimageRoomModal) {
+    openXimageRoomModal.addEventListener('click', async () => {
+      state.ximageRoomManager.showRoomModal = true;
+      render();
+      await loadXImageRooms();
+    });
+  }
+  if (changeXimageRoom) {
+    changeXimageRoom.addEventListener('click', async () => {
+      state.ximageRoomManager.showRoomModal = true;
+      render();
+      await loadXImageRooms();
+    });
+  }
+  
+  const closeXimageRoomModal = document.getElementById('closeXimageRoomModal');
+  const ximageRoomModalOverlay = document.getElementById('ximageRoomModalOverlay');
+  if (closeXimageRoomModal) {
+    closeXimageRoomModal.addEventListener('click', () => {
+      state.ximageRoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (ximageRoomModalOverlay) {
+    ximageRoomModalOverlay.addEventListener('click', (e) => {
+      if (e.target === ximageRoomModalOverlay) {
+        state.ximageRoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+  
+  const ximageRoomApiKeyInput = document.getElementById('ximageRoomApiKeyInput');
+  if (ximageRoomApiKeyInput) {
+    ximageRoomApiKeyInput.addEventListener('input', (e) => {
+      state.ximageRoomManager.xclipApiKey = e.target.value;
+    });
+  }
+  
+  // X Image room join buttons
+  document.querySelectorAll('.join-ximage-room-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const roomId = parseInt(btn.dataset.roomId);
+      joinXImageRoom(roomId);
+    });
+  });
 }
 
 function handleMotionImageUpload(e) {
