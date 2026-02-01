@@ -4925,13 +4925,15 @@ async function generateVidgen2Video() {
 }
 
 async function pollVidgen2Task(taskId) {
-  const maxAttempts = 120; // 10 minutes max
+  const maxAttempts = 720; // ~1 jam dengan interval 5 detik
   let attempts = 0;
   
   const poll = async () => {
     if (attempts >= maxAttempts) {
-      // Remove task from list
+      // Timeout - mark as failed
       state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+      state.vidgen2.error = 'Timeout - video generation terlalu lama';
+      showToast('Timeout - video generation terlalu lama', 'error');
       render();
       return;
     }
@@ -4960,16 +4962,25 @@ async function pollVidgen2Task(taskId) {
       if (data.status === 'failed') {
         state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
         state.vidgen2.error = data.error || 'Video generation failed';
+        showToast(data.error || 'Video generation failed', 'error');
         render();
         return;
       }
       
+      // Update task progress
+      const task = state.vidgen2.tasks.find(t => t.taskId === taskId);
+      if (task && data.progress) {
+        task.progress = data.progress;
+        render();
+      }
+      
       // Still processing, poll again
       attempts++;
+      console.log(`[VIDGEN2] Poll attempt ${attempts}/${maxAttempts}, status: ${data.status}`);
       setTimeout(poll, 5000);
       
     } catch (error) {
-      console.error('Poll error:', error);
+      console.error('[VIDGEN2] Poll error:', error);
       attempts++;
       setTimeout(poll, 5000);
     }

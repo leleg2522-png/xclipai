@@ -4868,9 +4868,10 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
         console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
         
         const data = statusResponse.data.data || statusResponse.data;
-        const status = data.status || data.state;
+        // Poyo.ai can return status in different fields: status, state, to_status
+        const status = data.status || data.state || data.to_status;
         
-        console.log(`[VIDGEN2] Parsed status: ${status}, data keys:`, Object.keys(data));
+        console.log(`[VIDGEN2] Parsed status: ${status}, stage: ${data.stage}, data keys:`, Object.keys(data));
         
         // Status: not_started, running, finished, failed, completed, success
         if (status === 'finished' || status === 'completed' || status === 'success') {
