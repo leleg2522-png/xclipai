@@ -4717,6 +4717,39 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
+    // If image is base64, upload to Poyo.ai storage first
+    let imageUrl = image;
+    if (image && image.startsWith('data:')) {
+      console.log('[VIDGEN2] Uploading base64 image to Poyo.ai storage...');
+      try {
+        const uploadResponse = await axios.post(
+          'https://api.poyo.ai/api/common/upload/base64',
+          {
+            base64_data: image,
+            upload_path: 'xclip-vidgen2'
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${roomKeyResult.apiKey}`
+            },
+            timeout: 60000
+          }
+        );
+        
+        if (uploadResponse.data?.data?.file_url) {
+          imageUrl = uploadResponse.data.data.file_url;
+          console.log(`[VIDGEN2] Image uploaded successfully: ${imageUrl}`);
+        } else {
+          console.log('[VIDGEN2] Upload response:', JSON.stringify(uploadResponse.data));
+          throw new Error('Failed to get image URL from upload response');
+        }
+      } catch (uploadError) {
+        console.error('[VIDGEN2] Image upload error:', uploadError.response?.data || uploadError.message);
+        return res.status(500).json({ error: 'Gagal upload image ke Poyo.ai: ' + (uploadError.response?.data?.msg || uploadError.message) });
+      }
+    }
+    
     // Model mapping for Poyo.ai
     // Models: sora-2, sora-2-pro, veo3.1, veo3.1-fast
     // Endpoint: https://api.poyo.ai/api/generate/submit
@@ -4750,11 +4783,11 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     };
     
     // Add image for image-to-video generation
-    if (image) {
+    if (imageUrl) {
       // Both Sora 2 and Veo 3.1 use image_urls inside input object
-      requestBody.input.image_urls = [image];
+      requestBody.input.image_urls = [imageUrl];
       requestBody.input.generation_type = 'reference';
-      console.log(`[VIDGEN2] Image-to-video mode enabled with reference image`);
+      console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
     }
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
