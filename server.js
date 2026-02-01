@@ -5118,6 +5118,413 @@ app.get('/api/vidgen2/history', async (req, res) => {
   }
 });
 
+// ============ X IMAGE (Poyo.ai Image Generation) ============
+
+// X Image model configuration
+const XIMAGE_MODELS = {
+  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', price: 0.01, supportsI2I: true },
+  'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', price: 0.02, supportsI2I: true },
+  'nano-banana': { name: 'Nano Banana', provider: 'Google', price: 0.03, supportsI2I: true },
+  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', price: 0.03, supportsI2I: true },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', price: 0.03, supportsI2I: true },
+  'flux-2': { name: 'FLUX.2', provider: 'Black Forest', price: 0.03, supportsI2I: true },
+  'z-image': { name: 'Z-Image', provider: 'Alibaba', price: 0.01, supportsI2I: false },
+  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', price: 0.03, supportsI2I: true }
+};
+
+// Get X Image room API key
+async function getXImageRoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  // Get user's ximage room from subscription
+  const subResult = await pool.query(`
+    SELECT s.ximage_room_id 
+    FROM subscriptions s 
+    WHERE s.user_id = $1 AND s.status = 'active' 
+    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    ORDER BY s.created_at DESC LIMIT 1
+  `, [keyInfo.user_id]);
+  
+  const ximageRoomId = subResult.rows[0]?.ximage_room_id || 1;
+  
+  // Get room keys from environment
+  const roomKeyPrefix = `XIMAGE_ROOM${ximageRoomId}_KEY_`;
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+  
+  if (availableKeys.length === 0) {
+    // Fallback to global Poyo.ai key
+    if (process.env.POYO_API_KEY) {
+      return { 
+        apiKey: process.env.POYO_API_KEY, 
+        keyName: 'POYO_API_KEY',
+        roomId: ximageRoomId,
+        userId: keyInfo.user_id,
+        keyInfoId: keyInfo.id
+      };
+    }
+    return { error: 'Tidak ada API key X Image yang tersedia. Hubungi admin.' };
+  }
+  
+  // Random key rotation
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { 
+    apiKey: process.env[randomKeyName], 
+    keyName: randomKeyName,
+    roomId: ximageRoomId,
+    userId: keyInfo.user_id,
+    keyInfoId: keyInfo.id
+  };
+}
+
+// Get X Image models
+app.get('/api/ximage/models', (req, res) => {
+  const models = Object.entries(XIMAGE_MODELS).map(([id, info]) => ({
+    id,
+    ...info
+  }));
+  res.json({ models });
+});
+
+// Get X Image rooms
+app.get('/api/ximage/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, current_users, status 
+      FROM ximage_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[XIMAGE] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan daftar room' });
+  }
+});
+
+// Join X Image Room
+app.post('/api/ximage/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId, xclipApiKey } = req.body;
+    
+    // Validate Xclip API key
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(400).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    // Check room availability
+    const roomResult = await pool.query(
+      'SELECT * FROM ximage_rooms WHERE id = $1', 
+      [roomId]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN') {
+      return res.status(400).json({ error: 'Room sedang tidak tersedia' });
+    }
+    
+    if (room.current_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room sudah penuh' });
+    }
+    
+    // Update subscription with room assignment
+    await pool.query(`
+      UPDATE subscriptions SET ximage_room_id = $1 
+      WHERE user_id = $2 AND status = 'active'
+    `, [roomId, req.session.userId]);
+    
+    // Increment room users
+    await pool.query(`
+      UPDATE ximage_rooms SET current_users = current_users + 1 WHERE id = $1
+    `, [roomId]);
+    
+    res.json({ 
+      success: true, 
+      message: `Berhasil bergabung ke ${room.name}`,
+      roomId 
+    });
+  } catch (error) {
+    console.error('[XIMAGE] Join room error:', error);
+    res.status(500).json({ error: 'Gagal bergabung ke room' });
+  }
+});
+
+// Generate X Image
+app.post('/api/ximage/generate', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getXImageRoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    const { model, prompt, image, aspectRatio, mode } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt diperlukan' });
+    }
+    
+    if (!XIMAGE_MODELS[model]) {
+      return res.status(400).json({ error: 'Model tidak valid' });
+    }
+    
+    // For image-to-image mode, check if model supports it
+    if (mode === 'image-to-image' && !XIMAGE_MODELS[model].supportsI2I) {
+      return res.status(400).json({ error: `Model ${XIMAGE_MODELS[model].name} tidak mendukung image-to-image` });
+    }
+    
+    console.log(`[XIMAGE] Generating with model: ${model}, mode: ${mode || 'text-to-image'}`);
+    
+    // If image-to-image mode, upload image to Poyo storage first
+    let imageUrl = null;
+    if (mode === 'image-to-image' && image) {
+      if (image.startsWith('data:')) {
+        console.log('[XIMAGE] Uploading base64 image to Poyo.ai storage...');
+        try {
+          const uploadResponse = await axios.post(
+            'https://api.poyo.ai/api/common/upload/base64',
+            {
+              base64_data: image,
+              upload_path: 'xclip-ximage'
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${roomKeyResult.apiKey}`
+              },
+              timeout: 60000
+            }
+          );
+          
+          if (uploadResponse.data?.data?.file_url) {
+            imageUrl = uploadResponse.data.data.file_url;
+            console.log(`[XIMAGE] Image uploaded: ${imageUrl}`);
+          } else {
+            throw new Error('Failed to get image URL');
+          }
+        } catch (uploadError) {
+          console.error('[XIMAGE] Image upload error:', uploadError.response?.data || uploadError.message);
+          return res.status(500).json({ error: 'Gagal upload image' });
+        }
+      } else {
+        imageUrl = image;
+      }
+    }
+    
+    // Prepare request to Poyo.ai
+    const requestBody = {
+      model: model,
+      input: {
+        prompt: prompt,
+        aspect_ratio: aspectRatio || '1:1'
+      }
+    };
+    
+    // Add image for image-to-image mode
+    if (imageUrl) {
+      requestBody.input.image_urls = [imageUrl];
+      requestBody.input.generation_type = 'reference';
+    }
+    
+    console.log('[XIMAGE] Request body:', JSON.stringify(requestBody));
+    
+    // Setup request config
+    const requestConfig = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${roomKeyResult.apiKey}`
+      },
+      timeout: 60000
+    };
+    
+    // Add Webshare proxy if available
+    if (process.env.WEBSHARE_API_KEY) {
+      await fetchWebshareProxies();
+      const proxy = getNextWebshareProxy();
+      if (proxy) {
+        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
+        console.log(`[XIMAGE] Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+        requestConfig.proxy = false;
+      }
+    }
+    
+    const response = await axios.post(
+      'https://api.poyo.ai/api/generate/submit',
+      requestBody,
+      requestConfig
+    );
+    
+    console.log('[XIMAGE] Poyo.ai response:', JSON.stringify(response.data));
+    
+    const taskId = response.data?.data?.task_id || 
+                   response.data?.task_id || 
+                   response.data?.data?.id || 
+                   response.data?.id;
+    
+    if (!taskId) {
+      console.error('[XIMAGE] No task ID in response:', response.data);
+      return res.status(500).json({ error: 'Gagal mendapatkan task ID' });
+    }
+    
+    // Save to history
+    await pool.query(`
+      INSERT INTO ximage_history (user_id, task_id, model, prompt, mode, aspect_ratio, reference_image, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
+    `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrl]);
+    
+    res.json({ 
+      taskId, 
+      model,
+      message: 'Image generation started' 
+    });
+    
+  } catch (error) {
+    console.error('[XIMAGE] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Gagal generate image: ' + (error.response?.data?.message || error.message) });
+  }
+});
+
+// Get X Image status
+app.get('/api/ximage/status/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getXImageRoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    // Setup request config
+    const statusConfig = {
+      headers: {
+        'Authorization': `Bearer ${roomKeyResult.apiKey}`
+      },
+      timeout: 30000
+    };
+    
+    // Add Webshare proxy if available
+    if (process.env.WEBSHARE_API_KEY) {
+      await fetchWebshareProxies();
+      const proxy = getNextWebshareProxy();
+      if (proxy) {
+        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
+        statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+        statusConfig.proxy = false;
+      }
+    }
+    
+    const statusResponse = await axios.get(
+      `https://api.poyo.ai/api/generate/status/${taskId}`,
+      statusConfig
+    );
+    
+    console.log('[XIMAGE] Status response:', JSON.stringify(statusResponse.data));
+    
+    const data = statusResponse.data.data || statusResponse.data;
+    const status = data.status || data.state || data.to_status;
+    
+    if (status === 'finished' || status === 'completed' || status === 'success') {
+      const imageUrl = data.output?.image_url || 
+                       data.output?.url || 
+                       data.media_url || 
+                       data.image_url ||
+                       (data.output?.images && data.output.images[0]);
+      
+      // Update history
+      await pool.query(`
+        UPDATE ximage_history 
+        SET status = 'completed', image_url = $1, completed_at = NOW()
+        WHERE task_id = $2
+      `, [imageUrl, taskId]);
+      
+      return res.json({
+        status: 'completed',
+        imageUrl
+      });
+    }
+    
+    if (status === 'failed' || status === 'error') {
+      const errorMsg = data.error || data.error_message || 'Generation failed';
+      
+      await pool.query(`
+        UPDATE ximage_history 
+        SET status = 'failed', completed_at = NOW()
+        WHERE task_id = $1
+      `, [taskId]);
+      
+      return res.json({
+        status: 'failed',
+        error: errorMsg
+      });
+    }
+    
+    // Still processing
+    const progress = data.progress || data.percent || 0;
+    res.json({
+      status: 'processing',
+      progress,
+      message: status === 'running' ? 'Image sedang diproses...' : 'Menunggu antrian...'
+    });
+    
+  } catch (error) {
+    console.error('[XIMAGE] Status check error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Gagal check status' });
+  }
+});
+
+// Get X Image history
+app.get('/api/ximage/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ images: [] });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT * FROM ximage_history 
+      WHERE user_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.session.userId]);
+    
+    res.json({ 
+      images: result.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        model: row.model,
+        prompt: row.prompt,
+        mode: row.mode,
+        aspectRatio: row.aspect_ratio,
+        imageUrl: row.image_url,
+        createdAt: row.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('[XIMAGE] Get history error:', error);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
 // Catch-all route - must be last
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'index.html'));
@@ -5217,6 +5624,56 @@ async function initDatabase() {
           ('Vidgen2 Room 3', 10, 'OPEN', 'VIDGEN2_ROOM3_KEY_1', 'VIDGEN2_ROOM3_KEY_2', 'VIDGEN2_ROOM3_KEY_3')
       `);
       console.log('Vidgen2 rooms seeded');
+    }
+    
+    // Create ximage_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ximage_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        current_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Create ximage_history table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ximage_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        task_id VARCHAR(255),
+        model VARCHAR(100),
+        prompt TEXT,
+        mode VARCHAR(50),
+        aspect_ratio VARCHAR(20),
+        image_url TEXT,
+        reference_image TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    
+    // Add ximage_room_id to subscriptions
+    await pool.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS ximage_room_id INTEGER
+    `).catch(() => {});
+    
+    // Seed ximage rooms if empty
+    const existingXimageRooms = await pool.query('SELECT COUNT(*) FROM ximage_rooms');
+    if (parseInt(existingXimageRooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO ximage_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('X Image Room 1', 10, 'OPEN', 'XIMAGE_ROOM1_KEY_1', 'XIMAGE_ROOM1_KEY_2', 'XIMAGE_ROOM1_KEY_3'),
+          ('X Image Room 2', 10, 'OPEN', 'XIMAGE_ROOM2_KEY_1', 'XIMAGE_ROOM2_KEY_2', 'XIMAGE_ROOM2_KEY_3'),
+          ('X Image Room 3', 10, 'OPEN', 'XIMAGE_ROOM3_KEY_1', 'XIMAGE_ROOM3_KEY_2', 'XIMAGE_ROOM3_KEY_3')
+      `);
+      console.log('X Image rooms seeded');
     }
     
     console.log('Database initialized');

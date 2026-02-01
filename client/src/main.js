@@ -95,6 +95,30 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  ximage: {
+    sourceImage: null,
+    prompt: '',
+    selectedModel: 'gpt-image-1.5',
+    aspectRatio: '1:1',
+    mode: 'text-to-image',
+    isGenerating: false,
+    isPolling: false,
+    tasks: [],
+    generatedImages: [],
+    error: null,
+    customApiKey: '',
+    selectedRoom: null,
+    models: [],
+    _historyLoaded: false
+  },
+  ximageRoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
   pricing: {
     plans: [],
     isLoading: false,
@@ -1812,6 +1836,15 @@ function renderNavMenu() {
       </svg>
       Vidgen2
     </button>
+    <button class="nav-btn ${state.currentPage === 'ximage' ? 'active' : ''}" data-page="ximage">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+        <path d="M14 3l7 7" stroke-width="3"/>
+      </svg>
+      X Image
+    </button>
     <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1923,6 +1956,7 @@ function renderMainContent() {
     ${state.currentPage === 'video' ? renderVideoPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
       state.currentPage === 'vidgen2' ? renderVidgen2Page() :
+      state.currentPage === 'ximage' ? renderXImagePage() :
       state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
@@ -2533,6 +2567,173 @@ function renderVidgen2Videos() {
     return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg></div><h3>Belum Ada Video</h3><p>Upload gambar dan klik Generate untuk membuat video AI</p></div>';
   }
   return '';
+}
+
+// ============ X IMAGE PAGE ============
+function renderXImagePage() {
+  var ximageModels = [
+    { id: 'gpt-image-1.5', name: 'GPT Image 1.5', provider: 'OpenAI', price: '$0.01', supportsI2I: true, badge: 'MURAH' },
+    { id: 'gpt-4o-image', name: 'GPT-4o Image', provider: 'OpenAI', price: '$0.02', supportsI2I: true },
+    { id: 'nano-banana', name: 'Nano Banana', provider: 'Google', price: '$0.03', supportsI2I: true },
+    { id: 'nano-banana-2', name: 'Nano Banana Pro', provider: 'Google', price: '$0.03', supportsI2I: true, badge: '4K' },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', provider: 'ByteDance', price: '$0.03', supportsI2I: true, badge: '4K' },
+    { id: 'flux-2', name: 'FLUX.2', provider: 'Black Forest', price: '$0.03', supportsI2I: true },
+    { id: 'z-image', name: 'Z-Image', provider: 'Alibaba', price: '$0.01', supportsI2I: false, badge: 'MURAH' },
+    { id: 'grok-imagine', name: 'Grok Imagine', provider: 'xAI', price: '$0.03', supportsI2I: true }
+  ];
+  
+  var aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+  
+  var html = '<div class="container">';
+  html += '<div class="hero">';
+  html += '<div class="hero-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator</div>';
+  html += '<h1>X Image - Poyo.ai Image Generation</h1>';
+  html += '<p>Generate gambar dengan berbagai model AI terbaik</p>';
+  html += '</div>';
+  
+  html += '<div class="ximage-content">';
+  
+  // Mode Selection
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Mode</h3>';
+  html += '<div class="mode-selector">';
+  html += '<button class="mode-btn ' + (state.ximage.mode === 'text-to-image' ? 'active' : '') + '" data-ximage-mode="text-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Text to Image</button>';
+  html += '<button class="mode-btn ' + (state.ximage.mode === 'image-to-image' ? 'active' : '') + '" data-ximage-mode="image-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Image to Image</button>';
+  html += '</div></div>';
+  
+  // Reference Image (for image-to-image mode)
+  if (state.ximage.mode === 'image-to-image') {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Reference Image</h3>';
+    html += '<div class="reference-upload ' + (state.ximage.sourceImage ? 'has-image' : '') + '" id="ximageUploadZone">';
+    if (state.ximage.sourceImage) {
+      html += '<img src="' + state.ximage.sourceImage.data + '" alt="Reference" class="preview-image"/>';
+      html += '<button class="remove-image-btn" id="removeXimageImage"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+    } else {
+      html += '<div class="upload-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p>Klik atau drop gambar referensi</p></div>';
+    }
+    html += '<input type="file" id="ximageFileInput" accept="image/*" style="display:none"/>';
+    html += '</div></div>';
+  }
+  
+  // Model Selection
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Model AI</h3>';
+  html += '<div class="models-grid ximage-models">';
+  ximageModels.forEach(function(model) {
+    var isDisabled = state.ximage.mode === 'image-to-image' && !model.supportsI2I;
+    html += '<div class="model-card ' + (state.ximage.selectedModel === model.id ? 'active' : '') + ' ' + (isDisabled ? 'disabled' : '') + '" data-ximage-model="' + model.id + '"' + (isDisabled ? ' title="Tidak support Image-to-Image"' : '') + '>';
+    html += '<div class="model-name">' + model.name + '</div>';
+    html += '<div class="model-provider">' + model.provider + '</div>';
+    html += '<div class="model-price">' + model.price + '</div>';
+    if (model.badge) html += '<span class="model-badge">' + model.badge + '</span>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  
+  // Prompt
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Prompt</h3>';
+  html += '<textarea id="ximagePrompt" class="prompt-input" placeholder="' + (state.ximage.mode === 'image-to-image' ? 'Deskripsikan perubahan yang diinginkan...' : 'Deskripsikan gambar yang ingin dibuat...') + '" rows="4">' + state.ximage.prompt + '</textarea>';
+  html += '</div>';
+  
+  // Aspect Ratio
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Aspect Ratio</h3>';
+  html += '<div class="aspect-buttons">';
+  aspectRatios.forEach(function(ratio) {
+    html += '<button class="aspect-btn ' + (state.ximage.aspectRatio === ratio ? 'active' : '') + '" data-ximage-ratio="' + ratio + '">' + ratio + '</button>';
+  });
+  html += '</div></div>';
+  
+  // API Key
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Xclip API Key</h3>';
+  html += '<input type="password" id="ximageApiKey" class="api-key-input" placeholder="Masukkan Xclip API Key" value="' + state.ximage.customApiKey + '"/>';
+  html += '</div>';
+  
+  // Generate Button
+  var btnDisabled = state.ximage.isGenerating || (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) || state.ximage.tasks.length >= 3;
+  html += '<button class="btn btn-primary btn-lg btn-full" id="generateXimageBtn" ' + (btnDisabled ? 'disabled' : '') + '>';
+  if (state.ximage.isGenerating) {
+    html += '<span class="loading-spinner"></span><span>Generating...</span>';
+  } else {
+    html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+    html += '<span>Generate Image' + (state.ximage.tasks.length > 0 ? ' (' + state.ximage.tasks.length + '/3)' : '') + '</span>';
+  }
+  html += '</button>';
+  
+  // Error Message
+  if (state.ximage.error) {
+    html += '<div class="error-message">' + state.ximage.error + '</div>';
+  }
+  
+  // Tasks & Results
+  html += '<div class="ximage-results">';
+  html += renderXImageTasks();
+  html += renderXImageGallery();
+  html += '</div>';
+  
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImageTasks() {
+  if (state.ximage.tasks.length === 0) return '';
+  
+  var html = '<div class="tasks-section"><h3>Sedang Diproses</h3><div class="tasks-list">';
+  
+  state.ximage.tasks.forEach(function(task) {
+    var elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    var minutes = Math.floor(elapsed / 60);
+    var seconds = elapsed % 60;
+    
+    html += '<div class="task-card">';
+    html += '<div class="task-info"><span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + minutes + ':' + seconds.toString().padStart(2, '0') + '</span></div>';
+    html += '<div class="task-progress"><div class="progress-bar"><div class="progress-fill" style="width: ' + (task.progress || 30) + '%"></div></div>';
+    html += '<span class="task-status">' + (task.status || 'Processing...') + '</span></div></div>';
+  });
+  
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImageGallery() {
+  if (state.ximage.generatedImages.length > 0) {
+    var html = '<div class="gallery-section">';
+    html += '<div class="gallery-header">Gambar yang Dihasilkan (' + state.ximage.generatedImages.length + ')</div>';
+    html += '<div class="images-grid">';
+    
+    state.ximage.generatedImages.forEach(function(image, index) {
+      html += '<div class="image-card">';
+      html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
+      html += '<div class="image-card-footer">';
+      html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
+      html += '<button onclick="downloadImage(\'' + image.url + '\', \'ximage-' + index + '.png\')" class="btn btn-sm btn-secondary">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      html += ' Download</button>';
+      html += '</div></div>';
+    });
+    
+    html += '</div></div>';
+    return html;
+  } else if (state.ximage.tasks.length === 0) {
+    return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div><h3>Belum Ada Gambar</h3><p>Masukkan prompt dan klik Generate untuk membuat gambar AI</p></div>';
+  }
+  return '';
+}
+
+function downloadImage(url, filename) {
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.target = '_blank';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function renderXMakerPage() {
@@ -4189,6 +4390,8 @@ function attachEventListeners() {
     attachVideoGenEventListeners();
   } else if (state.currentPage === 'vidgen2') {
     attachVidgen2EventListeners();
+  } else if (state.currentPage === 'ximage') {
+    attachXImageEventListeners();
   } else if (state.currentPage === 'xmaker') {
     attachXMakerEventListeners();
   } else if (state.currentPage === 'motion') {
@@ -4987,6 +5190,303 @@ async function pollVidgen2Task(taskId) {
   };
   
   poll();
+}
+
+// ============ X IMAGE EVENT HANDLERS ============
+function attachXImageEventListeners() {
+  // Load history on first visit
+  if (state.ximage.generatedImages.length === 0 && !state.ximage._historyLoaded) {
+    loadXImageHistory().then(function() { render(); });
+  }
+  
+  var uploadZone = document.getElementById('ximageUploadZone');
+  var imageInput = document.getElementById('ximageFileInput');
+  var removeImageBtn = document.getElementById('removeXimageImage');
+  var generateBtn = document.getElementById('generateXimageBtn');
+  var promptInput = document.getElementById('ximagePrompt');
+  var apiKeyInput = document.getElementById('ximageApiKey');
+  
+  if (uploadZone && imageInput) {
+    uploadZone.addEventListener('click', function() { imageInput.click(); });
+    
+    uploadZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+    
+    uploadZone.addEventListener('dragleave', function() {
+      uploadZone.classList.remove('drag-over');
+    });
+    
+    uploadZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleXImageUpload({ target: { files: e.dataTransfer.files } });
+      }
+    });
+    
+    imageInput.addEventListener('change', handleXImageUpload);
+  }
+  
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      state.ximage.sourceImage = null;
+      render();
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateXImage);
+  }
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', function(e) {
+      state.ximage.prompt = e.target.value;
+    });
+  }
+  
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', function(e) {
+      state.ximage.customApiKey = e.target.value;
+    });
+  }
+  
+  // Event delegation for mode, model, and aspect ratio selection
+  if (!window._ximageDelegationAttached) {
+    window._ximageDelegationAttached = true;
+    
+    document.addEventListener('click', function(e) {
+      // Mode selection
+      var modeBtn = e.target.closest('[data-ximage-mode]');
+      if (modeBtn && state.currentPage === 'ximage') {
+        var newMode = modeBtn.dataset.ximageMode;
+        state.ximage.mode = newMode;
+        
+        // Auto-select compatible model when switching to image-to-image
+        if (newMode === 'image-to-image') {
+          var ximageModels = [
+            { id: 'gpt-image-1.5', supportsI2I: true },
+            { id: 'gpt-4o-image', supportsI2I: true },
+            { id: 'nano-banana', supportsI2I: true },
+            { id: 'nano-banana-2', supportsI2I: true },
+            { id: 'seedream-4.5', supportsI2I: true },
+            { id: 'flux-2', supportsI2I: true },
+            { id: 'z-image', supportsI2I: false },
+            { id: 'grok-imagine', supportsI2I: true }
+          ];
+          var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
+          if (!currentModel || !currentModel.supportsI2I) {
+            // Switch to first model that supports I2I
+            var compatibleModel = ximageModels.find(function(m) { return m.supportsI2I; });
+            if (compatibleModel) state.ximage.selectedModel = compatibleModel.id;
+          }
+        }
+        
+        render();
+        return;
+      }
+      
+      // Model selection
+      var modelCard = e.target.closest('[data-ximage-model]');
+      if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
+        state.ximage.selectedModel = modelCard.dataset.ximageModel;
+        render();
+        return;
+      }
+      
+      // Aspect ratio selection
+      var ratioBtn = e.target.closest('[data-ximage-ratio]');
+      if (ratioBtn && state.currentPage === 'ximage') {
+        state.ximage.aspectRatio = ratioBtn.dataset.ximageRatio;
+        render();
+        return;
+      }
+    });
+  }
+}
+
+function handleXImageUpload(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    alert('Pilih file gambar');
+    return;
+  }
+  
+  var reader = new FileReader();
+  reader.onload = function(event) {
+    state.ximage.sourceImage = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateXImage() {
+  if (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) {
+    alert('Upload gambar referensi terlebih dahulu');
+    return;
+  }
+  
+  if (!state.ximage.prompt) {
+    alert('Masukkan prompt');
+    return;
+  }
+  
+  if (!state.ximage.customApiKey) {
+    alert('Masukkan Xclip API Key');
+    return;
+  }
+  
+  if (state.ximage.tasks.length >= 3) {
+    alert('Maks 3 gambar bersamaan. Tunggu salah satu selesai.');
+    return;
+  }
+  
+  // Validate model compatibility with mode
+  var modelsNotSupportingI2I = ['z-image'];
+  if (state.ximage.mode === 'image-to-image' && modelsNotSupportingI2I.includes(state.ximage.selectedModel)) {
+    alert('Model ini tidak mendukung mode Image-to-Image. Pilih model lain.');
+    return;
+  }
+  
+  state.ximage.isGenerating = true;
+  state.ximage.error = null;
+  render();
+  
+  try {
+    var requestBody = {
+      model: state.ximage.selectedModel,
+      prompt: state.ximage.prompt,
+      aspectRatio: state.ximage.aspectRatio,
+      mode: state.ximage.mode
+    };
+    
+    if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
+      requestBody.image = state.ximage.sourceImage.data;
+    }
+    
+    var response = await fetch(API_URL + '/api/ximage/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': state.ximage.customApiKey
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    var data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Gagal generate image');
+    }
+    
+    // Add task to tracking
+    state.ximage.tasks.push({
+      taskId: data.taskId,
+      model: state.ximage.selectedModel,
+      startTime: Date.now()
+    });
+    
+    // Start polling for this task
+    pollXImageTask(data.taskId);
+    
+  } catch (error) {
+    console.error('X Image error:', error);
+    state.ximage.error = error.message;
+    alert(error.message);
+  } finally {
+    state.ximage.isGenerating = false;
+    render();
+  }
+}
+
+async function pollXImageTask(taskId) {
+  var maxAttempts = 120; // ~10 minutes with 5s interval (image is faster than video)
+  var attempts = 0;
+  
+  var poll = async function() {
+    if (attempts >= maxAttempts) {
+      state.ximage.tasks = state.ximage.tasks.filter(function(t) { return t.taskId !== taskId; });
+      state.ximage.error = 'Timeout: Image generation terlalu lama';
+      render();
+      return;
+    }
+    
+    attempts++;
+    
+    try {
+      var response = await fetch(API_URL + '/api/ximage/status/' + taskId, {
+        headers: { 'X-Xclip-Key': state.ximage.customApiKey }
+      });
+      
+      var data = await response.json();
+      
+      if (data.status === 'completed' && data.imageUrl) {
+        state.ximage.tasks = state.ximage.tasks.filter(function(t) { return t.taskId !== taskId; });
+        state.ximage.generatedImages.unshift({
+          url: data.imageUrl,
+          model: state.ximage.selectedModel,
+          prompt: state.ximage.prompt,
+          createdAt: new Date().toISOString()
+        });
+        render();
+        return;
+      }
+      
+      if (data.status === 'failed') {
+        state.ximage.tasks = state.ximage.tasks.filter(function(t) { return t.taskId !== taskId; });
+        state.ximage.error = data.error || 'Image generation failed';
+        render();
+        return;
+      }
+      
+      // Update task progress
+      var task = state.ximage.tasks.find(function(t) { return t.taskId === taskId; });
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 3);
+        task.status = data.message || 'Processing...';
+      }
+      render();
+      
+      console.log('[XIMAGE] Poll attempt ' + attempts + '/' + maxAttempts + ', status: ' + data.status);
+      setTimeout(poll, 5000);
+      
+    } catch (error) {
+      console.error('[XIMAGE] Poll error:', error);
+      attempts++;
+      setTimeout(poll, 5000);
+    }
+  };
+  
+  poll();
+}
+
+async function loadXImageHistory() {
+  try {
+    var response = await fetch(API_URL + '/api/ximage/history', { credentials: 'include' });
+    var data = await response.json();
+    
+    if (data.images) {
+      state.ximage.generatedImages = data.images.map(function(img) {
+        return {
+          url: img.imageUrl,
+          model: img.model,
+          prompt: img.prompt,
+          createdAt: img.createdAt
+        };
+      });
+    }
+    state.ximage._historyLoaded = true;
+  } catch (error) {
+    console.error('Failed to load X Image history:', error);
+  }
 }
 
 function attachMotionEventListeners() {
