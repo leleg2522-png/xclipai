@@ -2577,9 +2577,9 @@ function renderXImagePage() {
     { id: 'nano-banana', name: 'Nano Banana', provider: 'Google', price: '$0.03', supportsI2I: true },
     { id: 'nano-banana-2', name: 'Nano Banana Pro', provider: 'Google', price: '$0.03', supportsI2I: true, badge: '4K' },
     { id: 'seedream-4.5', name: 'Seedream 4.5', provider: 'ByteDance', price: '$0.03', supportsI2I: true, badge: '4K' },
-    { id: 'flux-2', name: 'FLUX.2', provider: 'Black Forest', price: '$0.03', supportsI2I: true },
+    { id: 'flux-2-pro', name: 'FLUX.2', provider: 'Black Forest', price: '$0.03', supportsI2I: true },
     { id: 'z-image', name: 'Z-Image', provider: 'Alibaba', price: '$0.01', supportsI2I: false, badge: 'MURAH' },
-    { id: 'grok-imagine', name: 'Grok Imagine', provider: 'xAI', price: '$0.03', supportsI2I: true }
+    { id: 'grok-imagine-image', name: 'Grok Imagine', provider: 'xAI', price: '$0.03', supportsI2I: true }
   ];
   
   var aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
@@ -5272,9 +5272,9 @@ function attachXImageEventListeners() {
             { id: 'nano-banana', supportsI2I: true },
             { id: 'nano-banana-2', supportsI2I: true },
             { id: 'seedream-4.5', supportsI2I: true },
-            { id: 'flux-2', supportsI2I: true },
+            { id: 'flux-2-pro', supportsI2I: true },
             { id: 'z-image', supportsI2I: false },
-            { id: 'grok-imagine', supportsI2I: true }
+            { id: 'grok-imagine-image', supportsI2I: true }
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {

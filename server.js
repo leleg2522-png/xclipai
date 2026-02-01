@@ -5122,14 +5122,14 @@ app.get('/api/vidgen2/history', async (req, res) => {
 
 // X Image model configuration
 const XIMAGE_MODELS = {
-  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', price: 0.01, supportsI2I: true },
-  'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', price: 0.02, supportsI2I: true },
-  'nano-banana': { name: 'Nano Banana', provider: 'Google', price: 0.03, supportsI2I: true },
-  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', price: 0.03, supportsI2I: true },
-  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', price: 0.03, supportsI2I: true },
-  'flux-2': { name: 'FLUX.2', provider: 'Black Forest', price: 0.03, supportsI2I: true },
-  'z-image': { name: 'Z-Image', provider: 'Alibaba', price: 0.01, supportsI2I: false },
-  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', price: 0.03, supportsI2I: true }
+  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', price: 0.01, supportsI2I: true, apiModel: 'gpt-image-1.5', editModel: 'gpt-image-1.5-edit' },
+  'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', price: 0.02, supportsI2I: true, apiModel: 'gpt-4o-image', editModel: 'gpt-4o-image-edit' },
+  'nano-banana': { name: 'Nano Banana', provider: 'Google', price: 0.03, supportsI2I: true, apiModel: 'nano-banana', editModel: 'nano-banana-edit' },
+  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', price: 0.03, supportsI2I: true, apiModel: 'nano-banana-2', editModel: 'nano-banana-2-edit', supportsResolution: true },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', price: 0.03, supportsI2I: true, apiModel: 'seedream-4.5', editModel: 'seedream-4.5-edit' },
+  'flux-2-pro': { name: 'FLUX.2', provider: 'Black Forest', price: 0.03, supportsI2I: true, apiModel: 'flux-2-pro', editModel: 'flux-2-pro-edit', supportsResolution: true },
+  'z-image': { name: 'Z-Image', provider: 'Alibaba', price: 0.01, supportsI2I: false, apiModel: 'z-image' },
+  'grok-imagine-image': { name: 'Grok Imagine', provider: 'xAI', price: 0.03, supportsI2I: true, apiModel: 'grok-imagine-image' }
 };
 
 // Get X Image room API key
@@ -5326,19 +5326,35 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
     }
     
-    // Prepare request to Poyo.ai
+    // Prepare request to Poyo.ai with correct model and format
+    const modelConfig = XIMAGE_MODELS[model];
+    const isI2I = mode === 'image-to-image' && imageUrl;
+    const apiModelId = isI2I && modelConfig.editModel ? modelConfig.editModel : modelConfig.apiModel;
+    
     const requestBody = {
-      model: model,
+      model: apiModelId,
       input: {
         prompt: prompt,
-        aspect_ratio: aspectRatio || '1:1'
+        size: aspectRatio || '1:1'
       }
     };
+    
+    // Add n parameter for OpenAI models
+    if (model.startsWith('gpt-')) {
+      requestBody.input.n = 1;
+    }
+    
+    // Add resolution for models that support it (nano-banana-2, flux-2-pro)
+    if (modelConfig.supportsResolution) {
+      requestBody.input.resolution = '1K';
+    }
     
     // Add image for image-to-image mode
     if (imageUrl) {
       requestBody.input.image_urls = [imageUrl];
-      requestBody.input.generation_type = 'reference';
+      if (model !== 'grok-imagine-image') {
+        requestBody.input.generation_type = 'reference';
+      }
     }
     
     console.log('[XIMAGE] Request body:', JSON.stringify(requestBody));

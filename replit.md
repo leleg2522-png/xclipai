@@ -23,10 +23,17 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Video history persistence in database
   - Real-time task status polling via Poyo.ai status API
 - **X Image (Poyo.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}). Features include:
-  - 8 AI models: GPT Image 1.5, GPT-4o Image, Nano Banana, Nano Banana Pro (4K), Seedream 4.5 (4K), FLUX.2, Z-Image, Grok Imagine
-  - Text-to-image: Generate images from text descriptions
-  - Image-to-image: Transform reference images based on prompts (Z-Image excluded)
-  - Aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4
+  - 8 AI models with Poyo.ai-compatible IDs:
+    - gpt-image-1.5 / gpt-image-1.5-edit (OpenAI GPT Image 1.5)
+    - gpt-4o-image / gpt-4o-image-edit (OpenAI GPT-4o)
+    - nano-banana / nano-banana-edit (Google Gemini 2.5 Flash)
+    - nano-banana-2 / nano-banana-2-edit (Google Gemini 3 Pro, supports 1K/2K/4K resolution)
+    - seedream-4.5 / seedream-4.5-edit (ByteDance, 4K)
+    - flux-2-pro / flux-2-pro-edit (Black Forest Labs FLUX.2, supports resolution)
+    - z-image (Alibaba, text-to-image only)
+    - grok-imagine-image (xAI Grok)
+  - Request format: `{ model, input: { prompt, size, n, resolution, image_urls } }`
+  - Size parameter: 1:1, 16:9, 9:16, 4:3, 3:4
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
