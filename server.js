@@ -4738,9 +4738,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
     
     // Prepare request to Poyo.ai
-    // Veo 3.1 image-to-video uses:
-    // - generation_type: 'reference' for image-to-video with character consistency
-    // - image_urls: array of images (max 3)
+    // Sora 2 uses: input_reference for image-to-video
+    // Veo 3.1 uses: image_urls array + generation_type: 'reference'
     const requestBody = {
       model: poyoModel,
       input: {
@@ -4750,11 +4749,19 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       }
     };
     
-    // Add image for image-to-video generation (Veo 3.1 uses image_urls array + generation_type)
+    // Add image for image-to-video generation
     if (image) {
-      requestBody.input.generation_type = 'reference';
-      requestBody.input.image_urls = [image];
+      if (poyoModel.startsWith('sora')) {
+        // Sora 2 uses input_reference
+        requestBody.input.input_reference = image;
+      } else {
+        // Veo 3.1 uses image_urls array + generation_type
+        requestBody.input.generation_type = 'reference';
+        requestBody.input.image_urls = [image];
+      }
     }
+    
+    console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
     
     const response = await axios.post(
       apiEndpoint,
