@@ -5500,15 +5500,25 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       // Poyo.ai documented format: { status: 'completed', data: { images: [{ url }] } }
       let imageUrl = null;
       
-      // Priority 1: Documented format - raw.data.images[0].url
-      if (raw.data?.images && raw.data.images.length > 0) {
+      // Priority 1: Poyo.ai format - raw.data.files[0].url
+      if (raw.data?.files && raw.data.files.length > 0) {
+        const file = raw.data.files[0];
+        imageUrl = typeof file === 'string' ? file : (file.url || file.file_url || file.image_url);
+        console.log('[XIMAGE] Found image in files array:', imageUrl);
+      }
+      // Priority 2: Documented format - raw.data.images[0].url
+      else if (raw.data?.images && raw.data.images.length > 0) {
         imageUrl = raw.data.images[0].url || raw.data.images[0];
       }
-      // Priority 2: Direct images array at root
+      // Priority 3: Direct files/images array at root
+      else if (raw.files && raw.files.length > 0) {
+        const file = raw.files[0];
+        imageUrl = typeof file === 'string' ? file : (file.url || file.file_url || file.image_url);
+      }
       else if (raw.images && raw.images.length > 0) {
         imageUrl = raw.images[0].url || raw.images[0];
       }
-      // Priority 3: Legacy output formats
+      // Priority 4: Legacy output formats
       else if (raw.data?.output?.images && raw.data.output.images.length > 0) {
         imageUrl = raw.data.output.images[0].url || raw.data.output.images[0];
       }
