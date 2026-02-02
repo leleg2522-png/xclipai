@@ -3482,18 +3482,18 @@ function renderMotionPage() {
         <div class="room-manager-content" style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
           <div class="room-selection" style="flex: 1; min-width: 280px;">
             <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room (Maks 3 user/room)</label>
-            <div class="room-buttons" style="display: flex; gap: 8px;">
-              ${[1, 2, 3].map(roomId => {
+            <div class="room-buttons" style="display: flex; gap: 6px; flex-wrap: wrap;">
+              ${[1, 2, 3, 4, 5].map(roomId => {
                 const usage = state.motion.roomUsage[roomId] || 0;
                 const isFull = usage >= 3;
                 const isSelected = state.motion.selectedRoom === roomId;
                 return `<button 
                   class="btn ${isSelected ? 'btn-primary' : isFull ? 'btn-disabled' : 'btn-outline'}" 
                   data-motion-room="${roomId}" 
-                  style="flex: 1; position: relative;" 
+                  style="min-width: 70px; position: relative;" 
                   ${isFull && !isSelected ? 'disabled' : ''}>
                   Room ${roomId}
-                  <span style="display: block; font-size: 10px; opacity: 0.8;">${usage}/3 user</span>
+                  <span style="display: block; font-size: 10px; opacity: 0.8;">${usage}/3</span>
                 </button>`;
               }).join('')}
             </div>
