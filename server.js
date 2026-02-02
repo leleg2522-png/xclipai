@@ -5490,15 +5490,60 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
     
     console.log('[XIMAGE] Status response:', JSON.stringify(statusResponse.data));
     
-    const data = statusResponse.data.data || statusResponse.data;
-    const status = data.status || data.state || data.to_status;
+    // Keep raw response for proper parsing
+    const raw = statusResponse.data;
+    
+    // Status can be at outer level or in data
+    const status = raw.status || raw.data?.status || raw.state || raw.to_status;
     
     if (status === 'finished' || status === 'completed' || status === 'success') {
-      const imageUrl = data.output?.image_url || 
-                       data.output?.url || 
-                       data.media_url || 
-                       data.image_url ||
-                       (data.output?.images && data.output.images[0]);
+      // Poyo.ai documented format: { status: 'completed', data: { images: [{ url }] } }
+      let imageUrl = null;
+      
+      // Priority 1: Documented format - raw.data.images[0].url
+      if (raw.data?.images && raw.data.images.length > 0) {
+        imageUrl = raw.data.images[0].url || raw.data.images[0];
+      }
+      // Priority 2: Direct images array at root
+      else if (raw.images && raw.images.length > 0) {
+        imageUrl = raw.images[0].url || raw.images[0];
+      }
+      // Priority 3: Legacy output formats
+      else if (raw.data?.output?.images && raw.data.output.images.length > 0) {
+        imageUrl = raw.data.output.images[0].url || raw.data.output.images[0];
+      }
+      else if (raw.output?.images && raw.output.images.length > 0) {
+        imageUrl = raw.output.images[0].url || raw.output.images[0];
+      }
+      else if (raw.data?.output?.image_url) {
+        imageUrl = raw.data.output.image_url;
+      }
+      else if (raw.output?.image_url) {
+        imageUrl = raw.output.image_url;
+      }
+      else if (raw.data?.media_url) {
+        imageUrl = raw.data.media_url;
+      }
+      else if (raw.media_url) {
+        imageUrl = raw.media_url;
+      }
+      else if (raw.data?.url) {
+        imageUrl = raw.data.url;
+      }
+      else if (raw.url) {
+        imageUrl = raw.url;
+      }
+      
+      console.log('[XIMAGE] Extracted image URL:', imageUrl);
+      
+      // Defensive check - if completed but no URL, return error
+      if (!imageUrl) {
+        console.error('[XIMAGE] Status completed but no image URL found in response:', raw);
+        return res.status(500).json({ 
+          status: 'failed', 
+          error: 'Image generation completed but no URL returned' 
+        });
+      }
       
       // Update history
       await pool.query(`
@@ -5514,7 +5559,7 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
     }
     
     if (status === 'failed' || status === 'error') {
-      const errorMsg = data.error || data.error_message || 'Generation failed';
+      const errorMsg = raw.error || raw.data?.error || raw.error_message || 'Generation failed';
       
       await pool.query(`
         UPDATE ximage_history 
@@ -5529,7 +5574,7 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
     }
     
     // Still processing
-    const progress = data.progress || data.percent || 0;
+    const progress = raw.progress || raw.data?.progress || raw.percent || 0;
     res.json({
       status: 'processing',
       progress,
