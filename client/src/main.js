@@ -2849,12 +2849,12 @@ function renderXImagePage() {
     html += '<span class="room-status-label">Room Aktif:</span>';
     html += '<span class="room-status-name">' + state.ximageRoomManager.subscription.roomName + '</span>';
     html += '</div>';
-    html += '<button class="btn btn-sm btn-outline" id="changeXimageRoom">Ganti Room</button>';
+    html += '<button class="btn btn-sm btn-outline" id="changeXimageRoom" onclick="window.openXimageRoomModalFn && window.openXimageRoomModalFn()">Ganti Room</button>';
     html += '</div>';
   } else {
     html += '<div class="room-status-card">';
     html += '<p class="room-status-text">Belum bergabung ke room. Pilih room untuk menggunakan X Image.</p>';
-    html += '<button class="btn btn-primary" id="openXimageRoomModal">Pilih Room</button>';
+    html += '<button class="btn btn-primary" id="openXimageRoomModal" onclick="window.openXimageRoomModalFn && window.openXimageRoomModalFn()">Pilih Room</button>';
     html += '</div>';
   }
   html += '</div>';
@@ -5404,7 +5404,17 @@ async function pollVidgen2Task(taskId) {
 }
 
 // ============ X IMAGE EVENT HANDLERS ============
+// Global function for inline onclick handlers
+window.openXimageRoomModalFn = async function() {
+  console.log('[XIMAGE] Global room modal function called');
+  state.ximageRoomManager.showRoomModal = true;
+  render();
+  await loadXImageRooms();
+};
+
 function attachXImageEventListeners() {
+  console.log('[XIMAGE] attachXImageEventListeners called');
+  
   // Load history and subscription status on first visit
   if (state.ximage.generatedImages.length === 0 && !state.ximage._historyLoaded) {
     loadXImageHistory().then(function() { render(); });
