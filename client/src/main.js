@@ -5547,19 +5547,24 @@ function attachXImageEventListeners() {
   // X Image Room modal event listeners
   var openXimageRoomModal = document.getElementById('openXimageRoomModal');
   var changeXimageRoom = document.getElementById('changeXimageRoom');
+  console.log('[XIMAGE] Room buttons:', { openBtn: !!openXimageRoomModal, changeBtn: !!changeXimageRoom });
   if (openXimageRoomModal) {
-    openXimageRoomModal.addEventListener('click', async function() {
+    openXimageRoomModal.onclick = async function(e) {
+      e.preventDefault();
+      console.log('[XIMAGE] Open room modal clicked');
       state.ximageRoomManager.showRoomModal = true;
       render();
       await loadXImageRooms();
-    });
+    };
   }
   if (changeXimageRoom) {
-    changeXimageRoom.addEventListener('click', async function() {
+    changeXimageRoom.onclick = async function(e) {
+      e.preventDefault();
+      console.log('[XIMAGE] Change room clicked');
       state.ximageRoomManager.showRoomModal = true;
       render();
       await loadXImageRooms();
-    });
+    };
   }
   
   var closeXimageRoomModal = document.getElementById('closeXimageRoomModal');
