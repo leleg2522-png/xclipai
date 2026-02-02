@@ -2923,7 +2923,7 @@ function renderXImageGallery() {
       html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
       html += '<div class="image-card-footer">';
       html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
-      html += '<button onclick="downloadImage(\'' + image.url + '\', \'ximage-' + index + '.png\')" class="btn btn-sm btn-secondary">';
+      html += '<button class="btn btn-sm btn-secondary ximage-download-btn" data-url="' + encodeURIComponent(image.url) + '" data-filename="ximage-' + index + '.png">';
       html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
       html += ' Download</button>';
       html += '</div></div>';
@@ -5619,6 +5619,17 @@ function attachXImageEventListeners() {
     btn.addEventListener('click', function() {
       var roomId = parseInt(btn.dataset.roomId);
       joinXImageRoom(roomId);
+    });
+  });
+  
+  // X Image download buttons
+  document.querySelectorAll('.ximage-download-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var url = decodeURIComponent(btn.dataset.url);
+      var filename = btn.dataset.filename;
+      console.log('[XIMAGE] Download clicked:', url, filename);
+      await downloadImage(url, filename);
     });
   });
 }
