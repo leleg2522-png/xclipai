@@ -5543,6 +5543,56 @@ function attachXImageEventListeners() {
       }
     });
   }
+  
+  // X Image Room modal event listeners
+  var openXimageRoomModal = document.getElementById('openXimageRoomModal');
+  var changeXimageRoom = document.getElementById('changeXimageRoom');
+  if (openXimageRoomModal) {
+    openXimageRoomModal.addEventListener('click', async function() {
+      state.ximageRoomManager.showRoomModal = true;
+      render();
+      await loadXImageRooms();
+    });
+  }
+  if (changeXimageRoom) {
+    changeXimageRoom.addEventListener('click', async function() {
+      state.ximageRoomManager.showRoomModal = true;
+      render();
+      await loadXImageRooms();
+    });
+  }
+  
+  var closeXimageRoomModal = document.getElementById('closeXimageRoomModal');
+  var ximageRoomModalOverlay = document.getElementById('ximageRoomModalOverlay');
+  if (closeXimageRoomModal) {
+    closeXimageRoomModal.addEventListener('click', function() {
+      state.ximageRoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (ximageRoomModalOverlay) {
+    ximageRoomModalOverlay.addEventListener('click', function(e) {
+      if (e.target === ximageRoomModalOverlay) {
+        state.ximageRoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+  
+  var ximageRoomApiKeyInput = document.getElementById('ximageRoomApiKeyInput');
+  if (ximageRoomApiKeyInput) {
+    ximageRoomApiKeyInput.addEventListener('input', function(e) {
+      state.ximageRoomManager.xclipApiKey = e.target.value;
+    });
+  }
+  
+  // X Image room join buttons
+  document.querySelectorAll('.join-ximage-room-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var roomId = parseInt(btn.dataset.roomId);
+      joinXImageRoom(roomId);
+    });
+  });
 }
 
 function handleXImageUpload(e) {
@@ -5860,56 +5910,6 @@ function attachMotionEventListeners() {
       state.motion.customApiKey = e.target.value;
     });
   }
-  
-  // X Image Room modal event listeners
-  const openXimageRoomModal = document.getElementById('openXimageRoomModal');
-  const changeXimageRoom = document.getElementById('changeXimageRoom');
-  if (openXimageRoomModal) {
-    openXimageRoomModal.addEventListener('click', async () => {
-      state.ximageRoomManager.showRoomModal = true;
-      render();
-      await loadXImageRooms();
-    });
-  }
-  if (changeXimageRoom) {
-    changeXimageRoom.addEventListener('click', async () => {
-      state.ximageRoomManager.showRoomModal = true;
-      render();
-      await loadXImageRooms();
-    });
-  }
-  
-  const closeXimageRoomModal = document.getElementById('closeXimageRoomModal');
-  const ximageRoomModalOverlay = document.getElementById('ximageRoomModalOverlay');
-  if (closeXimageRoomModal) {
-    closeXimageRoomModal.addEventListener('click', () => {
-      state.ximageRoomManager.showRoomModal = false;
-      render();
-    });
-  }
-  if (ximageRoomModalOverlay) {
-    ximageRoomModalOverlay.addEventListener('click', (e) => {
-      if (e.target === ximageRoomModalOverlay) {
-        state.ximageRoomManager.showRoomModal = false;
-        render();
-      }
-    });
-  }
-  
-  const ximageRoomApiKeyInput = document.getElementById('ximageRoomApiKeyInput');
-  if (ximageRoomApiKeyInput) {
-    ximageRoomApiKeyInput.addEventListener('input', (e) => {
-      state.ximageRoomManager.xclipApiKey = e.target.value;
-    });
-  }
-  
-  // X Image room join buttons
-  document.querySelectorAll('.join-ximage-room-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const roomId = parseInt(btn.dataset.roomId);
-      joinXImageRoom(roomId);
-    });
-  });
 }
 
 function handleMotionImageUpload(e) {
