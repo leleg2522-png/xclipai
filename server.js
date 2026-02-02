@@ -2382,7 +2382,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     if (!freepikApiKey && keyInfo.is_admin) {
-      const roomKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM3_KEY_1', 'ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
+      const roomKeys = ['MOTION_ROOM1_KEY_1', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM3_KEY_1', 'MOTION_ROOM4_KEY_1', 'MOTION_ROOM5_KEY_1', 'ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
       for (const keyName of roomKeys) {
         if (process.env[keyName]) {
           freepikApiKey = process.env[keyName];
@@ -3895,7 +3895,7 @@ app.get('/api/motion/room-usage', async (req, res) => {
     res.json({ usage });
   } catch (error) {
     console.error('Get motion room usage error:', error);
-    res.json({ usage: { 1: 0, 2: 0, 3: 0 } });
+    res.json({ usage: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
   }
 });
 
