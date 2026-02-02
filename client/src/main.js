@@ -2937,14 +2937,27 @@ function renderXImageGallery() {
   return '';
 }
 
-function downloadImage(url, filename) {
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.target = '_blank';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+async function downloadImage(url, filename) {
+  try {
+    // Try fetch + blob approach for cross-origin images
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+    showToast('Gambar berhasil diunduh', 'success');
+  } catch (err) {
+    console.error('Download error:', err);
+    // Fallback: open in new tab
+    window.open(url, '_blank');
+    showToast('Membuka gambar di tab baru', 'info');
+  }
 }
 
 function renderXMakerPage() {
