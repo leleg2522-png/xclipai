@@ -5118,6 +5118,33 @@ app.get('/api/vidgen2/history', async (req, res) => {
   }
 });
 
+// Delete vidgen2 video permanently
+app.delete('/api/vidgen2/video/:id', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const videoId = req.params.id;
+  
+  try {
+    // Verify ownership and delete
+    const result = await pool.query(
+      'DELETE FROM vidgen2_tasks WHERE id = $1 AND user_id = $2 RETURNING id',
+      [videoId, req.session.userId]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Video tidak ditemukan' });
+    }
+    
+    console.log(`[VIDGEN2] Video ${videoId} deleted by user ${req.session.userId}`);
+    res.json({ success: true, message: 'Video berhasil dihapus' });
+  } catch (error) {
+    console.error('[VIDGEN2] Delete video error:', error);
+    res.status(500).json({ error: 'Gagal menghapus video' });
+  }
+});
+
 // ============ X IMAGE (Poyo.ai Image Generation) ============
 
 // X Image model configuration

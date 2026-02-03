@@ -2711,9 +2711,14 @@ function renderVidgen2Videos() {
       html += '<div class="video-wrapper"><video src="' + video.url + '" controls playsinline></video></div>';
       html += '<div class="video-card-footer">';
       html += '<span class="video-model-tag">' + (video.model || 'AI').toUpperCase() + '</span>';
+      html += '<div class="video-actions">';
       html += '<button onclick="downloadVideo(\'' + video.url + '\', \'vidgen2-' + index + '.mp4\')" class="btn btn-sm btn-secondary">';
       html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-      html += ' Download</button>';
+      html += '</button>';
+      html += '<button class="btn btn-sm btn-danger vidgen2-delete-btn" data-video-id="' + video.id + '">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
+      html += '</button>';
+      html += '</div>';
       html += '</div></div>';
     });
     
@@ -5266,6 +5271,35 @@ function attachVidgen2EventListeners() {
       }
     });
   }
+  
+  // Delete video buttons
+  document.querySelectorAll('.vidgen2-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const videoId = btn.dataset.videoId;
+      if (!videoId) return;
+      
+      if (!confirm('Hapus video ini secara permanen?')) return;
+      
+      try {
+        const response = await fetch(`${API_URL}/api/vidgen2/video/${videoId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          state.vidgen2.generatedVideos = state.vidgen2.generatedVideos.filter(v => v.id != videoId);
+          showToast('Video berhasil dihapus', 'success');
+          render();
+        } else {
+          showToast(data.error || 'Gagal menghapus video', 'error');
+        }
+      } catch (error) {
+        console.error('Delete video error:', error);
+        showToast('Gagal menghapus video', 'error');
+      }
+    });
+  });
 }
 
 function handleVidgen2ImageUpload(e) {
