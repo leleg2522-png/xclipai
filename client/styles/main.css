@@ -5905,6 +5905,9 @@ textarea.form-input {
 }
 
 .videos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--space-3);

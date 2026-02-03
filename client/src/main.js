@@ -2703,7 +2703,10 @@ function renderVidgen2Tasks() {
 function renderVidgen2Videos() {
   if (state.vidgen2.generatedVideos.length > 0) {
     let html = '<div class="generated-videos-section">';
-    html += '<div class="videos-header">Video yang Dihasilkan (' + state.vidgen2.generatedVideos.length + ')</div>';
+    html += '<div class="videos-header">';
+    html += '<span>Video yang Dihasilkan (' + state.vidgen2.generatedVideos.length + ')</span>';
+    html += '<button class="btn btn-sm btn-danger" id="clearAllVidgen2">Hapus Semua</button>';
+    html += '</div>';
     html += '<div class="videos-grid">';
     
     state.vidgen2.generatedVideos.forEach(function(video, index) {
@@ -5300,6 +5303,33 @@ function attachVidgen2EventListeners() {
       }
     });
   });
+  
+  // Clear all videos button
+  const clearAllBtn = document.getElementById('clearAllVidgen2');
+  if (clearAllBtn) {
+    clearAllBtn.addEventListener('click', async () => {
+      if (!confirm('Hapus semua video secara permanen? Tindakan ini tidak bisa dibatalkan.')) return;
+      
+      try {
+        const response = await fetch(`${API_URL}/api/vidgen2/videos/all`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          state.vidgen2.generatedVideos = [];
+          showToast(data.message || 'Semua video berhasil dihapus', 'success');
+          render();
+        } else {
+          showToast(data.error || 'Gagal menghapus video', 'error');
+        }
+      } catch (error) {
+        console.error('Clear all videos error:', error);
+        showToast('Gagal menghapus semua video', 'error');
+      }
+    });
+  }
 }
 
 function handleVidgen2ImageUpload(e) {
