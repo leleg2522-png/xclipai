@@ -85,7 +85,9 @@ const state = {
     generatedVideos: [],
     error: null,
     customApiKey: '',
-    selectedRoom: null
+    selectedRoom: null,
+    cooldownEndTime: parseInt(localStorage.getItem('vidgen2_cooldown') || '0'),
+    cooldownRemaining: 0
   },
   vidgen2RoomManager: {
     rooms: [],
@@ -2640,17 +2642,31 @@ function renderVidgen2Page() {
                 <p class="setting-hint">Buat Xclip API key di panel "Xclip Keys"</p>
               </div>
 
-              <button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 ? 'disabled' : ''}>
+              ${(() => {
+                const now = Date.now();
+                const isOnCooldown = state.vidgen2.cooldownEndTime > now;
+                const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000) : 0;
+                const cooldownMins = Math.floor(cooldownSecs / 60);
+                const cooldownRemSecs = cooldownSecs % 60;
+                const isDisabled = state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 || isOnCooldown;
+                
+                return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen2.isGenerating ? `
                   <div class="spinner"></div>
                   <span>Generating...</span>
+                ` : isOnCooldown ? `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span>Cooldown ${cooldownMins}:${cooldownRemSecs.toString().padStart(2, '0')}</span>
                 ` : `
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
                   <span>Generate Video${state.vidgen2.tasks.length > 0 ? ' (' + state.vidgen2.tasks.length + '/3)' : ''}</span>
                 `}
-              </button>
+              </button>`;
+              })()}
               ${!state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Upload gambar terlebih dahulu</p>' : ''}
               ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
@@ -5172,6 +5188,26 @@ function attachVideoGenEventListeners() {
 }
 
 // ============ VIDGEN2 EVENT LISTENERS ============
+// Vidgen2 cooldown timer
+let vidgen2CooldownInterval = null;
+
+function startVidgen2CooldownTimer() {
+  if (vidgen2CooldownInterval) clearInterval(vidgen2CooldownInterval);
+  
+  vidgen2CooldownInterval = setInterval(() => {
+    const now = Date.now();
+    if (state.vidgen2.cooldownEndTime <= now) {
+      clearInterval(vidgen2CooldownInterval);
+      vidgen2CooldownInterval = null;
+      state.vidgen2.cooldownEndTime = 0;
+      localStorage.removeItem('vidgen2_cooldown');
+      if (state.currentPage === 'vidgen2') render();
+    } else if (state.currentPage === 'vidgen2') {
+      render();
+    }
+  }, 1000);
+}
+
 function attachVidgen2EventListeners() {
   // Load rooms if not loaded yet
   if (state.vidgen2RoomManager.rooms.length === 0 && !state.vidgen2RoomManager.isLoading) {
@@ -5182,6 +5218,11 @@ function attachVidgen2EventListeners() {
   if (state.vidgen2.generatedVideos.length === 0 && !state.vidgen2._historyLoaded) {
     state.vidgen2._historyLoaded = true;
     loadVidgen2History().then(() => render());
+  }
+  
+  // Start cooldown timer if active
+  if (state.vidgen2.cooldownEndTime > Date.now() && !vidgen2CooldownInterval) {
+    startVidgen2CooldownTimer();
   }
   
   const uploadZone = document.getElementById('vidgen2UploadZone');
@@ -5369,6 +5410,16 @@ async function generateVidgen2Video() {
     return;
   }
   
+  // Check cooldown
+  const now = Date.now();
+  if (state.vidgen2.cooldownEndTime > now) {
+    const remaining = Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    alert(`Cooldown aktif. Tunggu ${mins}:${secs.toString().padStart(2, '0')} lagi.`);
+    return;
+  }
+  
   state.vidgen2.isGenerating = true;
   state.vidgen2.error = null;
   render();
@@ -5401,6 +5452,12 @@ async function generateVidgen2Video() {
       model: state.vidgen2.selectedModel,
       startTime: Date.now()
     });
+    
+    // Set 5 minute cooldown
+    const cooldownEnd = Date.now() + (5 * 60 * 1000);
+    state.vidgen2.cooldownEndTime = cooldownEnd;
+    localStorage.setItem('vidgen2_cooldown', cooldownEnd.toString());
+    startVidgen2CooldownTimer();
     
     // Start polling for this task
     pollVidgen2Task(data.taskId);
