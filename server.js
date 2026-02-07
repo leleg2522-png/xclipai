@@ -2040,8 +2040,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
     
-    const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
-    
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
       const currentKey = allKeys[attempt];
       console.log(`[TIMING] Attempt ${attempt + 1}/${allKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
@@ -2052,8 +2050,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
           `${baseUrl}${config.endpoint}`,
           currentKey.key,
           requestBody,
-          true,
-          pendingId
+          false,
+          null
         );
         
         successResponse = { data: response.data };
@@ -2088,12 +2086,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const createLatency = Date.now() - startTime;
     
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
-    
-    if (taskId && pendingId) {
-      promoteProxyToTask(pendingId, taskId);
-    } else if (pendingId) {
-      releaseProxyForTask(pendingId);
-    }
     
     // Get the key name that was actually used
     const usedKeyName = allKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
@@ -2263,8 +2255,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       `https://api.freepik.com${endpoint}${taskId}`,
       freepikApiKey,
       null,
-      true,
-      taskId
+      false,
+      null
     );
     const pollLatency = Date.now() - pollStart;
     
