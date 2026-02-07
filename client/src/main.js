@@ -1231,6 +1231,49 @@ async function loadVideoGenHistory() {
   }
 }
 
+// Load Motion history from database
+async function loadMotionHistory() {
+  try {
+    const response = await fetch(`${API_URL}/api/motion/history`, { credentials: 'include' });
+    const data = await response.json();
+    
+    if (data.videos && data.videos.length > 0) {
+      const existingTaskIds = new Set(state.motion.generatedVideos.map(v => v.taskId));
+      data.videos.forEach(v => {
+        if (!existingTaskIds.has(v.taskId)) {
+          state.motion.generatedVideos.push({
+            taskId: v.taskId,
+            url: v.url,
+            model: v.model,
+            createdAt: new Date(v.createdAt).getTime()
+          });
+        }
+      });
+      state.motion.generatedVideos.sort((a, b) => b.createdAt - a.createdAt);
+    }
+    
+    if (data.processing && data.processing.length > 0) {
+      data.processing.forEach(task => {
+        const existingTask = state.motion.tasks.find(t => t.taskId === task.taskId);
+        if (!existingTask) {
+          const motionApiKey = state.motion.customApiKey || state.motionRoomManager?.xclipApiKey;
+          state.motion.tasks.push({
+            taskId: task.taskId,
+            model: task.model,
+            status: 'processing',
+            progress: 0,
+            createdAt: new Date(task.createdAt).getTime(),
+            apiKey: motionApiKey
+          });
+          pollMotionStatus(task.taskId, task.model, motionApiKey);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Load motion history error:', error);
+  }
+}
+
 async function joinVidgen2Room(roomId) {
   try {
     state.vidgen2RoomManager.isLoading = true;
@@ -3775,7 +3818,36 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                     </div>
                   `).join('')}
                 </div>
-              ` : `
+              ` : ''}
+              ${state.motion.generatedVideos.length > 0 ? `
+                <div class="card-header" style="margin-top: 16px; padding: 0;">
+                  <h3 style="font-size: 14px; opacity: 0.7;">History</h3>
+                </div>
+                <div class="video-gallery">
+                  ${state.motion.generatedVideos.map((video, idx) => `
+                    <div class="video-item">
+                      <video src="${video.url}" controls class="result-video"></video>
+                      <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
+                        <a href="${video.url}" download="motion-${video.taskId}.mp4" class="btn btn-primary btn-sm" style="flex:1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                          </svg>
+                          Download
+                        </a>
+                        <button class="btn btn-sm" style="opacity:0.6" onclick="deleteMotionHistory(${idx})">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-2 14H7L5 6"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+              ${state.motion.tasks.length === 0 && state.motion.generatedVideos.length === 0 ? `
                 <div class="empty-gallery">
                   <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
                     <circle cx="12" cy="12" r="10"/>
@@ -3784,7 +3856,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                   </svg>
                   <p>Motion video yang di-generate akan muncul di sini</p>
                 </div>
-              `}
+              ` : ''}
             </div>
           </div>
         </div>
@@ -6018,6 +6090,11 @@ async function loadXImageHistory() {
 }
 
 function attachMotionEventListeners() {
+  if (!state.motion._historyLoaded) {
+    state.motion._historyLoaded = true;
+    loadMotionHistory().then(() => render());
+  }
+  
   const imageUploadZone = document.getElementById('motionImageUploadZone');
   const imageInput = document.getElementById('motionImageInput');
   const videoUploadZone = document.getElementById('motionVideoUploadZone');
@@ -6396,6 +6473,25 @@ function pollMotionStatus(taskId, model, apiKey) {
   };
   
   poll();
+}
+
+async function deleteMotionHistory(index) {
+  const video = state.motion.generatedVideos[index];
+  if (!video) return;
+  
+  state.motion.generatedVideos.splice(index, 1);
+  render();
+  
+  if (video.taskId) {
+    try {
+      await fetch(`${API_URL}/api/motion/history/${video.taskId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Failed to delete motion history:', error);
+    }
+  }
 }
 
 function handleVideoGenImageUpload(e) {
