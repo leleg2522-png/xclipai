@@ -2487,8 +2487,8 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen2Page() {
   const models = [
-    { id: 'sora-2-10s', name: 'Sora 2 (10s)', desc: 'Video 10 detik, 720p', badge: 'POPULAR', icon: '🎬' },
-    { id: 'sora-2-15s', name: 'Sora 2 (15s)', desc: 'Video 15 detik, 720p', badge: 'LONGER', icon: '🎥' },
+    { id: 'sora-2-10s', name: 'Sora 2 Stable (10s)', desc: 'Video 10 detik, 720p', badge: 'POPULAR', icon: '🎬' },
+    { id: 'sora-2-15s', name: 'Sora 2 Stable (15s)', desc: 'Video 15 detik, 720p', badge: 'LONGER', icon: '🎥' },
     { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Google Veo, cepat & berkualitas', badge: 'FAST', icon: '⚡' }
   ];
   
