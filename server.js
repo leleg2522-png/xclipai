@@ -390,6 +390,13 @@ function applyProxyToConfig(config, proxy) {
   return config;
 }
 
+function isFreepikBlocked(response) {
+  if (!response) return false;
+  const data = response.data;
+  if (typeof data === 'string' && (data.includes('Access denied') || data.includes('<!DOCTYPE'))) return true;
+  return response.status === 403;
+}
+
 async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null) {
   function buildConfig() {
     const cfg = {
@@ -408,6 +415,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   const config = buildConfig();
   const hasWebshareKey = !!process.env.WEBSHARE_API_KEY;
   let usedProxy = null;
+  const isPendingTask = taskId && taskId.startsWith('pending_');
   
   if (useProxy && hasWebshareKey) {
     if (taskId) {
@@ -436,21 +444,17 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   
   try {
     const response = await axios(config);
-    const responseData = typeof response.data === 'string' && response.data.includes('Access denied');
-    if (responseData) {
-      throw { response: { status: 403, data: response.data }, isProxyBlocked: true };
+    if (isFreepikBlocked(response)) {
+      throw { response, isProxyBlocked: true };
     }
     return response;
   } catch (error) {
-    const status = error.response?.status || error.status;
-    const isHtml = typeof error.response?.data === 'string' && error.response.data.includes('<!DOCTYPE');
-    const isBlocked = status === 403 || error.isProxyBlocked || (isHtml && error.response?.data?.includes('Access denied'));
+    const blocked = error.isProxyBlocked || isFreepikBlocked(error.response);
 
-    if (isBlocked && usedProxy) {
-      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked by Freepik (403). Retrying with different proxy...`);
-      if (taskId) {
-        releaseProxyForTask(taskId);
-      }
+    if (blocked && usedProxy && (isPendingTask || !taskId)) {
+      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked by Freepik (403) during task creation. Retrying...`);
+      
+      if (taskId) releaseProxyForTask(taskId);
 
       const retryConfig = buildConfig();
       await fetchWebshareProxies();
@@ -460,22 +464,29 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
         if (taskId) {
           taskProxyMap.set(taskId, { proxy: newProxy, assignedAt: Date.now() });
         }
-        console.log(`[PROXY] Retry with new IP: ${newProxy.proxy_address}:${newProxy.port}`);
+        console.log(`[PROXY] Retry #1 with new IP: ${newProxy.proxy_address}:${newProxy.port}`);
         try {
           const retryResponse = await axios(retryConfig);
-          const retryBlocked = typeof retryResponse.data === 'string' && retryResponse.data.includes('Access denied');
-          if (!retryBlocked) return retryResponse;
-          console.log(`[PROXY] Second proxy also blocked, falling back to direct connection`);
+          if (!isFreepikBlocked(retryResponse)) return retryResponse;
+          console.log(`[PROXY] Second proxy also blocked, falling back to direct`);
         } catch (retryErr) {
-          console.log(`[PROXY] Retry proxy also failed, falling back to direct connection`);
+          console.log(`[PROXY] Retry proxy failed, falling back to direct`);
         }
         if (taskId) releaseProxyForTask(taskId);
       }
 
       const directConfig = buildConfig();
-      console.log(`[PROXY] Using direct connection (no proxy)`);
+      console.log(`[PROXY] Falling back to direct connection (no proxy)`);
       return axios(directConfig);
     }
+
+    if (blocked && usedProxy && !isPendingTask && taskId) {
+      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Retrying without proxy...`);
+      releaseProxyForTask(taskId);
+      const directConfig = buildConfig();
+      return axios(directConfig);
+    }
+
     throw error;
   }
 }
