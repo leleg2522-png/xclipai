@@ -127,12 +127,31 @@ async function cleanupInactiveUsers() {
   try {
     const cutoffTime = new Date(Date.now() - INACTIVE_TIMEOUT_MINUTES * 60 * 1000);
     
+    // Clean inactive users from Video Gen rooms
     const inactiveVideoGen = await pool.query(`
       UPDATE subscriptions 
       SET room_id = NULL 
       WHERE room_id IS NOT NULL 
       AND (last_active IS NULL OR last_active < $1)
       RETURNING user_id, room_id
+    `, [cutoffTime]);
+    
+    // Clean inactive users from Vidgen2 rooms
+    const inactiveVidgen2 = await pool.query(`
+      UPDATE subscriptions 
+      SET vidgen2_room_id = NULL 
+      WHERE vidgen2_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, vidgen2_room_id
+    `, [cutoffTime]);
+    
+    // Clean inactive users from X Image rooms
+    const inactiveXimage = await pool.query(`
+      UPDATE subscriptions 
+      SET ximage_room_id = NULL 
+      WHERE ximage_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, ximage_room_id
     `, [cutoffTime]);
     
     // Update active_users in rooms table (Video Gen)
@@ -155,9 +174,19 @@ async function cleanupInactiveUsers() {
       )
     `);
     
-    const totalCleaned = inactiveVideoGen.rowCount;
+    // Update current_users in ximage_rooms table
+    await pool.query(`
+      UPDATE ximage_rooms r SET current_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.ximage_room_id = r.id
+        AND s.status = 'active' 
+        AND (s.expired_at IS NULL OR s.expired_at > NOW())
+      )
+    `);
+    
+    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveXimage.rowCount;
     if (totalCleaned > 0) {
-      console.log(`Cleaned up ${totalCleaned} inactive users from rooms`);
+      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, XImage=${inactiveXimage.rowCount}`);
     }
   } catch (error) {
     console.error('Cleanup inactive users error:', error);
