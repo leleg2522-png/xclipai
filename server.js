@@ -5458,7 +5458,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    const { model, prompt, image, aspectRatio, mode, resolution, numberOfImages } = req.body;
+    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -5475,45 +5475,48 @@ app.post('/api/ximage/generate', async (req, res) => {
     
     console.log(`[XIMAGE] Generating with model: ${model}, mode: ${mode || 'text-to-image'}, resolution: ${resolution || 'default'}, n: ${numberOfImages || 1}`);
     
-    // If image-to-image mode, upload image to Poyo storage first
-    let imageUrl = null;
-    if (mode === 'image-to-image' && image) {
-      if (image.startsWith('data:')) {
-        console.log('[XIMAGE] Uploading base64 image to Poyo.ai storage...');
-        try {
-          const uploadResponse = await axios.post(
-            'https://api.poyo.ai/api/common/upload/base64',
-            {
-              base64_data: image,
-              upload_path: 'xclip-ximage'
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${roomKeyResult.apiKey}`
-              },
-              timeout: 60000
-            }
-          );
-          
-          if (uploadResponse.data?.data?.file_url) {
-            imageUrl = uploadResponse.data.data.file_url;
-            console.log(`[XIMAGE] Image uploaded: ${imageUrl}`);
-          } else {
-            throw new Error('Failed to get image URL');
-          }
-        } catch (uploadError) {
-          console.error('[XIMAGE] Image upload error:', uploadError.response?.data || uploadError.message);
-          return res.status(500).json({ error: 'Gagal upload image' });
+    // Helper to upload a base64 image to Poyo storage
+    async function uploadImageToPoyo(imageData, label) {
+      if (!imageData) return null;
+      if (!imageData.startsWith('data:')) return imageData;
+      console.log(`[XIMAGE] Uploading ${label} base64 image to Poyo.ai storage...`);
+      const uploadResponse = await axios.post(
+        'https://api.poyo.ai/api/common/upload/base64',
+        { base64_data: imageData, upload_path: 'xclip-ximage' },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${roomKeyResult.apiKey}`
+          },
+          timeout: 60000
         }
-      } else {
-        imageUrl = image;
+      );
+      if (uploadResponse.data?.data?.file_url) {
+        console.log(`[XIMAGE] ${label} uploaded: ${uploadResponse.data.data.file_url}`);
+        return uploadResponse.data.data.file_url;
+      }
+      throw new Error(`Failed to get ${label} URL`);
+    }
+
+    // If image-to-image mode, upload images to Poyo storage
+    let imageUrls = [];
+    if (mode === 'image-to-image' && image) {
+      try {
+        const url1 = await uploadImageToPoyo(image, 'Reference image 1');
+        if (url1) imageUrls.push(url1);
+        if (image2) {
+          const url2 = await uploadImageToPoyo(image2, 'Reference image 2');
+          if (url2) imageUrls.push(url2);
+        }
+      } catch (uploadError) {
+        console.error('[XIMAGE] Image upload error:', uploadError.response?.data || uploadError.message);
+        return res.status(500).json({ error: 'Gagal upload image' });
       }
     }
     
     // Prepare request to Poyo.ai with correct model and format
     const modelConfig = XIMAGE_MODELS[model];
-    const isI2I = mode === 'image-to-image' && imageUrl;
+    const isI2I = mode === 'image-to-image' && imageUrls.length > 0;
     const apiModelId = isI2I && modelConfig.editModel ? modelConfig.editModel : modelConfig.apiModel;
     
     const requestBody = {
@@ -5534,9 +5537,9 @@ app.post('/api/ximage/generate', async (req, res) => {
       requestBody.input.resolution = resolution;
     }
     
-    // Add image for image-to-image mode
-    if (imageUrl) {
-      requestBody.input.image_urls = [imageUrl];
+    // Add images for image-to-image mode
+    if (imageUrls.length > 0) {
+      requestBody.input.image_urls = imageUrls;
       if (model !== 'grok-imagine-image') {
         requestBody.input.generation_type = 'reference';
       }

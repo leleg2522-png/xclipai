@@ -107,6 +107,7 @@ const state = {
   },
   ximage: {
     sourceImage: null,
+    sourceImage2: null,
     prompt: '',
     selectedModel: 'gpt-image-1.5',
     aspectRatio: '1:1',
@@ -2767,7 +2768,7 @@ function renderXImagePage() {
     { id: 'gpt-image-1.5', name: 'GPT Image 1.5', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'PRO', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'nano-banana-2', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: '4K', hasN: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'nano-banana-2', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: '4K', hasN: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: '4K', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, badge: 'ULTRA', hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 8, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'z-image', name: 'Z-Image', icon: 'alibaba', supportsI2I: false, badge: 'FAST', sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
@@ -2798,8 +2799,9 @@ function renderXImagePage() {
   
   // Reference Image (for image-to-image mode)
   if (state.ximage.mode === 'image-to-image') {
+    var showSecondRef = currentModelConfig.maxRefs && currentModelConfig.maxRefs >= 2;
     html += '<div class="section-card">';
-    html += '<h3 class="section-title">Reference Image</h3>';
+    html += '<h3 class="section-title">Reference Image' + (showSecondRef ? ' 1' : '') + '</h3>';
     html += '<div class="reference-upload ' + (state.ximage.sourceImage ? 'has-image' : '') + '" id="ximageUploadZone">';
     if (state.ximage.sourceImage) {
       html += '<img src="' + state.ximage.sourceImage.data + '" alt="Reference" class="preview-image"/>';
@@ -2809,6 +2811,20 @@ function renderXImagePage() {
     }
     html += '<input type="file" id="ximageFileInput" accept="image/*" style="display:none"/>';
     html += '</div></div>';
+
+    if (showSecondRef) {
+      html += '<div class="section-card">';
+      html += '<h3 class="section-title">Reference Image 2 <span style="font-size:12px;color:#888;font-weight:normal">(opsional)</span></h3>';
+      html += '<div class="reference-upload ' + (state.ximage.sourceImage2 ? 'has-image' : '') + '" id="ximageUploadZone2">';
+      if (state.ximage.sourceImage2) {
+        html += '<img src="' + state.ximage.sourceImage2.data + '" alt="Reference 2" class="preview-image"/>';
+        html += '<button class="remove-image-btn" id="removeXimageImage2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+      } else {
+        html += '<div class="upload-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p>Klik atau drop gambar referensi ke-2</p></div>';
+      }
+      html += '<input type="file" id="ximageFileInput2" accept="image/*" style="display:none"/>';
+      html += '</div></div>';
+    }
   }
   
   // Model Selection
@@ -5597,6 +5613,37 @@ function attachXImageEventListeners() {
       render();
     });
   }
+
+  var uploadZone2 = document.getElementById('ximageUploadZone2');
+  var imageInput2 = document.getElementById('ximageFileInput2');
+  var removeImageBtn2 = document.getElementById('removeXimageImage2');
+
+  if (uploadZone2 && imageInput2) {
+    uploadZone2.addEventListener('click', function() { imageInput2.click(); });
+    uploadZone2.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      uploadZone2.classList.add('drag-over');
+    });
+    uploadZone2.addEventListener('dragleave', function() {
+      uploadZone2.classList.remove('drag-over');
+    });
+    uploadZone2.addEventListener('drop', function(e) {
+      e.preventDefault();
+      uploadZone2.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleXImageUpload2({ target: { files: e.dataTransfer.files } });
+      }
+    });
+    imageInput2.addEventListener('change', handleXImageUpload2);
+  }
+
+  if (removeImageBtn2) {
+    removeImageBtn2.addEventListener('click', function(e) {
+      e.stopPropagation();
+      state.ximage.sourceImage2 = null;
+      render();
+    });
+  }
   
   if (generateBtn) {
     generateBtn.addEventListener('click', generateXImage);
@@ -5624,6 +5671,7 @@ function attachXImageEventListeners() {
       if (modeBtn && state.currentPage === 'ximage') {
         var newMode = modeBtn.dataset.ximageMode;
         state.ximage.mode = newMode;
+        state.ximage.sourceImage2 = null;
         
         // Auto-select compatible model when switching to image-to-image
         if (newMode === 'image-to-image') {
@@ -5652,7 +5700,12 @@ function attachXImageEventListeners() {
       // Model selection
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
-        state.ximage.selectedModel = modelCard.dataset.ximageModel;
+        var newModelId = modelCard.dataset.ximageModel;
+        var modelsWithMultiRef = ['nano-banana-2', 'flux-2-pro'];
+        if (!modelsWithMultiRef.includes(newModelId)) {
+          state.ximage.sourceImage2 = null;
+        }
+        state.ximage.selectedModel = newModelId;
         render();
         return;
       }
@@ -5776,6 +5829,27 @@ function handleXImageUpload(e) {
   reader.readAsDataURL(file);
 }
 
+function handleXImageUpload2(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Pilih file gambar');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(event) {
+    state.ximage.sourceImage2 = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
 async function generateXImage() {
   if (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) {
     alert('Upload gambar referensi terlebih dahulu');
@@ -5820,6 +5894,10 @@ async function generateXImage() {
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
+      var multiRefModels = ['nano-banana-2', 'flux-2-pro'];
+      if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
+        requestBody.image2 = state.ximage.sourceImage2.data;
+      }
     }
     
     var response = await fetch(API_URL + '/api/ximage/generate', {
