@@ -1,0 +1,95 @@
+[VIDGEN2] Polling status for task: 7KST3SM7848GHJUS
+[VIDGEN2] Status response: {"code":200,"data":{"task_id":"7KST3SM7848GHJUS","status":"running","files":[],"created_time":"2026-02-07T19:51:06","progress":87,"error_message":null}}
+[VIDGEN2] Parsed status: running, stage: undefined, data keys: [
+  'task_id',
+  'status',
+  'files',
+  'created_time',
+  'progress',
+  'error_message'
+]
+[VIDGEN2] Polling status for task: A98VTJICJO3I865F
+[VIDGEN2] Status response: {"code":200,"data":{"task_id":"A98VTJICJO3I865F","status":"running","files":[],"created_time":"2026-02-07T19:53:41","progress":0,"error_message":null}}
+[VIDGEN2] Parsed status: running, stage: undefined, data keys: [
+  'task_id',
+  'status',
+  'files',
+  'created_time',
+  'progress',
+  'error_message'
+]
+[MOTION] Room 1 available keys: MOTION_ROOM1_KEY_1, MOTION_ROOM1_KEY_2, MOTION_ROOM1_KEY_3
+[MOTION] Checking env vars: MOTION_ROOM1_KEY_1=SET, MOTION_ROOM1_KEY_2=SET, MOTION_ROOM1_KEY_3=SET
+[MOTION] Selected key: MOTION_ROOM1_KEY_1
+[MOTION] Saving files to public storage, base URL: https://web-production-0531a.up.railway.app
+[MOTION] Image URL: https://web-production-0531a.up.railway.app/uploads/motion/3d47faa7-d937-484f-9716-a3e07e592e2d.png
+[MOTION] Video URL: https://web-production-0531a.up.railway.app/uploads/motion/a580fa6a-3f70-4950-926c-05b7d510eec6.mp4
+[MOTION] Using webhook: https://web-production-0531a.up.railway.app/api/webhook/freepik
+[MOTION] Generating motion video with model: kling-v2.6-std
+[MOTION] Request body: {"image_url":"https://web-production-0531a.up.railway.app/uploads/motion/3d47faa7-d937-484f-9716-a3e07e592e2d.png","video_url":"https://web-production-0531a.up.railway.app/uploads/motion/a580fa6a-3f70-4950-926c-05b7d510eec6.mp4","character_orientation":"video","webhook_url":"https://web-production-0531a.up.railway.app/api/webhook/freepik"}
+[PROXY] Pre-assigned 198.23.239.134:6540 as pending pending_1770494029156_18kyp4
+[PROXY] Using Webshare: 198.23.239.134:6540
+[PROXY] Task pending_1770494029156_18kyp4 using fixed IP: 198.23.239.134:6540
+[VIDGEN2] Polling status for task: 7KST3SM7848GHJUS
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Access denied</title>
+  <link rel="icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon.ico">
+  <link rel="icon" type="image/png" href="https://fps.cdnpk.net/favicons/favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="https://fps.cdnpk.net/favicons/favicon-16x16.png" sizes="16x16">
+  <link rel="shortcut icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon-96x96.png">
+  <link rel="icon" type="image/x-icon" href="https://fps.cdnpk.net/favicons/favicon-96x96.png" sizes="96x96">
+  <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-57x57.png" sizes="57x57">
+  <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-72x72.png" sizes="72x72">
+  <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-114x114.png" sizes="114x114">
+  <link rel="apple-touch-icon-precomposed" href="https://fps.cdnpk.net/favicons/apple-icon-144x144.png" sizes="144x144">
+  <link rel="preload" href="https://fps.cdnpk.net/common/error-image-left.png" as="image" fetchpriority="high">
+Motion generation error: <!DOCTYPE html>
+    class="_17lid5f4 _17lid5f1 _1286nb12il _1286nb128l _1286nb18l _1286nb12v3 _1286nb12uf _1286nb16os _1286nb12sl _1286nb124l _1286nb1255 _1286nb1241 _1286nb12dx _1286nb12nl _1286nb12nh _17lid5f3">
+  <link rel="preload" href="https://fps.cdnpk.net/common/static-errors.css" as="style" crossorigin="">
+    <div class="_1286nb1m _1286nb18l _1286nb12v3 _1286nb12t9 _1286nb12tx">
+      <h4 class="_17lid5f9 _1286nb12n9 _1286nb12mz _1286nb12r3 _1286nb111 _1286nb11ol">Error</h4>
+  <link rel="stylesheet" href="https://fps.cdnpk.net/common/static-errors.css" crossorigin="">
+</head>
+
+<body class="_otnfkq0">
+  <div
+  <link rel="preload" href="https://fps.cdnpk.net/common/error-image-right.png" as="image" fetchpriority="high">
+  <link rel="preload" href="https://fps.cdnpk.net/static/inter-regular.woff2" as="font" type="font/woff2"
+    crossorigin="anonymous">
+  <link rel="preload" href="https://fps.cdnpk.net/static/inter-semibold.woff2" as="font" type="font/woff2"
+    crossorigin="anonymous">
+  <link rel="preload" href="https://fps.cdnpk.net/static/inter-bold.woff2" as="font" type="font/woff2"
+    crossorigin="anonymous">
+  <link rel="preload" href="https://fps.cdnpk.net/static/degular-semibold.woff2" as="font" type="font/woff2"
+    crossorigin="anonymous">
+      <p style="margin-top: 20px;">You don’t have permission to access this resource. This may be due to restricted
+        content, insufficient
+        permissions, or a misconfigured request.</p>
+      <div class="_17lid5fi">
+        <div class="_17lid5ft _17lid5fq _17lid5fr"><img alt="Space Man" fetchpriority="high" width="222" height="276"
+            decoding="async" class="_1286nb1433 _1286nb1434 _1286nb143n _1286nb1446 _1286nb13jl _1286nb11ox"
+            src="https://fps.cdnpk.net/common/error-image-left.png"></div><span
+          class="_17lid5ff _1286nb189 _1286nb12r9 _1286nb11ox">403</span>
+        <div class="_17lid5fo">
+          <div class="_17lid5ft _17lid5fq _17lid5fs"><img alt="Space Woman" fetchpriority="high" width="153"
+              height="317" decoding="async"
+              class="_1286nb1433 _1286nb1434 _1286nb143n _1286nb1446 _1286nb13jl _1286nb11ox"
+              src="https://fps.cdnpk.net/common/error-image-right.png"></div>
+        </div>
+      </div>
+      <h4 class="_17lid5f9 _1286nb12n9 _1286nb12mz _1286nb12r3 _1286nb11ox">Access denied
+      </h4>
+      <p><b>Reference:</b> 0.5307d417.1770494029.e635ea26</p>
+      <p><b>My IP Address:</b> 198.23.239.134</p>
+    </div>
+    <p class="_1286nb12nx _1286nb168j _1286nb11b9">If the problem persists, contact our support team <a
+        class="_1286nb15nj _1286nb15op _1286nb12r3"
+        href="mailto:support@freepik.com?subject=Error%20500">support@freepik.com</a></p>
+  </div>
+</body>
+
+</html>
