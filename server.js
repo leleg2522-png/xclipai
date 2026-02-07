@@ -5619,7 +5619,7 @@ app.post('/api/ximage/generate', async (req, res) => {
     await pool.query(`
       INSERT INTO ximage_history (user_id, task_id, model, prompt, mode, aspect_ratio, reference_image, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
-    `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrl]);
+    `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
     
     res.json({ 
       taskId, 
