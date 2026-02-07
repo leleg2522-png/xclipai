@@ -3866,9 +3866,7 @@ async function cleanupExpiredSubscriptions() {
   }
 }
 
-// Run cleanup every minute
-setInterval(cleanupExpiredSubscriptions, 60000);
-cleanupExpiredSubscriptions();
+// Cleanup is started after database initialization (see initDatabase().then())
 
 // ==================== MOTION ROOM MANAGER API ====================
 
@@ -5683,6 +5681,193 @@ app.get('/{*splat}', (req, res) => {
 
 async function initDatabase() {
   try {
+    // Create core tables first
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        freepik_api_key TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_admin BOOLEAN DEFAULT false,
+        subscription_expired_at TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        provider_key_name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        provider VARCHAR(50) DEFAULT 'freepik',
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        droplet_ip VARCHAR(100),
+        droplet_port INTEGER,
+        proxy_secret VARCHAR(255),
+        use_proxy BOOLEAN DEFAULT false,
+        use_webshare BOOLEAN DEFAULT false
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        plan_id INTEGER,
+        room_id INTEGER REFERENCES rooms(id),
+        xmaker_room_id INTEGER REFERENCES rooms(id),
+        room_locked BOOLEAN DEFAULT false,
+        status VARCHAR(20) DEFAULT 'active',
+        expired_at TIMESTAMP,
+        last_active TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        package VARCHAR(50) NOT NULL,
+        amount INTEGER NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        proof_image TEXT,
+        admin_notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS xclip_api_keys (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        api_key VARCHAR(255) NOT NULL UNIQUE,
+        label VARCHAR(100),
+        status VARCHAR(20) DEFAULT 'active',
+        requests_count INTEGER DEFAULT 0,
+        last_used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS video_generation_tasks (
+        id SERIAL PRIMARY KEY,
+        task_id VARCHAR(255) NOT NULL,
+        xclip_api_key_id INTEGER REFERENCES xclip_api_keys(id),
+        user_id INTEGER REFERENCES users(id),
+        model VARCHAR(100),
+        status VARCHAR(50) DEFAULT 'pending',
+        video_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP,
+        room_id INTEGER REFERENCES rooms(id),
+        key_index INTEGER
+      )
+    `);
+
+    // Seed rooms if empty
+    const existingRooms = await pool.query('SELECT COUNT(*) FROM rooms');
+    if (parseInt(existingRooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO rooms (name, max_users, status, provider_key_name, provider, key_name_1, key_name_2, key_name_3) VALUES
+          ('Room 1', 5, 'OPEN', 'FREEPIK_API_KEY_1', 'freepik', 'ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3'),
+          ('Room 2', 5, 'OPEN', 'FREEPIK_API_KEY_2', 'freepik', 'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3'),
+          ('Room 3', 5, 'OPEN', 'FREEPIK_API_KEY_3', 'freepik', 'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3')
+      `);
+      console.log('Rooms seeded');
+    }
+
+    // Create motion_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS motion_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed motion rooms if empty
+    const existingMotionRooms = await pool.query('SELECT COUNT(*) FROM motion_rooms');
+    if (parseInt(existingMotionRooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO motion_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('Motion Room 1', 10, 'OPEN', 'MOTION_ROOM1_KEY_1', 'MOTION_ROOM1_KEY_2', 'MOTION_ROOM1_KEY_3'),
+          ('Motion Room 2', 10, 'OPEN', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM2_KEY_2', 'MOTION_ROOM2_KEY_3'),
+          ('Motion Room 3', 10, 'OPEN', 'MOTION_ROOM3_KEY_1', 'MOTION_ROOM3_KEY_2', 'MOTION_ROOM3_KEY_3')
+      `);
+      console.log('Motion rooms seeded');
+    }
+
+    // Create motion_subscriptions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS motion_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        motion_room_id INTEGER REFERENCES motion_rooms(id),
+        expired_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create xmaker_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS xmaker_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        current_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        is_active BOOLEAN DEFAULT true,
+        key_name VARCHAR(100),
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed xmaker rooms if empty
+    const existingXmakerRooms = await pool.query('SELECT COUNT(*) FROM xmaker_rooms');
+    if (parseInt(existingXmakerRooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO xmaker_rooms (name, max_users, status, is_active, key_name, key_name_1, key_name_2, key_name_3) VALUES
+          ('X Maker Room 1', 10, 'OPEN', true, 'XMAKER_ROOM1_KEY', 'XMAKER_ROOM1_KEY_1', 'XMAKER_ROOM1_KEY_2', 'XMAKER_ROOM1_KEY_3'),
+          ('X Maker Room 2', 10, 'OPEN', true, 'XMAKER_ROOM2_KEY', 'XMAKER_ROOM2_KEY_1', 'XMAKER_ROOM2_KEY_2', 'XMAKER_ROOM2_KEY_3'),
+          ('X Maker Room 3', 10, 'OPEN', true, 'XMAKER_ROOM3_KEY', 'XMAKER_ROOM3_KEY_1', 'XMAKER_ROOM3_KEY_2', 'XMAKER_ROOM3_KEY_3')
+      `);
+      console.log('X Maker rooms seeded');
+    }
+
+    // Create xmaker_subscriptions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS xmaker_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        xmaker_room_id INTEGER REFERENCES xmaker_rooms(id),
+        expired_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create sessions table for express-session (required for login)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -5834,6 +6019,9 @@ async function initDatabase() {
 }
 
 initDatabase().then(() => {
+  setInterval(cleanupExpiredSubscriptions, 60000);
+  cleanupExpiredSubscriptions();
+  setInterval(cleanupInactiveUsers, 60000);
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Xclip server running on http://0.0.0.0:${PORT}`);
   });
