@@ -260,6 +260,7 @@ const jobs = new Map();
 let webshareProxies = [];
 let webshareProxyIndex = 0;
 let webshareLastFetch = 0;
+const taskProxyMap = new Map();
 
 async function fetchWebshareProxies() {
   const apiKey = process.env.WEBSHARE_API_KEY;
@@ -295,8 +296,72 @@ function getNextWebshareProxy() {
   return proxy;
 }
 
-// Helper to make Freepik API calls with optional Webshare proxy
-async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true) {
+async function assignProxyForTask(taskId) {
+  if (!process.env.WEBSHARE_API_KEY) return null;
+  await fetchWebshareProxies();
+  const proxy = getNextWebshareProxy();
+  if (proxy) {
+    taskProxyMap.set(taskId, { proxy, assignedAt: Date.now() });
+    console.log(`[PROXY] Assigned ${proxy.proxy_address}:${proxy.port} to task ${taskId}`);
+  }
+  return proxy;
+}
+
+function getProxyForTask(taskId) {
+  const entry = taskProxyMap.get(taskId);
+  return entry ? entry.proxy : null;
+}
+
+function releaseProxyForTask(taskId) {
+  const entry = taskProxyMap.get(taskId);
+  if (entry) {
+    console.log(`[PROXY] Released ${entry.proxy.proxy_address}:${entry.proxy.port} from task ${taskId}`);
+    taskProxyMap.delete(taskId);
+  }
+}
+
+setInterval(() => {
+  const maxAge = 30 * 60 * 1000;
+  const now = Date.now();
+  for (const [taskId, entry] of taskProxyMap) {
+    if (now - entry.assignedAt > maxAge) {
+      console.log(`[PROXY] Evicting stale proxy for task ${taskId} (age: ${Math.round((now - entry.assignedAt) / 60000)}min)`);
+      taskProxyMap.delete(taskId);
+    }
+  }
+}, 300000);
+
+async function getOrAssignProxyForPendingTask() {
+  if (!process.env.WEBSHARE_API_KEY) return { proxy: null, pendingId: null };
+  await fetchWebshareProxies();
+  const proxy = getNextWebshareProxy();
+  if (!proxy) return { proxy: null, pendingId: null };
+  const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  taskProxyMap.set(pendingId, { proxy, assignedAt: Date.now() });
+  console.log(`[PROXY] Pre-assigned ${proxy.proxy_address}:${proxy.port} as pending ${pendingId}`);
+  return { proxy, pendingId };
+}
+
+function promoteProxyToTask(pendingId, taskId) {
+  const entry = taskProxyMap.get(pendingId);
+  if (entry) {
+    taskProxyMap.delete(pendingId);
+    taskProxyMap.set(taskId, entry);
+    console.log(`[PROXY] Promoted pending ${pendingId} -> task ${taskId} (IP: ${entry.proxy.proxy_address}:${entry.proxy.port})`);
+  }
+}
+
+function applyProxyToConfig(config, proxy) {
+  if (proxy) {
+    const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
+    console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
+    config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+    config.proxy = false;
+  }
+  return config;
+}
+
+async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null) {
   const config = {
     method,
     url,
@@ -309,32 +374,36 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   
   if (body) config.data = body;
   
-  // Try Webshare proxy if available and enabled
   const hasWebshareKey = !!process.env.WEBSHARE_API_KEY;
-  console.log(`[PROXY DEBUG] useProxy=${useProxy}, hasWebshareKey=${hasWebshareKey}, proxyCount=${webshareProxies.length}`);
   
   if (useProxy && hasWebshareKey) {
-    await fetchWebshareProxies();
-    const proxy = getNextWebshareProxy();
-    
-    if (proxy) {
-      const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-      console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
-      // Bypass SSL verification to avoid certificate mismatch errors with proxy
-      config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-      config.proxy = false; // Disable axios built-in proxy when using agent
+    if (taskId) {
+      let proxy = getProxyForTask(taskId);
+      if (!proxy) {
+        proxy = await assignProxyForTask(taskId);
+      }
+      if (proxy) {
+        applyProxyToConfig(config, proxy);
+        console.log(`[PROXY] Task ${taskId} using fixed IP: ${proxy.proxy_address}:${proxy.port}`);
+      } else {
+        console.log(`[PROXY] No proxy available for task ${taskId}, using direct connection`);
+      }
     } else {
-      console.log(`[PROXY] No proxy available, using direct connection`);
+      await fetchWebshareProxies();
+      const proxy = getNextWebshareProxy();
+      if (proxy) {
+        applyProxyToConfig(config, proxy);
+      } else {
+        console.log(`[PROXY] No proxy available, using direct connection`);
+      }
     }
-  } else {
-    console.log(`[PROXY] Skipped - useProxy=${useProxy}, hasKey=${hasWebshareKey}`);
   }
   
   return axios(config);
 }
 
 // ============ DROPLET PROXY SUPPORT ============
-async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
+async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = null) {
   try {
     const roomResult = await pool.query(
       'SELECT droplet_ip, droplet_port, proxy_secret, use_proxy, use_webshare FROM rooms WHERE id = $1',
@@ -348,8 +417,19 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey) {
     const freepikUrl = `https://api.freepik.com/${endpoint}`;
     
     if (useWebshare) {
-      await fetchWebshareProxies();
-      const proxy = getNextWebshareProxy();
+      let proxy = null;
+      if (taskId) {
+        proxy = getProxyForTask(taskId);
+        if (!proxy) {
+          proxy = await assignProxyForTask(taskId);
+        }
+        if (proxy) {
+          console.log(`[PROXY] Task ${taskId} using fixed IP via requestViaProxy: ${proxy.proxy_address}:${proxy.port}`);
+        }
+      } else {
+        await fetchWebshareProxies();
+        proxy = getNextWebshareProxy();
+      }
       
       if (proxy) {
         console.log(`Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
@@ -1084,13 +1164,12 @@ app.post('/api/webhook/freepik', async (req, res) => {
     const isFailed = status === 'failed' || status === 'error';
     
     if (isCompleted && videoUrl) {
-      // Update database
+      releaseProxyForTask(taskId);
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['completed', videoUrl, taskId]
       );
       
-      // Send SSE to user for instant notification
       const sent = sendSSEToUser(task.user_id, {
         type: 'video_completed',
         taskId: taskId,
@@ -1100,6 +1179,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
       
       console.log(`Webhook: Video completed! Task ${taskId}, SSE sent: ${sent}`);
     } else if (isFailed) {
+      releaseProxyForTask(taskId);
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE task_id = $2',
         ['failed', taskId]
@@ -1871,7 +1951,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
     
-    // Try each key until success or all exhausted (with Webshare proxy rotation)
+    const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
+    
     for (let attempt = 0; attempt < allKeys.length; attempt++) {
       const currentKey = allKeys[attempt];
       console.log(`[TIMING] Attempt ${attempt + 1}/${allKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
@@ -1882,7 +1963,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
           `${baseUrl}${config.endpoint}`,
           currentKey.key,
           requestBody,
-          true
+          true,
+          pendingId
         );
         
         successResponse = { data: response.data };
@@ -1905,6 +1987,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     if (!successResponse) {
+      if (pendingId) releaseProxyForTask(pendingId);
       console.error('All API keys exhausted or failed');
       console.error('Last error:', JSON.stringify(lastError?.response?.data, null, 2) || lastError?.message);
       const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.response?.data?.error || lastError?.message;
@@ -1916,6 +1999,12 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const createLatency = Date.now() - startTime;
     
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
+    
+    if (taskId && pendingId) {
+      promoteProxyToTask(pendingId, taskId);
+    } else if (pendingId) {
+      releaseProxyForTask(pendingId);
+    }
     
     // Get the key name that was actually used
     const usedKeyName = allKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
@@ -2085,7 +2174,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       `https://api.freepik.com${endpoint}${taskId}`,
       freepikApiKey,
       null,
-      true
+      true,
+      taskId
     );
     const pollLatency = Date.now() - pollStart;
     
@@ -2119,6 +2209,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
                        (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
     
     if (isCompleted && videoUrl) {
+      releaseProxyForTask(taskId);
       pool.query(
         'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['completed', videoUrl, taskId]
@@ -2132,8 +2223,10 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       });
     }
     
-    // Return current status
     const normalizedStatus = (data.status || 'processing').toLowerCase();
+    if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
+      releaseProxyForTask(taskId);
+    }
     res.json({
       status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
       progress: data.progress || 0,
@@ -2282,12 +2375,15 @@ app.post('/api/motion/generate', async (req, res) => {
     console.log(`[MOTION] Generating motion video with model: ${model}`);
     console.log(`[MOTION] Request body:`, JSON.stringify(requestBody));
     
+    const { proxy: motionPendingProxy, pendingId: motionPendingId } = await getOrAssignProxyForPendingTask();
+    
     const response = await makeFreepikRequest(
       'POST',
       `https://api.freepik.com${endpoint}`,
       freepikApiKey,
       requestBody,
-      true
+      true,
+      motionPendingId
     );
     
     console.log(`[MOTION] Freepik response:`, JSON.stringify(response.data));
@@ -2295,6 +2391,12 @@ app.post('/api/motion/generate', async (req, res) => {
     const taskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
     
     console.log(`[MOTION] Task created: ${taskId}`);
+    
+    if (taskId && motionPendingId) {
+      promoteProxyToTask(motionPendingId, taskId);
+    } else if (motionPendingId) {
+      releaseProxyForTask(motionPendingId);
+    }
     
     if (taskId) {
       await pool.query(
@@ -2421,7 +2523,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           freepikApiKey,
           null,
-          true
+          true,
+          taskId
         );
         
         if (pollResponse.data && !pollResponse.data?.message?.includes('Not found')) {
@@ -2475,6 +2578,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
                        (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
     
     if (isCompleted && videoUrl) {
+      releaseProxyForTask(taskId);
       pool.query(
         'UPDATE video_generation_tasks SET status = $1, video_url = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['completed', videoUrl, taskId]
@@ -2489,6 +2593,9 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     const normalizedStatus = (data.status || 'processing').toLowerCase();
+    if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
+      releaseProxyForTask(taskId);
+    }
     res.json({
       status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
       progress: data.progress || 0,
