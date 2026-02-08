@@ -2584,7 +2584,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     if (savedTask.status === 'completed' && savedTask.video_url) {
       console.log(`[MOTION] Task ${taskId} already completed (via webhook), returning from DB`);
       return res.json({
-        status: 'COMPLETED',
+        status: 'completed',
+        progress: 100,
         videoUrl: savedTask.video_url,
         taskId: taskId,
         model: savedTask.model
@@ -2593,7 +2594,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     if (savedTask.status === 'failed') {
       console.log(`[MOTION] Task ${taskId} already failed (via webhook), returning from DB`);
       return res.json({
-        status: 'FAILED',
+        status: 'failed',
         error: 'Task gagal diproses',
         taskId: taskId
       });
