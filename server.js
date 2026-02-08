@@ -2162,6 +2162,26 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
+    
+    // If webhook already updated this task, return from DB directly (no extra API call/proxy needed)
+    if (savedTask.status === 'completed' && savedTask.video_url) {
+      console.log(`[VIDEOGEN] Task ${taskId} already completed (via webhook), returning from DB`);
+      return res.json({
+        status: 'COMPLETED',
+        videoUrl: savedTask.video_url,
+        taskId: taskId,
+        model: savedTask.model
+      });
+    }
+    if (savedTask.status === 'failed') {
+      console.log(`[VIDEOGEN] Task ${taskId} already failed (via webhook), returning from DB`);
+      return res.json({
+        status: 'FAILED',
+        error: 'Task gagal diproses',
+        taskId: taskId
+      });
+    }
+    
     let freepikApiKey = null;
     let keySource = 'unknown';
     
@@ -2578,9 +2598,29 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
+    
+    // If webhook already updated this task to completed/failed, return from DB directly
+    // This prevents assigning a new proxy after webhook already released the old one
+    if (savedTask.status === 'completed' && savedTask.video_url) {
+      console.log(`[MOTION] Task ${taskId} already completed (via webhook), returning from DB`);
+      return res.json({
+        status: 'COMPLETED',
+        videoUrl: savedTask.video_url,
+        taskId: taskId,
+        model: savedTask.model
+      });
+    }
+    if (savedTask.status === 'failed') {
+      console.log(`[MOTION] Task ${taskId} already failed (via webhook), returning from DB`);
+      return res.json({
+        status: 'FAILED',
+        error: 'Task gagal diproses',
+        taskId: taskId
+      });
+    }
+    
     let freepikApiKey = null;
     
-    // First try to use the exact key that was used for generation
     if (savedTask.used_key_name && savedTask.used_key_name !== 'personal' && savedTask.used_key_name !== 'global') {
       freepikApiKey = process.env[savedTask.used_key_name];
       console.log(`[MOTION] Using saved key: ${savedTask.used_key_name}, found: ${!!freepikApiKey}`);
@@ -2593,7 +2633,6 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       }
     }
     
-    // For motion tasks, try motion room keys (motion tasks store room_id as the motion room number)
     if (!freepikApiKey && savedTask.room_id && savedTask.model?.startsWith('motion-')) {
       const motionRoomKeys = [
         `MOTION_ROOM${savedTask.room_id}_KEY_1`,
