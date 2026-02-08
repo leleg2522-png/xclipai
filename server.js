@@ -2162,26 +2162,6 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
-    
-    // If webhook already updated this task, return from DB directly (no extra API call/proxy needed)
-    if (savedTask.status === 'completed' && savedTask.video_url) {
-      console.log(`[VIDEOGEN] Task ${taskId} already completed (via webhook), returning from DB`);
-      return res.json({
-        status: 'COMPLETED',
-        videoUrl: savedTask.video_url,
-        taskId: taskId,
-        model: savedTask.model
-      });
-    }
-    if (savedTask.status === 'failed') {
-      console.log(`[VIDEOGEN] Task ${taskId} already failed (via webhook), returning from DB`);
-      return res.json({
-        status: 'FAILED',
-        error: 'Task gagal diproses',
-        taskId: taskId
-      });
-    }
-    
     let freepikApiKey = null;
     let keySource = 'unknown';
     
