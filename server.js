@@ -1259,14 +1259,15 @@ app.post('/api/webhook/freepik', async (req, res) => {
         ['completed', videoUrl, taskId]
       );
       
+      const isMotionTask = task.model && task.model.startsWith('motion-');
       const sent = sendSSEToUser(task.user_id, {
-        type: 'video_completed',
+        type: isMotionTask ? 'motion_completed' : 'video_completed',
         taskId: taskId,
         videoUrl: videoUrl,
         model: task.model
       });
       
-      console.log(`Webhook: Video completed! Task ${taskId}, SSE sent: ${sent}`);
+      console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}, SSE sent: ${sent}`);
     } else if (isFailed) {
       releaseProxyForTask(taskId);
       await pool.query(
@@ -1274,8 +1275,9 @@ app.post('/api/webhook/freepik', async (req, res) => {
         ['failed', taskId]
       );
       
+      const isMotionFailed = task.model && task.model.startsWith('motion-');
       sendSSEToUser(task.user_id, {
-        type: 'video_failed',
+        type: isMotionFailed ? 'motion_failed' : 'video_failed',
         taskId: taskId,
         error: data.error || 'Video generation failed'
       });

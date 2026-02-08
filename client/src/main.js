@@ -7263,7 +7263,6 @@ function handleSSEEvent(data) {
       
     case 'video_completed':
       console.log('[SSE] Video completed event received:', data.taskId, data.videoUrl);
-      // ALWAYS add to generated videos (even if task not in state - handles refresh scenario)
       const videoExists = state.videogen.generatedVideos.some(v => v.taskId === data.taskId);
       if (!videoExists && data.videoUrl) {
         state.videogen.generatedVideos.unshift({ 
@@ -7272,10 +7271,8 @@ function handleSSEEvent(data) {
           taskId: data.taskId,
           model: data.model || 'unknown'
         });
-        console.log('[SSE] Added video to generatedVideos:', data.taskId);
       }
       
-      // Also update/remove from tasks array if exists
       const completedTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
       if (completedTask) {
         completedTask.status = 'completed';
@@ -7283,13 +7280,35 @@ function handleSSEEvent(data) {
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
       }
       
-      // Clear polling flag if no more active tasks
       if (state.videogen.tasks.length === 0) {
         state.videogen.isPolling = false;
       }
       
       showToast('Video berhasil di-generate!', 'success');
-      render(true); // Force full re-render
+      render(true);
+      break;
+    
+    case 'motion_completed':
+      console.log('[SSE] Motion completed event received:', data.taskId, data.videoUrl);
+      const motionExists = state.motion.generatedVideos.some(v => v.taskId === data.taskId);
+      if (!motionExists && data.videoUrl) {
+        state.motion.generatedVideos.unshift({ 
+          url: data.videoUrl, 
+          createdAt: Date.now(), 
+          taskId: data.taskId,
+          model: data.model || 'unknown'
+        });
+      }
+      
+      const completedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
+      if (completedMotionTask) {
+        completedMotionTask.status = 'completed';
+        completedMotionTask.videoUrl = data.videoUrl;
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+      }
+      
+      showToast('Motion video berhasil di-generate!', 'success');
+      render(true);
       break;
       
     case 'video_failed':
@@ -7299,6 +7318,17 @@ function handleSSEEvent(data) {
         failedTask.error = data.error;
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
         showToast('Gagal generate video: ' + data.error, 'error');
+        render();
+      }
+      break;
+    
+    case 'motion_failed':
+      const failedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
+      if (failedMotionTask) {
+        failedMotionTask.status = 'failed';
+        failedMotionTask.error = data.error;
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+        showToast('Gagal generate motion: ' + data.error, 'error');
         render();
       }
       break;
