@@ -2390,23 +2390,33 @@ app.post('/api/motion/generate', async (req, res) => {
       });
     }
     
-    // Get room's API keys from environment
+    // Build list of all available Motion keys: current room first, then other rooms
+    const allMotionKeys = [];
+    
+    // Current room's keys first
     const roomKeyPrefix = `MOTION_ROOM${selectedRoomId}_KEY_`;
-    const allPossibleKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`);
-    const roomKeys = allPossibleKeys.filter(k => process.env[k]);
+    [1, 2, 3].forEach(i => {
+      const keyName = `${roomKeyPrefix}${i}`;
+      if (process.env[keyName]) {
+        allMotionKeys.push({ key: process.env[keyName], name: keyName, roomId: selectedRoomId });
+      }
+    });
     
-    console.log(`[MOTION] Room ${selectedRoomId} available keys: ${roomKeys.length > 0 ? roomKeys.join(', ') : 'NONE'}`);
-    console.log(`[MOTION] Checking env vars: ${allPossibleKeys.map(k => `${k}=${process.env[k] ? 'SET' : 'NOT SET'}`).join(', ')}`);
-    
-    if (roomKeys.length > 0) {
-      // Round-robin selection
-      const randomKey = roomKeys[Math.floor(Math.random() * roomKeys.length)];
-      freepikApiKey = process.env[randomKey];
-      usedKeyName = randomKey;
-      console.log(`[MOTION] Selected key: ${randomKey}`);
+    // Then keys from other rooms as fallback
+    const totalRooms = 5;
+    for (let r = 1; r <= totalRooms; r++) {
+      if (r === selectedRoomId) continue;
+      [1, 2, 3].forEach(i => {
+        const keyName = `MOTION_ROOM${r}_KEY_${i}`;
+        if (process.env[keyName]) {
+          allMotionKeys.push({ key: process.env[keyName], name: keyName, roomId: r });
+        }
+      });
     }
     
-    if (!freepikApiKey) {
+    console.log(`[MOTION] Available keys: ${allMotionKeys.length} (room ${selectedRoomId} first, then fallback rooms)`);
+    
+    if (allMotionKeys.length === 0) {
       return res.status(500).json({ error: `Motion Room ${selectedRoomId} belum dikonfigurasi. Coba room lain atau hubungi admin.` });
     }
     
@@ -2428,23 +2438,17 @@ app.post('/api/motion/generate', async (req, res) => {
       ? '/v1/ai/video/kling-v2-6-motion-control-pro' 
       : '/v1/ai/video/kling-v2-6-motion-control-std';
     
-    // Get base URL for public file access
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const baseUrl = `${protocol}://${host}`;
     
-    console.log(`[MOTION] Saving files to public storage, base URL: ${baseUrl}`);
-    
-    // Save image and video to public files
     const imageFile = await saveBase64ToFile(characterImage, 'image', baseUrl);
     const videoFile = await saveBase64ToFile(referenceVideo, 'video', baseUrl);
     
     console.log(`[MOTION] Image URL: ${imageFile.publicUrl}`);
     console.log(`[MOTION] Video URL: ${videoFile.publicUrl}`);
     
-    // Get webhook URL for instant notifications
     const webhookUrl = getWebhookUrl();
-    console.log(`[MOTION] Using webhook: ${webhookUrl}`);
     
     const requestBody = {
       image_url: imageFile.publicUrl,
@@ -2452,7 +2456,6 @@ app.post('/api/motion/generate', async (req, res) => {
       character_orientation: characterOrientation || 'video'
     };
     
-    // Add webhook for instant completion notification
     if (webhookUrl) {
       requestBody.webhook_url = webhookUrl;
     }
@@ -2462,22 +2465,59 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     console.log(`[MOTION] Generating motion video with model: ${model}`);
-    console.log(`[MOTION] Request body:`, JSON.stringify(requestBody));
     
     const { proxy: motionPendingProxy, pendingId: motionPendingId } = await getOrAssignProxyForPendingTask();
     
-    const response = await makeFreepikRequest(
-      'POST',
-      `https://api.freepik.com${endpoint}`,
-      freepikApiKey,
-      requestBody,
-      true,
-      motionPendingId
-    );
+    let successResponse = null;
+    let lastError = null;
+    usedKeyName = null;
     
-    console.log(`[MOTION] Freepik response:`, JSON.stringify(response.data));
+    for (let attempt = 0; attempt < allMotionKeys.length; attempt++) {
+      const currentKey = allMotionKeys[attempt];
+      console.log(`[MOTION] Attempt ${attempt + 1}/${allMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
+      
+      try {
+        const response = await makeFreepikRequest(
+          'POST',
+          `https://api.freepik.com${endpoint}`,
+          currentKey.key,
+          requestBody,
+          true,
+          motionPendingId
+        );
+        
+        successResponse = response;
+        usedKeyName = currentKey.name;
+        freepikApiKey = currentKey.key;
+        console.log(`[MOTION] Key ${currentKey.name} worked!`);
+        break;
+        
+      } catch (error) {
+        lastError = error;
+        const status = error.response?.status;
+        const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
+        const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
+        
+        if (isDailyLimit) {
+          console.log(`[MOTION] Key ${currentKey.name} hit daily limit (${status}), trying next key...`);
+          continue;
+        } else {
+          console.error(`[MOTION] Key ${currentKey.name} failed with status ${status}:`, errorMsg);
+          break;
+        }
+      }
+    }
     
-    const taskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
+    if (!successResponse) {
+      if (motionPendingId) releaseProxyForTask(motionPendingId);
+      console.error('[MOTION] All API keys exhausted or failed');
+      const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.message;
+      return res.status(500).json({ error: 'Semua API key Motion sudah mencapai daily limit. Coba lagi besok atau hubungi admin. ' + errorMsg });
+    }
+    
+    console.log(`[MOTION] Freepik response:`, JSON.stringify(successResponse.data));
+    
+    const taskId = successResponse.data?.data?.task_id || successResponse.data?.task_id || successResponse.data?.data?.id || successResponse.data?.id;
     
     console.log(`[MOTION] Task created: ${taskId}`);
     
