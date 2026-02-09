@@ -341,17 +341,22 @@ async function fetchWebshareProxies() {
 function markProxyBlocked(proxy) {
   if (!proxy) return;
   const ip = proxy.proxy_address;
-  blockedProxies.set(ip, Date.now());
-  console.log(`[PROXY] Marked ${ip} as blocked (cooldown 10min)`);
+  const entry = blockedProxies.get(ip);
+  const count = entry ? entry.count + 1 : 1;
+  blockedProxies.set(ip, { blockedAt: Date.now(), count });
+  if (count >= 3) {
+    console.log(`[PROXY] ${ip} blocked ${count}x, cooldown 3min`);
+  }
 }
 
 function isProxyBlocked(proxy) {
   if (!proxy) return false;
   const ip = proxy.proxy_address;
-  const blockedAt = blockedProxies.get(ip);
-  if (!blockedAt) return false;
-  const cooldown = 10 * 60 * 1000;
-  if (Date.now() - blockedAt > cooldown) {
+  const entry = blockedProxies.get(ip);
+  if (!entry) return false;
+  if (entry.count < 3) return false;
+  const cooldown = 3 * 60 * 1000;
+  if (Date.now() - entry.blockedAt > cooldown) {
     blockedProxies.delete(ip);
     return false;
   }
@@ -359,12 +364,10 @@ function isProxyBlocked(proxy) {
 }
 
 setInterval(() => {
-  const cooldown = 10 * 60 * 1000;
   const now = Date.now();
-  for (const [ip, blockedAt] of blockedProxies) {
-    if (now - blockedAt > cooldown) {
+  for (const [ip, entry] of blockedProxies) {
+    if (now - entry.blockedAt > 3 * 60 * 1000) {
       blockedProxies.delete(ip);
-      console.log(`[PROXY] Cooldown expired for ${ip}, available again`);
     }
   }
 }, 60000);
@@ -378,9 +381,7 @@ function getNextWebshareProxy() {
     if (!isProxyBlocked(proxy)) {
       return proxy;
     }
-    console.log(`[PROXY] Skipping blocked IP ${proxy.proxy_address}`);
   }
-  console.log(`[PROXY] All ${totalProxies} proxies are in cooldown, using least recently blocked`);
   const proxy = webshareProxies[webshareProxyIndex % totalProxies];
   webshareProxyIndex++;
   return proxy;
