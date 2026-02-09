@@ -5301,26 +5301,10 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${roomKeyResult.apiKey}`
       },
-      timeout: 120000
+      timeout: 60000
     };
     
-    function applyVidgen2Proxy(cfg) {
-      if (isProxyConfigured()) {
-        const proxy = getNextProxy();
-        if (proxy) {
-          const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-          console.log(`[VIDGEN2] Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
-          cfg.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-          cfg.proxy = false;
-          return proxy;
-        }
-      }
-      return null;
-    }
-    
-    applyVidgen2Proxy(requestConfig);
-    
-    // Retry logic for rate limiting and network errors
+    // Vidgen2 uses direct connection (no proxy)
     let response;
     let retries = 0;
     const maxRetries = 3;
@@ -5332,15 +5316,12 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       } catch (retryError) {
         const isRateLimit = retryError.response?.status === 429 || 
                             retryError.response?.data?.message?.includes('Too many requests');
-        const errMsg = (retryError.message || '').toLowerCase();
-        const isNetworkError = !retryError.response && (errMsg.includes('socket hang up') || errMsg.includes('timeout') || errMsg.includes('econnreset') || errMsg.includes('econnrefused') || errMsg.includes('etimedout') || retryError.code === 'ECONNABORTED');
         
-        if ((isRateLimit || isNetworkError) && retries < maxRetries - 1) {
+        if (isRateLimit && retries < maxRetries - 1) {
           retries++;
-          const waitTime = isRateLimit ? Math.pow(2, retries) * 10000 : 2000;
-          console.log(`[VIDGEN2] ${isRateLimit ? 'Rate limited' : 'Network error: ' + retryError.message}, waiting ${waitTime/1000}s before retry ${retries}/${maxRetries}`);
+          const waitTime = Math.pow(2, retries) * 10000;
+          console.log(`[VIDGEN2] Rate limited, waiting ${waitTime/1000}s before retry ${retries}/${maxRetries}`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
-          applyVidgen2Proxy(requestConfig);
         } else {
           throw retryError;
         }
@@ -5440,17 +5421,8 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           headers: {
             'Authorization': `Bearer ${roomKeyResult.apiKey}`
           },
-          timeout: 60000
+          timeout: 30000
         };
-        
-        if (isProxyConfigured()) {
-          const proxy = getNextProxy();
-          if (proxy) {
-            const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-            statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-            statusConfig.proxy = false;
-          }
-        }
         
         const statusResponse = await axios.get(
           `https://api.poyo.ai/api/generate/status/${taskId}`,
