@@ -309,6 +309,7 @@ let webshareProxies = [];
 let webshareProxyIndex = 0;
 let webshareLastFetch = 0;
 const taskProxyMap = new Map();
+const blockedProxies = new Map();
 
 async function fetchWebshareProxies() {
   const apiKey = process.env.WEBSHARE_API_KEY;
@@ -337,9 +338,50 @@ async function fetchWebshareProxies() {
   }
 }
 
+function markProxyBlocked(proxy) {
+  if (!proxy) return;
+  const ip = proxy.proxy_address;
+  blockedProxies.set(ip, Date.now());
+  console.log(`[PROXY] Marked ${ip} as blocked (cooldown 10min)`);
+}
+
+function isProxyBlocked(proxy) {
+  if (!proxy) return false;
+  const ip = proxy.proxy_address;
+  const blockedAt = blockedProxies.get(ip);
+  if (!blockedAt) return false;
+  const cooldown = 10 * 60 * 1000;
+  if (Date.now() - blockedAt > cooldown) {
+    blockedProxies.delete(ip);
+    return false;
+  }
+  return true;
+}
+
+setInterval(() => {
+  const cooldown = 10 * 60 * 1000;
+  const now = Date.now();
+  for (const [ip, blockedAt] of blockedProxies) {
+    if (now - blockedAt > cooldown) {
+      blockedProxies.delete(ip);
+      console.log(`[PROXY] Cooldown expired for ${ip}, available again`);
+    }
+  }
+}, 60000);
+
 function getNextWebshareProxy() {
   if (webshareProxies.length === 0) return null;
-  const proxy = webshareProxies[webshareProxyIndex % webshareProxies.length];
+  const totalProxies = webshareProxies.length;
+  for (let i = 0; i < totalProxies; i++) {
+    const proxy = webshareProxies[webshareProxyIndex % totalProxies];
+    webshareProxyIndex++;
+    if (!isProxyBlocked(proxy)) {
+      return proxy;
+    }
+    console.log(`[PROXY] Skipping blocked IP ${proxy.proxy_address}`);
+  }
+  console.log(`[PROXY] All ${totalProxies} proxies are in cooldown, using least recently blocked`);
+  const proxy = webshareProxies[webshareProxyIndex % totalProxies];
   webshareProxyIndex++;
   return proxy;
 }
@@ -472,6 +514,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
     if (blocked && usedProxy && (isPendingTask || !taskId)) {
       console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked by Freepik (403) during task creation. Retrying...`);
+      markProxyBlocked(usedProxy);
       
       if (taskId) releaseProxyForTask(taskId);
 
@@ -488,8 +531,10 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
           const retryResponse = await axios(retryConfig);
           if (!isFreepikBlocked(retryResponse)) return retryResponse;
           console.log(`[PROXY] Second proxy also blocked, falling back to direct`);
+          markProxyBlocked(newProxy);
         } catch (retryErr) {
           console.log(`[PROXY] Retry proxy failed, falling back to direct`);
+          markProxyBlocked(newProxy);
         }
         if (taskId) releaseProxyForTask(taskId);
       }
@@ -501,6 +546,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
     if (blocked && usedProxy && !isPendingTask && taskId) {
       console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Switching to new proxy...`);
+      markProxyBlocked(usedProxy);
       releaseProxyForTask(taskId);
       
       await fetchWebshareProxies();
@@ -514,9 +560,11 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
           const retryResponse = await axios(retryConfig);
           if (!isFreepikBlocked(retryResponse)) return retryResponse;
           console.log(`[PROXY] New proxy ${newProxy.proxy_address} also blocked, trying another...`);
+          markProxyBlocked(newProxy);
           releaseProxyForTask(taskId);
         } catch (retryErr) {
           console.log(`[PROXY] New proxy failed, trying another...`);
+          markProxyBlocked(newProxy);
           releaseProxyForTask(taskId);
         }
         
@@ -530,9 +578,11 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
             const thirdResponse = await axios(thirdConfig);
             if (!isFreepikBlocked(thirdResponse)) return thirdResponse;
             console.log(`[PROXY] Third proxy also blocked, falling back to direct`);
+            markProxyBlocked(thirdProxy);
             releaseProxyForTask(taskId);
           } catch (thirdErr) {
             console.log(`[PROXY] Third proxy failed, falling back to direct`);
+            markProxyBlocked(thirdProxy);
             releaseProxyForTask(taskId);
           }
         }
