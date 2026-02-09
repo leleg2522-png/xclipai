@@ -503,7 +503,11 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Retrying without proxy...`);
       releaseProxyForTask(taskId);
       const directConfig = buildConfig();
-      return axios(directConfig);
+      const directResponse = await axios(directConfig);
+      if (isFreepikBlocked(directResponse)) {
+        throw { response: directResponse, message: 'Access denied by Freepik (direct fallback also blocked)' };
+      }
+      return directResponse;
     }
 
     throw error;
@@ -2347,6 +2351,11 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     );
     const pollLatency = Date.now() - pollStart;
     
+    if (typeof response.data === 'string') {
+      console.log(`[VIDEOGEN] Poll returned HTML/text instead of JSON, Freepik may be blocking`);
+      return res.json({ status: 'processing', progress: 0, taskId });
+    }
+    
     const data = response.data?.data || response.data;
     console.log(`[TIMING] Poll ${taskId} | Status: ${data.status} | Latency: ${pollLatency}ms`);
     console.log(`[DEBUG] Full response:`, JSON.stringify(data, null, 2));
@@ -2755,17 +2764,18 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           taskId
         );
         
-        if (pollResponse.data && !pollResponse.data?.message?.includes('Not found')) {
+        if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
           response = pollResponse;
           successEndpoint = endpoint;
           console.log(`[MOTION] Poll success with: ${endpoint}`);
           
-          // If this endpoint shows different status than CREATED, use it
           const status = pollResponse.data?.data?.status || pollResponse.data?.status;
           if (status && status !== 'CREATED') {
             console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
             break;
           }
+        } else if (typeof pollResponse.data === 'string') {
+          console.log(`[MOTION] Endpoint ${endpoint} returned HTML/text, skipping`);
         }
       } catch (err) {
         console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
@@ -6012,6 +6022,11 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         true,
         taskId
       );
+      
+      if (typeof pollResponse.data === 'string') {
+        console.log(`[VIDGEN3] Poll returned HTML/text, Freepik may be blocking`);
+        return res.json({ status: 'processing', progress: 0, taskId });
+      }
       
       console.log(`[VIDGEN3] Poll response:`, JSON.stringify(pollResponse.data));
       const data = pollResponse.data?.data || pollResponse.data;
