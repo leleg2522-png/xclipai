@@ -465,7 +465,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
         'x-freepik-api-key': apiKey,
         'Content-Type': 'application/json'
       },
-      timeout: 60000
+      timeout: 120000
     };
     if (body) cfg.data = body;
     return cfg;
@@ -502,7 +502,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   
   function isSocketError(err) {
     const msg = (err.message || '').toLowerCase();
-    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT';
+    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED';
   }
 
   async function attemptWithRetry(cfg, maxRetries = 2) {
