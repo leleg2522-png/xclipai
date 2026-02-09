@@ -1,0 +1,44 @@
+PROXY] Task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 using fixed IP: 2.proxy.proxying.io:8080
+[PROXY] Using Proxying.io: 3.proxy.proxying.io:8080
+[PROXY] Socket error, retry #1 with 3.proxy.proxying.io:8080
+[PROXY] Using Proxying.io: 4.proxy.proxying.io:8080
+[PROXY] Socket error, retry #2 with 4.proxy.proxying.io:8080
+[PROXY] Socket error on 4.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 4.proxy.proxying.io:8080 from task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78
+[PROXY] Falling back to direct connection (no proxy)
+[TIMING] Poll eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 | Status: IN_PROGRESS | Latency: 7167ms
+[DEBUG] Full response: {
+  "task_id": "eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[VERY SLOW REQUEST] GET /api/videogen/tasks/eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78?model=kling-v2.6-pro took 7191ms
+[STATUS] Checking task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 with key: ROOM2_FREEPIK_KEY_1, saved_key_name: ROOM2_FREEPIK_KEY_1
+[PROXY] Assigned 5.proxy.proxying.io:8080 to task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78
+[PROXY] Using Proxying.io: 5.proxy.proxying.io:8080
+[PROXY] Task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 using fixed IP: 5.proxy.proxying.io:8080
+[TIMING] Poll eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 | Status: IN_PROGRESS | Latency: 1400ms
+[DEBUG] Full response: {
+  "task_id": "eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[STATUS] Checking task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 with key: ROOM2_FREEPIK_KEY_1, saved_key_name: ROOM2_FREEPIK_KEY_1
+[PROXY] Using Proxying.io: 5.proxy.proxying.io:8080
+[PROXY] Task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 using fixed IP: 5.proxy.proxying.io:8080
+[TIMING] Poll eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 | Status: IN_PROGRESS | Latency: 1972ms
+[DEBUG] Full response: {
+  "task_id": "eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[VERY SLOW REQUEST] GET /api/videogen/tasks/eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78?model=kling-v2.6-pro took 2003ms
+[STATUS] Checking task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 with key: ROOM2_FREEPIK_KEY_1, saved_key_name: ROOM2_FREEPIK_KEY_1
+[PROXY] Using Proxying.io: 5.proxy.proxying.io:8080
+[PROXY] Task eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 using fixed IP: 5.proxy.proxying.io:8080
+[TIMING] Poll eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78 | Status: IN_PROGRESS | Latency: 1281ms
+[DEBUG] Full response: {
+  "task_id": "eaf1ff56-cf9d-4da7-8b0b-cfdae34abb78",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
