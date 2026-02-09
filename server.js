@@ -500,96 +500,54 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     }
   }
   
-  try {
-    const response = await axios(config);
-    if (isFreepikBlocked(response)) {
-      throw { response, isProxyBlocked: true };
+  function isSocketError(err) {
+    const msg = (err.message || '').toLowerCase();
+    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT';
+  }
+
+  async function attemptWithRetry(cfg, maxRetries = 2) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const resp = await axios(cfg);
+        if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
+        return resp;
+      } catch (err) {
+        if (isSocketError(err) && attempt < maxRetries) {
+          const newProxy = getNextProxy();
+          if (newProxy) {
+            const retryCfg = buildConfig();
+            applyProxyToConfig(retryCfg, newProxy);
+            if (taskId) taskProxyMap.set(taskId, { proxy: newProxy, assignedAt: Date.now() });
+            console.log(`[PROXY] Socket error, retry #${attempt + 1} with ${newProxy.proxy_address}:${newProxy.port}`);
+            cfg = retryCfg;
+            usedProxy = newProxy;
+            continue;
+          }
+        }
+        throw err;
+      }
     }
-    return response;
+  }
+
+  try {
+    return await attemptWithRetry(config);
   } catch (error) {
     const blocked = error.isProxyBlocked || isFreepikBlocked(error.response);
+    const socketErr = isSocketError(error);
 
-    if (blocked && usedProxy && (isPendingTask || !taskId)) {
-      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked by Freepik (403) during task creation. Retrying...`);
+    if ((blocked || socketErr) && usedProxy) {
+      console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.proxy_address}. Falling back to direct...`);
       markProxyBlocked(usedProxy);
-      
       if (taskId) releaseProxyForTask(taskId);
-
-      const retryConfig = buildConfig();
-      const newProxy = getNextProxy();
-      if (newProxy && newProxy.proxy_address !== usedProxy.proxy_address) {
-        applyProxyToConfig(retryConfig, newProxy);
-        if (taskId) {
-          taskProxyMap.set(taskId, { proxy: newProxy, assignedAt: Date.now() });
-        }
-        console.log(`[PROXY] Retry #1 with new IP: ${newProxy.proxy_address}:${newProxy.port}`);
-        try {
-          const retryResponse = await axios(retryConfig);
-          if (!isFreepikBlocked(retryResponse)) return retryResponse;
-          console.log(`[PROXY] Second proxy also blocked, falling back to direct`);
-          markProxyBlocked(newProxy);
-        } catch (retryErr) {
-          console.log(`[PROXY] Retry proxy failed, falling back to direct`);
-          markProxyBlocked(newProxy);
-        }
-        if (taskId) releaseProxyForTask(taskId);
-      }
 
       const directConfig = buildConfig();
       console.log(`[PROXY] Falling back to direct connection (no proxy)`);
-      return axios(directConfig);
-    }
-
-    if (blocked && usedProxy && !isPendingTask && taskId) {
-      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Switching to new proxy...`);
-      markProxyBlocked(usedProxy);
-      releaseProxyForTask(taskId);
-      
-      const newProxy = getNextProxy();
-      if (newProxy && newProxy.proxy_address !== usedProxy.proxy_address) {
-        const retryConfig = buildConfig();
-        applyProxyToConfig(retryConfig, newProxy);
-        taskProxyMap.set(taskId, { proxy: newProxy, assignedAt: Date.now() });
-        console.log(`[PROXY] Retry polling with new IP: ${newProxy.proxy_address}:${newProxy.port} for task ${taskId}`);
-        try {
-          const retryResponse = await axios(retryConfig);
-          if (!isFreepikBlocked(retryResponse)) return retryResponse;
-          console.log(`[PROXY] New proxy ${newProxy.proxy_address} also blocked, trying another...`);
-          markProxyBlocked(newProxy);
-          releaseProxyForTask(taskId);
-        } catch (retryErr) {
-          console.log(`[PROXY] New proxy failed, trying another...`);
-          markProxyBlocked(newProxy);
-          releaseProxyForTask(taskId);
-        }
-        
-        const thirdProxy = getNextProxy();
-        if (thirdProxy && thirdProxy.proxy_address !== usedProxy.proxy_address && thirdProxy.proxy_address !== newProxy.proxy_address) {
-          const thirdConfig = buildConfig();
-          applyProxyToConfig(thirdConfig, thirdProxy);
-          taskProxyMap.set(taskId, { proxy: thirdProxy, assignedAt: Date.now() });
-          console.log(`[PROXY] Retry #2 with IP: ${thirdProxy.proxy_address}:${thirdProxy.port} for task ${taskId}`);
-          try {
-            const thirdResponse = await axios(thirdConfig);
-            if (!isFreepikBlocked(thirdResponse)) return thirdResponse;
-            console.log(`[PROXY] Third proxy also blocked, falling back to direct`);
-            markProxyBlocked(thirdProxy);
-            releaseProxyForTask(taskId);
-          } catch (thirdErr) {
-            console.log(`[PROXY] Third proxy failed, falling back to direct`);
-            markProxyBlocked(thirdProxy);
-            releaseProxyForTask(taskId);
-          }
-        }
+      try {
+        const directResponse = await axios(directConfig);
+        if (!isFreepikBlocked(directResponse)) return directResponse;
+      } catch (directErr) {
+        console.log(`[PROXY] Direct connection also failed: ${directErr.message}`);
       }
-      
-      const directConfig = buildConfig();
-      console.log(`[PROXY] All proxies blocked, falling back to direct connection for task ${taskId}`);
-      const directResponse = await axios(directConfig);
-      if (isFreepikBlocked(directResponse)) {
-        throw { response: directResponse, message: 'Access denied by Freepik (all proxies and direct blocked)' };
-      }
-      return directResponse;
     }
 
     throw error;
