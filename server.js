@@ -2639,9 +2639,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model}`);
-    
-    const { proxy: motionPendingProxy, pendingId: motionPendingId } = await getOrAssignProxyForPendingTask();
+    console.log(`[MOTION] Generating motion video with model: ${model} (direct connection, no proxy)`);
     
     let successResponse = null;
     let lastError = null;
@@ -2657,8 +2655,8 @@ app.post('/api/motion/generate', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           currentKey.key,
           requestBody,
-          true,
-          motionPendingId
+          false,
+          null
         );
         
         successResponse = response;
@@ -2695,12 +2693,6 @@ app.post('/api/motion/generate', async (req, res) => {
     const taskId = successResponse.data?.data?.task_id || successResponse.data?.task_id || successResponse.data?.data?.id || successResponse.data?.id;
     
     console.log(`[MOTION] Task created: ${taskId}`);
-    
-    if (taskId && motionPendingId) {
-      promoteProxyToTask(motionPendingId, taskId);
-    } else if (motionPendingId) {
-      releaseProxyForTask(motionPendingId);
-    }
     
     if (taskId) {
       await pool.query(
@@ -2847,8 +2839,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           freepikApiKey,
           null,
-          true,
-          taskId
+          false,
+          null
         );
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
