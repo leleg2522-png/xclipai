@@ -502,7 +502,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   
   function isSocketError(err) {
     const msg = (err.message || '').toLowerCase();
-    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED';
+    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC';
   }
 
   async function attemptWithRetry(cfg, maxRetries = 2) {
@@ -2622,7 +2622,7 @@ app.post('/api/motion/generate', async (req, res) => {
         const status = error.response?.status;
         const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
         const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
-        const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT'));
+        const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
         
         if (isDailyLimit) {
           console.log(`[MOTION] Key ${currentKey.name} hit daily limit (${status}), trying next key...`);
