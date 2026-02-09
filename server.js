@@ -6471,16 +6471,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       timeout: 60000
     };
     
-    if (isProxyConfigured()) {
-      const proxy = getNextProxy();
-      if (proxy) {
-        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-        console.log(`[XIMAGE] Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
-        requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-        requestConfig.proxy = false;
-      }
-    }
-    
+    // X Image uses direct connection (no proxy)
     const response = await axios.post(
       'https://api.poyo.ai/api/generate/submit',
       requestBody,
