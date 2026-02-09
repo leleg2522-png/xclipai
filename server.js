@@ -500,12 +500,49 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     }
 
     if (blocked && usedProxy && !isPendingTask && taskId) {
-      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Retrying without proxy...`);
+      console.log(`[PROXY] IP ${usedProxy.proxy_address} blocked during polling for task ${taskId}. Switching to new proxy...`);
       releaseProxyForTask(taskId);
+      
+      await fetchWebshareProxies();
+      const newProxy = getNextWebshareProxy();
+      if (newProxy && newProxy.proxy_address !== usedProxy.proxy_address) {
+        const retryConfig = buildConfig();
+        applyProxyToConfig(retryConfig, newProxy);
+        taskProxyMap.set(taskId, { proxy: newProxy, assignedAt: Date.now() });
+        console.log(`[PROXY] Retry polling with new IP: ${newProxy.proxy_address}:${newProxy.port} for task ${taskId}`);
+        try {
+          const retryResponse = await axios(retryConfig);
+          if (!isFreepikBlocked(retryResponse)) return retryResponse;
+          console.log(`[PROXY] New proxy ${newProxy.proxy_address} also blocked, trying another...`);
+          releaseProxyForTask(taskId);
+        } catch (retryErr) {
+          console.log(`[PROXY] New proxy failed, trying another...`);
+          releaseProxyForTask(taskId);
+        }
+        
+        const thirdProxy = getNextWebshareProxy();
+        if (thirdProxy && thirdProxy.proxy_address !== usedProxy.proxy_address && thirdProxy.proxy_address !== newProxy.proxy_address) {
+          const thirdConfig = buildConfig();
+          applyProxyToConfig(thirdConfig, thirdProxy);
+          taskProxyMap.set(taskId, { proxy: thirdProxy, assignedAt: Date.now() });
+          console.log(`[PROXY] Retry #2 with IP: ${thirdProxy.proxy_address}:${thirdProxy.port} for task ${taskId}`);
+          try {
+            const thirdResponse = await axios(thirdConfig);
+            if (!isFreepikBlocked(thirdResponse)) return thirdResponse;
+            console.log(`[PROXY] Third proxy also blocked, falling back to direct`);
+            releaseProxyForTask(taskId);
+          } catch (thirdErr) {
+            console.log(`[PROXY] Third proxy failed, falling back to direct`);
+            releaseProxyForTask(taskId);
+          }
+        }
+      }
+      
       const directConfig = buildConfig();
+      console.log(`[PROXY] All proxies blocked, falling back to direct connection for task ${taskId}`);
       const directResponse = await axios(directConfig);
       if (isFreepikBlocked(directResponse)) {
-        throw { response: directResponse, message: 'Access denied by Freepik (direct fallback also blocked)' };
+        throw { response: directResponse, message: 'Access denied by Freepik (all proxies and direct blocked)' };
       }
       return directResponse;
     }
