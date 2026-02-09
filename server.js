@@ -145,6 +145,15 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, vidgen2_room_id
     `, [cutoffTime]);
     
+    // Clean inactive users from Vidgen3 rooms
+    const inactiveVidgen3 = await pool.query(`
+      UPDATE subscriptions 
+      SET vidgen3_room_id = NULL 
+      WHERE vidgen3_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, vidgen3_room_id
+    `, [cutoffTime]);
+    
     // Clean inactive users from X Image rooms
     const inactiveXimage = await pool.query(`
       UPDATE subscriptions 
@@ -174,6 +183,16 @@ async function cleanupInactiveUsers() {
       )
     `);
     
+    // Update active_users in vidgen3_rooms table
+    await pool.query(`
+      UPDATE vidgen3_rooms r SET active_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.vidgen3_room_id = r.id
+        AND s.status = 'active' 
+        AND s.expired_at > NOW()
+      )
+    `).catch(() => {});
+    
     // Update current_users in ximage_rooms table
     await pool.query(`
       UPDATE ximage_rooms r SET current_users = (
@@ -184,9 +203,9 @@ async function cleanupInactiveUsers() {
       )
     `);
     
-    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveXimage.rowCount;
+    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveVidgen3.rowCount + inactiveXimage.rowCount;
     if (totalCleaned > 0) {
-      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, XImage=${inactiveXimage.rowCount}`);
+      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, Vidgen3=${inactiveVidgen3.rowCount}, XImage=${inactiveXimage.rowCount}`);
     }
   } catch (error) {
     console.error('Cleanup inactive users error:', error);
@@ -1212,6 +1231,64 @@ app.post('/api/webhook/freepik', async (req, res) => {
       'SELECT id FROM video_generation_tasks WHERE task_id = $1',
       [taskId]
     );
+    
+    // Check if task is in vidgen3_tasks
+    const vidgen3TaskCheck = await pool.query(
+      'SELECT id, user_id, model FROM vidgen3_tasks WHERE task_id = $1',
+      [taskId]
+    );
+    
+    if (vidgen3TaskCheck.rows.length > 0) {
+      const v3Task = vidgen3TaskCheck.rows[0];
+      const status = ((req.body.data || req.body).status || req.body.status || '').toLowerCase();
+      const data = req.body.data || req.body;
+      
+      let videoUrl = null;
+      if (data.generated && data.generated.length > 0) {
+        videoUrl = data.generated[0];
+      } else if (data.video_url) {
+        videoUrl = data.video_url;
+      } else if (data.video?.url) {
+        videoUrl = data.video.url;
+      } else if (data.result?.video_url) {
+        videoUrl = data.result.video_url;
+      } else if (data.url) {
+        videoUrl = data.url;
+      }
+      
+      const isCompleted = status === 'completed' || status === 'success' || 
+                         (videoUrl && status !== 'processing' && status !== 'pending');
+      const isFailed = status === 'failed' || status === 'error';
+      
+      if (isCompleted && videoUrl) {
+        releaseProxyForTask(taskId);
+        await pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+          ['completed', videoUrl, taskId]
+        );
+        sendSSEToUser(v3Task.user_id, {
+          type: 'vidgen3_completed',
+          taskId: taskId,
+          videoUrl: videoUrl,
+          model: v3Task.model
+        });
+        console.log(`[VIDGEN3] Webhook: Video completed! Task ${taskId}`);
+      } else if (isFailed) {
+        releaseProxyForTask(taskId);
+        await pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+          ['failed', data.error || 'Generation failed', taskId]
+        );
+        sendSSEToUser(v3Task.user_id, {
+          type: 'vidgen3_failed',
+          taskId: taskId,
+          error: data.error || 'Video generation failed'
+        });
+        console.log(`[VIDGEN3] Webhook: Video failed! Task ${taskId}`);
+      }
+      
+      return res.status(200).json({ received: true });
+    }
     
     if (taskCheck.rows.length === 0) {
       console.log('Webhook rejected: Unknown task_id:', taskId);
@@ -4956,6 +5033,66 @@ async function getVidgen2RoomApiKey(xclipApiKey) {
   };
 }
 
+// Helper: Get Vidgen3 room API key (Freepik-based)
+async function getVidgen3RoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  const subResult = await pool.query(`
+    SELECT s.vidgen3_room_id 
+    FROM subscriptions s 
+    WHERE s.user_id = $1 AND s.status = 'active' 
+    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    ORDER BY s.created_at DESC LIMIT 1
+  `, [keyInfo.user_id]);
+  
+  const vidgen3RoomId = subResult.rows[0]?.vidgen3_room_id || 1;
+  
+  const roomKeyPrefix = `VIDGEN3_ROOM${vidgen3RoomId}_KEY_`;
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+  
+  if (availableKeys.length === 0) {
+    for (let r = 1; r <= 3; r++) {
+      for (let k = 1; k <= 3; k++) {
+        const keyName = `VIDGEN3_ROOM${r}_KEY_${k}`;
+        if (process.env[keyName]) {
+          return { 
+            apiKey: process.env[keyName], 
+            keyName,
+            roomId: vidgen3RoomId,
+            userId: keyInfo.user_id,
+            keyInfoId: keyInfo.id,
+            isAdmin: keyInfo.is_admin
+          };
+        }
+      }
+    }
+    if (process.env.FREEPIK_API_KEY) {
+      return { 
+        apiKey: process.env.FREEPIK_API_KEY, 
+        keyName: 'FREEPIK_API_KEY',
+        roomId: vidgen3RoomId,
+        userId: keyInfo.user_id,
+        keyInfoId: keyInfo.id,
+        isAdmin: keyInfo.is_admin
+      };
+    }
+    return { error: 'Tidak ada API key Vidgen3 yang tersedia. Hubungi admin.' };
+  }
+  
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { 
+    apiKey: process.env[randomKeyName], 
+    keyName: randomKeyName,
+    roomId: vidgen3RoomId,
+    userId: keyInfo.user_id,
+    keyInfoId: keyInfo.id,
+    isAdmin: keyInfo.is_admin
+  };
+}
+
 // Join Vidgen2 Room
 app.post('/api/vidgen2/join-room', async (req, res) => {
   if (!req.session.userId) {
@@ -5487,6 +5624,548 @@ app.delete('/api/vidgen2/videos/all', async (req, res) => {
     res.json({ success: true, deleted: result.rowCount, message: `${result.rowCount} video berhasil dihapus` });
   } catch (error) {
     console.error('[VIDGEN2] Delete all videos error:', error);
+    res.status(500).json({ error: 'Gagal menghapus semua video' });
+  }
+});
+
+// ============ VIDGEN3 (Freepik Video Generation) API ============
+
+const VIDGEN3_MODEL_CONFIGS = {
+  'minimax-live': { 
+    endpoint: '/v1/ai/image-to-video/minimax-live',
+    pollEndpoint: '/v1/ai/image-to-video/minimax-live',
+    type: 'i2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      image_url: params.image,
+      prompt_optimizer: true
+    })
+  },
+  'seedance-1.5-pro-1080p': {
+    endpoint: '/v1/ai/video/seedance-1-5-pro-1080p',
+    pollEndpoint: '/v1/ai/video/seedance-1-5-pro-1080p',
+    type: 'both',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      ...(params.image ? { image: params.image } : {}),
+      duration: parseInt(params.duration) || 5,
+      generate_audio: params.generateAudio !== false,
+      camera_fixed: params.cameraFixed || false,
+      aspect_ratio: params.aspectRatio || 'widescreen_16_9',
+      seed: -1
+    })
+  },
+  'seedance-1.5-pro-720p': {
+    endpoint: '/v1/ai/video/seedance-1-5-pro-720p',
+    pollEndpoint: '/v1/ai/video/seedance-1-5-pro-720p',
+    type: 'both',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      ...(params.image ? { image: params.image } : {}),
+      duration: parseInt(params.duration) || 5,
+      generate_audio: params.generateAudio !== false,
+      camera_fixed: params.cameraFixed || false,
+      aspect_ratio: params.aspectRatio || 'widescreen_16_9',
+      seed: -1
+    })
+  },
+  'ltx-2-pro-t2v': {
+    endpoint: '/v1/ai/text-to-video/ltx-2-pro',
+    pollEndpoint: '/v1/ai/text-to-video/ltx-2-pro',
+    type: 't2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      generate_audio: params.generateAudio || false,
+      seed: Math.floor(Math.random() * 4294967295),
+      resolution: params.resolution || '1080p',
+      duration: parseInt(params.duration) || 6,
+      fps: parseInt(params.fps) || 25
+    })
+  },
+  'ltx-2-pro-i2v': {
+    endpoint: '/v1/ai/image-to-video/ltx-2-pro',
+    pollEndpoint: '/v1/ai/image-to-video/ltx-2-pro',
+    type: 'i2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      image_url: params.image,
+      generate_audio: params.generateAudio || false,
+      seed: Math.floor(Math.random() * 4294967295),
+      resolution: params.resolution || '1080p',
+      duration: parseInt(params.duration) || 6,
+      fps: parseInt(params.fps) || 25
+    })
+  },
+  'ltx-2-fast-t2v': {
+    endpoint: '/v1/ai/text-to-video/ltx-2-fast',
+    pollEndpoint: '/v1/ai/text-to-video/ltx-2-fast',
+    type: 't2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      generate_audio: params.generateAudio || false,
+      seed: Math.floor(Math.random() * 4294967295),
+      resolution: params.resolution || '1080p',
+      duration: parseInt(params.duration) || 6,
+      fps: parseInt(params.fps) || 25
+    })
+  },
+  'ltx-2-fast-i2v': {
+    endpoint: '/v1/ai/image-to-video/ltx-2-fast',
+    pollEndpoint: '/v1/ai/image-to-video/ltx-2-fast',
+    type: 'i2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      image_url: params.image,
+      generate_audio: params.generateAudio || false,
+      seed: Math.floor(Math.random() * 4294967295),
+      resolution: params.resolution || '1080p',
+      duration: parseInt(params.duration) || 6,
+      fps: parseInt(params.fps) || 25
+    })
+  },
+  'runway-4.5-t2v': {
+    endpoint: '/v1/ai/text-to-video/runway-4-5',
+    pollEndpoint: '/v1/ai/text-to-video/runway-4-5',
+    type: 't2v',
+    buildBody: (params) => ({
+      prompt: params.prompt || '',
+      ratio: params.ratio || '1280:720',
+      duration: parseInt(params.duration) || 5
+    })
+  },
+  'runway-4.5-i2v': {
+    endpoint: '/v1/ai/image-to-video/runway-4-5',
+    pollEndpoint: '/v1/ai/image-to-video/runway-4-5',
+    type: 'i2v',
+    buildBody: (params) => ({
+      image: params.image,
+      prompt: params.prompt || '',
+      ratio: params.ratio || '1280:720',
+      duration: parseInt(params.duration) || 5,
+      seed: Math.floor(Math.random() * 4294967295)
+    })
+  },
+  'runway-gen4-turbo': {
+    endpoint: '/v1/ai/image-to-video/runway-gen4-turbo',
+    pollEndpoint: '/v1/ai/image-to-video/runway-gen4-turbo',
+    type: 'i2v',
+    buildBody: (params) => ({
+      image: params.image,
+      prompt: params.prompt || '',
+      ratio: params.ratio || '1280:720',
+      duration: parseInt(params.duration) || 10,
+      seed: Math.floor(Math.random() * 4294967295)
+    })
+  },
+  'omnihuman-1.5': {
+    endpoint: '/v1/ai/video/omni-human-1-5',
+    pollEndpoint: '/v1/ai/video/omni-human-1-5',
+    type: 'omnihuman',
+    buildBody: (params) => ({
+      image_url: params.image,
+      audio_url: params.audioUrl,
+      prompt: params.prompt || '',
+      turbo_mode: params.turboMode || false,
+      resolution: params.resolution || '1080p'
+    })
+  }
+};
+
+// Get available Vidgen3 rooms
+app.get('/api/vidgen3/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, active_users, status 
+      FROM vidgen3_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN3] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal load rooms' });
+  }
+});
+
+// Join Vidgen3 Room
+app.post('/api/vidgen3/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId } = req.body;
+    const targetRoom = roomId || 1;
+    
+    const roomResult = await pool.query(
+      'SELECT * FROM vidgen3_rooms WHERE id = $1',
+      [targetRoom]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN' || room.active_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room penuh atau tutup' });
+    }
+    
+    await pool.query(`
+      UPDATE subscriptions SET vidgen3_room_id = $1
+      WHERE user_id = $2 AND status = 'active'
+    `, [targetRoom, req.session.userId]);
+    
+    await pool.query(
+      'UPDATE vidgen3_rooms SET active_users = active_users + 1 WHERE id = $1',
+      [targetRoom]
+    );
+    
+    res.json({ success: true, roomId: targetRoom, roomName: room.name });
+  } catch (error) {
+    console.error('[VIDGEN3] Join room error:', error);
+    res.status(500).json({ error: 'Gagal join room' });
+  }
+});
+
+// Generate video with Vidgen3 (Freepik)
+app.post('/api/vidgen3/proxy', async (req, res) => {
+  try {
+    console.log('[VIDGEN3] Generate request received');
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      console.log('[VIDGEN3] No API key provided');
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    console.log('[VIDGEN3] Getting room API key...');
+    const roomKeyResult = await getVidgen3RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      console.log('[VIDGEN3] Room key error:', roomKeyResult.error);
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    console.log('[VIDGEN3] Got room API key:', roomKeyResult.keyName);
+    
+    const { model, prompt, image, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode } = req.body;
+    
+    const config = VIDGEN3_MODEL_CONFIGS[model];
+    if (!config) {
+      return res.status(400).json({ error: `Model tidak didukung: ${model}` });
+    }
+    
+    if (config.type === 'i2v' && !image) {
+      return res.status(400).json({ error: 'Image diperlukan untuk model ini' });
+    }
+    if (config.type === 'omnihuman' && (!image || !audioUrl)) {
+      return res.status(400).json({ error: 'Image dan audio URL diperlukan untuk OmniHuman' });
+    }
+    if (config.type === 't2v' && !prompt) {
+      return res.status(400).json({ error: 'Prompt diperlukan untuk text-to-video' });
+    }
+    if (config.type === 'both' && !prompt && !image) {
+      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    }
+    
+    const requestBody = config.buildBody({ prompt, image, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode });
+    
+    const webhookUrl = getWebhookUrl();
+    if (webhookUrl) {
+      requestBody.webhook_url = webhookUrl;
+    }
+    
+    console.log(`[VIDGEN3] Generating with model: ${model}, endpoint: ${config.endpoint}`);
+    console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
+    
+    const { proxy: preProxy, pendingId } = await getOrAssignProxyForPendingTask();
+    
+    const response = await makeFreepikRequest(
+      'POST',
+      `https://api.freepik.com${config.endpoint}`,
+      roomKeyResult.apiKey,
+      requestBody,
+      true,
+      pendingId
+    );
+    
+    console.log(`[VIDGEN3] Freepik response:`, JSON.stringify(response.data));
+    
+    const data = response.data?.data || response.data;
+    const taskId = data.task_id || data.id || response.data?.task_id || response.data?.id;
+    
+    if (!taskId) {
+      if (pendingId) releaseProxyForTask(pendingId);
+      console.error('[VIDGEN3] No task_id in response:', JSON.stringify(response.data));
+      return res.status(500).json({ error: 'Tidak mendapat task_id dari Freepik' });
+    }
+    
+    if (pendingId) {
+      promoteProxyToTask(pendingId, taskId);
+    }
+    
+    await pool.query(`
+      INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName]);
+    
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [roomKeyResult.keyInfoId]
+    );
+    
+    console.log(`[VIDGEN3] Task created: ${taskId}`);
+    
+    res.json({
+      taskId: taskId,
+      model: model,
+      status: 'processing'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN3] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.message || error.response?.data?.detail || 'Gagal generate video' 
+    });
+  }
+});
+
+// Check Vidgen3 task status
+app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const { taskId } = req.params;
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const localTask = await pool.query(
+      'SELECT * FROM vidgen3_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+      [taskId, keyInfo.id]
+    );
+    
+    if (localTask.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan' });
+    }
+    
+    const task = localTask.rows[0];
+    
+    if (task.status === 'completed' && task.video_url) {
+      console.log(`[VIDGEN3] Task ${taskId} already completed, returning from DB`);
+      return res.json({
+        status: 'completed',
+        progress: 100,
+        videoUrl: task.video_url,
+        taskId: taskId,
+        model: task.model
+      });
+    }
+    
+    if (task.status === 'failed') {
+      console.log(`[VIDGEN3] Task ${taskId} already failed, returning from DB`);
+      return res.json({
+        status: 'failed',
+        error: task.error_message || 'Video generation failed',
+        taskId: taskId
+      });
+    }
+    
+    let freepikApiKey = null;
+    if (task.used_key_name && process.env[task.used_key_name]) {
+      freepikApiKey = process.env[task.used_key_name];
+      console.log(`[VIDGEN3] Using saved key: ${task.used_key_name}`);
+    }
+    
+    if (!freepikApiKey) {
+      const roomKeyResult = await getVidgen3RoomApiKey(xclipApiKey);
+      if (!roomKeyResult.error) {
+        freepikApiKey = roomKeyResult.apiKey;
+      }
+    }
+    
+    if (!freepikApiKey) {
+      freepikApiKey = process.env.FREEPIK_API_KEY;
+    }
+    
+    if (!freepikApiKey) {
+      return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
+    }
+    
+    const modelConfig = VIDGEN3_MODEL_CONFIGS[task.model];
+    if (!modelConfig) {
+      return res.json({ status: 'processing', progress: 0, taskId });
+    }
+    
+    const pollUrl = `https://api.freepik.com${modelConfig.pollEndpoint}/${taskId}`;
+    console.log(`[VIDGEN3] Polling: ${pollUrl}`);
+    
+    try {
+      const pollResponse = await makeFreepikRequest(
+        'GET',
+        pollUrl,
+        freepikApiKey,
+        null,
+        true,
+        taskId
+      );
+      
+      console.log(`[VIDGEN3] Poll response:`, JSON.stringify(pollResponse.data));
+      const data = pollResponse.data?.data || pollResponse.data;
+      
+      let videoUrl = null;
+      if (data.generated && data.generated.length > 0) {
+        videoUrl = data.generated[0];
+      } else if (data.video_url) {
+        videoUrl = data.video_url;
+      } else if (data.video?.url) {
+        videoUrl = data.video.url;
+      } else if (data.result?.video_url) {
+        videoUrl = data.result.video_url;
+      } else if (data.output?.video_url) {
+        videoUrl = data.output.video_url;
+      } else if (data.result?.url) {
+        videoUrl = data.result.url;
+      } else if (data.output?.url) {
+        videoUrl = data.output.url;
+      } else if (data.url) {
+        videoUrl = data.url;
+      }
+      
+      const isCompleted = data.status === 'COMPLETED' || data.status === 'completed' || 
+                         data.status === 'SUCCESS' || data.status === 'success' ||
+                         (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
+      
+      if (isCompleted && videoUrl) {
+        releaseProxyForTask(taskId);
+        pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+          ['completed', videoUrl, taskId]
+        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+        
+        return res.json({
+          status: 'completed',
+          progress: 100,
+          videoUrl: videoUrl,
+          taskId: taskId,
+          model: task.model
+        });
+      }
+      
+      const normalizedStatus = (data.status || 'processing').toLowerCase();
+      if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
+        releaseProxyForTask(taskId);
+        const errorMsg = data.error_message || data.error || data.message || 'Generation failed';
+        pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+          ['failed', errorMsg, taskId]
+        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+        
+        return res.json({
+          status: 'failed',
+          error: errorMsg,
+          taskId: taskId
+        });
+      }
+      
+      return res.json({
+        status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : 'processing',
+        progress: data.progress || 0,
+        taskId: taskId
+      });
+      
+    } catch (pollError) {
+      console.error('[VIDGEN3] Poll error:', pollError.response?.data || pollError.message);
+      return res.json({
+        status: 'processing',
+        progress: 0,
+        taskId: taskId,
+        message: 'Video sedang diproses...'
+      });
+    }
+    
+  } catch (error) {
+    console.error('[VIDGEN3] Status check error:', error);
+    res.status(500).json({ error: 'Gagal check status' });
+  }
+});
+
+// Get Vidgen3 history
+app.get('/api/vidgen3/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ videos: [], processing: [] });
+  }
+  
+  try {
+    const completedResult = await pool.query(`
+      SELECT * FROM vidgen3_tasks 
+      WHERE user_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.session.userId]);
+    
+    const processingResult = await pool.query(`
+      SELECT * FROM vidgen3_tasks 
+      WHERE user_id = $1 AND status IN ('processing', 'pending')
+      AND created_at > NOW() - INTERVAL '30 minutes'
+      ORDER BY created_at DESC
+    `, [req.session.userId]);
+    
+    res.json({ 
+      videos: completedResult.rows,
+      processing: processingResult.rows
+    });
+  } catch (error) {
+    console.error('[VIDGEN3] Get history error:', error);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
+// Delete vidgen3 video permanently
+app.delete('/api/vidgen3/video/:id', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const videoId = req.params.id;
+  
+  try {
+    const result = await pool.query(
+      'DELETE FROM vidgen3_tasks WHERE id = $1 AND user_id = $2 RETURNING id',
+      [videoId, req.session.userId]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Video tidak ditemukan' });
+    }
+    
+    console.log(`[VIDGEN3] Video ${videoId} deleted by user ${req.session.userId}`);
+    res.json({ success: true, message: 'Video berhasil dihapus' });
+  } catch (error) {
+    console.error('[VIDGEN3] Delete video error:', error);
+    res.status(500).json({ error: 'Gagal menghapus video' });
+  }
+});
+
+// Delete all vidgen3 videos for user
+app.delete('/api/vidgen3/videos/all', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    const result = await pool.query(
+      'DELETE FROM vidgen3_tasks WHERE user_id = $1 RETURNING id',
+      [req.session.userId]
+    );
+    
+    console.log(`[VIDGEN3] Deleted ${result.rowCount} videos for user ${req.session.userId}`);
+    res.json({ success: true, deleted: result.rowCount, message: `${result.rowCount} video berhasil dihapus` });
+  } catch (error) {
+    console.error('[VIDGEN3] Delete all videos error:', error);
     res.status(500).json({ error: 'Gagal menghapus semua video' });
   }
 });
@@ -6291,6 +6970,58 @@ async function initDatabase() {
           ('Vidgen2 Room 3', 10, 'OPEN', 'VIDGEN2_ROOM3_KEY_1', 'VIDGEN2_ROOM3_KEY_2', 'VIDGEN2_ROOM3_KEY_3')
       `);
       console.log('Vidgen2 rooms seeded');
+    }
+    
+    // Create vidgen3_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen3_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100)
+      )
+    `);
+    
+    // Create vidgen3_tasks table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen3_tasks (
+        id SERIAL PRIMARY KEY,
+        xclip_api_key_id INTEGER,
+        user_id INTEGER,
+        room_id INTEGER,
+        task_id VARCHAR(255) UNIQUE,
+        model VARCHAR(100),
+        prompt TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        video_url TEXT,
+        error_message TEXT,
+        key_index INTEGER,
+        used_key_name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    
+    // Add vidgen3_room_id to subscriptions
+    await pool.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS vidgen3_room_id INTEGER
+    `).catch(() => {});
+    
+    // Seed vidgen3 rooms if empty
+    const existingVidgen3Rooms = await pool.query('SELECT COUNT(*) FROM vidgen3_rooms');
+    if (parseInt(existingVidgen3Rooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO vidgen3_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('Vidgen3 Room 1', 10, 'OPEN', 'VIDGEN3_ROOM1_KEY_1', 'VIDGEN3_ROOM1_KEY_2', 'VIDGEN3_ROOM1_KEY_3'),
+          ('Vidgen3 Room 2', 10, 'OPEN', 'VIDGEN3_ROOM2_KEY_1', 'VIDGEN3_ROOM2_KEY_2', 'VIDGEN3_ROOM2_KEY_3'),
+          ('Vidgen3 Room 3', 10, 'OPEN', 'VIDGEN3_ROOM3_KEY_1', 'VIDGEN3_ROOM3_KEY_2', 'VIDGEN3_ROOM3_KEY_3')
+      `);
+      console.log('Vidgen3 rooms seeded');
     }
     
     // Create ximage_rooms table

@@ -37,6 +37,20 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
+- **Vidgen3 (Freepik Video Playground)**: Advanced video generation using Freepik API with premium models. Uses its own separate room-based API key system (VIDGEN3_ROOM{N}_KEY_{1-3}). Features include:
+  - 7 AI models with per-model playground settings:
+    - MiniMax Live (I2V, animation, camera movements)
+    - Seedance 1.5 Pro 1080p/720p (T2V + I2V, audio generation, 4-12s duration)
+    - LTX 2.0 Pro (T2V + I2V, up to 2160p, 50fps)
+    - LTX 2.0 Fast (T2V + I2V, ultra-fast, up to 20s duration)
+    - RunWay Gen 4.5 (T2V + I2V, cinematic quality, multiple aspect ratios)
+    - RunWay Gen4 Turbo (I2V, fast generation)
+    - OmniHuman 1.5 (human animation from image + audio URL)
+  - Database tables: vidgen3_rooms, vidgen3_tasks
+  - Room assignment via vidgen3_room_id in subscriptions
+  - SSE events: vidgen3_completed, vidgen3_failed
+  - Video history persistence in database
+  - Webhook integration for real-time task completion
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Motion rooms have their own set of Freepik API keys (MOTION_ROOM1_KEY_1/2/3, etc.).
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
