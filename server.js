@@ -5474,7 +5474,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       try {
         console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
         
-        // Setup request config with optional Webshare proxy
+        // Setup request config with optional proxy
         const statusConfig = {
           headers: {
             'Authorization': `Bearer ${roomKeyResult.apiKey}`
