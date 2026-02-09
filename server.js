@@ -304,38 +304,36 @@ const uploadPaymentProof = multer({
 // Storage for video processing jobs
 const jobs = new Map();
 
-// ============ WEBSHARE PROXY SUPPORT ============
-let webshareProxies = [];
-let webshareProxyIndex = 0;
-let webshareLastFetch = 0;
+// ============ PROXYING.IO RESIDENTIAL PROXY SUPPORT ============
+const PROXYING_IO_PROXIES = [];
+let proxyIndex = 0;
 const taskProxyMap = new Map();
 const blockedProxies = new Map();
 
-async function fetchWebshareProxies() {
-  const apiKey = process.env.WEBSHARE_API_KEY;
-  if (!apiKey) {
-    console.log('WEBSHARE_API_KEY not configured');
-    return [];
+function initProxyingIoProxies() {
+  if (PROXYING_IO_PROXIES.length > 0) return;
+  const host = process.env.GOPROXY_HOST;
+  const port = process.env.GOPROXY_PORT;
+  const username = process.env.GOPROXY_USERNAME;
+  const password = process.env.GOPROXY_PASSWORD;
+  if (!host || !port || !username || !password) {
+    console.log('[PROXY] Proxying.io not configured (missing GOPROXY_* env vars)');
+    return;
   }
-  
-  if (webshareProxies.length > 0 && Date.now() - webshareLastFetch < 300000) {
-    return webshareProxies;
-  }
-  
-  try {
-    const response = await axios.get('https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100', {
-      headers: { 'Authorization': `Token ${apiKey}` },
-      timeout: 10000
+  for (let i = 1; i <= 50; i++) {
+    PROXYING_IO_PROXIES.push({
+      proxy_address: `${i}.${host}`,
+      port: parseInt(port),
+      username: username,
+      password: password
     });
-    
-    webshareProxies = response.data.results || [];
-    webshareLastFetch = Date.now();
-    console.log(`Fetched ${webshareProxies.length} proxies from Webshare`);
-    return webshareProxies;
-  } catch (error) {
-    console.error('Failed to fetch Webshare proxies:', error.message);
-    return [];
   }
+  console.log(`[PROXY] Initialized ${PROXYING_IO_PROXIES.length} Proxying.io residential proxies`);
+}
+
+function isProxyConfigured() {
+  initProxyingIoProxies();
+  return PROXYING_IO_PROXIES.length > 0;
 }
 
 function markProxyBlocked(proxy) {
@@ -372,25 +370,25 @@ setInterval(() => {
   }
 }, 60000);
 
-function getNextWebshareProxy() {
-  if (webshareProxies.length === 0) return null;
-  const totalProxies = webshareProxies.length;
+function getNextProxy() {
+  initProxyingIoProxies();
+  if (PROXYING_IO_PROXIES.length === 0) return null;
+  const totalProxies = PROXYING_IO_PROXIES.length;
   for (let i = 0; i < totalProxies; i++) {
-    const proxy = webshareProxies[webshareProxyIndex % totalProxies];
-    webshareProxyIndex++;
+    const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+    proxyIndex++;
     if (!isProxyBlocked(proxy)) {
       return proxy;
     }
   }
-  const proxy = webshareProxies[webshareProxyIndex % totalProxies];
-  webshareProxyIndex++;
+  const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+  proxyIndex++;
   return proxy;
 }
 
 async function assignProxyForTask(taskId) {
-  if (!process.env.WEBSHARE_API_KEY) return null;
-  await fetchWebshareProxies();
-  const proxy = getNextWebshareProxy();
+  if (!isProxyConfigured()) return null;
+  const proxy = getNextProxy();
   if (proxy) {
     taskProxyMap.set(taskId, { proxy, assignedAt: Date.now() });
     console.log(`[PROXY] Assigned ${proxy.proxy_address}:${proxy.port} to task ${taskId}`);
@@ -423,9 +421,8 @@ setInterval(() => {
 }, 300000);
 
 async function getOrAssignProxyForPendingTask() {
-  if (!process.env.WEBSHARE_API_KEY) return { proxy: null, pendingId: null };
-  await fetchWebshareProxies();
-  const proxy = getNextWebshareProxy();
+  if (!isProxyConfigured()) return { proxy: null, pendingId: null };
+  const proxy = getNextProxy();
   if (!proxy) return { proxy: null, pendingId: null };
   const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   taskProxyMap.set(pendingId, { proxy, assignedAt: Date.now() });
@@ -445,7 +442,7 @@ function promoteProxyToTask(pendingId, taskId) {
 function applyProxyToConfig(config, proxy) {
   if (proxy) {
     const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-    console.log(`[PROXY] Using Webshare: ${proxy.proxy_address}:${proxy.port}`);
+    console.log(`[PROXY] Using Proxying.io: ${proxy.proxy_address}:${proxy.port}`);
     config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
     config.proxy = false;
   }
@@ -475,11 +472,11 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   }
 
   const config = buildConfig();
-  const hasWebshareKey = !!process.env.WEBSHARE_API_KEY;
+  const hasProxy = isProxyConfigured();
   let usedProxy = null;
   const isPendingTask = taskId && taskId.startsWith('pending_');
   
-  if (useProxy && hasWebshareKey) {
+  if (useProxy && hasProxy) {
     if (taskId) {
       let proxy = getProxyForTask(taskId);
       if (!proxy) {
@@ -493,8 +490,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
         console.log(`[PROXY] No proxy available for task ${taskId}, using direct connection`);
       }
     } else {
-      await fetchWebshareProxies();
-      const proxy = getNextWebshareProxy();
+      const proxy = getNextProxy();
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(config, proxy);
@@ -520,8 +516,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       if (taskId) releaseProxyForTask(taskId);
 
       const retryConfig = buildConfig();
-      await fetchWebshareProxies();
-      const newProxy = getNextWebshareProxy();
+      const newProxy = getNextProxy();
       if (newProxy && newProxy.proxy_address !== usedProxy.proxy_address) {
         applyProxyToConfig(retryConfig, newProxy);
         if (taskId) {
@@ -550,8 +545,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       markProxyBlocked(usedProxy);
       releaseProxyForTask(taskId);
       
-      await fetchWebshareProxies();
-      const newProxy = getNextWebshareProxy();
+      const newProxy = getNextProxy();
       if (newProxy && newProxy.proxy_address !== usedProxy.proxy_address) {
         const retryConfig = buildConfig();
         applyProxyToConfig(retryConfig, newProxy);
@@ -569,7 +563,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
           releaseProxyForTask(taskId);
         }
         
-        const thirdProxy = getNextWebshareProxy();
+        const thirdProxy = getNextProxy();
         if (thirdProxy && thirdProxy.proxy_address !== usedProxy.proxy_address && thirdProxy.proxy_address !== newProxy.proxy_address) {
           const thirdConfig = buildConfig();
           applyProxyToConfig(thirdConfig, thirdProxy);
@@ -612,11 +606,11 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
     
     const room = roomResult.rows[0];
     const useDropletProxy = room && room.use_proxy && room.droplet_ip && room.proxy_secret;
-    const useWebshare = room && room.use_webshare && process.env.WEBSHARE_API_KEY;
+    const useResidentialProxy = isProxyConfigured();
     
     const freepikUrl = `https://api.freepik.com/${endpoint}`;
     
-    if (useWebshare) {
+    if (useResidentialProxy) {
       let proxy = null;
       if (taskId) {
         proxy = getProxyForTask(taskId);
@@ -627,12 +621,11 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
           console.log(`[PROXY] Task ${taskId} using fixed IP via requestViaProxy: ${proxy.proxy_address}:${proxy.port}`);
         }
       } else {
-        await fetchWebshareProxies();
-        proxy = getNextWebshareProxy();
+        proxy = getNextProxy();
       }
       
       if (proxy) {
-        console.log(`Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        console.log(`Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         const response = await axios({
           method,
@@ -5342,7 +5335,6 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
     
-    // Setup request config with optional Webshare proxy
     const requestConfig = {
       headers: {
         'Content-Type': 'application/json',
@@ -5351,13 +5343,11 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       timeout: 60000
     };
     
-    // Add Webshare proxy if available
-    if (process.env.WEBSHARE_API_KEY) {
-      await fetchWebshareProxies();
-      const proxy = getNextWebshareProxy();
+    if (isProxyConfigured()) {
+      const proxy = getNextProxy();
       if (proxy) {
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-        console.log(`[VIDGEN2] Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        console.log(`[VIDGEN2] Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
         requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
         requestConfig.proxy = false;
       }
@@ -5382,9 +5372,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
           console.log(`[VIDGEN2] Rate limited, waiting ${waitTime/1000}s before retry ${retries}/${maxRetries}`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           
-          // Rotate to different proxy for retry
-          if (process.env.WEBSHARE_API_KEY) {
-            const newProxy = getNextWebshareProxy();
+          if (isProxyConfigured()) {
+            const newProxy = getNextProxy();
             if (newProxy) {
               const proxyUrl = `http://${newProxy.username}:${newProxy.password}@${newProxy.proxy_address}:${newProxy.port}`;
               requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
@@ -5493,10 +5482,8 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
           timeout: 30000
         };
         
-        // Add Webshare proxy if available
-        if (process.env.WEBSHARE_API_KEY) {
-          await fetchWebshareProxies();
-          const proxy = getNextWebshareProxy();
+        if (isProxyConfigured()) {
+          const proxy = getNextProxy();
           if (proxy) {
             const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
             statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
@@ -6551,13 +6538,11 @@ app.post('/api/ximage/generate', async (req, res) => {
       timeout: 60000
     };
     
-    // Add Webshare proxy if available
-    if (process.env.WEBSHARE_API_KEY) {
-      await fetchWebshareProxies();
-      const proxy = getNextWebshareProxy();
+    if (isProxyConfigured()) {
+      const proxy = getNextProxy();
       if (proxy) {
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-        console.log(`[XIMAGE] Using Webshare proxy: ${proxy.proxy_address}:${proxy.port}`);
+        console.log(`[XIMAGE] Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
         requestConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
         requestConfig.proxy = false;
       }
@@ -6622,10 +6607,8 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       timeout: 30000
     };
     
-    // Add Webshare proxy if available
-    if (process.env.WEBSHARE_API_KEY) {
-      await fetchWebshareProxies();
-      const proxy = getNextWebshareProxy();
+    if (isProxyConfigured()) {
+      const proxy = getNextProxy();
       if (proxy) {
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
