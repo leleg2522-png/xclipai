@@ -2622,9 +2622,13 @@ app.post('/api/motion/generate', async (req, res) => {
         const status = error.response?.status;
         const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
         const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
+        const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT'));
         
         if (isDailyLimit) {
           console.log(`[MOTION] Key ${currentKey.name} hit daily limit (${status}), trying next key...`);
+          continue;
+        } else if (isNetworkError) {
+          console.log(`[MOTION] Key ${currentKey.name} network error: ${errorMsg}, trying next key...`);
           continue;
         } else {
           console.error(`[MOTION] Key ${currentKey.name} failed with status ${status}:`, errorMsg);
@@ -2634,7 +2638,6 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     if (!successResponse) {
-      if (motionPendingId) releaseProxyForTask(motionPendingId);
       console.error('[MOTION] All API keys exhausted or failed');
       const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.message;
       return res.status(500).json({ error: 'Semua API key Motion sudah mencapai daily limit. Coba lagi besok atau hubungi admin. ' + errorMsg });
