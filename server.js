@@ -2817,6 +2817,16 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     if (!response || !response.data) {
+      const taskAge = savedTask.created_at ? (Date.now() - new Date(savedTask.created_at).getTime()) / 1000 : 0;
+      if (taskAge < 120) {
+        console.log(`[MOTION] Task ${taskId} not found on Freepik yet (age: ${Math.round(taskAge)}s), returning processing status`);
+        return res.json({
+          status: 'processing',
+          progress: 5,
+          taskId: taskId,
+          message: 'Task sedang diproses oleh Freepik...'
+        });
+      }
       return res.status(404).json({ error: 'Task tidak ditemukan di Freepik' });
     }
     

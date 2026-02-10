@@ -7422,10 +7422,20 @@ function pollMotionStatus(taskId, model, apiKey) {
         console.error('Motion status error:', response.status, errorData);
         
         if (response.status === 404 || errorData.message === 'Not found' || errorData.error?.includes('tidak ditemukan')) {
-          task.status = 'failed';
-          task.error = 'Task expired atau tidak ditemukan';
-          stopPolling();
-          render();
+          if (!task._notFoundCount) task._notFoundCount = 0;
+          task._notFoundCount++;
+          console.log(`[MOTION POLL] 404 count: ${task._notFoundCount}/10 for task ${taskId}`);
+          if (task._notFoundCount >= 10) {
+            task.status = 'failed';
+            task.error = 'Task expired atau tidak ditemukan';
+            stopPolling();
+            render();
+            return;
+          }
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 5000);
+          }
           return;
         }
         
