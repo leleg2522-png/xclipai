@@ -2002,6 +2002,9 @@ function render(force = false) {
   if (state.videogen.isPolling && !force && state.currentPage === 'videogen') {
     return;
   }
+  if (state.motion.isPolling && !force && state.currentPage === 'motion') {
+    return;
+  }
   
   // Throttle renders to prevent performance issues
   const now = Date.now();
@@ -4333,7 +4336,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
               ${state.motion.tasks.length > 0 ? `
                 <div class="task-list">
                   ${state.motion.tasks.map((task, idx) => `
-                    <div class="task-item ${task.status}">
+                    <div class="task-item ${task.status}" data-motion-task="${task.taskId}">
                       <div class="task-header">
                         <span class="task-model">${MOTION_MODELS.find(m => m.id === task.model)?.name || task.model}</span>
                         <span class="task-status status-${task.status}">${task.status === 'processing' ? 'Processing...' : task.status === 'completed' ? 'Selesai' : task.status === 'failed' ? 'Gagal' : task.status}</span>
@@ -4341,9 +4344,9 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                       ${task.status === 'processing' ? `
                         <div class="task-progress">
                           <div class="progress-bar">
-                            <div class="progress-fill pulse" style="width: ${task.progress || 30}%"></div>
+                            <div class="progress-fill task-progress-bar pulse" style="width: ${task.progress || 30}%"></div>
                           </div>
-                          <span class="progress-text">${task.statusText || 'Generating motion video...'}</span>
+                          <span class="progress-text task-progress-text">${task.statusText || 'Generating motion video...'}</span>
                         </div>
                       ` : task.status === 'completed' && task.videoUrl ? `
                         <div class="task-result">
@@ -7337,34 +7340,71 @@ async function generateMotion() {
   }
 }
 
+function updateMotionTaskUI(taskId) {
+  const task = state.motion.tasks.find(t => t.taskId === taskId);
+  if (!task) return;
+  
+  const taskEl = document.querySelector(`[data-motion-task="${taskId}"]`);
+  if (!taskEl) return;
+  
+  const statusEl = taskEl.querySelector('.task-status');
+  const progressEl = taskEl.querySelector('.task-progress-bar');
+  const progressTextEl = taskEl.querySelector('.task-progress-text');
+  
+  if (statusEl) {
+    if (task.status === 'completed') {
+      statusEl.textContent = 'Selesai';
+      statusEl.className = 'task-status completed';
+    } else if (task.status === 'failed') {
+      statusEl.textContent = task.error || 'Gagal';
+      statusEl.className = 'task-status failed';
+    } else {
+      statusEl.textContent = task.statusText || 'Processing...';
+      statusEl.className = 'task-status processing';
+    }
+  }
+  if (progressEl) {
+    progressEl.style.width = `${task.progress || 0}%`;
+  }
+  if (progressTextEl) {
+    progressTextEl.textContent = `${task.progress || 0}%`;
+  }
+}
+
 function pollMotionStatus(taskId, model, apiKey) {
   console.log('[MOTION POLL] Starting polling for task:', taskId, 'with apiKey:', apiKey ? 'present' : 'missing');
   
-  const maxAttempts = 1200; // ~1 jam dengan interval 3 detik
+  const maxAttempts = 1200;
   let attempts = 0;
+  state.motion.isPolling = true;
   
-  // Delay first poll by 5 seconds to let Freepik register the task
   console.log('[MOTION POLL] Waiting 5 seconds before first poll...');
   setTimeout(() => poll(), 5000);
+  
+  const stopPolling = () => {
+    const hasActiveTasks = state.motion.tasks.some(t => t.taskId !== taskId && t.status !== 'completed' && t.status !== 'failed');
+    if (!hasActiveTasks) {
+      state.motion.isPolling = false;
+    }
+  };
   
   const poll = async () => {
     try {
       const task = state.motion.tasks.find(t => t.taskId === taskId);
       if (!task) {
         console.log('[MOTION POLL] Task not found in state, stopping poll');
+        stopPolling();
         return;
       }
       
-      // Use the API key passed to this function, or fall back to task's stored key, or state
       const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey;
-      
-      console.log('[MOTION POLL] Polling attempt', attempts + 1, 'for task:', taskId, 'key:', xclipKey ? 'present' : 'missing');
       
       if (!xclipKey) {
         console.error('[MOTION POLL] No API key available');
         task.status = 'failed';
         task.error = 'Xclip API key diperlukan';
-        render();
+        stopPolling();
+        render(true);
         return;
       }
       
@@ -7382,12 +7422,12 @@ function pollMotionStatus(taskId, model, apiKey) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Motion status error:', response.status, errorData);
         
-        // If task not found (404) or expired, mark as failed and stop polling
         if (response.status === 404 || errorData.message === 'Not found' || errorData.error?.includes('tidak ditemukan')) {
           task.status = 'failed';
           task.error = 'Task expired atau tidak ditemukan';
-          render();
-          return; // Stop polling
+          stopPolling();
+          render(true);
+          return;
         }
         
         throw new Error(errorData.error || `Gagal mengambil status task (${response.status})`);
@@ -7402,26 +7442,29 @@ function pollMotionStatus(taskId, model, apiKey) {
       if (data.status === 'completed' && data.videoUrl) {
         task.videoUrl = data.videoUrl;
         showToast('Motion video selesai!', 'success');
-        render();
+        stopPolling();
+        render(true);
         return;
       }
       
       if (data.status === 'failed') {
         task.error = 'Motion generation gagal';
         showToast('Motion generation gagal', 'error');
-        render();
+        stopPolling();
+        render(true);
         return;
       }
       
-      render();
+      updateMotionTaskUI(taskId);
       
       attempts++;
       if (attempts < maxAttempts) {
-        setTimeout(poll, 3000);
+        setTimeout(poll, 5000);
       } else {
         task.status = 'failed';
         task.error = 'Timeout - motion generation terlalu lama';
-        render();
+        stopPolling();
+        render(true);
       }
       
     } catch (error) {
@@ -7430,7 +7473,8 @@ function pollMotionStatus(taskId, model, apiKey) {
       if (task) {
         task.status = 'failed';
         task.error = error.message;
-        render();
+        stopPolling();
+        render(true);
       }
     }
   };
