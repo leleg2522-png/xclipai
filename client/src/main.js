@@ -1998,11 +1998,10 @@ function showToast(message, type = 'info') {
 }
 
 function render(force = false) {
-  // Skip render during video polling to prevent glitches (unless forced)
   if (state.videogen.isPolling && !force && state.currentPage === 'videogen') {
     return;
   }
-  if (state.motion.isPolling && !force && state.currentPage === 'motion') {
+  if (state.motion.isPolling && state.currentPage === 'motion') {
     return;
   }
   
@@ -7404,7 +7403,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = 'Xclip API key diperlukan';
         stopPolling();
-        render(true);
+        render();
         return;
       }
       
@@ -7426,7 +7425,7 @@ function pollMotionStatus(taskId, model, apiKey) {
           task.status = 'failed';
           task.error = 'Task expired atau tidak ditemukan';
           stopPolling();
-          render(true);
+          render();
           return;
         }
         
@@ -7443,7 +7442,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.videoUrl = data.videoUrl;
         showToast('Motion video selesai!', 'success');
         stopPolling();
-        render(true);
+        render();
         return;
       }
       
@@ -7451,7 +7450,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.error = 'Motion generation gagal';
         showToast('Motion generation gagal', 'error');
         stopPolling();
-        render(true);
+        render();
         return;
       }
       
@@ -7464,7 +7463,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = 'Timeout - motion generation terlalu lama';
         stopPolling();
-        render(true);
+        render();
       }
       
     } catch (error) {
@@ -7474,7 +7473,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = error.message;
         stopPolling();
-        render(true);
+        render();
       }
     }
   };
@@ -8314,8 +8313,9 @@ function handleSSEEvent(data) {
         state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
       }
       
+      state.motion.isPolling = !state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
       showToast('Motion video berhasil di-generate!', 'success');
-      render(true);
+      render();
       break;
       
     case 'video_failed':
@@ -8335,6 +8335,7 @@ function handleSSEEvent(data) {
         failedMotionTask.status = 'failed';
         failedMotionTask.error = data.error;
         state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+        state.motion.isPolling = !state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
         showToast('Gagal generate motion: ' + data.error, 'error');
         render();
       }
