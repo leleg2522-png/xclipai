@@ -6523,7 +6523,7 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    // Setup request config
+    // X Image status uses direct connection (no proxy) with retry
     const statusConfig = {
       headers: {
         'Authorization': `Bearer ${roomKeyResult.apiKey}`
@@ -6531,19 +6531,25 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       timeout: 30000
     };
     
-    if (isProxyConfigured()) {
-      const proxy = getNextProxy();
-      if (proxy) {
-        const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-        statusConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-        statusConfig.proxy = false;
+    let statusResponse;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        statusResponse = await axios.get(
+          `https://api.poyo.ai/api/generate/status/${taskId}`,
+          statusConfig
+        );
+        break;
+      } catch (retryErr) {
+        const msg = (retryErr.message || '').toLowerCase();
+        const isNetErr = !retryErr.response && (msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('etimedout'));
+        if (isNetErr && attempt < 2) {
+          console.log(`[XIMAGE] Status poll network error, retry ${attempt + 1}/3: ${retryErr.message}`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        throw retryErr;
       }
     }
-    
-    const statusResponse = await axios.get(
-      `https://api.poyo.ai/api/generate/status/${taskId}`,
-      statusConfig
-    );
     
     console.log('[XIMAGE] Status response:', JSON.stringify(statusResponse.data));
     
