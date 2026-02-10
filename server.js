@@ -2385,7 +2385,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       `https://api.freepik.com${endpoint}${taskId}`,
       freepikApiKey,
       null,
-      true,
+      false,
       taskId
     );
     const pollLatency = Date.now() - pollStart;
@@ -6029,7 +6029,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         pollUrl,
         freepikApiKey,
         null,
-        true,
+        false,
         taskId
       );
       
