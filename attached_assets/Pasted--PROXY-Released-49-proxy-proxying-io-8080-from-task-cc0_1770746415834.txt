@@ -1,0 +1,100 @@
+[PROXY] Released 49.proxy.proxying.io:8080 from task cc039f53-3667-4e21-bb81-bba10562d220
+[PROXY] Falling back to direct connection (no proxy)
+[TIMING] Poll cc039f53-3667-4e21-bb81-bba10562d220 | Status: IN_PROGRESS | Latency: 340ms
+[DEBUG] Full response: {
+  "task_id": "cc039f53-3667-4e21-bb81-bba10562d220",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[STATUS] Checking task cc039f53-3667-4e21-bb81-bba10562d220 with key: ROOM2_FREEPIK_KEY_1, saved_key_name: ROOM2_FREEPIK_KEY_1
+[PROXY] Assigned 50.proxy.proxying.io:8080 to task cc039f53-3667-4e21-bb81-bba10562d220
+[PROXY] Using Proxying.io: 50.proxy.proxying.io:8080
+[PROXY] Task cc039f53-3667-4e21-bb81-bba10562d220 using fixed IP: 50.proxy.proxying.io:8080
+[TIMING] Poll cc039f53-3667-4e21-bb81-bba10562d220 | Status: IN_PROGRESS | Latency: 329ms
+[DEBUG] Full response: {
+  "task_id": "cc039f53-3667-4e21-bb81-bba10562d220",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[PROXY] IP blocked on 50.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 50.proxy.proxying.io:8080 from task cc039f53-3667-4e21-bb81-bba10562d220
+[PROXY] Falling back to direct connection (no proxy)
+[STATUS] Checking task cc039f53-3667-4e21-bb81-bba10562d220 with key: ROOM2_FREEPIK_KEY_1, saved_key_name: ROOM2_FREEPIK_KEY_1
+[PROXY] Assigned 1.proxy.proxying.io:8080 to task cc039f53-3667-4e21-bb81-bba10562d220
+[PROXY] Using Proxying.io: 1.proxy.proxying.io:8080
+[PROXY] Task cc039f53-3667-4e21-bb81-bba10562d220 using fixed IP: 1.proxy.proxying.io:8080
+[PROXY] IP blocked on 1.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 1.proxy.proxying.io:8080 from task cc039f53-3667-4e21-bb81-bba10562d220
+[PROXY] Falling back to direct connection (no proxy)
+[TIMING] Poll cc039f53-3667-4e21-bb81-bba10562d220 | Status: IN_PROGRESS | Latency: 321ms
+[DEBUG] Full response: {
+  "task_id": "cc039f53-3667-4e21-bb81-bba10562d220",
+  "status": "IN_PROGRESS",
+  "generated": []
+}
+[TIMING] Webhook received for task cc039f53-3667-4e21-bb81-bba10562d220 at 2026-02-10T17:54:07.852Z
+Webhook: Video completed! Task cc039f53-3667-4e21-bb81-bba10562d220, SSE sent: true
+Request aborted by client (normal)
+SSE disconnected: user 130
+SSE disconnected: user 155
+SSE connected: user 155, total connections: 1
+SSE disconnected: user 155
+SSE connected: user 155, total connections: 1
+SSE disconnected: user 154
+SSE connected: user 154, total connections: 1
+SSE disconnected: user 154
+SSE connected: user 154, total connections: 1
+2026-02-10 17:56:49.031 UTC [76] LOG:  checkpoint starting: time
+2026-02-10 17:56:52.873 UTC [76] LOG:  checkpoint complete: wrote 38 buffers (0.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=3.726 s, sync=0.033 s, total=3.842 s; sync files=24, longest=0.025 s, average=0.002 s; distance=215 kB, estimate=354 kB; lsn=0/320152F8, redo lsn=0/320121D8
+SSE disconnected: user 154
+2026-02-10 17:59:18.788 UTC [78918] ERROR:  invalid input syntax for type integer: "undefined"
+2026-02-10 17:59:18.788 UTC [78918] CONTEXT:  unnamed portal parameter $1 = '...'
+2026-02-10 17:59:18.788 UTC [78918] STATEMENT:  DELETE FROM vidgen3_tasks WHERE id = $1 AND user_id = $2 RETURNING id
+  routine: 'pg_strtoint32_safe'
+}
+[VIDGEN3] Delete video error: error: invalid input syntax for type integer: "undefined"
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/server.js:6161:20 {
+  length: 152,
+  severity: 'ERROR',
+  code: '22P02',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: "unnamed portal parameter $1 = '...'",
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'numutils.c',
+  line: '616',
+[VIDGEN3] Delete video error: error: invalid input syntax for type integer: "undefined"
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /app/server.js:6161:20 {
+  length: 152,
+  severity: 'ERROR',
+  code: '22P02',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: "unnamed portal parameter $1 = '...'",
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'numutils.c',
+  line: '616',
+  routine: 'pg_strtoint32_safe'
+}
+[VIDGEN3] Deleted 1 videos for user 1
+2026-02-10 17:59:26.932 UTC [78921] ERROR:  invalid input syntax for type integer: "undefined"
+2026-02-10 17:59:26.932 UTC [78921] CONTEXT:  unnamed portal parameter $1 = '...'
+2026-02-10 17:59:26.932 UTC [78921] STATEMENT:  DELETE FROM vidgen3_tasks WHERE id = $1 AND user_id = $2 RETURNING id
