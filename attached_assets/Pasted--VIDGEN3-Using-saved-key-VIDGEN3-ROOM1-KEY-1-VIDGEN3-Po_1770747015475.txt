@@ -1,0 +1,26 @@
+[VIDGEN3] Using saved key: VIDGEN3_ROOM1_KEY_1
+[VIDGEN3] Polling: https://api.freepik.com/v1/ai/image-to-video/runway-4-5/bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Assigned 49.proxy.proxying.io:8080 to task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Using Proxying.io: 49.proxy.proxying.io:8080
+[PROXY] Task bc37e13c-5051-438c-9712-f1156cfc6fe5 using fixed IP: 49.proxy.proxying.io:8080
+[PROXY] IP blocked on 49.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 49.proxy.proxying.io:8080 from task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Falling back to direct connection (no proxy)
+[VIDGEN3] Poll response: {"data":{"task_id":"bc37e13c-5051-438c-9712-f1156cfc6fe5","status":"IN_PROGRESS","generated":[]}}
+[VIDGEN3] Using saved key: VIDGEN3_ROOM1_KEY_1
+[VIDGEN3] Polling: https://api.freepik.com/v1/ai/image-to-video/runway-4-5/bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Assigned 50.proxy.proxying.io:8080 to task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Using Proxying.io: 50.proxy.proxying.io:8080
+[PROXY] Task bc37e13c-5051-438c-9712-f1156cfc6fe5 using fixed IP: 50.proxy.proxying.io:8080
+[PROXY] IP blocked on 50.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 50.proxy.proxying.io:8080 from task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Falling back to direct connection (no proxy)
+[VIDGEN3] Poll response: {"data":{"task_id":"bc37e13c-5051-438c-9712-f1156cfc6fe5","status":"IN_PROGRESS","generated":[]}}
+[VIDGEN3] Using saved key: VIDGEN3_ROOM1_KEY_1
+[VIDGEN3] Polling: https://api.freepik.com/v1/ai/image-to-video/runway-4-5/bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Assigned 1.proxy.proxying.io:8080 to task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Using Proxying.io: 1.proxy.proxying.io:8080
+[PROXY] Task bc37e13c-5051-438c-9712-f1156cfc6fe5 using fixed IP: 1.proxy.proxying.io:8080
+[PROXY] IP blocked on 1.proxy.proxying.io. Falling back to direct...
+[PROXY] Released 1.proxy.proxying.io:8080 from task bc37e13c-5051-438c-9712-f1156cfc6fe5
+[PROXY] Falling back to direct connection (no proxy)
