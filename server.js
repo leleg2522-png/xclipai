@@ -336,32 +336,64 @@ function initProxyingIoProxies() {
   console.log(`[PROXY] Initialized ${PROXYING_IO_PROXIES.length} Proxying.io residential proxies`);
 }
 
-function initWebshareProxy() {
-  if (webshareProxy) return;
-  const username = process.env.WEBSHARE_USERNAME;
-  const password = process.env.WEBSHARE_PASSWORD;
-  if (!username || !password) {
-    console.log('[PROXY] Webshare not configured (missing WEBSHARE_USERNAME/WEBSHARE_PASSWORD)');
+const WEBSHARE_PROXIES = [];
+let webshareIndex = 0;
+let webshareInitialized = false;
+
+async function initWebshareProxy() {
+  if (webshareInitialized) return;
+  webshareInitialized = true;
+  
+  const apiKey = process.env.WEBSHARE_API_KEY;
+  if (!apiKey) {
+    console.log('[PROXY] Webshare not configured (missing WEBSHARE_API_KEY)');
     return;
   }
-  webshareProxy = {
-    proxy_address: 'p.webshare.io',
-    port: 80,
-    username: username,
-    password: password,
-    provider: 'webshare'
-  };
-  console.log(`[PROXY] Initialized Webshare rotating proxy (80M+ IP pool)`);
+  
+  try {
+    console.log('[PROXY] Fetching Webshare proxy list via API...');
+    const response = await axios.get('https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100', {
+      headers: { 'Authorization': `Token ${apiKey}` },
+      timeout: 15000
+    });
+    
+    const proxies = response.data?.results || [];
+    if (proxies.length === 0) {
+      console.log('[PROXY] Webshare API returned 0 proxies');
+      return;
+    }
+    
+    for (const p of proxies) {
+      if (p.valid) {
+        WEBSHARE_PROXIES.push({
+          proxy_address: p.proxy_address,
+          port: p.port,
+          username: p.username,
+          password: p.password,
+          provider: 'webshare',
+          country: p.country_code
+        });
+      }
+    }
+    
+    console.log(`[PROXY] Initialized ${WEBSHARE_PROXIES.length} Webshare proxies from API (${proxies.length} total, countries: ${[...new Set(WEBSHARE_PROXIES.map(p => p.country))].join(', ')})`);
+  } catch (err) {
+    console.log(`[PROXY] Failed to fetch Webshare proxies: ${err.message}`);
+  }
+}
+
+async function ensureProxiesInitialized() {
+  initProxyingIoProxies();
+  await initWebshareProxy();
 }
 
 function isProxyConfigured() {
   initProxyingIoProxies();
-  initWebshareProxy();
-  return PROXYING_IO_PROXIES.length > 0 || webshareProxy !== null;
+  return PROXYING_IO_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
 }
 
 function isWebshareAvailable() {
-  if (!webshareProxy) return false;
+  if (WEBSHARE_PROXIES.length === 0) return false;
   if (Date.now() < webshareBlockedUntil) return false;
   return true;
 }
@@ -412,7 +444,6 @@ setInterval(() => {
 
 function getNextProxy() {
   initProxyingIoProxies();
-  initWebshareProxy();
   
   const hasWebshare = isWebshareAvailable();
   const hasProxyingIo = PROXYING_IO_PROXIES.length > 0;
@@ -422,7 +453,9 @@ function getNextProxy() {
   if (hasWebshare && hasProxyingIo) {
     proxyProviderToggle++;
     if (proxyProviderToggle % 3 !== 0) {
-      return webshareProxy;
+      const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+      webshareIndex++;
+      return wp;
     }
     const totalProxies = PROXYING_IO_PROXIES.length;
     for (let i = 0; i < totalProxies; i++) {
@@ -430,10 +463,16 @@ function getNextProxy() {
       proxyIndex++;
       if (!isProxyBlocked(proxy)) return proxy;
     }
-    return webshareProxy;
+    const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+    webshareIndex++;
+    return wp;
   }
   
-  if (hasWebshare) return webshareProxy;
+  if (hasWebshare) {
+    const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+    webshareIndex++;
+    return wp;
+  }
   
   const totalProxies = PROXYING_IO_PROXIES.length;
   for (let i = 0; i < totalProxies; i++) {
@@ -7181,7 +7220,8 @@ async function initDatabase() {
   }
 }
 
-initDatabase().then(() => {
+initDatabase().then(async () => {
+  await ensureProxiesInitialized();
   setInterval(cleanupExpiredSubscriptions, 60000);
   cleanupExpiredSubscriptions();
   setInterval(cleanupInactiveUsers, 60000);
