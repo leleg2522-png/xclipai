@@ -609,26 +609,30 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
 
-  let usedProxy = null;
-  const proxyConfig = buildConfig();
-  if (taskId) {
-    let proxy = getProxyForTask(taskId);
-    if (!proxy) proxy = await assignProxyForTask(taskId);
-    if (proxy) {
-      usedProxy = proxy;
-      applyProxyToConfig(proxyConfig, proxy);
+  const maxProxyAttempts = 3;
+  for (let proxyAttempt = 0; proxyAttempt < maxProxyAttempts; proxyAttempt++) {
+    let usedProxy = null;
+    const proxyConfig = buildConfig();
+    
+    if (proxyAttempt === 0 && taskId) {
+      let proxy = getProxyForTask(taskId);
+      if (!proxy) proxy = await assignProxyForTask(taskId);
+      if (proxy) {
+        usedProxy = proxy;
+        applyProxyToConfig(proxyConfig, proxy);
+      }
     }
-  }
-  if (!usedProxy) {
-    const proxy = getNextProxy();
-    if (proxy) {
-      usedProxy = proxy;
-      applyProxyToConfig(proxyConfig, proxy);
+    if (!usedProxy) {
+      const proxy = getNextProxy();
+      if (proxy) {
+        usedProxy = proxy;
+        applyProxyToConfig(proxyConfig, proxy);
+      }
     }
-  }
 
-  if (usedProxy) {
-    console.log(`[PROXY] Using IP: ${usedProxy.proxy_address}:${usedProxy.port}`);
+    if (!usedProxy) break;
+
+    console.log(`[PROXY] Attempt ${proxyAttempt + 1}/${maxProxyAttempts} via ${usedProxy.provider}: ${usedProxy.proxy_address}:${usedProxy.port}`);
     try {
       const resp = await axios(proxyConfig);
       if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
@@ -640,34 +644,36 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       const rateLimited = isRateLimited(proxyErr);
 
       if (blocked || socketErr || rateLimited) {
-        console.log(`[PROXY] ${rateLimited ? '429 rate limited' : socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.proxy_address}. Falling back to direct...`);
+        console.log(`[PROXY] ${rateLimited ? '429 rate limited' : socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.proxy_address}. Trying next proxy...`);
         if (blocked || socketErr) markProxyBlocked(usedProxy);
         if (taskId) releaseProxyForTask(taskId);
-      } else {
-        throw proxyErr;
+        if (rateLimited) await sleep(3000);
+        continue;
       }
+      throw proxyErr;
     }
   }
 
-  console.log(`[FREEPIK] Trying direct connection...`);
+  console.log(`[FREEPIK] All proxies failed, trying direct connection...`);
   const directConfig = buildConfig();
+  const retryDelays = [5000, 10000, 15000, 20000];
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const resp = await axios(directConfig);
       if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
       console.log(`[FREEPIK] Direct connection success`);
       return resp;
     } catch (err) {
-      if (isRateLimited(err) && attempt < 2) {
-        const delay = (attempt + 1) * 3000;
+      if (isRateLimited(err) && attempt < 3) {
+        const delay = retryDelays[attempt];
         console.log(`[FREEPIK] Rate limited (429), waiting ${delay/1000}s before retry #${attempt + 1}...`);
         await sleep(delay);
         continue;
       }
-      if (isSocketError(err) && attempt < 2) {
+      if (isSocketError(err) && attempt < 3) {
         console.log(`[FREEPIK] Socket error on direct, retry #${attempt + 1}...`);
-        await sleep(2000);
+        await sleep(3000);
         continue;
       }
       console.log(`[FREEPIK] Direct connection failed: ${err.message}`);
