@@ -573,7 +573,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   function isSocketError(err) {
     const msg = (err.message || '').toLowerCase();
-    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC';
+    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || msg.includes('epipe') || msg.includes('write epipe') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC';
   }
 
   function isRateLimited(err) {
