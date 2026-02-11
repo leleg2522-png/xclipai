@@ -304,11 +304,15 @@ const uploadPaymentProof = multer({
 // Storage for video processing jobs
 const jobs = new Map();
 
-// ============ PROXYING.IO RESIDENTIAL PROXY SUPPORT ============
+// ============ MULTI-PROVIDER PROXY SUPPORT ============
 const PROXYING_IO_PROXIES = [];
 let proxyIndex = 0;
 const taskProxyMap = new Map();
 const blockedProxies = new Map();
+let webshareProxy = null;
+let webshareFailCount = 0;
+let webshareBlockedUntil = 0;
+let proxyProviderToggle = 0;
 
 function initProxyingIoProxies() {
   if (PROXYING_IO_PROXIES.length > 0) return;
@@ -325,19 +329,54 @@ function initProxyingIoProxies() {
       proxy_address: `${i}.${host}`,
       port: parseInt(port),
       username: username,
-      password: password
+      password: password,
+      provider: 'proxying.io'
     });
   }
   console.log(`[PROXY] Initialized ${PROXYING_IO_PROXIES.length} Proxying.io residential proxies`);
 }
 
+function initWebshareProxy() {
+  if (webshareProxy) return;
+  const username = process.env.WEBSHARE_USERNAME;
+  const password = process.env.WEBSHARE_PASSWORD;
+  if (!username || !password) {
+    console.log('[PROXY] Webshare not configured (missing WEBSHARE_USERNAME/WEBSHARE_PASSWORD)');
+    return;
+  }
+  webshareProxy = {
+    proxy_address: 'p.webshare.io',
+    port: 80,
+    username: username,
+    password: password,
+    provider: 'webshare'
+  };
+  console.log(`[PROXY] Initialized Webshare rotating proxy (80M+ IP pool)`);
+}
+
 function isProxyConfigured() {
   initProxyingIoProxies();
-  return PROXYING_IO_PROXIES.length > 0;
+  initWebshareProxy();
+  return PROXYING_IO_PROXIES.length > 0 || webshareProxy !== null;
+}
+
+function isWebshareAvailable() {
+  if (!webshareProxy) return false;
+  if (Date.now() < webshareBlockedUntil) return false;
+  return true;
 }
 
 function markProxyBlocked(proxy) {
   if (!proxy) return;
+  if (proxy.provider === 'webshare') {
+    webshareFailCount++;
+    if (webshareFailCount >= 3) {
+      webshareBlockedUntil = Date.now() + 60000;
+      console.log(`[PROXY] Webshare blocked ${webshareFailCount}x, cooldown 1min`);
+      webshareFailCount = 0;
+    }
+    return;
+  }
   const ip = proxy.proxy_address;
   const entry = blockedProxies.get(ip);
   const count = entry ? entry.count + 1 : 1;
@@ -349,6 +388,7 @@ function markProxyBlocked(proxy) {
 
 function isProxyBlocked(proxy) {
   if (!proxy) return false;
+  if (proxy.provider === 'webshare') return !isWebshareAvailable();
   const ip = proxy.proxy_address;
   const entry = blockedProxies.get(ip);
   if (!entry) return false;
@@ -372,14 +412,34 @@ setInterval(() => {
 
 function getNextProxy() {
   initProxyingIoProxies();
-  if (PROXYING_IO_PROXIES.length === 0) return null;
+  initWebshareProxy();
+  
+  const hasWebshare = isWebshareAvailable();
+  const hasProxyingIo = PROXYING_IO_PROXIES.length > 0;
+  
+  if (!hasWebshare && !hasProxyingIo) return null;
+  
+  if (hasWebshare && hasProxyingIo) {
+    proxyProviderToggle++;
+    if (proxyProviderToggle % 3 !== 0) {
+      return webshareProxy;
+    }
+    const totalProxies = PROXYING_IO_PROXIES.length;
+    for (let i = 0; i < totalProxies; i++) {
+      const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+      proxyIndex++;
+      if (!isProxyBlocked(proxy)) return proxy;
+    }
+    return webshareProxy;
+  }
+  
+  if (hasWebshare) return webshareProxy;
+  
   const totalProxies = PROXYING_IO_PROXIES.length;
   for (let i = 0; i < totalProxies; i++) {
     const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
     proxyIndex++;
-    if (!isProxyBlocked(proxy)) {
-      return proxy;
-    }
+    if (!isProxyBlocked(proxy)) return proxy;
   }
   const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
   proxyIndex++;
@@ -442,7 +502,8 @@ function promoteProxyToTask(pendingId, taskId) {
 function applyProxyToConfig(config, proxy) {
   if (proxy) {
     const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-    console.log(`[PROXY] Using Proxying.io: ${proxy.proxy_address}:${proxy.port}`);
+    const providerName = proxy.provider === 'webshare' ? 'Webshare (80M+ IPs)' : 'Proxying.io';
+    console.log(`[PROXY] Using ${providerName}: ${proxy.proxy_address}:${proxy.port}`);
     config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
     config.proxy = false;
   }
