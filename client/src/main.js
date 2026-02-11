@@ -6574,7 +6574,7 @@ function pollVidgen3Task(taskId, model) {
       render();
       attempts++;
       if (attempts < maxAttempts) {
-        setTimeout(poll, 3000);
+        setTimeout(poll, 5000);
       } else {
         task.status = 'failed';
         task.error = 'Timeout';
@@ -7720,9 +7720,7 @@ async function pollVideoStatus(taskId, model) {
       
       attempts++;
       if (attempts < maxAttempts) {
-        // Aggressive polling: 2s for first 60 attempts (~2 min), then 3s
-        const nextInterval = attempts < 60 ? 2000 : 3000;
-        setTimeout(poll, nextInterval);
+        setTimeout(poll, 5000);
       } else {
         throw new Error('Timeout: Video generation took too long (15+ menit)');
       }
@@ -7743,8 +7741,7 @@ async function pollVideoStatus(taskId, model) {
     }
   };
   
-  // Start polling immediately (1 second delay)
-  setTimeout(poll, 1000);
+  setTimeout(poll, 5000);
 }
 
 async function removeGeneratedVideo(index) {
@@ -8186,11 +8183,11 @@ async function pollJobStatus() {
       if (prevProgress !== data.progress || prevStatus !== data.status) {
         updateProcessingProgressUI();
       }
-      setTimeout(pollJobStatus, 2000);
+      setTimeout(pollJobStatus, 5000);
     }
   } catch (error) {
     console.error('Polling error:', error);
-    setTimeout(pollJobStatus, 3000);
+    setTimeout(pollJobStatus, 5000);
   }
 }
 
