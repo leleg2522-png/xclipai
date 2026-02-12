@@ -79,6 +79,7 @@ const state = {
     prompt: '',
     selectedModel: 'sora-2-10s',
     aspectRatio: '16:9',
+    grokMode: 'normal',
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -2642,10 +2643,12 @@ function formatMessageContent(content) {
 
 // ============ VIDGEN2 PAGE ============
 function renderVidgen2Page() {
+  const isGrokModel = state.vidgen2.selectedModel === 'grok-imagine';
   const models = [
     { id: 'sora-2-10s', name: 'Sora 2 Stable (10s)', desc: 'Video 10 detik, 720p', badge: 'POPULAR', icon: '🎬' },
     { id: 'sora-2-15s', name: 'Sora 2 Stable (15s)', desc: 'Video 15 detik, 720p', badge: 'LONGER', icon: '🎥' },
-    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Google Veo, cepat & berkualitas', badge: 'FAST', icon: '⚡' }
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Google Veo, cepat & berkualitas', badge: 'FAST', icon: '⚡' },
+    { id: 'grok-imagine', name: 'Grok Imagine', desc: 'xAI Aurora, 6s video + audio', badge: 'NEW', icon: '🧠' }
   ];
   
   return `
@@ -2741,7 +2744,7 @@ function renderVidgen2Page() {
               <div class="setting-group">
                 <label class="setting-label">Aspect Ratio</label>
                 <div class="aspect-ratio-selector">
-                  ${['16:9', '9:16', '1:1'].map(ratio => `
+                  ${(isGrokModel ? ['1:1', '2:3', '3:2'] : ['16:9', '9:16', '1:1']).map(ratio => `
                     <button class="aspect-btn ${state.vidgen2.aspectRatio === ratio ? 'active' : ''}" data-vidgen2-ratio="${ratio}">
                       <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
                       <span>${ratio}</span>
@@ -2749,13 +2752,41 @@ function renderVidgen2Page() {
                   `).join('')}
                 </div>
               </div>
+
+              ${isGrokModel ? `
+              <div class="setting-group">
+                <label class="setting-label">Creative Mode</label>
+                <div class="grok-mode-selector" style="display:flex;gap:8px;">
+                  ${[
+                    { id: 'normal', label: 'Normal', desc: 'Balanced & professional', color: '#3b82f6' },
+                    { id: 'fun', label: 'Fun', desc: 'Playful & whimsical', color: '#10b981' },
+                    { id: 'spicy', label: 'Spicy', desc: 'Edgy & vibrant', color: '#ef4444' }
+                  ].map(mode => `
+                    <button class="aspect-btn ${state.vidgen2.grokMode === mode.id ? 'active' : ''}" data-grok-mode="${mode.id}" style="flex:1;${state.vidgen2.grokMode === mode.id ? 'border-color:' + mode.color + ';' : ''}">
+                      <span style="font-size:13px;font-weight:600;">${mode.label}</span>
+                      <span style="font-size:10px;opacity:0.7;display:block;margin-top:2px;">${mode.desc}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group" style="background:rgba(139,92,246,0.08);border-radius:10px;padding:10px 12px;border:1px solid rgba(139,92,246,0.15);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                  <span style="font-size:14px;">🧠</span>
+                  <span style="font-size:12px;font-weight:600;color:#8b5cf6;">Grok Imagine Info</span>
+                </div>
+                <p style="font-size:11px;color:var(--text-secondary);margin:0;line-height:1.5;">
+                  Video 6 detik + audio sinkronisasi otomatis. Mendukung text-to-video & image-to-video. Powered by xAI Aurora engine.
+                </p>
+              </div>
+              ` : ''}
               
               <div class="setting-group">
-                <label class="setting-label">Prompt (Opsional)</label>
+                <label class="setting-label">Prompt ${isGrokModel ? '' : '(Opsional)'}</label>
                 <textarea 
                   class="form-textarea" 
                   id="vidgen2Prompt" 
-                  placeholder="Deskripsikan gerakan atau aksi yang diinginkan..."
+                  placeholder="${isGrokModel ? 'Deskripsikan video yang ingin dibuat...' : 'Deskripsikan gerakan atau aksi yang diinginkan...'}"
                   rows="3"
                 >${state.vidgen2.prompt}</textarea>
               </div>
@@ -2804,7 +2835,9 @@ function renderVidgen2Page() {
                 const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000) : 0;
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
-                const isDisabled = state.vidgen2.isGenerating || !state.vidgen2.sourceImage || state.vidgen2.tasks.length >= 3 || isOnCooldown;
+                const grokTextMode = state.vidgen2.selectedModel === 'grok-imagine' && !state.vidgen2.sourceImage;
+                const needsImage = !state.vidgen2.sourceImage && state.vidgen2.selectedModel !== 'grok-imagine';
+                const isDisabled = state.vidgen2.isGenerating || needsImage || (grokTextMode && !state.vidgen2.prompt.trim()) || state.vidgen2.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen2.isGenerating ? `
@@ -2823,7 +2856,8 @@ function renderVidgen2Page() {
                 `}
               </button>`;
               })()}
-              ${!state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Upload gambar terlebih dahulu</p>' : ''}
+              ${!state.vidgen2.sourceImage && state.vidgen2.selectedModel !== 'grok-imagine' ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Upload gambar terlebih dahulu</p>' : ''}
+              ${state.vidgen2.selectedModel === 'grok-imagine' && !state.vidgen2.sourceImage && !state.vidgen2.prompt.trim() ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
               ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
           </div>
@@ -5926,7 +5960,13 @@ function attachVidgen2EventListeners() {
       // Model selection
       const modelCard = e.target.closest('[data-vidgen2-model]');
       if (modelCard && state.currentPage === 'vidgen2') {
-        state.vidgen2.selectedModel = modelCard.dataset.vidgen2Model;
+        const newModel = modelCard.dataset.vidgen2Model;
+        const wasGrok = state.vidgen2.selectedModel === 'grok-imagine';
+        const isGrok = newModel === 'grok-imagine';
+        state.vidgen2.selectedModel = newModel;
+        if (wasGrok !== isGrok) {
+          state.vidgen2.aspectRatio = isGrok ? '1:1' : '16:9';
+        }
         render();
         return;
       }
@@ -5935,6 +5975,14 @@ function attachVidgen2EventListeners() {
       const ratioBtn = e.target.closest('[data-vidgen2-ratio]');
       if (ratioBtn && state.currentPage === 'vidgen2') {
         state.vidgen2.aspectRatio = ratioBtn.dataset.vidgen2Ratio;
+        render();
+        return;
+      }
+      
+      // Grok mode selection
+      const grokModeBtn = e.target.closest('[data-grok-mode]');
+      if (grokModeBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.grokMode = grokModeBtn.dataset.grokMode;
         render();
         return;
       }
@@ -6034,8 +6082,13 @@ function handleVidgen2ImageUpload(e) {
 }
 
 async function generateVidgen2Video() {
-  if (!state.vidgen2.sourceImage) {
+  const isGrok = state.vidgen2.selectedModel === 'grok-imagine';
+  if (!isGrok && !state.vidgen2.sourceImage) {
     alert('Upload gambar terlebih dahulu');
+    return;
+  }
+  if (isGrok && !state.vidgen2.sourceImage && !state.vidgen2.prompt.trim()) {
+    alert('Masukkan prompt atau upload gambar');
     return;
   }
   
@@ -6073,9 +6126,10 @@ async function generateVidgen2Video() {
       body: JSON.stringify({
         model: state.vidgen2.selectedModel,
         prompt: state.vidgen2.prompt,
-        image: state.vidgen2.sourceImage.data,
+        image: state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
         aspectRatio: state.vidgen2.aspectRatio,
-        roomId: state.vidgen2.selectedRoom
+        roomId: state.vidgen2.selectedRoom,
+        grokMode: state.vidgen2.selectedModel === 'grok-imagine' ? state.vidgen2.grokMode : undefined
       })
     });
     

@@ -5459,12 +5459,13 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     }
     
     // Model mapping for Poyo.ai
-    // Models: sora-2-stable, sora-2-pro, veo3.1, veo3.1-fast
+    // Models: sora-2-stable, veo3.1-fast, grok-imagine
     // Endpoint: https://api.poyo.ai/api/generate/submit
     const modelConfig = {
-      'sora-2-10s': { apiModel: 'sora-2-stable', duration: 10 },
-      'sora-2-15s': { apiModel: 'sora-2-stable', duration: 15 },
-      'veo-3.1-fast': { apiModel: 'veo3.1-fast', duration: 8 }
+      'sora-2-10s': { apiModel: 'sora-2-stable', duration: 10, type: 'video' },
+      'sora-2-15s': { apiModel: 'sora-2-stable', duration: 15, type: 'video' },
+      'veo-3.1-fast': { apiModel: 'veo3.1-fast', duration: 8, type: 'video' },
+      'grok-imagine': { apiModel: 'grok-imagine', duration: 6, type: 'grok' }
     };
     const config = modelConfig[model] || modelConfig['sora-2-10s'];
     const poyoModel = config.apiModel;
@@ -5473,38 +5474,59 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     // Duration based on model selection
     const videoDuration = config.duration;
     
-    // Aspect ratio: 16:9 or 9:16
+    // Aspect ratio
     const poyoAspectRatio = aspectRatio || '16:9';
     
-    console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
+    // Grok Imagine mode (fun/normal/spicy)
+    const grokMode = req.body.grokMode || 'normal';
+    
+    console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}${config.type === 'grok' ? ', mode: ' + grokMode : ''}`);
     
     // Prepare request to Poyo.ai
-    // Poyo.ai uses imageUrls (camelCase) inside input object
-    // For character consistency, prompt should describe the character in detail
     const effectivePrompt = prompt || 'Generate a cinematic video with smooth motion';
     
-    const requestBody = {
-      model: poyoModel,
-      input: {
-        prompt: effectivePrompt,
-        duration: videoDuration,
-        aspect_ratio: poyoAspectRatio
-      }
-    };
+    let requestBody;
     
-    // Add image for image-to-video generation
-    if (imageUrl) {
-      // Poyo.ai uses imageUrls (camelCase) inside input object for all models
-      requestBody.input.imageUrls = [imageUrl];
+    if (config.type === 'grok') {
+      // Grok Imagine has different request format
+      requestBody = {
+        model: poyoModel,
+        input: {
+          prompt: effectivePrompt,
+          aspect_ratio: poyoAspectRatio,
+          mode: grokMode
+        }
+      };
       
-      // For Veo 3.1, enhance prompt with character consistency instructions
-      if (poyoModel.includes('veo3')) {
-        const charPrompt = effectivePrompt + '. Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image.';
-        requestBody.input.prompt = charPrompt;
-        console.log(`[VIDGEN2] Veo 3.1 character consistency mode - enhanced prompt`);
+      // Add image for image-to-video
+      if (imageUrl) {
+        requestBody.input.image_urls = [imageUrl];
+        console.log(`[VIDGEN2] Grok Imagine image-to-video mode with image: ${imageUrl}`);
       }
+    } else {
+      // Standard Poyo.ai format for Sora 2, Veo 3.1
+      requestBody = {
+        model: poyoModel,
+        input: {
+          prompt: effectivePrompt,
+          duration: videoDuration,
+          aspect_ratio: poyoAspectRatio
+        }
+      };
       
-      console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
+      // Add image for image-to-video generation
+      if (imageUrl) {
+        requestBody.input.imageUrls = [imageUrl];
+        
+        // For Veo 3.1, enhance prompt with character consistency instructions
+        if (poyoModel.includes('veo3')) {
+          const charPrompt = effectivePrompt + '. Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image.';
+          requestBody.input.prompt = charPrompt;
+          console.log(`[VIDGEN2] Veo 3.1 character consistency mode - enhanced prompt`);
+        }
+        
+        console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
+      }
     }
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
