@@ -5500,7 +5500,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       
       // Add image for image-to-video
       if (imageUrl) {
-        requestBody.input.image_urls = [imageUrl];
+        requestBody.input.imageUrls = [imageUrl];
         console.log(`[VIDGEN2] Grok Imagine image-to-video mode with image: ${imageUrl}`);
       }
     } else {
