@@ -305,6 +305,7 @@ const uploadPaymentProof = multer({
 const jobs = new Map();
 
 // ============ MULTI-PROVIDER PROXY SUPPORT ============
+const IPROYAL_PROXY = { configured: false };
 const PROXYING_IO_PROXIES = [];
 let proxyIndex = 0;
 const taskProxyMap = new Map();
@@ -312,7 +313,28 @@ const blockedProxies = new Map();
 let webshareProxy = null;
 let webshareFailCount = 0;
 let webshareBlockedUntil = 0;
+let iproyalFailCount = 0;
+let iproyalBlockedUntil = 0;
 let proxyProviderToggle = 0;
+
+function initIpRoyalProxy() {
+  if (IPROYAL_PROXY.configured) return;
+  const host = process.env.IPROYAL_HOST;
+  const port = process.env.IPROYAL_PORT;
+  const username = process.env.IPROYAL_USERNAME;
+  const password = process.env.IPROYAL_PASSWORD;
+  if (!host || !port || !username || !password) {
+    console.log('[PROXY] IPRoyal ISP not configured (missing IPROYAL_* env vars)');
+    return;
+  }
+  IPROYAL_PROXY.proxy_address = host;
+  IPROYAL_PROXY.port = parseInt(port);
+  IPROYAL_PROXY.username = username;
+  IPROYAL_PROXY.password = password;
+  IPROYAL_PROXY.provider = 'iproyal';
+  IPROYAL_PROXY.configured = true;
+  console.log(`[PROXY] Initialized IPRoyal ISP proxy: ${host}:${port} (PRIMARY)`);
+}
 
 function initProxyingIoProxies() {
   if (PROXYING_IO_PROXIES.length > 0) return;
@@ -383,13 +405,21 @@ async function initWebshareProxy() {
 }
 
 async function ensureProxiesInitialized() {
+  initIpRoyalProxy();
   initProxyingIoProxies();
   await initWebshareProxy();
 }
 
 function isProxyConfigured() {
+  initIpRoyalProxy();
   initProxyingIoProxies();
-  return PROXYING_IO_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
+  return IPROYAL_PROXY.configured || PROXYING_IO_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
+}
+
+function isIpRoyalAvailable() {
+  if (!IPROYAL_PROXY.configured) return false;
+  if (Date.now() < iproyalBlockedUntil) return false;
+  return true;
 }
 
 function isWebshareAvailable() {
@@ -400,6 +430,15 @@ function isWebshareAvailable() {
 
 function markProxyBlocked(proxy) {
   if (!proxy) return;
+  if (proxy.provider === 'iproyal') {
+    iproyalFailCount++;
+    if (iproyalFailCount >= 5) {
+      iproyalBlockedUntil = Date.now() + 120000;
+      console.log(`[PROXY] IPRoyal ISP blocked ${iproyalFailCount}x, cooldown 2min`);
+      iproyalFailCount = 0;
+    }
+    return;
+  }
   if (proxy.provider === 'webshare') {
     webshareFailCount++;
     if (webshareFailCount >= 3) {
@@ -420,6 +459,7 @@ function markProxyBlocked(proxy) {
 
 function isProxyBlocked(proxy) {
   if (!proxy) return false;
+  if (proxy.provider === 'iproyal') return !isIpRoyalAvailable();
   if (proxy.provider === 'webshare') return !isWebshareAvailable();
   const ip = proxy.proxy_address;
   const entry = blockedProxies.get(ip);
@@ -443,13 +483,39 @@ setInterval(() => {
 }, 60000);
 
 function getNextProxy() {
+  initIpRoyalProxy();
   initProxyingIoProxies();
   
+  const hasIpRoyal = isIpRoyalAvailable();
   const hasWebshare = isWebshareAvailable();
   const hasProxyingIo = PROXYING_IO_PROXIES.length > 0;
   
-  if (!hasWebshare && !hasProxyingIo) return null;
+  if (!hasIpRoyal && !hasWebshare && !hasProxyingIo) return null;
   
+  // Priority: IPRoyal ISP (primary) > Webshare > Proxying.io
+  if (hasIpRoyal) {
+    // IPRoyal is always primary - use it for most requests
+    proxyProviderToggle++;
+    // 80% IPRoyal, 20% fallback to others for load distribution
+    if (proxyProviderToggle % 5 !== 0) {
+      return IPROYAL_PROXY;
+    }
+    // Occasionally use fallback to keep connections warm
+    if (hasWebshare) {
+      const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+      webshareIndex++;
+      return wp;
+    }
+    if (hasProxyingIo) {
+      const totalProxies = PROXYING_IO_PROXIES.length;
+      const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+      proxyIndex++;
+      return proxy;
+    }
+    return IPROYAL_PROXY;
+  }
+  
+  // Fallback when IPRoyal not available
   if (hasWebshare && hasProxyingIo) {
     proxyProviderToggle++;
     if (proxyProviderToggle % 3 !== 0) {
@@ -541,7 +607,7 @@ function promoteProxyToTask(pendingId, taskId) {
 function applyProxyToConfig(config, proxy) {
   if (proxy) {
     const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-    const providerName = proxy.provider === 'webshare' ? 'Webshare (80M+ IPs)' : 'Proxying.io';
+    const providerName = proxy.provider === 'iproyal' ? 'IPRoyal ISP (PRIMARY)' : proxy.provider === 'webshare' ? 'Webshare (80M+ IPs)' : 'Proxying.io';
     console.log(`[PROXY] Using ${providerName}: ${proxy.proxy_address}:${proxy.port}`);
     config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
     config.proxy = false;
