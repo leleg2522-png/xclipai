@@ -5413,12 +5413,14 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     console.log(`[VIDGEN2] Generating with Poyo.ai model: ${poyoModel}, duration: ${videoDuration}s, aspect: ${poyoAspectRatio}`);
     
     // Prepare request to Poyo.ai
-    // VEO 3.1 image-to-video: image_urls inside input, generation_type: 'reference'
-    // Sora 2: also supports image-to-video via image_urls
+    // Poyo.ai uses imageUrls (camelCase) inside input object
+    // For character consistency, prompt should describe the character in detail
+    const effectivePrompt = prompt || 'Generate a cinematic video with smooth motion';
+    
     const requestBody = {
       model: poyoModel,
       input: {
-        prompt: prompt || 'Generate a cinematic video with smooth motion',
+        prompt: effectivePrompt,
         duration: videoDuration,
         aspect_ratio: poyoAspectRatio
       }
@@ -5426,9 +5428,16 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     // Add image for image-to-video generation
     if (imageUrl) {
-      // Both Sora 2 and Veo 3.1 use image_urls inside input object
-      requestBody.input.image_urls = [imageUrl];
-      requestBody.input.generation_type = 'reference';
+      // Poyo.ai uses imageUrls (camelCase) inside input object for all models
+      requestBody.input.imageUrls = [imageUrl];
+      
+      // For Veo 3.1, enhance prompt with character consistency instructions
+      if (poyoModel.includes('veo3')) {
+        const charPrompt = effectivePrompt + '. Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image.';
+        requestBody.input.prompt = charPrompt;
+        console.log(`[VIDGEN2] Veo 3.1 character consistency mode - enhanced prompt`);
+      }
+      
       console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
     }
     
@@ -6593,9 +6602,6 @@ app.post('/api/ximage/generate', async (req, res) => {
     // Add images for image-to-image mode
     if (imageUrls.length > 0) {
       requestBody.input.image_urls = imageUrls;
-      if (model !== 'grok-imagine-image') {
-        requestBody.input.generation_type = 'reference';
-      }
     }
     
     console.log('[XIMAGE] Request body:', JSON.stringify(requestBody));
