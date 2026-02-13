@@ -224,6 +224,53 @@ const state = {
   }
 };
 
+const PERSIST_KEYS = {
+  vidgen2: ['prompt', 'selectedModel', 'aspectRatio', 'grokMode', 'customApiKey'],
+  vidgen3: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'fps', 'generateAudio', 'cameraFixed', 'turboMode', 'ratio', 'customApiKey'],
+  videogen: ['prompt', 'selectedModel', 'duration', 'aspectRatio', 'customApiKey'],
+  motion: ['prompt', 'selectedModel', 'characterOrientation'],
+  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages'],
+  xmaker: ['selectedModel', 'style', 'aspectRatio', 'multiSceneMode'],
+  chat: ['selectedModel'],
+  vidgen2RoomManager: ['xclipApiKey'],
+  vidgen3RoomManager: ['xclipApiKey'],
+  xmakerRoomManager: ['xclipApiKey'],
+  ximageRoomManager: ['xclipApiKey'],
+  motionRoomManager: ['xclipApiKey']
+};
+
+function saveUserInputs(section) {
+  const keys = PERSIST_KEYS[section];
+  if (!keys || !state[section]) return;
+  const data = {};
+  keys.forEach(k => {
+    if (state[section][k] !== undefined && state[section][k] !== null) {
+      data[k] = state[section][k];
+    }
+  });
+  try {
+    localStorage.setItem('xclip_inputs_' + section, JSON.stringify(data));
+  } catch (e) {}
+}
+
+function restoreAllUserInputs() {
+  Object.keys(PERSIST_KEYS).forEach(section => {
+    try {
+      const saved = localStorage.getItem('xclip_inputs_' + section);
+      if (saved && state[section]) {
+        const data = JSON.parse(saved);
+        PERSIST_KEYS[section].forEach(k => {
+          if (data[k] !== undefined) {
+            state[section][k] = data[k];
+          }
+        });
+      }
+    } catch (e) {}
+  });
+}
+
+restoreAllUserInputs();
+
 const MOTION_MODELS = [
   { id: 'kling-v2.6-pro', name: 'Kling V2.6 Pro Motion', desc: 'Transfer motion berkualitas tinggi', icon: '🔥' },
   { id: 'kling-v2.6-std', name: 'Kling V2.6 Std Motion', desc: 'Transfer motion hemat biaya', icon: '💰' }
@@ -744,6 +791,7 @@ async function handleSaveApiKey(apiKey) {
     
     if (data.success) {
       state.videogen.customApiKey = apiKey;
+      saveUserInputs('videogen');
       state.auth.showModal = false;
       showToast(apiKey ? 'API key berhasil disimpan' : 'API key berhasil dihapus', 'success');
       render();
@@ -1141,6 +1189,7 @@ async function joinXImageRoom(roomId) {
       showToast(data.message || 'Berhasil bergabung ke X Image room!', 'success');
       state.ximageRoomManager.showRoomModal = false;
       state.ximage.customApiKey = apiKey;
+      saveUserInputs('ximage');
       await loadXImageSubscriptionStatus();
       await loadXImageRooms();
     } else {
@@ -5415,6 +5464,7 @@ function attachChatEventListeners() {
   document.querySelectorAll('.model-item').forEach(item => {
     item.addEventListener('click', () => {
       state.chat.selectedModel = item.dataset.model;
+      saveUserInputs('chat');
       render();
     });
   });
@@ -5503,6 +5553,7 @@ function attachXMakerEventListeners() {
   if (apiKeyInput) {
     apiKeyInput.addEventListener('input', (e) => {
       state.xmakerRoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('xmakerRoomManager');
     });
   }
   
@@ -5541,6 +5592,7 @@ function attachXMakerEventListeners() {
   document.querySelectorAll('.xmaker-settings .model-option').forEach(item => {
     item.addEventListener('click', () => {
       state.xmaker.selectedModel = item.dataset.model;
+      saveUserInputs('xmaker');
       render();
     });
   });
@@ -5548,6 +5600,7 @@ function attachXMakerEventListeners() {
   document.querySelectorAll('.xmaker-settings .style-option').forEach(item => {
     item.addEventListener('click', () => {
       state.xmaker.style = item.dataset.style;
+      saveUserInputs('xmaker');
       render();
     });
   });
@@ -5555,6 +5608,7 @@ function attachXMakerEventListeners() {
   document.querySelectorAll('.xmaker-settings .aspect-option').forEach(item => {
     item.addEventListener('click', () => {
       state.xmaker.aspectRatio = item.dataset.ratio;
+      saveUserInputs('xmaker');
       render();
     });
   });
@@ -5809,6 +5863,7 @@ function attachVideoGenEventListeners() {
   document.querySelectorAll('[data-videogen-model]').forEach(option => {
     option.addEventListener('click', () => {
       state.videogen.selectedModel = option.dataset.videogenModel;
+      saveUserInputs('videogen');
       render();
     });
   });
@@ -5816,6 +5871,7 @@ function attachVideoGenEventListeners() {
   document.querySelectorAll('[data-videogen-duration]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.videogen.duration = btn.dataset.videogenDuration;
+      saveUserInputs('videogen');
       render();
     });
   });
@@ -5823,6 +5879,7 @@ function attachVideoGenEventListeners() {
   document.querySelectorAll('[data-videogen-ratio]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.videogen.aspectRatio = btn.dataset.videogenRatio;
+      saveUserInputs('videogen');
       render();
     });
   });
@@ -5830,6 +5887,7 @@ function attachVideoGenEventListeners() {
   if (promptInput) {
     promptInput.addEventListener('input', (e) => {
       state.videogen.prompt = e.target.value;
+      saveUserInputs('videogen');
     });
   }
   
@@ -5837,6 +5895,7 @@ function attachVideoGenEventListeners() {
   if (apiKeyInput) {
     apiKeyInput.addEventListener('input', (e) => {
       state.videogen.customApiKey = e.target.value;
+      saveUserInputs('videogen');
     });
   }
   
@@ -5943,12 +6002,14 @@ function attachVidgen2EventListeners() {
   if (promptInput) {
     promptInput.addEventListener('input', (e) => {
       state.vidgen2.prompt = e.target.value;
+      saveUserInputs('vidgen2');
     });
   }
   
   if (apiKeyInput) {
     apiKeyInput.addEventListener('input', (e) => {
       state.vidgen2.customApiKey = e.target.value;
+      saveUserInputs('vidgen2');
     });
   }
   
@@ -5967,6 +6028,7 @@ function attachVidgen2EventListeners() {
         if (wasGrok !== isGrok) {
           state.vidgen2.aspectRatio = isGrok ? '1:1' : '16:9';
         }
+        saveUserInputs('vidgen2');
         render();
         return;
       }
@@ -5975,6 +6037,7 @@ function attachVidgen2EventListeners() {
       const ratioBtn = e.target.closest('[data-vidgen2-ratio]');
       if (ratioBtn && state.currentPage === 'vidgen2') {
         state.vidgen2.aspectRatio = ratioBtn.dataset.vidgen2Ratio;
+        saveUserInputs('vidgen2');
         render();
         return;
       }
@@ -5983,6 +6046,7 @@ function attachVidgen2EventListeners() {
       const grokModeBtn = e.target.closest('[data-grok-mode]');
       if (grokModeBtn && state.currentPage === 'vidgen2') {
         state.vidgen2.grokMode = grokModeBtn.dataset.grokMode;
+        saveUserInputs('vidgen2');
         render();
         return;
       }
@@ -6310,12 +6374,14 @@ function attachVidgen3EventListeners() {
   if (promptInput) {
     promptInput.addEventListener('input', (e) => {
       state.vidgen3.prompt = e.target.value;
+      saveUserInputs('vidgen3');
     });
   }
 
   if (apiKeyInput) {
     apiKeyInput.addEventListener('input', (e) => {
       state.vidgen3.customApiKey = e.target.value;
+      saveUserInputs('vidgen3');
     });
   }
 
@@ -6329,6 +6395,7 @@ function attachVidgen3EventListeners() {
   if (audioToggle) {
     audioToggle.addEventListener('change', (e) => {
       state.vidgen3.generateAudio = e.target.checked;
+      saveUserInputs('vidgen3');
     });
   }
 
@@ -6336,6 +6403,7 @@ function attachVidgen3EventListeners() {
   if (cameraToggle) {
     cameraToggle.addEventListener('change', (e) => {
       state.vidgen3.cameraFixed = e.target.checked;
+      saveUserInputs('vidgen3');
     });
   }
 
@@ -6343,6 +6411,7 @@ function attachVidgen3EventListeners() {
   if (turboToggle) {
     turboToggle.addEventListener('change', (e) => {
       state.vidgen3.turboMode = e.target.checked;
+      saveUserInputs('vidgen3');
     });
   }
 
@@ -6353,6 +6422,7 @@ function attachVidgen3EventListeners() {
       const modelCard = e.target.closest('[data-vidgen3-model]');
       if (modelCard && state.currentPage === 'vidgen3') {
         state.vidgen3.selectedModel = modelCard.dataset.vidgen3Model;
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6360,6 +6430,7 @@ function attachVidgen3EventListeners() {
       const aspectBtn = e.target.closest('[data-vidgen3-aspect]');
       if (aspectBtn && state.currentPage === 'vidgen3') {
         state.vidgen3.aspectRatio = aspectBtn.dataset.vidgen3Aspect;
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6367,6 +6438,7 @@ function attachVidgen3EventListeners() {
       const durationBtn = e.target.closest('[data-vidgen3-duration]');
       if (durationBtn && state.currentPage === 'vidgen3') {
         state.vidgen3.duration = parseInt(durationBtn.dataset.vidgen3Duration);
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6374,6 +6446,7 @@ function attachVidgen3EventListeners() {
       const resolutionBtn = e.target.closest('[data-vidgen3-resolution]');
       if (resolutionBtn && state.currentPage === 'vidgen3') {
         state.vidgen3.resolution = resolutionBtn.dataset.vidgen3Resolution;
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6381,6 +6454,7 @@ function attachVidgen3EventListeners() {
       const fpsBtn = e.target.closest('[data-vidgen3-fps]');
       if (fpsBtn && state.currentPage === 'vidgen3') {
         state.vidgen3.fps = parseInt(fpsBtn.dataset.vidgen3Fps);
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6388,6 +6462,7 @@ function attachVidgen3EventListeners() {
       const ratioBtn = e.target.closest('[data-vidgen3-ratio]');
       if (ratioBtn && state.currentPage === 'vidgen3') {
         state.vidgen3.ratio = ratioBtn.dataset.vidgen3Ratio;
+        saveUserInputs('vidgen3');
         render();
         return;
       }
@@ -6743,12 +6818,14 @@ function attachXImageEventListeners() {
   if (promptInput) {
     promptInput.addEventListener('input', function(e) {
       state.ximage.prompt = e.target.value;
+      saveUserInputs('ximage');
     });
   }
   
   if (apiKeyInput) {
     apiKeyInput.addEventListener('input', function(e) {
       state.ximage.customApiKey = e.target.value;
+      saveUserInputs('ximage');
     });
   }
   
@@ -6778,12 +6855,12 @@ function attachXImageEventListeners() {
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {
-            // Switch to first model that supports I2I
             var compatibleModel = ximageModels.find(function(m) { return m.supportsI2I; });
             if (compatibleModel) state.ximage.selectedModel = compatibleModel.id;
           }
         }
         
+        saveUserInputs('ximage');
         render();
         return;
       }
@@ -6797,6 +6874,7 @@ function attachXImageEventListeners() {
           state.ximage.sourceImage2 = null;
         }
         state.ximage.selectedModel = newModelId;
+        saveUserInputs('ximage');
         render();
         return;
       }
@@ -6805,6 +6883,7 @@ function attachXImageEventListeners() {
       var ratioBtn = e.target.closest('[data-ximage-ratio]');
       if (ratioBtn && state.currentPage === 'ximage') {
         state.ximage.aspectRatio = ratioBtn.dataset.ximageRatio;
+        saveUserInputs('ximage');
         render();
         return;
       }
@@ -6813,6 +6892,7 @@ function attachXImageEventListeners() {
       var resBtn = e.target.closest('[data-ximage-resolution]');
       if (resBtn && state.currentPage === 'ximage') {
         state.ximage.resolution = resBtn.dataset.ximageResolution;
+        saveUserInputs('ximage');
         render();
         return;
       }
@@ -6826,6 +6906,7 @@ function attachXImageEventListeners() {
         } else if (action === 'decrease' && state.ximage.numberOfImages > 1) {
           state.ximage.numberOfImages--;
         }
+        saveUserInputs('ximage');
         render();
         return;
       }
@@ -6876,6 +6957,7 @@ function attachXImageEventListeners() {
   if (ximageRoomApiKeyInput) {
     ximageRoomApiKeyInput.addEventListener('input', function(e) {
       state.ximageRoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('ximageRoomManager');
     });
   }
   
@@ -7164,6 +7246,7 @@ function attachMotionEventListeners() {
       const model = option.dataset.model;
       if (MOTION_MODELS.find(m => m.id === model)) {
         state.motion.selectedModel = model;
+        saveUserInputs('motion');
         render();
       }
     });
@@ -7172,6 +7255,7 @@ function attachMotionEventListeners() {
   document.querySelectorAll('.option-btn[data-orientation]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.motion.characterOrientation = btn.dataset.orientation;
+      saveUserInputs('motion');
       render();
     });
   });
@@ -7179,6 +7263,7 @@ function attachMotionEventListeners() {
   if (promptInput) {
     promptInput.addEventListener('input', (e) => {
       state.motion.prompt = e.target.value;
+      saveUserInputs('motion');
     });
   }
   
@@ -7226,6 +7311,7 @@ function attachMotionEventListeners() {
   if (motionRoomApiKeyInput) {
     motionRoomApiKeyInput.addEventListener('input', (e) => {
       state.motionRoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('motionRoomManager');
     });
   }
   
