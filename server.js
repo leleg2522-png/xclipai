@@ -5518,11 +5518,15 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       if (imageUrl) {
         requestBody.input.imageUrls = [imageUrl];
         
-        // For Veo 3.1, enhance prompt with character consistency instructions
+        // Enhance prompt with character consistency instructions for all models
+        const charConsistencyPrompt = 'Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image. Preserve skin tone, eye color, hair color and style, facial structure, and all distinctive features exactly as shown in the source image.';
+        
         if (poyoModel.includes('veo3')) {
-          const charPrompt = effectivePrompt + '. Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image.';
-          requestBody.input.prompt = charPrompt;
+          requestBody.input.prompt = effectivePrompt + '. ' + charConsistencyPrompt;
           console.log(`[VIDGEN2] Veo 3.1 character consistency mode - enhanced prompt`);
+        } else if (poyoModel.includes('sora')) {
+          requestBody.input.prompt = effectivePrompt + '. ' + charConsistencyPrompt + ' Do not alter or morph the character face or body in any frame.';
+          console.log(`[VIDGEN2] Sora 2 character consistency mode - enhanced prompt`);
         }
         
         console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
