@@ -5503,8 +5503,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         requestBody.input.imageUrls = [imageUrl];
         console.log(`[VIDGEN2] Grok Imagine image-to-video mode with image: ${imageUrl}`);
       }
-    } else {
-      // Standard Poyo.ai format for Sora 2, Veo 3.1
+    } else if (poyoModel.includes('sora')) {
+      // Sora 2 format - uses image_url (singular) and image_urls (plural) for reference
       requestBody = {
         model: poyoModel,
         input: {
@@ -5514,22 +5514,34 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         }
       };
       
-      // Add image for image-to-video generation
       if (imageUrl) {
+        requestBody.input.image_url = imageUrl;
+        requestBody.input.image_urls = [imageUrl];
+        
+        const charConsistencyPrompt = 'This is an image-to-video generation. The uploaded reference image must be used as the starting frame. Maintain exact character appearance, facial features, clothing, hairstyle, body proportions, skin tone, eye color, hair color and style, and facial structure from the reference image throughout every frame of the video. The character must look identical to the reference image at all times. Do not alter, morph, or change the character face or body in any frame.';
+        requestBody.input.prompt = charConsistencyPrompt + ' ' + effectivePrompt;
+        
+        console.log(`[VIDGEN2] Sora 2 image-to-video with character consistency - image: ${imageUrl}`);
+      }
+    } else {
+      // Veo 3.1 format
+      requestBody = {
+        model: poyoModel,
+        input: {
+          prompt: effectivePrompt,
+          duration: videoDuration,
+          aspect_ratio: poyoAspectRatio
+        }
+      };
+      
+      if (imageUrl) {
+        requestBody.input.image_urls = [imageUrl];
         requestBody.input.imageUrls = [imageUrl];
         
-        // Enhance prompt with character consistency instructions for all models
         const charConsistencyPrompt = 'Maintain exact character appearance, facial features, clothing, hairstyle, and body proportions from the reference image throughout the entire video. The character must look identical to the reference image. Preserve skin tone, eye color, hair color and style, facial structure, and all distinctive features exactly as shown in the source image.';
+        requestBody.input.prompt = effectivePrompt + '. ' + charConsistencyPrompt;
         
-        if (poyoModel.includes('veo3')) {
-          requestBody.input.prompt = effectivePrompt + '. ' + charConsistencyPrompt;
-          console.log(`[VIDGEN2] Veo 3.1 character consistency mode - enhanced prompt`);
-        } else if (poyoModel.includes('sora')) {
-          requestBody.input.prompt = effectivePrompt + '. ' + charConsistencyPrompt + ' Do not alter or morph the character face or body in any frame.';
-          console.log(`[VIDGEN2] Sora 2 character consistency mode - enhanced prompt`);
-        }
-        
-        console.log(`[VIDGEN2] Image-to-video mode enabled with image URL: ${imageUrl}`);
+        console.log(`[VIDGEN2] Veo 3.1 image-to-video with character consistency - image: ${imageUrl}`);
       }
     }
     
