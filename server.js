@@ -2785,7 +2785,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (using proxy)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (direct connection)`);
     
     let successResponse = null;
     let lastError = null;
@@ -2801,7 +2801,7 @@ app.post('/api/motion/generate', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           currentKey.key,
           requestBody,
-          true,
+          false,
           null
         );
         
@@ -2988,7 +2988,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           freepikApiKey,
           null,
-          true,
+          false,
           null
         );
         
