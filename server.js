@@ -305,7 +305,9 @@ const uploadPaymentProof = multer({
 const jobs = new Map();
 
 // ============ MULTI-PROVIDER PROXY SUPPORT ============
-const IPROYAL_PROXY = { configured: false };
+const IPROYAL_PROXIES = [];
+let iproyalIndex = 0;
+let iproyalInitialized = false;
 const PROXYING_IO_PROXIES = [];
 let proxyIndex = 0;
 const taskProxyMap = new Map();
@@ -318,22 +320,71 @@ let iproyalBlockedUntil = 0;
 let proxyProviderToggle = 0;
 
 function initIpRoyalProxy() {
-  if (IPROYAL_PROXY.configured) return;
+  if (iproyalInitialized) return;
+  iproyalInitialized = true;
+  
+  const proxyList = process.env.IPROYAL_PROXIES;
+  if (proxyList) {
+    const entries = proxyList.split(',').map(e => e.trim()).filter(Boolean);
+    for (const entry of entries) {
+      const parts = entry.split(':');
+      if (parts.length >= 4) {
+        IPROYAL_PROXIES.push({
+          proxy_address: parts[0],
+          port: parseInt(parts[1]),
+          username: parts[2],
+          password: parts.slice(3).join(':'),
+          provider: 'iproyal',
+          configured: true
+        });
+      }
+    }
+    if (IPROYAL_PROXIES.length > 0) {
+      console.log(`[PROXY] Initialized ${IPROYAL_PROXIES.length} IPRoyal ISP proxies from IPROYAL_PROXIES (PRIMARY)`);
+      IPROYAL_PROXIES.forEach((p, i) => console.log(`  [${i+1}] ${p.proxy_address}:${p.port}`));
+      return;
+    }
+  }
+  
+  for (let i = 1; i <= 20; i++) {
+    const host = process.env[`IPROYAL_HOST_${i}`];
+    const port = process.env[`IPROYAL_PORT_${i}`];
+    const username = process.env[`IPROYAL_USERNAME_${i}`];
+    const password = process.env[`IPROYAL_PASSWORD_${i}`];
+    if (host && port && username && password) {
+      IPROYAL_PROXIES.push({
+        proxy_address: host,
+        port: parseInt(port),
+        username: username,
+        password: password,
+        provider: 'iproyal',
+        configured: true
+      });
+    }
+  }
+  if (IPROYAL_PROXIES.length > 0) {
+    console.log(`[PROXY] Initialized ${IPROYAL_PROXIES.length} IPRoyal ISP proxies from individual vars (PRIMARY)`);
+    IPROYAL_PROXIES.forEach((p, i) => console.log(`  [${i+1}] ${p.proxy_address}:${p.port}`));
+    return;
+  }
+  
   const host = process.env.IPROYAL_HOST;
   const port = process.env.IPROYAL_PORT;
   const username = process.env.IPROYAL_USERNAME;
   const password = process.env.IPROYAL_PASSWORD;
-  if (!host || !port || !username || !password) {
+  if (host && port && username && password) {
+    IPROYAL_PROXIES.push({
+      proxy_address: host,
+      port: parseInt(port),
+      username: username,
+      password: password,
+      provider: 'iproyal',
+      configured: true
+    });
+    console.log(`[PROXY] Initialized 1 IPRoyal ISP proxy: ${host}:${port} (PRIMARY)`);
+  } else {
     console.log('[PROXY] IPRoyal ISP not configured (missing IPROYAL_* env vars)');
-    return;
   }
-  IPROYAL_PROXY.proxy_address = host;
-  IPROYAL_PROXY.port = parseInt(port);
-  IPROYAL_PROXY.username = username;
-  IPROYAL_PROXY.password = password;
-  IPROYAL_PROXY.provider = 'iproyal';
-  IPROYAL_PROXY.configured = true;
-  console.log(`[PROXY] Initialized IPRoyal ISP proxy: ${host}:${port} (PRIMARY)`);
 }
 
 function initProxyingIoProxies() {
@@ -413,11 +464,18 @@ async function ensureProxiesInitialized() {
 function isProxyConfigured() {
   initIpRoyalProxy();
   initProxyingIoProxies();
-  return IPROYAL_PROXY.configured || PROXYING_IO_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
+  return IPROYAL_PROXIES.length > 0 || PROXYING_IO_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
+}
+
+function getNextIpRoyalProxy() {
+  if (IPROYAL_PROXIES.length === 0) return null;
+  const proxy = IPROYAL_PROXIES[iproyalIndex % IPROYAL_PROXIES.length];
+  iproyalIndex++;
+  return proxy;
 }
 
 function isIpRoyalAvailable() {
-  if (!IPROYAL_PROXY.configured) return false;
+  if (IPROYAL_PROXIES.length === 0) return false;
   if (Date.now() < iproyalBlockedUntil) return false;
   return true;
 }
@@ -492,15 +550,13 @@ function getNextProxy() {
   
   if (!hasIpRoyal && !hasWebshare && !hasProxyingIo) return null;
   
-  // Priority: IPRoyal ISP (primary) > Webshare > Proxying.io
+  // Priority: IPRoyal ISP (primary, round-robin) > Webshare > Proxying.io
   if (hasIpRoyal) {
-    // IPRoyal is always primary - use it for most requests
     proxyProviderToggle++;
-    // 80% IPRoyal, 20% fallback to others for load distribution
+    // 80% IPRoyal (round-robin across all IPs), 20% fallback
     if (proxyProviderToggle % 5 !== 0) {
-      return IPROYAL_PROXY;
+      return getNextIpRoyalProxy();
     }
-    // Occasionally use fallback to keep connections warm
     if (hasWebshare) {
       const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
       webshareIndex++;
@@ -512,7 +568,7 @@ function getNextProxy() {
       proxyIndex++;
       return proxy;
     }
-    return IPROYAL_PROXY;
+    return getNextIpRoyalProxy();
   }
   
   // Fallback when IPRoyal not available
