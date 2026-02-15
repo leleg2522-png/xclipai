@@ -56,6 +56,10 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
 - **Subscription System**: A tiered subscription model with feature locking, countdown timers, and manual QRIS payment verification.
 - **Admin Dashboard**: Provides functionalities for managing payments and user subscriptions.
+- **Rate Limiting System** (Video Gen & Motion): Three-layer API protection:
+  - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
+  - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
+  - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
 
 ## External Dependencies
 - **Database**: PostgreSQL

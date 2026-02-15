@@ -2085,6 +2085,105 @@ function cleanupMotionFiles() {
 // Run cleanup every 30 minutes
 setInterval(cleanupMotionFiles, 30 * 60 * 1000);
 
+// ============ RATE LIMITING: Random Jitter, Daily Quota, User Cooldown ============
+
+const RATE_LIMIT_CONFIG = {
+  videogen: {
+    cooldownMs: 75 * 1000,
+    dailyQuotaPerKey: 50,
+    jitterMinMs: 1000,
+    jitterMaxMs: 3000,
+    label: 'Video Gen'
+  },
+  motion: {
+    cooldownMs: 180 * 1000,
+    dailyQuotaPerKey: 30,
+    jitterMinMs: 2000,
+    jitterMaxMs: 5000,
+    label: 'Motion'
+  }
+};
+
+const userCooldowns = new Map();
+const dailyKeyUsage = new Map();
+let dailyQuotaResetDate = new Date().toDateString();
+
+function resetDailyQuotaIfNeeded() {
+  const today = new Date().toDateString();
+  if (today !== dailyQuotaResetDate) {
+    dailyKeyUsage.clear();
+    dailyQuotaResetDate = today;
+    console.log('[RATE-LIMIT] Daily quota reset for new day');
+  }
+}
+
+function getDailyKeyUsage(keyName, feature) {
+  resetDailyQuotaIfNeeded();
+  const id = `${feature}:${keyName}`;
+  return dailyKeyUsage.get(id) || 0;
+}
+
+function incrementDailyKeyUsage(keyName, feature) {
+  resetDailyQuotaIfNeeded();
+  const id = `${feature}:${keyName}`;
+  const current = dailyKeyUsage.get(id) || 0;
+  dailyKeyUsage.set(id, current + 1);
+  return current + 1;
+}
+
+function isKeyOverDailyQuota(keyName, feature) {
+  const config = RATE_LIMIT_CONFIG[feature];
+  if (!config) return false;
+  const usage = getDailyKeyUsage(keyName, feature);
+  return usage >= config.dailyQuotaPerKey;
+}
+
+function getUserCooldownRemaining(userId, feature) {
+  const id = `${feature}:${userId}`;
+  const lastGenerate = userCooldowns.get(id);
+  if (!lastGenerate) return 0;
+  const config = RATE_LIMIT_CONFIG[feature];
+  if (!config) return 0;
+  const elapsed = Date.now() - lastGenerate;
+  const remaining = config.cooldownMs - elapsed;
+  return remaining > 0 ? remaining : 0;
+}
+
+function setUserCooldown(userId, feature) {
+  const id = `${feature}:${userId}`;
+  userCooldowns.set(id, Date.now());
+}
+
+async function applyRandomJitter(feature) {
+  const config = RATE_LIMIT_CONFIG[feature];
+  if (!config) return;
+  const delay = config.jitterMinMs + Math.random() * (config.jitterMaxMs - config.jitterMinMs);
+  console.log(`[RATE-LIMIT] ${config.label} jitter: ${Math.round(delay)}ms`);
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+function filterKeysByDailyQuota(keys, feature) {
+  return keys.filter(k => {
+    const keyName = k.name || k;
+    if (isKeyOverDailyQuota(keyName, feature)) {
+      console.log(`[RATE-LIMIT] Key ${keyName} over daily quota for ${feature}, skipping`);
+      return false;
+    }
+    return true;
+  });
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, timestamp] of userCooldowns) {
+    if (now - timestamp > 300000) {
+      userCooldowns.delete(id);
+    }
+  }
+}, 60000);
+
+// ============ END RATE LIMITING ============
+
 async function validateXclipApiKey(apiKey) {
   // First check if the API key exists and is active
   const keyResult = await pool.query(
@@ -2173,6 +2272,16 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     if (!keyInfo) {
       return res.status(401).json({ error: 'Xclip API key tidak valid atau sudah tidak aktif' });
+    }
+    
+    const cooldownRemaining = getUserCooldownRemaining(keyInfo.user_id, 'videogen');
+    if (cooldownRemaining > 0) {
+      const cooldownSec = Math.ceil(cooldownRemaining / 1000);
+      return res.status(429).json({ 
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate video berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: cooldownRemaining
+      });
     }
     
     let freepikApiKey = null;
@@ -2408,15 +2517,22 @@ app.post('/api/videogen/proxy', async (req, res) => {
       allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
     
+    const availableKeys = filterKeysByDailyQuota(allKeys, 'videogen');
+    if (availableKeys.length === 0 && allKeys.length > 0) {
+      return res.status(429).json({ error: 'Semua API key sudah mencapai batas harian. Coba lagi besok.' });
+    }
+    
+    await applyRandomJitter('videogen');
+    
     let lastError = null;
     let successResponse = null;
     let finalKeyIndex = usedKeyIndex;
     
     const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
     
-    for (let attempt = 0; attempt < allKeys.length; attempt++) {
-      const currentKey = allKeys[attempt];
-      console.log(`[TIMING] Attempt ${attempt + 1}/${allKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
+    for (let attempt = 0; attempt < availableKeys.length; attempt++) {
+      const currentKey = availableKeys[attempt];
+      console.log(`[TIMING] Attempt ${attempt + 1}/${availableKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
       
       try {
         const response = await makeFreepikRequest(
@@ -2459,6 +2575,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const requestTime = new Date().toISOString();
     const createLatency = Date.now() - startTime;
     
+    setUserCooldown(keyInfo.user_id, 'videogen');
+    const usedKeyForQuota = availableKeys.find(k => k.index === finalKeyIndex);
+    if (usedKeyForQuota) {
+      const newCount = incrementDailyKeyUsage(usedKeyForQuota.name, 'videogen');
+      console.log(`[RATE-LIMIT] Video Gen key ${usedKeyForQuota.name} daily usage: ${newCount}/${RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey}`);
+    }
+    
     console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
     
     if (taskId && pendingId) {
@@ -2468,7 +2591,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     // Get the key name that was actually used
-    const usedKeyName = allKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
+    const usedKeyName = availableKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
     
     if (taskId) {
       await pool.query(
@@ -2732,6 +2855,16 @@ app.post('/api/motion/generate', async (req, res) => {
       return res.status(401).json({ error: 'Xclip API key tidak valid' });
     }
     
+    const motionCooldownRemaining = getUserCooldownRemaining(keyInfo.user_id, 'motion');
+    if (motionCooldownRemaining > 0) {
+      const cooldownSec = Math.ceil(motionCooldownRemaining / 1000);
+      return res.status(429).json({ 
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate motion berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: motionCooldownRemaining
+      });
+    }
+    
     // Get the selected room's API keys (default to room 1)
     const selectedRoomId = roomId || 1;
     let freepikApiKey = null;
@@ -2843,13 +2976,20 @@ app.post('/api/motion/generate', async (req, res) => {
     
     console.log(`[MOTION] Generating motion video with model: ${model} (direct connection)`);
     
+    const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
+    if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
+      return res.status(429).json({ error: 'Semua API key Motion sudah mencapai batas harian. Coba lagi besok.' });
+    }
+    
+    await applyRandomJitter('motion');
+    
     let successResponse = null;
     let lastError = null;
     usedKeyName = null;
     
-    for (let attempt = 0; attempt < allMotionKeys.length; attempt++) {
-      const currentKey = allMotionKeys[attempt];
-      console.log(`[MOTION] Attempt ${attempt + 1}/${allMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
+    for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
+      const currentKey = availableMotionKeys[attempt];
+      console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
       
       try {
         const response = await makeFreepikRequest(
@@ -2894,6 +3034,12 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     console.log(`[MOTION] Freepik response:`, JSON.stringify(successResponse.data));
+    
+    setUserCooldown(keyInfo.user_id, 'motion');
+    if (usedKeyName) {
+      const motionUsageCount = incrementDailyKeyUsage(usedKeyName, 'motion');
+      console.log(`[RATE-LIMIT] Motion key ${usedKeyName} daily usage: ${motionUsageCount}/${RATE_LIMIT_CONFIG.motion.dailyQuotaPerKey}`);
+    }
     
     const taskId = successResponse.data?.data?.task_id || successResponse.data?.task_id || successResponse.data?.data?.id || successResponse.data?.id;
     

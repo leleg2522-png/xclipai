@@ -2035,6 +2035,66 @@ window.downloadVideo = async function(url, filename) {
   }
 };
 
+const cooldownTimers = {};
+
+function startCooldownTimer(feature, seconds) {
+  if (cooldownTimers[feature]) {
+    clearInterval(cooldownTimers[feature].interval);
+  }
+  
+  let remaining = seconds;
+  
+  const updateCooldownDisplay = () => {
+    const btn = document.querySelector(`[data-cooldown="${feature}"]`);
+    if (btn) {
+      btn.disabled = true;
+      if (!btn.getAttribute('data-original-html')) {
+        btn.setAttribute('data-original-html', btn.innerHTML);
+      }
+      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Tunggu ${remaining}s`;
+      btn.style.opacity = '0.6';
+    }
+    
+    const cooldownEl = document.getElementById(`${feature}-cooldown`);
+    if (cooldownEl) {
+      cooldownEl.textContent = `Cooldown: ${remaining}s`;
+      cooldownEl.style.display = 'block';
+    }
+  };
+  
+  updateCooldownDisplay();
+  
+  cooldownTimers[feature] = {
+    interval: setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(cooldownTimers[feature].interval);
+        delete cooldownTimers[feature];
+        
+        const btn = document.querySelector(`[data-cooldown="${feature}"]`);
+        if (btn) {
+          btn.disabled = false;
+          const originalHtml = btn.getAttribute('data-original-html');
+          if (originalHtml) {
+            btn.innerHTML = originalHtml;
+            btn.removeAttribute('data-original-html');
+          }
+          btn.style.opacity = '1';
+        }
+        
+        const cooldownEl = document.getElementById(`${feature}-cooldown`);
+        if (cooldownEl) {
+          cooldownEl.style.display = 'none';
+        }
+        
+        showToast(`${feature === 'motion' ? 'Motion' : 'Video Gen'} siap digunakan kembali!`, 'success');
+      } else {
+        updateCooldownDisplay();
+      }
+    }, 1000)
+  };
+}
+
 function showToast(message, type = 'info') {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -4073,7 +4133,7 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
           
           <div class="card glass-card">
             <div class="card-body">
-              <button class="btn btn-primary btn-full btn-generate" id="generateVideoBtn" ${state.videogen.isGenerating || !state.videogen.sourceImage || state.videogen.tasks.length >= 3 ? 'disabled' : ''}>
+              <button class="btn btn-primary btn-full btn-generate" id="generateVideoBtn" data-cooldown="videogen" ${state.videogen.isGenerating || !state.videogen.sourceImage || state.videogen.tasks.length >= 3 ? 'disabled' : ''}>
                 ${state.videogen.isGenerating ? `
                   <div class="btn-loader"></div>
                   <span>Mengirim...</span>
@@ -4084,6 +4144,7 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                   <span>Generate Video ${state.videogen.tasks.length > 0 ? `(${state.videogen.tasks.length}/3 aktif)` : ''}</span>
                 `}
               </button>
+              <span id="videogen-cooldown" style="display:none;text-align:center;color:var(--warning);font-size:13px;margin-top:6px;"></span>
               ${!state.videogen.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:8px;">Upload gambar terlebih dahulu</p>' : ''}
               ${state.videogen.tasks.length >= 3 ? '<p class="setting-hint" style="text-align:center;margin-top:8px;color:var(--warning);">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
@@ -4374,7 +4435,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
             </div>
           </div>
           
-          <button class="btn btn-primary btn-lg btn-full" id="generateMotionBtn" ${state.motion.isGenerating ? 'disabled' : ''}>
+          <button class="btn btn-primary btn-lg btn-full" id="generateMotionBtn" data-cooldown="motion" ${state.motion.isGenerating ? 'disabled' : ''}>
             ${state.motion.isGenerating ? `
               <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-dashoffset="20"/>
@@ -4389,6 +4450,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
               Generate Motion Video
             `}
           </button>
+          <span id="motion-cooldown" style="display:none;text-align:center;color:var(--warning);font-size:13px;margin-top:6px;"></span>
           
           ${state.motion.error ? `
             <div class="error-message">
@@ -7448,6 +7510,9 @@ async function generateMotion() {
     
     if (!response.ok) {
       const error = await response.json();
+      if (response.status === 429 && error.cooldown) {
+        startCooldownTimer('motion', error.cooldown);
+      }
       throw new Error(error.error || 'Gagal generate motion');
     }
     
@@ -7735,6 +7800,9 @@ async function generateVideo() {
     
     if (!response.ok) {
       const error = await response.json();
+      if (response.status === 429 && error.cooldown) {
+        startCooldownTimer('videogen', error.cooldown);
+      }
       throw new Error(error.error || 'Failed to generate video');
     }
     
