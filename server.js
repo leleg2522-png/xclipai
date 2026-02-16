@@ -2089,14 +2089,14 @@ setInterval(cleanupMotionFiles, 30 * 60 * 1000);
 
 const RATE_LIMIT_CONFIG = {
   videogen: {
-    cooldownMs: 75 * 1000,
+    cooldownMs: 180 * 1000,
     dailyQuotaPerKey: 50,
     jitterMinMs: 1000,
     jitterMaxMs: 3000,
     label: 'Video Gen'
   },
   motion: {
-    cooldownMs: 180 * 1000,
+    cooldownMs: 240 * 1000,
     dailyQuotaPerKey: 30,
     jitterMinMs: 2000,
     jitterMaxMs: 5000,
