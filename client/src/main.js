@@ -2146,6 +2146,14 @@ function render(force = false) {
   
   attachEventListeners();
   
+  Object.keys(cooldownTimers).forEach(feature => {
+    const btn = document.querySelector(`[data-cooldown="${feature}"]`);
+    if (btn && cooldownTimers[feature]) {
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+    }
+  });
+  
   if (state.currentPage === 'chat') {
     scrollChatToBottom();
   }
@@ -7518,6 +7526,10 @@ async function generateMotion() {
     
     const result = await response.json();
     
+    if (result.cooldown) {
+      startCooldownTimer('motion', result.cooldown);
+    }
+    
     state.motion.tasks.unshift({
       taskId: result.taskId,
       model: state.motion.selectedModel,
@@ -7808,6 +7820,10 @@ async function generateVideo() {
     
     const data = await response.json();
     
+    if (data.cooldown) {
+      startCooldownTimer('videogen', data.cooldown);
+    }
+    
     if (data.taskId) {
       const newTask = {
         taskId: data.taskId,
@@ -7824,7 +7840,6 @@ async function generateVideo() {
       showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
       state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now() });
-      // Video not persisted to localStorage
       state.videogen.isGenerating = false;
       showToast('Video berhasil di-generate!', 'success');
       render();

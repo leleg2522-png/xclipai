@@ -2605,7 +2605,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
       success: true,
       taskId: taskId,
       model: model,
-      createdAt: requestTime
+      createdAt: requestTime,
+      cooldown: Math.ceil(RATE_LIMIT_CONFIG.videogen.cooldownMs / 1000)
     });
     
   } catch (error) {
@@ -3058,7 +3059,8 @@ app.post('/api/motion/generate', async (req, res) => {
       success: true,
       taskId: taskId,
       model: model,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      cooldown: Math.ceil(RATE_LIMIT_CONFIG.motion.cooldownMs / 1000)
     });
     
   } catch (error) {
