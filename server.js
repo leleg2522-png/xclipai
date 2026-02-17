@@ -2120,6 +2120,13 @@ const RATE_LIMIT_CONFIG = {
     jitterMinMs: 2000,
     jitterMaxMs: 5000,
     label: 'Motion'
+  },
+  vidgen4: {
+    cooldownMs: 180 * 1000,
+    dailyQuotaPerKey: 50,
+    jitterMinMs: 1000,
+    jitterMaxMs: 3000,
+    label: 'Vidgen4'
   }
 };
 
@@ -6372,6 +6379,16 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     }
     console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
     
+    const vidgen4Cooldown = getUserCooldownRemaining(roomKeyResult.userId, 'vidgen4');
+    if (vidgen4Cooldown > 0) {
+      const cooldownSec = Math.ceil(vidgen4Cooldown / 1000);
+      return res.status(429).json({
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate video berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: vidgen4Cooldown
+      });
+    }
+    
     const { model, prompt, image, startFrame, endFrame, referenceImage,
             generationType, aspectRatio, duration, resolution, enableGif,
             watermark, thumbnail, isPrivate, style, storyboard } = req.body;
@@ -6529,12 +6546,15 @@ app.post('/api/vidgen4/generate', async (req, res) => {
       [roomKeyResult.keyInfoId]
     );
     
+    setUserCooldown(roomKeyResult.userId, 'vidgen4');
+    
     console.log(`[VIDGEN4] Task created: ${taskId}`);
     
     res.json({
       success: true,
       taskId: taskId,
       model: model,
+      cooldown: Math.ceil(RATE_LIMIT_CONFIG.vidgen4.cooldownMs / 1000),
       message: 'Video generation dimulai'
     });
     

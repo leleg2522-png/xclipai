@@ -7259,7 +7259,7 @@ async function generateVidgen4Video() {
       startTime: Date.now()
     });
     
-    const cooldownEnd = Date.now() + (5 * 60 * 1000);
+    const cooldownEnd = Date.now() + (3 * 60 * 1000);
     state.vidgen4.cooldownEndTime = cooldownEnd;
     localStorage.setItem('vidgen4_cooldown', cooldownEnd.toString());
     startVidgen4CooldownTimer();
