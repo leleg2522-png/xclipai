@@ -6595,7 +6595,7 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         console.log(`[VIDGEN4] Polling status for task: ${taskId}`);
         
         const statusResponse = await axios.get(
-          `https://api.apimart.ai/v1/videos/${taskId}`,
+          `https://api.apimart.ai/v1/tasks/${taskId}`,
           {
             headers: {
               'Authorization': `Bearer ${roomKeyResult.apiKey}`
@@ -6611,43 +6611,12 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         const status = data.status || data.state;
         
         if (status === 'completed' || status === 'finished' || status === 'success') {
-          // Try to get video URL from status response first
+          // Official API response: { data: { result: { videos: [{ url: "..." }] } } }
           let videoUrl = data.result?.videos?.[0]?.url || 
                          data.result?.video_url || 
                          data.video_url || 
                          data.url || 
                          data.output?.url;
-          
-          // If no direct URL, try /content endpoint
-          if (!videoUrl) {
-            try {
-              const contentResponse = await axios.get(
-                `https://api.apimart.ai/v1/videos/${taskId}/content`,
-                {
-                  headers: {
-                    'Authorization': `Bearer ${roomKeyResult.apiKey}`
-                  },
-                  timeout: 30000,
-                  maxRedirects: 5
-                }
-              );
-              
-              // If redirected to a video URL
-              if (contentResponse.request?.res?.responseUrl) {
-                videoUrl = contentResponse.request.res.responseUrl;
-              } else if (typeof contentResponse.data === 'string' && contentResponse.data.startsWith('http')) {
-                videoUrl = contentResponse.data;
-              } else if (contentResponse.data?.url) {
-                videoUrl = contentResponse.data.url;
-              }
-            } catch (contentErr) {
-              // If content endpoint returns redirect URL in error
-              if (contentErr.response?.headers?.location) {
-                videoUrl = contentErr.response.headers.location;
-              }
-              console.log(`[VIDGEN4] Content endpoint note:`, contentErr.message);
-            }
-          }
           
           if (videoUrl) {
             console.log(`[VIDGEN4] Video URL found: ${videoUrl}`);
