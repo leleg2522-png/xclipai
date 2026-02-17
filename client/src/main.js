@@ -6943,13 +6943,18 @@ function renderVidgen4Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen4.generatedVideos.forEach(video => {
-    html += '<div class="video-result-card">';
+    html += '<div class="video-result-card" style="position:relative;">';
     html += '<video controls playsinline preload="metadata" class="result-video">';
     html += '<source src="' + video.url + '" type="video/mp4">';
     html += '</video>';
-    html += '<div class="video-meta">';
+    html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div>';
     html += '<span class="video-model-tag">' + video.model + '</span>';
     if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
+    html += '</div>';
+    html += '<button class="btn-icon deleteVidgen4Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;flex-shrink:0;">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    html += '</button>';
     html += '</div></div>';
   });
   html += '</div>';
@@ -6981,7 +6986,7 @@ function attachVidgen4EventListeners() {
     loadVidgen4Rooms().then(() => render());
   }
   
-  if (state.vidgen4.generatedVideos.length === 0 && !state.vidgen4._historyLoaded) {
+  if (!state.vidgen4._historyLoaded && state.vidgen4.customApiKey) {
     state.vidgen4._historyLoaded = true;
     loadVidgen4History().then(() => render());
   }
@@ -7082,6 +7087,7 @@ function attachVidgen4EventListeners() {
     apiKeyInput.addEventListener('input', (e) => {
       state.vidgen4.customApiKey = e.target.value;
       saveUserInputs('vidgen4');
+      state.vidgen4._historyLoaded = false;
     });
   }
 
@@ -7152,6 +7158,15 @@ function attachVidgen4EventListeners() {
         render();
         return;
       }
+
+      const deleteBtn = e.target.closest('.deleteVidgen4Video');
+      if (deleteBtn && state.currentPage === 'vidgen4') {
+        const taskId = deleteBtn.dataset.taskId;
+        if (confirm('Hapus video ini secara permanen?')) {
+          deleteVidgen4Video(taskId);
+        }
+        return;
+      }
       
     });
   }
@@ -7167,6 +7182,24 @@ function attachVidgen4EventListeners() {
         state.vidgen4.selectedRoom = null;
       }
     });
+  }
+}
+
+async function deleteVidgen4Video(taskId) {
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen4/history/${taskId}`, {
+      method: 'DELETE',
+      headers: { 'X-Xclip-Key': state.vidgen4.customApiKey }
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.vidgen4.generatedVideos = state.vidgen4.generatedVideos.filter(v => v.id !== taskId);
+      render();
+    } else {
+      alert(data.error || 'Gagal hapus video');
+    }
+  } catch (e) {
+    alert('Gagal hapus video');
   }
 }
 

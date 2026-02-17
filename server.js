@@ -6721,6 +6721,35 @@ app.get('/api/vidgen4/history', async (req, res) => {
   }
 });
 
+app.delete('/api/vidgen4/history/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const { taskId } = req.params;
+    const result = await pool.query(
+      'DELETE FROM vidgen4_tasks WHERE task_id = $1 AND user_id = $2',
+      [taskId, keyInfo.user_id]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Video tidak ditemukan' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[VIDGEN4] Delete error:', error.message);
+    res.status(500).json({ error: 'Gagal hapus video' });
+  }
+});
+
 // Get available Vidgen3 rooms
 app.get('/api/vidgen3/rooms', async (req, res) => {
   try {
