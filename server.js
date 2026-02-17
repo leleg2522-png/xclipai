@@ -2975,7 +2975,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (with proxy support)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (direct connection)`);
     
     const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
@@ -2983,8 +2983,6 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     await applyRandomJitter('motion');
-    
-    const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
     
     let successResponse = null;
     let lastError = null;
@@ -3000,8 +2998,8 @@ app.post('/api/motion/generate', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           currentKey.key,
           requestBody,
-          true,
-          pendingId
+          false,
+          null
         );
         
         successResponse = response;
@@ -3032,7 +3030,6 @@ app.post('/api/motion/generate', async (req, res) => {
     
     if (!successResponse) {
       console.error('[MOTION] All API keys exhausted or failed');
-      if (pendingId) releaseProxyForTask(pendingId);
       const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.message;
       return res.status(500).json({ error: 'Semua API key Motion sudah mencapai daily limit. Coba lagi besok atau hubungi admin. ' + errorMsg });
     }
@@ -3048,12 +3045,6 @@ app.post('/api/motion/generate', async (req, res) => {
     const taskId = successResponse.data?.data?.task_id || successResponse.data?.task_id || successResponse.data?.data?.id || successResponse.data?.id;
     
     console.log(`[MOTION] Task created: ${taskId}`);
-    
-    if (taskId && pendingId) {
-      promoteProxyToTask(pendingId, taskId);
-    } else if (pendingId) {
-      releaseProxyForTask(pendingId);
-    }
     
     if (taskId) {
       await pool.query(
@@ -3201,8 +3192,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           freepikApiKey,
           null,
-          true,
-          taskId
+          false,
+          null
         );
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
