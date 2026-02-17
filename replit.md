@@ -54,9 +54,9 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 (720p, 10/15 seconds, text-to-video + image-to-video)
-    - Veo 3.1 Fast (max 1080p, 8 seconds, text-to-video + image-to-video)
-  - Resolution selector: 720p, 1080p (Veo 3.1 Fast only, capped at 1080p)
-  - Apimart.ai playground parameters: aspect_ratio, duration, size (resolution), watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
+    - Veo 3.1 Fast (max 1080p, 4/6/8 seconds, text-to-video + image-to-video, audio generation)
+  - Sora 2 playground: aspect_ratio, duration, watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
+  - Veo 3.1 Fast playground: aspect_ratio, duration (4/6/8s), resolution (720p/1080p), generate_audio, negative_prompt, seed, enhance_prompt
   - Image reference via `image_urls` array
   - Database tables: vidgen4_rooms, vidgen4_tasks
   - Room assignment via vidgen4_room_id in subscriptions

@@ -6372,7 +6372,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     }
     console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, aspectRatio, duration, resolution, watermark, thumbnail, isPrivate, style, storyboard } = req.body;
+    const { model, prompt, image, aspectRatio, duration, resolution, 
+            watermark, thumbnail, isPrivate, style, storyboard,
+            generateAudio, negativePrompt, seed, enhancePrompt } = req.body;
     
     if (!prompt && !image) {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
@@ -6386,14 +6388,16 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         defaultDuration: 10,
         supportedResolutions: ['720p'],
         defaultResolution: '720p',
+        type: 'sora',
         desc: 'Standard 720p'
       },
       'veo3.1-fast': { 
         apiModel: 'veo3.1-fast', 
-        supportedDurations: [8],
+        supportedDurations: [4, 6, 8],
         defaultDuration: 8,
         supportedResolutions: ['720p', '1080p'],
-        defaultResolution: '1080p',
+        defaultResolution: '720p',
+        type: 'veo',
         desc: 'Veo 3.1 Fast max 1080p'
       }
     };
@@ -6414,16 +6418,25 @@ app.post('/api/vidgen4/generate', async (req, res) => {
       model: config.apiModel,
       prompt: prompt || 'Generate a cinematic video with smooth motion',
       duration: videoDuration,
-      size: videoResolution,
       aspect_ratio: videoAspectRatio
     };
     
-    // Optional playground parameters
-    if (watermark !== undefined) requestBody.watermark = watermark;
-    if (thumbnail !== undefined) requestBody.thumbnail = thumbnail;
-    if (isPrivate !== undefined) requestBody.private = isPrivate;
-    if (style && style !== 'none') requestBody.style = style;
-    if (storyboard !== undefined) requestBody.storyboard = storyboard;
+    // Model-specific playground parameters
+    if (config.type === 'sora') {
+      // Sora 2 specific params
+      if (watermark !== undefined) requestBody.watermark = watermark;
+      if (thumbnail !== undefined) requestBody.thumbnail = thumbnail;
+      if (isPrivate !== undefined) requestBody.private = isPrivate;
+      if (style && style !== 'none') requestBody.style = style;
+      if (storyboard !== undefined) requestBody.storyboard = storyboard;
+    } else if (config.type === 'veo') {
+      // Veo 3.1 Fast specific params
+      requestBody.resolution = videoResolution;
+      if (generateAudio !== undefined) requestBody.generate_audio = generateAudio;
+      if (negativePrompt && negativePrompt.trim()) requestBody.negative_prompt = negativePrompt.trim();
+      if (seed !== undefined && seed !== null && seed !== '') requestBody.seed = parseInt(seed);
+      if (enhancePrompt !== undefined) requestBody.enhance_prompt = enhancePrompt;
+    }
     
     // Add image for image-to-video
     if (image) {

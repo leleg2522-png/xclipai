@@ -141,6 +141,10 @@ const state = {
     isPrivate: false,
     style: 'none',
     storyboard: false,
+    generateAudio: false,
+    negativePrompt: '',
+    seed: '',
+    enhancePrompt: true,
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -265,7 +269,7 @@ const PERSIST_KEYS = {
   chat: ['selectedModel'],
   vidgen2RoomManager: ['xclipApiKey'],
   vidgen3RoomManager: ['xclipApiKey'],
-  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'customApiKey'],
+  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'generateAudio', 'negativePrompt', 'seed', 'enhancePrompt', 'customApiKey'],
   vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
@@ -6471,10 +6475,10 @@ function renderVidgen4Page() {
   const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
   const models = [
     { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p', badge: 'FAST', icon: '⚡' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 4-8 detik, max 1080p, audio', badge: 'FAST', icon: '⚡' }
   ];
   
-  const durationOptions = isSora2 ? [10, 15] : [8];
+  const durationOptions = isSora2 ? [10, 15] : [4, 6, 8];
   const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
   
   const styleOptions = [
@@ -6600,6 +6604,7 @@ function renderVidgen4Page() {
                 </div>
               </div>
 
+              ${isVeo ? `
               <div class="setting-group">
                 <label class="setting-label">Resolution</label>
                 <div class="aspect-ratio-selector">
@@ -6610,7 +6615,9 @@ function renderVidgen4Page() {
                   `).join('')}
                 </div>
               </div>
+              ` : ''}
 
+              ${isSora2 ? `
               <div class="setting-group">
                 <label class="setting-label">Video Style</label>
                 <select class="form-select" id="vidgen4StyleSelect">
@@ -6621,7 +6628,7 @@ function renderVidgen4Page() {
               </div>
 
               <div class="setting-group">
-                <label class="setting-label">Advanced Options</label>
+                <label class="setting-label">Sora 2 Options</label>
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
                     <span style="font-size:13px;opacity:0.85;">Watermark</span>
@@ -6661,6 +6668,55 @@ function renderVidgen4Page() {
                   </label>
                 </div>
               </div>
+              ` : ''}
+
+              ${isVeo ? `
+              <div class="setting-group">
+                <label class="setting-label">Veo 3.1 Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Generate Audio</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4GenerateAudio" ${state.vidgen4.generateAudio ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.generateAudio ? 'active' : ''}" data-vidgen4-toggle="generateAudio" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.generateAudio ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.generateAudio ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Enhance Prompt</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4EnhancePrompt" ${state.vidgen4.enhancePrompt ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.enhancePrompt ? 'active' : ''}" data-vidgen4-toggle="enhancePrompt" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.enhancePrompt ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.enhancePrompt ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Negative Prompt</label>
+                <textarea 
+                  class="form-textarea" 
+                  id="vidgen4NegativePrompt" 
+                  placeholder="Elemen yang ingin dihindari di video... (opsional)"
+                  rows="2"
+                >${state.vidgen4.negativePrompt}</textarea>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Seed (opsional)</label>
+                <input 
+                  type="number" 
+                  class="form-input" 
+                  id="vidgen4Seed" 
+                  placeholder="Kosongkan untuk random..."
+                  value="${state.vidgen4.seed}"
+                >
+                <p class="setting-hint">Seed sama = hasil sama. Kosongkan untuk hasil random.</p>
+              </div>
+              ` : ''}
 
               <div class="setting-group">
                 <label class="setting-label">Prompt</label>
@@ -6903,6 +6959,20 @@ function attachVidgen4EventListeners() {
       render();
     });
   });
+
+  const negPromptInput = document.getElementById('vidgen4NegativePrompt');
+  if (negPromptInput) {
+    negPromptInput.addEventListener('input', (e) => {
+      state.vidgen4.negativePrompt = e.target.value;
+    });
+  }
+
+  const seedInput = document.getElementById('vidgen4Seed');
+  if (seedInput) {
+    seedInput.addEventListener('input', (e) => {
+      state.vidgen4.seed = e.target.value;
+    });
+  }
   
   if (!window._vidgen4DelegationAttached) {
     window._vidgen4DelegationAttached = true;
@@ -6912,7 +6982,7 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2' ? [10, 15] : [8];
+        const validDurations = newModel === 'sora-2' ? [10, 15] : [4, 6, 8];
         if (!validDurations.includes(state.vidgen4.duration)) {
           state.vidgen4.duration = validDurations[0];
         }
@@ -7033,6 +7103,10 @@ async function generateVidgen4Video() {
         isPrivate: state.vidgen4.isPrivate,
         style: state.vidgen4.style,
         storyboard: state.vidgen4.storyboard,
+        generateAudio: state.vidgen4.generateAudio,
+        negativePrompt: state.vidgen4.negativePrompt,
+        seed: state.vidgen4.seed,
+        enhancePrompt: state.vidgen4.enhancePrompt,
         roomId: state.vidgen4.selectedRoom
       })
     });
