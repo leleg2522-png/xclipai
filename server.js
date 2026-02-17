@@ -6395,10 +6395,10 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         apiModel: 'veo3.1-fast', 
         supportedDurations: [8],
         defaultDuration: 8,
-        supportedResolutions: ['720p', '1080p', '4k'],
+        supportedResolutions: ['720p', '1080p'],
         defaultResolution: '720p',
         type: 'veo',
-        desc: 'Veo 3.1 Fast max 4K'
+        desc: 'Veo 3.1 Fast max 1080p'
       }
     };
     

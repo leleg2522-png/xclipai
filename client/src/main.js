@@ -6475,11 +6475,11 @@ function renderVidgen4Page() {
   const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
   const models = [
     { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 4K, start/end frame', badge: 'FAST', icon: '⚡' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
   ];
   
   const durationOptions = isSora2 ? [10, 15] : [8];
-  const resolutionOptions = isVeo ? ['720p', '1080p', '4k'] : ['720p'];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
   
   const styleOptions = [
     { value: 'none', label: 'None' },
@@ -7099,7 +7099,7 @@ function attachVidgen4EventListeners() {
         if (!validDurations.includes(state.vidgen4.duration)) {
           state.vidgen4.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p', '4k'] : ['720p'];
+        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p'] : ['720p'];
         if (!validResolutions.includes(state.vidgen4.resolution)) {
           state.vidgen4.resolution = validResolutions[0];
         }
