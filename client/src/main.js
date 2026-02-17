@@ -6498,12 +6498,12 @@ function renderVidgen4Page() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          Vidgen4 - Apimart AI
+          Vidgen4 - AI Video
         </div>
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen4</span> AI Video
         </h1>
-        <p class="hero-subtitle">Generate video dengan Sora 2 & Veo 3.1 Fast via Apimart.ai</p>
+        <p class="hero-subtitle">Generate video dengan Sora 2 & Veo 3.1 Fast</p>
       </div>
 
       <div class="xmaker-layout">
