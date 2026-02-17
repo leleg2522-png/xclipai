@@ -1,5 +1,19 @@
 const API_URL = '';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    document.body.style.display = 'none';
+    document.body.offsetHeight;
+    document.body.style.display = '';
+  }
+});
+
 // Debounce render to prevent too many updates
 let renderTimeout = null;
 let lastRenderTime = 0;
