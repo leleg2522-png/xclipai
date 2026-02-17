@@ -131,6 +131,9 @@ const state = {
   },
   vidgen4: {
     sourceImage: null,
+    startFrame: null,
+    endFrame: null,
+    generationType: 'reference',
     prompt: '',
     selectedModel: 'sora-2',
     aspectRatio: '16:9',
@@ -141,10 +144,7 @@ const state = {
     isPrivate: false,
     style: 'none',
     storyboard: false,
-    generateAudio: false,
-    negativePrompt: '',
-    seed: '',
-    enhancePrompt: true,
+    enableGif: false,
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -269,7 +269,7 @@ const PERSIST_KEYS = {
   chat: ['selectedModel'],
   vidgen2RoomManager: ['xclipApiKey'],
   vidgen3RoomManager: ['xclipApiKey'],
-  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'generateAudio', 'negativePrompt', 'seed', 'enhancePrompt', 'customApiKey'],
+  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
   vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
@@ -6475,11 +6475,11 @@ function renderVidgen4Page() {
   const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
   const models = [
     { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 4-8 detik, max 1080p, audio', badge: 'FAST', icon: '⚡' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 4K, start/end frame', badge: 'FAST', icon: '⚡' }
   ];
   
-  const durationOptions = isSora2 ? [10, 15] : [4, 6, 8];
-  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
+  const durationOptions = isSora2 ? [10, 15] : [8];
+  const resolutionOptions = isVeo ? ['720p', '1080p', '4k'] : ['720p'];
   
   const styleOptions = [
     { value: 'none', label: 'None' },
@@ -6508,6 +6508,7 @@ function renderVidgen4Page() {
 
       <div class="xmaker-layout">
         <div class="xmaker-settings">
+          ${isSora2 ? `
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
@@ -6537,13 +6538,119 @@ function renderVidgen4Page() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar (opsional)</span>
-                    <span class="upload-hint">JPG, PNG (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
                   </div>
                 `}
               </div>
               <input type="file" id="vidgen4ImageInput" accept="image/*" style="display: none">
             </div>
           </div>
+          ` : `
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Image to Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Generation Type</label>
+                <div class="aspect-ratio-selector">
+                  <button class="aspect-btn ${state.vidgen4.generationType === 'frame' ? 'active' : ''}" data-vidgen4-gentype="frame">
+                    <span>🎞️ Start/End Frame</span>
+                  </button>
+                  <button class="aspect-btn ${state.vidgen4.generationType === 'reference' ? 'active' : ''}" data-vidgen4-gentype="reference">
+                    <span>🖼️ Reference</span>
+                  </button>
+                </div>
+                <p class="setting-hint">${state.vidgen4.generationType === 'frame' ? 'Upload start frame dan end frame untuk mengontrol awal & akhir video' : 'Upload gambar referensi untuk gaya video (max 3)'}</p>
+              </div>
+
+              ${state.vidgen4.generationType === 'frame' ? `
+              <div style="display:flex;gap:12px;margin-top:8px;">
+                <div style="flex:1;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">Start Frame</label>
+                  <div class="reference-upload ${state.vidgen4.startFrame ? 'has-image' : ''}" id="vidgen4StartFrameZone" style="min-height:120px;">
+                    ${state.vidgen4.startFrame ? `
+                      <img src="${state.vidgen4.startFrame.data}" alt="Start" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen4StartFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 8 16 12"/>
+                          <line x1="12" y1="16" x2="12" y2="8"/>
+                        </svg>
+                        <span style="font-size:11px;">Start Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen4StartFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+                <div style="flex:1;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">End Frame</label>
+                  <div class="reference-upload ${state.vidgen4.endFrame ? 'has-image' : ''}" id="vidgen4EndFrameZone" style="min-height:120px;">
+                    ${state.vidgen4.endFrame ? `
+                      <img src="${state.vidgen4.endFrame.data}" alt="End" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen4EndFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 16 16 12"/>
+                          <line x1="12" y1="8" x2="12" y2="16"/>
+                        </svg>
+                        <span style="font-size:11px;">End Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen4EndFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+              </div>
+              ` : `
+              <div style="margin-top:8px;">
+                <div class="reference-upload ${state.vidgen4.sourceImage ? 'has-image' : ''}" id="vidgen4UploadZone">
+                  ${state.vidgen4.sourceImage ? `
+                    <img src="${state.vidgen4.sourceImage.data}" alt="Source" class="reference-preview">
+                    <button class="remove-reference" id="removeVidgen4Image">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  ` : `
+                    <div class="reference-placeholder">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>Klik untuk upload referensi (opsional, max 3)</span>
+                      <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                    </div>
+                  `}
+                </div>
+                <input type="file" id="vidgen4ImageInput" accept="image/*" style="display: none">
+              </div>
+              `}
+            </div>
+          </div>
+          `}
 
           <div class="card glass-card">
             <div class="card-header">
@@ -6584,7 +6691,7 @@ function renderVidgen4Page() {
               <div class="setting-group">
                 <label class="setting-label">Aspect Ratio</label>
                 <div class="aspect-ratio-selector">
-                  ${['16:9', '9:16', '1:1'].map(ratio => `
+                  ${['16:9', '9:16'].map(ratio => `
                     <button class="aspect-btn ${state.vidgen4.aspectRatio === ratio ? 'active' : ''}" data-vidgen4-ratio="${ratio}">
                       <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
                       <span>${ratio}</span>
@@ -6675,46 +6782,16 @@ function renderVidgen4Page() {
                 <label class="setting-label">Veo 3.1 Options</label>
                 <div style="display:flex;flex-direction:column;gap:10px;">
                   <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
-                    <span style="font-size:13px;opacity:0.85;">Generate Audio</span>
+                    <span style="font-size:13px;opacity:0.85;">Enable GIF</span>
                     <div class="toggle-switch-wrapper">
-                      <input type="checkbox" id="vidgen4GenerateAudio" ${state.vidgen4.generateAudio ? 'checked' : ''} style="display:none;">
-                      <div class="toggle-track ${state.vidgen4.generateAudio ? 'active' : ''}" data-vidgen4-toggle="generateAudio" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.generateAudio ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
-                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.generateAudio ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
-                      </div>
-                    </div>
-                  </label>
-                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
-                    <span style="font-size:13px;opacity:0.85;">Enhance Prompt</span>
-                    <div class="toggle-switch-wrapper">
-                      <input type="checkbox" id="vidgen4EnhancePrompt" ${state.vidgen4.enhancePrompt ? 'checked' : ''} style="display:none;">
-                      <div class="toggle-track ${state.vidgen4.enhancePrompt ? 'active' : ''}" data-vidgen4-toggle="enhancePrompt" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.enhancePrompt ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
-                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.enhancePrompt ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      <input type="checkbox" id="vidgen4EnableGif" ${state.vidgen4.enableGif ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.enableGif ? 'active' : ''}" data-vidgen4-toggle="enableGif" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.enableGif ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.enableGif ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
                       </div>
                     </div>
                   </label>
                 </div>
-              </div>
-
-              <div class="setting-group">
-                <label class="setting-label">Negative Prompt</label>
-                <textarea 
-                  class="form-textarea" 
-                  id="vidgen4NegativePrompt" 
-                  placeholder="Elemen yang ingin dihindari di video... (opsional)"
-                  rows="2"
-                >${state.vidgen4.negativePrompt}</textarea>
-              </div>
-
-              <div class="setting-group">
-                <label class="setting-label">Seed (opsional)</label>
-                <input 
-                  type="number" 
-                  class="form-input" 
-                  id="vidgen4Seed" 
-                  placeholder="Kosongkan untuk random..."
-                  value="${state.vidgen4.seed}"
-                >
-                <p class="setting-hint">Seed sama = hasil sama. Kosongkan untuk hasil random.</p>
+                ${state.vidgen4.enableGif ? `<p class="setting-hint" style="color:#f59e0b;margin-top:4px;">⚠️ GIF tidak bisa digunakan dengan resolusi 1080p/4K</p>` : ''}
               </div>
               ` : ''}
 
@@ -6772,7 +6849,8 @@ function renderVidgen4Page() {
                 const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen4.cooldownEndTime - now) / 1000) : 0;
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
-                const needsPrompt = !state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage;
+                const hasImage = state.vidgen4.sourceImage || state.vidgen4.startFrame || state.vidgen4.endFrame;
+                const needsPrompt = !state.vidgen4.prompt.trim() && !hasImage;
                 const isDisabled = state.vidgen4.isGenerating || needsPrompt || state.vidgen4.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen4Btn" ${isDisabled ? 'disabled' : ''}>
@@ -6926,6 +7004,54 @@ function attachVidgen4EventListeners() {
       render();
     });
   }
+
+  const startFrameZone = document.getElementById('vidgen4StartFrameZone');
+  const startFrameInput = document.getElementById('vidgen4StartFrameInput');
+  const removeStartFrame = document.getElementById('removeVidgen4StartFrame');
+  if (startFrameZone && startFrameInput) {
+    startFrameZone.addEventListener('click', () => startFrameInput.click());
+    startFrameInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        state.vidgen4.startFrame = { file, data: ev.target.result, name: file.name };
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  if (removeStartFrame) {
+    removeStartFrame.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen4.startFrame = null;
+      render();
+    });
+  }
+
+  const endFrameZone = document.getElementById('vidgen4EndFrameZone');
+  const endFrameInput = document.getElementById('vidgen4EndFrameInput');
+  const removeEndFrame = document.getElementById('removeVidgen4EndFrame');
+  if (endFrameZone && endFrameInput) {
+    endFrameZone.addEventListener('click', () => endFrameInput.click());
+    endFrameInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        state.vidgen4.endFrame = { file, data: ev.target.result, name: file.name };
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  if (removeEndFrame) {
+    removeEndFrame.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen4.endFrame = null;
+      render();
+    });
+  }
   
   if (generateBtn) {
     generateBtn.addEventListener('click', generateVidgen4Video);
@@ -6960,19 +7086,6 @@ function attachVidgen4EventListeners() {
     });
   });
 
-  const negPromptInput = document.getElementById('vidgen4NegativePrompt');
-  if (negPromptInput) {
-    negPromptInput.addEventListener('input', (e) => {
-      state.vidgen4.negativePrompt = e.target.value;
-    });
-  }
-
-  const seedInput = document.getElementById('vidgen4Seed');
-  if (seedInput) {
-    seedInput.addEventListener('input', (e) => {
-      state.vidgen4.seed = e.target.value;
-    });
-  }
   
   if (!window._vidgen4DelegationAttached) {
     window._vidgen4DelegationAttached = true;
@@ -6982,11 +7095,11 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2' ? [10, 15] : [4, 6, 8];
+        const validDurations = newModel === 'sora-2' ? [10, 15] : [8];
         if (!validDurations.includes(state.vidgen4.duration)) {
           state.vidgen4.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p'] : ['720p'];
+        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p', '4k'] : ['720p'];
         if (!validResolutions.includes(state.vidgen4.resolution)) {
           state.vidgen4.resolution = validResolutions[0];
         }
@@ -7015,6 +7128,13 @@ function attachVidgen4EventListeners() {
       if (resolutionBtn && state.currentPage === 'vidgen4') {
         state.vidgen4.resolution = resolutionBtn.dataset.vidgen4Resolution;
         saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+
+      const genTypeBtn = e.target.closest('[data-vidgen4-gentype]');
+      if (genTypeBtn && state.currentPage === 'vidgen4') {
+        state.vidgen4.generationType = genTypeBtn.dataset.vidgen4Gentype;
         render();
         return;
       }
@@ -7056,7 +7176,8 @@ function handleVidgen4ImageUpload(e) {
 }
 
 async function generateVidgen4Video() {
-  if (!state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage) {
+  const hasAnyImage = state.vidgen4.sourceImage || state.vidgen4.startFrame || state.vidgen4.endFrame;
+  if (!state.vidgen4.prompt.trim() && !hasAnyImage) {
     alert('Masukkan prompt atau upload gambar');
     return;
   }
@@ -7094,19 +7215,20 @@ async function generateVidgen4Video() {
       body: JSON.stringify({
         model: state.vidgen4.selectedModel,
         prompt: state.vidgen4.prompt,
-        image: state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        image: state.vidgen4.selectedModel === 'sora-2' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        startFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.startFrame ? state.vidgen4.startFrame.data : null,
+        endFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.endFrame ? state.vidgen4.endFrame.data : null,
+        referenceImage: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'reference' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        generationType: state.vidgen4.selectedModel === 'veo3.1-fast' ? state.vidgen4.generationType : undefined,
         aspectRatio: state.vidgen4.aspectRatio,
         duration: state.vidgen4.duration,
         resolution: state.vidgen4.resolution,
+        enableGif: state.vidgen4.enableGif,
         watermark: state.vidgen4.watermark,
         thumbnail: state.vidgen4.thumbnail,
         isPrivate: state.vidgen4.isPrivate,
         style: state.vidgen4.style,
         storyboard: state.vidgen4.storyboard,
-        generateAudio: state.vidgen4.generateAudio,
-        negativePrompt: state.vidgen4.negativePrompt,
-        seed: state.vidgen4.seed,
-        enhancePrompt: state.vidgen4.enhancePrompt,
         roomId: state.vidgen4.selectedRoom
       })
     });

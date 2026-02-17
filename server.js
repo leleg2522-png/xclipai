@@ -6372,11 +6372,11 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     }
     console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, aspectRatio, duration, resolution, 
-            watermark, thumbnail, isPrivate, style, storyboard,
-            generateAudio, negativePrompt, seed, enhancePrompt } = req.body;
+    const { model, prompt, image, startFrame, endFrame, referenceImage,
+            generationType, aspectRatio, duration, resolution, enableGif,
+            watermark, thumbnail, isPrivate, style, storyboard } = req.body;
     
-    if (!prompt && !image) {
+    if (!prompt && !image && !startFrame && !referenceImage) {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
@@ -6393,12 +6393,12 @@ app.post('/api/vidgen4/generate', async (req, res) => {
       },
       'veo3.1-fast': { 
         apiModel: 'veo3.1-fast', 
-        supportedDurations: [4, 6, 8],
+        supportedDurations: [8],
         defaultDuration: 8,
-        supportedResolutions: ['720p', '1080p'],
+        supportedResolutions: ['720p', '1080p', '4k'],
         defaultResolution: '720p',
         type: 'veo',
-        desc: 'Veo 3.1 Fast max 1080p'
+        desc: 'Veo 3.1 Fast max 4K'
       }
     };
     
@@ -6422,34 +6422,71 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     };
     
     // Model-specific playground parameters
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+
     if (config.type === 'sora') {
-      // Sora 2 specific params
+      // Sora 2 - official API: prompt, duration, aspect_ratio, image_urls
       if (watermark !== undefined) requestBody.watermark = watermark;
       if (thumbnail !== undefined) requestBody.thumbnail = thumbnail;
       if (isPrivate !== undefined) requestBody.private = isPrivate;
       if (style && style !== 'none') requestBody.style = style;
       if (storyboard !== undefined) requestBody.storyboard = storyboard;
-    } else if (config.type === 'veo') {
-      // Veo 3.1 Fast specific params
-      requestBody.resolution = videoResolution;
-      if (generateAudio !== undefined) requestBody.generate_audio = generateAudio;
-      if (negativePrompt && negativePrompt.trim()) requestBody.negative_prompt = negativePrompt.trim();
-      if (seed !== undefined && seed !== null && seed !== '') requestBody.seed = parseInt(seed);
-      if (enhancePrompt !== undefined) requestBody.enhance_prompt = enhancePrompt;
-    }
-    
-    // Add image for image-to-video
-    if (image) {
-      let imageUrl = image;
-      if (image.startsWith('data:')) {
-        const protocol = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers['x-forwarded-host'] || req.headers.host;
-        const baseUrl = `${protocol}://${host}`;
-        const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
-        imageUrl = imageFile.publicUrl;
-        console.log(`[VIDGEN4] Image uploaded: ${imageUrl}`);
+      
+      if (image) {
+        let imageUrl = image;
+        if (image.startsWith('data:')) {
+          const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
+          imageUrl = imageFile.publicUrl;
+          console.log(`[VIDGEN4] Sora image uploaded: ${imageUrl}`);
+        }
+        requestBody.image_urls = [imageUrl];
       }
-      requestBody.image_urls = [imageUrl];
+    } else if (config.type === 'veo') {
+      // Veo 3.1 Fast - official API: resolution, generation_type, image_urls (start/end frame), enable_gif
+      requestBody.resolution = videoResolution;
+      if (enableGif !== undefined) requestBody.enable_gif = enableGif;
+      
+      if (generationType === 'frame') {
+        // Frame-to-video mode: image_urls[0] = start frame, image_urls[1] = end frame
+        const frameUrls = [];
+        if (startFrame) {
+          let startUrl = startFrame;
+          if (startFrame.startsWith('data:')) {
+            const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
+            startUrl = sf.publicUrl;
+            console.log(`[VIDGEN4] Start frame uploaded: ${startUrl}`);
+          }
+          frameUrls.push(startUrl);
+        }
+        if (endFrame) {
+          let endUrl = endFrame;
+          if (endFrame.startsWith('data:')) {
+            const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
+            endUrl = ef.publicUrl;
+            console.log(`[VIDGEN4] End frame uploaded: ${endUrl}`);
+          }
+          frameUrls.push(endUrl);
+        }
+        if (frameUrls.length > 0) {
+          requestBody.image_urls = frameUrls;
+          requestBody.generation_type = 'frame';
+        }
+      } else if (generationType === 'reference') {
+        // Reference image mode
+        const refImg = referenceImage || image;
+        if (refImg) {
+          let refUrl = refImg;
+          if (refImg.startsWith('data:')) {
+            const rf = await saveBase64ToFile(refImg, 'image', baseUrl);
+            refUrl = rf.publicUrl;
+            console.log(`[VIDGEN4] Reference image uploaded: ${refUrl}`);
+          }
+          requestBody.image_urls = [refUrl];
+          requestBody.generation_type = 'reference';
+        }
+      }
     }
     
     console.log(`[VIDGEN4] Request body:`, JSON.stringify({ ...requestBody, image_urls: requestBody.image_urls ? ['[IMAGE]'] : undefined }));
