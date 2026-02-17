@@ -135,7 +135,7 @@ const state = {
     endFrame: null,
     generationType: 'reference',
     prompt: '',
-    selectedModel: 'sora-2',
+    selectedModel: 'sora-2-vip',
     aspectRatio: '16:9',
     duration: 10,
     resolution: '720p',
@@ -6471,10 +6471,10 @@ async function pollVidgen2Task(taskId) {
 }
 
 function renderVidgen4Page() {
-  const isSora2 = state.vidgen4.selectedModel === 'sora-2';
+  const isSora2 = state.vidgen4.selectedModel === 'sora-2-vip';
   const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
   const models = [
-    { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
+    { id: 'sora-2-vip', name: 'Sora 2 VIP', desc: 'Video hingga 15 detik, 720p, kualitas premium', badge: 'VIP', icon: '🎬' },
     { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
   ];
   
@@ -7095,7 +7095,7 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2' ? [10, 15] : [8];
+        const validDurations = newModel === 'sora-2-vip' ? [10, 15] : [8];
         if (!validDurations.includes(state.vidgen4.duration)) {
           state.vidgen4.duration = validDurations[0];
         }
@@ -7215,7 +7215,7 @@ async function generateVidgen4Video() {
       body: JSON.stringify({
         model: state.vidgen4.selectedModel,
         prompt: state.vidgen4.prompt,
-        image: state.vidgen4.selectedModel === 'sora-2' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        image: state.vidgen4.selectedModel === 'sora-2-vip' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
         startFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.startFrame ? state.vidgen4.startFrame.data : null,
         endFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.endFrame ? state.vidgen4.endFrame.data : null,
         referenceImage: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'reference' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,

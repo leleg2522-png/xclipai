@@ -6382,14 +6382,14 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     
     // Model config for Apimart.ai
     const modelConfig = {
-      'sora-2': { 
-        apiModel: 'sora-2', 
+      'sora-2-vip': { 
+        apiModel: 'sora-2-vip', 
         supportedDurations: [10, 15],
         defaultDuration: 10,
         supportedResolutions: ['720p'],
         defaultResolution: '720p',
         type: 'sora',
-        desc: 'Standard 720p'
+        desc: 'Sora 2 VIP Premium'
       },
       'veo3.1-fast': { 
         apiModel: 'veo3.1-fast', 
@@ -6404,7 +6404,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2 atau veo3.1-fast' });
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2-vip atau veo3.1-fast' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
