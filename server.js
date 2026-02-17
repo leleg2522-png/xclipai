@@ -6372,7 +6372,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     }
     console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, aspectRatio, duration, watermark, thumbnail, isPrivate, style, storyboard } = req.body;
+    const { model, prompt, image, aspectRatio, duration, resolution, watermark, thumbnail, isPrivate, style, storyboard } = req.body;
     
     if (!prompt && !image) {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
@@ -6384,33 +6384,37 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         apiModel: 'sora-2', 
         supportedDurations: [10, 15],
         defaultDuration: 10,
-        resolution: '720p',
+        supportedResolutions: ['720p'],
+        defaultResolution: '720p',
         desc: 'Standard 720p'
       },
-      'sora-2-pro': { 
-        apiModel: 'sora-2-pro', 
-        supportedDurations: [10, 15, 25],
-        defaultDuration: 10,
-        resolution: '1024p',
-        desc: 'Pro 1024p'
+      'veo3.1-fast': { 
+        apiModel: 'veo3.1-fast', 
+        supportedDurations: [8],
+        defaultDuration: 8,
+        supportedResolutions: ['720p', '1080p'],
+        defaultResolution: '1080p',
+        desc: 'Veo 3.1 Fast max 1080p'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2 atau sora-2-pro' });
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2 atau veo3.1-fast' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
+    const videoResolution = config.supportedResolutions.includes(resolution) ? resolution : config.defaultResolution;
     const videoAspectRatio = aspectRatio || '16:9';
     
-    console.log(`[VIDGEN4] Generating with Apimart.ai model: ${config.apiModel}, duration: ${videoDuration}s, aspect: ${videoAspectRatio}`);
+    console.log(`[VIDGEN4] Generating with Apimart.ai model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
     
     // Build Apimart.ai request body
     const requestBody = {
       model: config.apiModel,
       prompt: prompt || 'Generate a cinematic video with smooth motion',
       duration: videoDuration,
+      size: videoResolution,
       aspect_ratio: videoAspectRatio
     };
     

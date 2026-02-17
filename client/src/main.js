@@ -135,6 +135,7 @@ const state = {
     selectedModel: 'sora-2',
     aspectRatio: '16:9',
     duration: 10,
+    resolution: '720p',
     watermark: false,
     thumbnail: false,
     isPrivate: false,
@@ -264,7 +265,7 @@ const PERSIST_KEYS = {
   chat: ['selectedModel'],
   vidgen2RoomManager: ['xclipApiKey'],
   vidgen3RoomManager: ['xclipApiKey'],
-  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'customApiKey'],
+  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'customApiKey'],
   vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
@@ -6467,12 +6468,14 @@ async function pollVidgen2Task(taskId) {
 
 function renderVidgen4Page() {
   const isSora2 = state.vidgen4.selectedModel === 'sora-2';
+  const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
   const models = [
     { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video hingga 25 detik, 1024p', badge: 'PRO', icon: '🌟' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p', badge: 'FAST', icon: '⚡' }
   ];
   
-  const durationOptions = isSora2 ? [10, 15] : [10, 15, 25];
+  const durationOptions = isSora2 ? [10, 15] : [8];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
   
   const styleOptions = [
     { value: 'none', label: 'None' },
@@ -6496,7 +6499,7 @@ function renderVidgen4Page() {
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen4</span> AI Video
         </h1>
-        <p class="hero-subtitle">Generate video dengan Sora 2 & Sora 2 Pro via Apimart.ai</p>
+        <p class="hero-subtitle">Generate video dengan Sora 2 & Veo 3.1 Fast via Apimart.ai</p>
       </div>
 
       <div class="xmaker-layout">
@@ -6592,6 +6595,17 @@ function renderVidgen4Page() {
                   ${durationOptions.map(d => `
                     <button class="aspect-btn ${state.vidgen4.duration === d ? 'active' : ''}" data-vidgen4-duration="${d}">
                       <span>${d}s</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Resolution</label>
+                <div class="aspect-ratio-selector">
+                  ${resolutionOptions.map(r => `
+                    <button class="aspect-btn ${state.vidgen4.resolution === r ? 'active' : ''}" data-vidgen4-resolution="${r}">
+                      <span>${r}</span>
                     </button>
                   `).join('')}
                 </div>
@@ -6898,9 +6912,13 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2' ? [10, 15] : [10, 15, 25];
+        const validDurations = newModel === 'sora-2' ? [10, 15] : [8];
         if (!validDurations.includes(state.vidgen4.duration)) {
-          state.vidgen4.duration = 10;
+          state.vidgen4.duration = validDurations[0];
+        }
+        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p'] : ['720p'];
+        if (!validResolutions.includes(state.vidgen4.resolution)) {
+          state.vidgen4.resolution = validResolutions[0];
         }
         saveUserInputs('vidgen4');
         render();
@@ -6918,6 +6936,14 @@ function attachVidgen4EventListeners() {
       const durationBtn = e.target.closest('[data-vidgen4-duration]');
       if (durationBtn && state.currentPage === 'vidgen4') {
         state.vidgen4.duration = parseInt(durationBtn.dataset.vidgen4Duration);
+        saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+
+      const resolutionBtn = e.target.closest('[data-vidgen4-resolution]');
+      if (resolutionBtn && state.currentPage === 'vidgen4') {
+        state.vidgen4.resolution = resolutionBtn.dataset.vidgen4Resolution;
         saveUserInputs('vidgen4');
         render();
         return;
@@ -7001,6 +7027,7 @@ async function generateVidgen4Video() {
         image: state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
         aspectRatio: state.vidgen4.aspectRatio,
         duration: state.vidgen4.duration,
+        resolution: state.vidgen4.resolution,
         watermark: state.vidgen4.watermark,
         thumbnail: state.vidgen4.thumbnail,
         isPrivate: state.vidgen4.isPrivate,

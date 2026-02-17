@@ -54,8 +54,9 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 (720p, 10/15 seconds, text-to-video + image-to-video)
-    - Sora 2 Pro (1024p, 10/15/25 seconds, text-to-video + image-to-video)
-  - Apimart.ai playground parameters: aspect_ratio, duration, watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
+    - Veo 3.1 Fast (max 1080p, 8 seconds, text-to-video + image-to-video)
+  - Resolution selector: 720p, 1080p (Veo 3.1 Fast only, capped at 1080p)
+  - Apimart.ai playground parameters: aspect_ratio, duration, size (resolution), watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
   - Image reference via `image_urls` array
   - Database tables: vidgen4_rooms, vidgen4_tasks
   - Room assignment via vidgen4_room_id in subscriptions
@@ -81,7 +82,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - Freepik API (for image-to-video generation and motion control with Kling models)
     - GeminiGen.AI API (for X Maker image generation with Nano Banana and Imagen 4 models)
     - Poyo.ai API (for Vidgen2 video generation with Sora 2, Sora 2 Pro, Hailuo models and X Image generation with GPT Image, Nano Banana, Seedream, FLUX, Z-Image, Grok models)
-    - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Sora 2 Pro models)
+    - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
     - FFmpeg (for video processing)
