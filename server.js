@@ -163,6 +163,15 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, ximage_room_id
     `, [cutoffTime]);
     
+    // Clean inactive users from Vidgen4 rooms
+    const inactiveVidgen4 = await pool.query(`
+      UPDATE subscriptions 
+      SET vidgen4_room_id = NULL 
+      WHERE vidgen4_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, vidgen4_room_id
+    `, [cutoffTime]);
+    
     // Update active_users in rooms table (Video Gen)
     await pool.query(`
       UPDATE rooms r SET active_users = (
@@ -193,6 +202,16 @@ async function cleanupInactiveUsers() {
       )
     `).catch(() => {});
     
+    // Update active_users in vidgen4_rooms table
+    await pool.query(`
+      UPDATE vidgen4_rooms r SET active_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.vidgen4_room_id = r.id
+        AND s.status = 'active' 
+        AND s.expired_at > NOW()
+      )
+    `).catch(() => {});
+    
     // Update current_users in ximage_rooms table
     await pool.query(`
       UPDATE ximage_rooms r SET current_users = (
@@ -203,9 +222,9 @@ async function cleanupInactiveUsers() {
       )
     `);
     
-    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveVidgen3.rowCount + inactiveXimage.rowCount;
+    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveVidgen3.rowCount + inactiveXimage.rowCount + inactiveVidgen4.rowCount;
     if (totalCleaned > 0) {
-      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, Vidgen3=${inactiveVidgen3.rowCount}, XImage=${inactiveXimage.rowCount}`);
+      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, Vidgen3=${inactiveVidgen3.rowCount}, Vidgen4=${inactiveVidgen4.rowCount}, XImage=${inactiveXimage.rowCount}`);
     }
   } catch (error) {
     console.error('Cleanup inactive users error:', error);
@@ -6236,6 +6255,416 @@ const VIDGEN3_MODEL_CONFIGS = {
   }
 };
 
+// ============ VIDGEN4 (Apimart.ai) ============
+
+async function getVidgen4RoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  const subResult = await pool.query(`
+    SELECT s.vidgen4_room_id 
+    FROM subscriptions s 
+    WHERE s.user_id = $1 AND s.status = 'active' 
+    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    ORDER BY s.created_at DESC LIMIT 1
+  `, [keyInfo.user_id]);
+  
+  const vidgen4RoomId = subResult.rows[0]?.vidgen4_room_id || 1;
+  
+  const roomKeyPrefix = `VIDGEN4_ROOM${vidgen4RoomId}_KEY_`;
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+  
+  if (availableKeys.length === 0) {
+    if (process.env.APIMART_API_KEY) {
+      return { 
+        apiKey: process.env.APIMART_API_KEY, 
+        keyName: 'APIMART_API_KEY',
+        roomId: vidgen4RoomId,
+        userId: keyInfo.user_id,
+        keyInfoId: keyInfo.id
+      };
+    }
+    return { error: 'Tidak ada API key Vidgen4 yang tersedia. Hubungi admin.' };
+  }
+  
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { 
+    apiKey: process.env[randomKeyName], 
+    keyName: randomKeyName,
+    roomId: vidgen4RoomId,
+    userId: keyInfo.user_id,
+    keyInfoId: keyInfo.id
+  };
+}
+
+// Get available Vidgen4 rooms
+app.get('/api/vidgen4/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, active_users, status 
+      FROM vidgen4_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN4] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal load rooms' });
+  }
+});
+
+// Join Vidgen4 Room
+app.post('/api/vidgen4/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId } = req.body;
+    const targetRoom = roomId || 1;
+    
+    const roomResult = await pool.query(
+      'SELECT * FROM vidgen4_rooms WHERE id = $1',
+      [targetRoom]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN' || room.active_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room penuh atau tutup' });
+    }
+    
+    await pool.query(`
+      UPDATE subscriptions SET vidgen4_room_id = $1
+      WHERE user_id = $2 AND status = 'active'
+    `, [targetRoom, req.session.userId]);
+    
+    await pool.query(
+      'UPDATE vidgen4_rooms SET active_users = active_users + 1 WHERE id = $1',
+      [targetRoom]
+    );
+    
+    res.json({ success: true, roomId: targetRoom, roomName: room.name });
+  } catch (error) {
+    console.error('[VIDGEN4] Join room error:', error);
+    res.status(500).json({ error: 'Gagal join room' });
+  }
+});
+
+// Generate video with Vidgen4 (Apimart.ai)
+app.post('/api/vidgen4/generate', async (req, res) => {
+  try {
+    console.log('[VIDGEN4] Generate request received');
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getVidgen4RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      console.log('[VIDGEN4] Room key error:', roomKeyResult.error);
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
+    
+    const { model, prompt, image, aspectRatio, duration, resolution } = req.body;
+    
+    if (!prompt && !image) {
+      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    }
+    
+    // Model config for Apimart.ai
+    const modelConfig = {
+      'sora-2-pro': { 
+        apiModel: 'sora-2-pro', 
+        maxDuration: 25, 
+        maxSize: '1024p',
+        supportedAspectRatios: ['16:9', '9:16', '1:1'],
+        supportsImage: true
+      },
+      'veo3.1-fast': { 
+        apiModel: 'veo3.1-fast', 
+        maxDuration: 8, 
+        maxSize: '1080p',
+        supportedAspectRatios: ['16:9', '9:16', '1:1'],
+        supportsImage: true
+      }
+    };
+    
+    const config = modelConfig[model];
+    if (!config) {
+      return res.status(400).json({ error: 'Model tidak valid' });
+    }
+    
+    const videoDuration = Math.min(duration || config.maxDuration, config.maxDuration);
+    const videoResolution = model === 'veo3.1-fast' ? (resolution === '720p' ? '720p' : '1080p') : (resolution || '1024p');
+    const videoAspectRatio = aspectRatio || '16:9';
+    
+    console.log(`[VIDGEN4] Generating with Apimart.ai model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
+    
+    // Build Apimart.ai request body (OpenAI-compatible /v1/videos)
+    const requestBody = {
+      model: config.apiModel,
+      prompt: prompt || 'Generate a cinematic video with smooth motion',
+      size: videoResolution,
+      seconds: videoDuration,
+      aspect_ratio: videoAspectRatio
+    };
+    
+    // Add image for image-to-video
+    if (image) {
+      let imageUrl = image;
+      if (image.startsWith('data:')) {
+        // Convert base64 to publicly accessible URL using our server
+        const protocol = req.headers['x-forwarded-proto'] || 'https';
+        const host = req.headers['x-forwarded-host'] || req.headers.host;
+        const baseUrl = `${protocol}://${host}`;
+        const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
+        imageUrl = imageFile.publicUrl;
+        console.log(`[VIDGEN4] Image uploaded: ${imageUrl}`);
+      }
+      requestBody.image_url = imageUrl;
+    }
+    
+    console.log(`[VIDGEN4] Request body:`, JSON.stringify({ ...requestBody, image_url: requestBody.image_url ? '[IMAGE]' : undefined }));
+    
+    const response = await axios.post(
+      'https://api.apimart.ai/v1/videos',
+      requestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${roomKeyResult.apiKey}`
+        },
+        timeout: 60000
+      }
+    );
+    
+    console.log(`[VIDGEN4] Apimart.ai response:`, JSON.stringify(response.data));
+    
+    const taskId = response.data?.id || response.data?.data?.id || response.data?.task_id;
+    
+    if (!taskId) {
+      console.error('[VIDGEN4] No task ID in response:', response.data);
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari Apimart.ai' });
+    }
+    
+    // Save task to database
+    await pool.query(`
+      INSERT INTO vidgen4_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt, roomKeyResult.keyName, 
+        JSON.stringify({ resolution: videoResolution, duration: videoDuration, aspectRatio: videoAspectRatio })]);
+    
+    // Update request count
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [roomKeyResult.keyInfoId]
+    );
+    
+    console.log(`[VIDGEN4] Task created: ${taskId}`);
+    
+    res.json({
+      success: true,
+      taskId: taskId,
+      model: model,
+      message: 'Video generation dimulai'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN4] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.error?.message || error.response?.data?.message || 'Gagal generate video' 
+    });
+  }
+});
+
+// Check Vidgen4 task status
+app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const { taskId } = req.params;
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    // Check local database first
+    const localTask = await pool.query(
+      'SELECT * FROM vidgen4_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+      [taskId, keyInfo.id]
+    );
+    
+    if (localTask.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan' });
+    }
+    
+    const task = localTask.rows[0];
+    
+    if (task.status === 'completed') {
+      return res.json({
+        status: 'completed',
+        videoUrl: task.video_url,
+        model: task.model
+      });
+    }
+    
+    if (task.status === 'failed') {
+      return res.json({
+        status: 'failed',
+        error: task.error_message || 'Video generation failed'
+      });
+    }
+    
+    // Poll Apimart.ai for status
+    const roomKeyResult = await getVidgen4RoomApiKey(xclipApiKey);
+    if (!roomKeyResult.error) {
+      try {
+        console.log(`[VIDGEN4] Polling status for task: ${taskId}`);
+        
+        const statusResponse = await axios.get(
+          `https://api.apimart.ai/v1/videos/${taskId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${roomKeyResult.apiKey}`
+            },
+            timeout: 30000
+          }
+        );
+        
+        console.log(`[VIDGEN4] Status response:`, JSON.stringify(statusResponse.data));
+        
+        const data = statusResponse.data;
+        const status = data.status || data.state;
+        
+        if (status === 'completed' || status === 'finished' || status === 'success') {
+          // Try to get video URL from status response first
+          let videoUrl = data.video_url || data.url || data.output?.url;
+          
+          // If no direct URL, try /content endpoint
+          if (!videoUrl) {
+            try {
+              const contentResponse = await axios.get(
+                `https://api.apimart.ai/v1/videos/${taskId}/content`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${roomKeyResult.apiKey}`
+                  },
+                  timeout: 30000,
+                  maxRedirects: 5
+                }
+              );
+              
+              // If redirected to a video URL
+              if (contentResponse.request?.res?.responseUrl) {
+                videoUrl = contentResponse.request.res.responseUrl;
+              } else if (typeof contentResponse.data === 'string' && contentResponse.data.startsWith('http')) {
+                videoUrl = contentResponse.data;
+              } else if (contentResponse.data?.url) {
+                videoUrl = contentResponse.data.url;
+              }
+            } catch (contentErr) {
+              // If content endpoint returns redirect URL in error
+              if (contentErr.response?.headers?.location) {
+                videoUrl = contentErr.response.headers.location;
+              }
+              console.log(`[VIDGEN4] Content endpoint note:`, contentErr.message);
+            }
+          }
+          
+          if (videoUrl) {
+            console.log(`[VIDGEN4] Video URL found: ${videoUrl}`);
+            
+            await pool.query(
+              'UPDATE vidgen4_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+              ['completed', videoUrl, taskId]
+            );
+            
+            return res.json({
+              status: 'completed',
+              videoUrl: videoUrl,
+              model: task.model
+            });
+          }
+        }
+        
+        if (status === 'failed' || status === 'error') {
+          const errorMsg = data.error?.message || data.error_message || data.message || 'Generation failed';
+          console.log(`[VIDGEN4] Task failed: ${errorMsg}`);
+          
+          await pool.query(
+            'UPDATE vidgen4_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+            ['failed', errorMsg, taskId]
+          );
+          
+          return res.json({
+            status: 'failed',
+            error: errorMsg
+          });
+        }
+        
+        // Still processing
+        const progress = data.progress || 0;
+        return res.json({
+          status: 'processing',
+          progress: progress,
+          message: status === 'processing' ? 'Video sedang diproses...' : 'Menunggu antrian...'
+        });
+        
+      } catch (pollError) {
+        console.error('[VIDGEN4] Poll error:', pollError.response?.data || pollError.message);
+      }
+    }
+    
+    res.json({
+      status: 'pending',
+      message: 'Menunggu status dari Apimart.ai...'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN4] Task status error:', error.message);
+    res.status(500).json({ error: 'Gagal cek status task' });
+  }
+});
+
+// Get Vidgen4 video history
+app.get('/api/vidgen4/history', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const result = await pool.query(
+      `SELECT task_id, model, prompt, status, video_url, created_at, completed_at 
+       FROM vidgen4_tasks 
+       WHERE user_id = $1 AND status = 'completed' AND video_url IS NOT NULL
+       ORDER BY completed_at DESC LIMIT 20`,
+      [keyInfo.user_id]
+    );
+    
+    res.json({ videos: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN4] History error:', error.message);
+    res.status(500).json({ error: 'Gagal load history' });
+  }
+});
+
 // Get available Vidgen3 rooms
 app.get('/api/vidgen3/rooms', async (req, res) => {
   try {
@@ -7482,6 +7911,59 @@ async function initDatabase() {
           ('Vidgen3 Room 3', 10, 'OPEN', 'VIDGEN3_ROOM3_KEY_1', 'VIDGEN3_ROOM3_KEY_2', 'VIDGEN3_ROOM3_KEY_3')
       `);
       console.log('Vidgen3 rooms seeded');
+    }
+    
+    // Create vidgen4_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen4_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100)
+      )
+    `);
+    
+    // Create vidgen4_tasks table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vidgen4_tasks (
+        id SERIAL PRIMARY KEY,
+        xclip_api_key_id INTEGER,
+        user_id INTEGER,
+        room_id INTEGER,
+        task_id VARCHAR(255) UNIQUE,
+        model VARCHAR(100),
+        prompt TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        video_url TEXT,
+        error_message TEXT,
+        key_index INTEGER,
+        used_key_name VARCHAR(100),
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    
+    // Add vidgen4_room_id to subscriptions
+    await pool.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS vidgen4_room_id INTEGER
+    `).catch(() => {});
+    
+    // Seed vidgen4 rooms if empty
+    const existingVidgen4Rooms = await pool.query('SELECT COUNT(*) FROM vidgen4_rooms');
+    if (parseInt(existingVidgen4Rooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO vidgen4_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('Vidgen4 Room 1', 10, 'OPEN', 'VIDGEN4_ROOM1_KEY_1', 'VIDGEN4_ROOM1_KEY_2', 'VIDGEN4_ROOM1_KEY_3'),
+          ('Vidgen4 Room 2', 10, 'OPEN', 'VIDGEN4_ROOM2_KEY_1', 'VIDGEN4_ROOM2_KEY_2', 'VIDGEN4_ROOM2_KEY_3'),
+          ('Vidgen4 Room 3', 10, 'OPEN', 'VIDGEN4_ROOM3_KEY_1', 'VIDGEN4_ROOM3_KEY_2', 'VIDGEN4_ROOM3_KEY_3')
+      `);
+      console.log('Vidgen4 rooms seeded');
     }
     
     // Create ximage_rooms table

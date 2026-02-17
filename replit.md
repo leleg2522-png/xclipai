@@ -51,6 +51,16 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - SSE events: vidgen3_completed, vidgen3_failed
   - Video history persistence in database
   - Webhook integration for real-time task completion
+- **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API (OpenAI-compatible). Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
+  - 2 AI models:
+    - Sora 2 Pro (up to 25s, 1024p, text-to-video + image-to-video)
+    - Veo 3.1 Fast (8s, max 1080p, text-to-video + image-to-video)
+  - Configurable aspect ratio (16:9, 9:16, 1:1), duration, and resolution
+  - Database tables: vidgen4_rooms, vidgen4_tasks
+  - Room assignment via vidgen4_room_id in subscriptions
+  - Apimart.ai API: POST /v1/videos to create, GET /v1/videos/{id} to poll, GET /v1/videos/{id}/content for download
+  - Video history persistence in database
+  - 5-minute cooldown timer between generations
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Motion rooms have their own set of Freepik API keys (MOTION_ROOM1_KEY_1/2/3, etc.).
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
@@ -69,6 +79,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - Freepik API (for image-to-video generation and motion control with Kling models)
     - GeminiGen.AI API (for X Maker image generation with Nano Banana and Imagen 4 models)
     - Poyo.ai API (for Vidgen2 video generation with Sora 2, Sora 2 Pro, Hailuo models and X Image generation with GPT Image, Nano Banana, Seedream, FLUX, Z-Image, Grok models)
+    - Apimart.ai API (for Vidgen4 video generation with Sora 2 Pro and Veo 3.1 Fast models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
     - FFmpeg (for video processing)

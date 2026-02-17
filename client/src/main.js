@@ -129,6 +129,32 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  vidgen4: {
+    sourceImage: null,
+    prompt: '',
+    selectedModel: 'sora-2-pro',
+    aspectRatio: '16:9',
+    duration: 10,
+    resolution: '1080p',
+    isGenerating: false,
+    isPolling: false,
+    tasks: [],
+    generatedVideos: [],
+    error: null,
+    customApiKey: '',
+    selectedRoom: null,
+    cooldownEndTime: parseInt(localStorage.getItem('vidgen4_cooldown') || '0'),
+    cooldownRemaining: 0,
+    _historyLoaded: false
+  },
+  vidgen4RoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
   ximageRoomManager: {
     rooms: [],
     subscription: null,
@@ -234,6 +260,8 @@ const PERSIST_KEYS = {
   chat: ['selectedModel'],
   vidgen2RoomManager: ['xclipApiKey'],
   vidgen3RoomManager: ['xclipApiKey'],
+  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'customApiKey'],
+  vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
   motionRoomManager: ['xclipApiKey']
@@ -1430,6 +1458,65 @@ async function loadVidgen3History() {
   }
 }
 
+async function loadVidgen4Rooms() {
+  state.vidgen4RoomManager.isLoading = true;
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen4/rooms`, { credentials: 'include' });
+    const data = await res.json();
+    state.vidgen4RoomManager.rooms = data.rooms || [];
+  } catch (e) {
+    state.vidgen4RoomManager.rooms = [];
+  }
+  state.vidgen4RoomManager.isLoading = false;
+}
+
+async function joinVidgen4Room(roomId) {
+  state.vidgen4RoomManager.isLoading = true;
+  render();
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen4/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ roomId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.vidgen4.selectedRoom = roomId;
+      state.vidgen4RoomManager.showRoomModal = false;
+      showToast(`Bergabung ke ${data.roomName}`, 'success');
+      await loadVidgen4Rooms();
+    } else {
+      showToast(data.error || 'Gagal join room', 'error');
+    }
+  } catch (e) {
+    showToast('Gagal join room', 'error');
+  }
+  state.vidgen4RoomManager.isLoading = false;
+  render();
+}
+
+async function loadVidgen4History() {
+  try {
+    if (!state.vidgen4.customApiKey) return;
+    const res = await fetch(`${API_URL}/api/vidgen4/history`, {
+      headers: { 'X-Xclip-Key': state.vidgen4.customApiKey }
+    });
+    const data = await res.json();
+    if (data.videos) {
+      state.vidgen4.generatedVideos = data.videos.map(v => ({
+        id: v.task_id,
+        url: v.video_url,
+        model: v.model,
+        prompt: v.prompt,
+        createdAt: new Date(v.completed_at || v.created_at)
+      }));
+    }
+  } catch (e) {
+    console.error('Load vidgen4 history error:', e);
+  }
+}
+
 async function joinVidgen3Room(roomId) {
   try {
     state.vidgen3RoomManager.isLoading = true;
@@ -2220,6 +2307,13 @@ function renderNavMenu() {
       </svg>
       Vidgen3
     </button>
+    <button class="nav-btn ${state.currentPage === 'vidgen4' ? 'active' : ''}" data-page="vidgen4">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+        <circle cx="19" cy="12" r="3"/>
+      </svg>
+      Vidgen4
+    </button>
     <button class="nav-btn ${state.currentPage === 'chat' ? 'active' : ''}" data-page="chat">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -2316,6 +2410,7 @@ function renderMainContent() {
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
       state.currentPage === 'vidgen2' ? renderVidgen2Page() :
       state.currentPage === 'vidgen3' ? renderVidgen3Page() :
+      state.currentPage === 'vidgen4' ? renderVidgen4Page() :
       state.currentPage === 'ximage' ? renderXImagePage() :
       state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
@@ -5428,6 +5523,8 @@ function attachEventListeners() {
     attachVideoGenEventListeners();
   } else if (state.currentPage === 'vidgen2') {
     attachVidgen2EventListeners();
+  } else if (state.currentPage === 'vidgen4') {
+    attachVidgen4EventListeners();
   } else if (state.currentPage === 'vidgen3') {
     attachVidgen3EventListeners();
   } else if (state.currentPage === 'ximage') {
@@ -6356,6 +6453,583 @@ async function pollVidgen2Task(taskId) {
       
     } catch (error) {
       console.error('[VIDGEN2] Poll error:', error);
+      attempts++;
+      setTimeout(poll, 5000);
+    }
+  };
+  
+  poll();
+}
+
+function renderVidgen4Page() {
+  const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
+  const models = [
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video hingga 25 detik, 1024p', badge: 'PRO', icon: '🎬' },
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Google Veo, 8 detik, max 1080p', badge: 'FAST', icon: '⚡' }
+  ];
+  
+  const durationOptions = isVeo ? [8] : [5, 10, 15, 20, 25];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['480p', '720p', '1024p'];
+  
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Vidgen4 - Apimart AI
+        </div>
+        <h1 class="hero-title">
+          <span class="gradient-text">Vidgen4</span> AI Video
+        </h1>
+        <p class="hero-subtitle">Generate video dengan Sora 2 Pro & Veo 3.1 Fast via Apimart.ai</p>
+      </div>
+
+      <div class="xmaker-layout">
+        <div class="xmaker-settings">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Upload Gambar</h2>
+            </div>
+            <div class="card-body">
+              <div class="reference-upload ${state.vidgen4.sourceImage ? 'has-image' : ''}" id="vidgen4UploadZone">
+                ${state.vidgen4.sourceImage ? `
+                  <img src="${state.vidgen4.sourceImage.data}" alt="Source" class="reference-preview">
+                  <button class="remove-reference" id="removeVidgen4Image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Klik untuk upload gambar (opsional)</span>
+                    <span class="upload-hint">JPG, PNG (max 10MB)</span>
+                  </div>
+                `}
+              </div>
+              <input type="file" id="vidgen4ImageInput" accept="image/*" style="display: none">
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pilih Model</h2>
+            </div>
+            <div class="card-body">
+              <div class="model-selector-grid">
+                ${models.map(model => `
+                  <div class="model-card ${state.vidgen4.selectedModel === model.id ? 'active' : ''}" data-vidgen4-model="${model.id}">
+                    <div class="model-card-icon">${model.icon}</div>
+                    <div class="model-card-info">
+                      <div class="model-card-name">${model.name}</div>
+                      <div class="model-card-desc">${model.desc}</div>
+                    </div>
+                    ${model.badge ? `<span class="model-card-badge ${model.badge.toLowerCase()}">${model.badge}</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pengaturan Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Aspect Ratio</label>
+                <div class="aspect-ratio-selector">
+                  ${['16:9', '9:16', '1:1'].map(ratio => `
+                    <button class="aspect-btn ${state.vidgen4.aspectRatio === ratio ? 'active' : ''}" data-vidgen4-ratio="${ratio}">
+                      <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
+                      <span>${ratio}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Durasi (detik)</label>
+                <div class="aspect-ratio-selector">
+                  ${durationOptions.map(d => `
+                    <button class="aspect-btn ${state.vidgen4.duration === d ? 'active' : ''}" data-vidgen4-duration="${d}">
+                      <span>${d}s</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Resolusi</label>
+                <div class="aspect-ratio-selector">
+                  ${resolutionOptions.map(r => `
+                    <button class="aspect-btn ${state.vidgen4.resolution === r ? 'active' : ''}" data-vidgen4-resolution="${r}">
+                      <span>${r}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Prompt</label>
+                <textarea 
+                  class="form-textarea" 
+                  id="vidgen4Prompt" 
+                  placeholder="Deskripsikan video yang ingin dibuat..."
+                  rows="3"
+                >${state.vidgen4.prompt}</textarea>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  Room
+                </label>
+                <select class="form-select" id="vidgen4RoomSelect">
+                  <option value="">-- Pilih Room --</option>
+                  ${state.vidgen4RoomManager.rooms.map(room => `
+                    <option value="${room.id}" ${state.vidgen4.selectedRoom == room.id ? 'selected' : ''}>
+                      ${room.name} (${room.active_users}/${room.max_users} users)
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Xclip API Key
+                </label>
+                <input 
+                  type="password" 
+                  class="form-input" 
+                  id="vidgen4ApiKey" 
+                  placeholder="Masukkan Xclip API key..."
+                  value="${state.vidgen4.customApiKey}"
+                >
+                <p class="setting-hint">Buat Xclip API key di panel "Xclip Keys"</p>
+              </div>
+
+              ${(() => {
+                const now = Date.now();
+                const isOnCooldown = state.vidgen4.cooldownEndTime > now;
+                const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen4.cooldownEndTime - now) / 1000) : 0;
+                const cooldownMins = Math.floor(cooldownSecs / 60);
+                const cooldownRemSecs = cooldownSecs % 60;
+                const needsPrompt = !state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage;
+                const isDisabled = state.vidgen4.isGenerating || needsPrompt || state.vidgen4.tasks.length >= 3 || isOnCooldown;
+                
+                return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen4Btn" ${isDisabled ? 'disabled' : ''}>
+                ${state.vidgen4.isGenerating ? `
+                  <div class="spinner"></div>
+                  <span>Generating...</span>
+                ` : isOnCooldown ? `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span>Cooldown ${cooldownMins}:${cooldownRemSecs.toString().padStart(2, '0')}</span>
+                ` : `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span>Generate Video${state.vidgen4.tasks.length > 0 ? ' (' + state.vidgen4.tasks.length + '/3)' : ''}</span>
+                `}
+              </button>`;
+              })()}
+              ${!state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
+              ${state.vidgen4.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="xmaker-preview">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Hasil Video</h2>
+            </div>
+            <div class="card-body">
+              ${renderVidgen4Tasks()}
+              ${renderVidgen4Videos()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVidgen4Tasks() {
+  if (state.vidgen4.tasks.length === 0) return '';
+  
+  let html = '<div class="processing-tasks">';
+  html += '<div class="tasks-header"><span class="pulse-dot"></span> Sedang Diproses (' + state.vidgen4.tasks.length + '/3)</div>';
+  html += '<div class="tasks-list">';
+  
+  state.vidgen4.tasks.forEach(task => {
+    const elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    html += '<div class="task-item">';
+    html += '<div class="task-info">';
+    html += '<span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + mins + ':' + secs.toString().padStart(2, '0') + '</span>';
+    html += '</div>';
+    html += '<div class="task-progress"><div class="task-progress-bar" style="width:' + (task.progress || 0) + '%"></div></div>';
+    html += '</div>';
+  });
+  
+  html += '</div></div>';
+  return html;
+}
+
+function renderVidgen4Videos() {
+  if (state.vidgen4.generatedVideos.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div><p>Belum ada video yang dihasilkan</p></div>';
+  }
+  
+  let html = '<div class="video-grid">';
+  state.vidgen4.generatedVideos.forEach(video => {
+    html += '<div class="video-result-card">';
+    html += '<video controls playsinline preload="metadata" class="result-video">';
+    html += '<source src="' + video.url + '" type="video/mp4">';
+    html += '</video>';
+    html += '<div class="video-meta">';
+    html += '<span class="video-model-tag">' + video.model + '</span>';
+    if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// ============ VIDGEN4 EVENT HANDLERS ============
+
+let vidgen4CooldownInterval = null;
+
+function startVidgen4CooldownTimer() {
+  if (vidgen4CooldownInterval) clearInterval(vidgen4CooldownInterval);
+  vidgen4CooldownInterval = setInterval(() => {
+    const now = Date.now();
+    if (state.vidgen4.cooldownEndTime <= now) {
+      clearInterval(vidgen4CooldownInterval);
+      vidgen4CooldownInterval = null;
+      state.vidgen4.cooldownEndTime = 0;
+      localStorage.removeItem('vidgen4_cooldown');
+      if (state.currentPage === 'vidgen4') render();
+    } else if (state.currentPage === 'vidgen4') {
+      render();
+    }
+  }, 1000);
+}
+
+function attachVidgen4EventListeners() {
+  if (state.vidgen4RoomManager.rooms.length === 0 && !state.vidgen4RoomManager.isLoading) {
+    loadVidgen4Rooms().then(() => render());
+  }
+  
+  if (state.vidgen4.generatedVideos.length === 0 && !state.vidgen4._historyLoaded) {
+    state.vidgen4._historyLoaded = true;
+    loadVidgen4History().then(() => render());
+  }
+  
+  if (state.vidgen4.cooldownEndTime > Date.now() && !vidgen4CooldownInterval) {
+    startVidgen4CooldownTimer();
+  }
+  
+  const uploadZone = document.getElementById('vidgen4UploadZone');
+  const imageInput = document.getElementById('vidgen4ImageInput');
+  const removeImageBtn = document.getElementById('removeVidgen4Image');
+  const generateBtn = document.getElementById('generateVidgen4Btn');
+  const promptInput = document.getElementById('vidgen4Prompt');
+  const apiKeyInput = document.getElementById('vidgen4ApiKey');
+  
+  if (uploadZone && imageInput) {
+    uploadZone.addEventListener('click', () => imageInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleVidgen4ImageUpload({ target: { files: e.dataTransfer.files } });
+      }
+    });
+    imageInput.addEventListener('change', handleVidgen4ImageUpload);
+  }
+  
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen4.sourceImage = null;
+      render();
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateVidgen4Video);
+  }
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', (e) => {
+      state.vidgen4.prompt = e.target.value;
+      saveUserInputs('vidgen4');
+    });
+  }
+  
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+      state.vidgen4.customApiKey = e.target.value;
+      saveUserInputs('vidgen4');
+    });
+  }
+  
+  if (!window._vidgen4DelegationAttached) {
+    window._vidgen4DelegationAttached = true;
+    
+    document.addEventListener('click', function(e) {
+      const modelCard = e.target.closest('[data-vidgen4-model]');
+      if (modelCard && state.currentPage === 'vidgen4') {
+        const newModel = modelCard.dataset.vidgen4Model;
+        state.vidgen4.selectedModel = newModel;
+        if (newModel === 'veo3.1-fast') {
+          state.vidgen4.duration = 8;
+          if (state.vidgen4.resolution !== '720p' && state.vidgen4.resolution !== '1080p') {
+            state.vidgen4.resolution = '1080p';
+          }
+        } else {
+          if (state.vidgen4.duration === 8) state.vidgen4.duration = 10;
+        }
+        saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+      
+      const ratioBtn = e.target.closest('[data-vidgen4-ratio]');
+      if (ratioBtn && state.currentPage === 'vidgen4') {
+        state.vidgen4.aspectRatio = ratioBtn.dataset.vidgen4Ratio;
+        saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+      
+      const durationBtn = e.target.closest('[data-vidgen4-duration]');
+      if (durationBtn && state.currentPage === 'vidgen4') {
+        state.vidgen4.duration = parseInt(durationBtn.dataset.vidgen4Duration);
+        saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+      
+      const resBtn = e.target.closest('[data-vidgen4-resolution]');
+      if (resBtn && state.currentPage === 'vidgen4') {
+        state.vidgen4.resolution = resBtn.dataset.vidgen4Resolution;
+        saveUserInputs('vidgen4');
+        render();
+        return;
+      }
+    });
+  }
+  
+  const roomSelect = document.getElementById('vidgen4RoomSelect');
+  if (roomSelect) {
+    roomSelect.addEventListener('change', async (e) => {
+      const roomId = e.target.value;
+      if (roomId) {
+        state.vidgen4.selectedRoom = parseInt(roomId);
+        await joinVidgen4Room(parseInt(roomId));
+      } else {
+        state.vidgen4.selectedRoom = null;
+      }
+    });
+  }
+}
+
+function handleVidgen4ImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Hanya file gambar yang diperbolehkan');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.vidgen4.sourceImage = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateVidgen4Video() {
+  if (!state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage) {
+    alert('Masukkan prompt atau upload gambar');
+    return;
+  }
+  
+  if (!state.vidgen4.customApiKey) {
+    alert('Masukkan Xclip API Key');
+    return;
+  }
+  
+  if (state.vidgen4.tasks.length >= 3) {
+    alert('Maks 3 video bersamaan. Tunggu salah satu selesai.');
+    return;
+  }
+  
+  const now = Date.now();
+  if (state.vidgen4.cooldownEndTime > now) {
+    const remaining = Math.ceil((state.vidgen4.cooldownEndTime - now) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    alert(`Cooldown aktif. Tunggu ${mins}:${secs.toString().padStart(2, '0')} lagi.`);
+    return;
+  }
+  
+  state.vidgen4.isGenerating = true;
+  state.vidgen4.error = null;
+  render();
+  
+  try {
+    const response = await fetch(`${API_URL}/api/vidgen4/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': state.vidgen4.customApiKey
+      },
+      body: JSON.stringify({
+        model: state.vidgen4.selectedModel,
+        prompt: state.vidgen4.prompt,
+        image: state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        aspectRatio: state.vidgen4.aspectRatio,
+        duration: state.vidgen4.duration,
+        resolution: state.vidgen4.resolution,
+        roomId: state.vidgen4.selectedRoom
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Gagal generate video');
+    }
+    
+    state.vidgen4.tasks.push({
+      taskId: data.taskId,
+      model: state.vidgen4.selectedModel,
+      startTime: Date.now()
+    });
+    
+    const cooldownEnd = Date.now() + (5 * 60 * 1000);
+    state.vidgen4.cooldownEndTime = cooldownEnd;
+    localStorage.setItem('vidgen4_cooldown', cooldownEnd.toString());
+    startVidgen4CooldownTimer();
+    
+    pollVidgen4Task(data.taskId);
+    
+  } catch (error) {
+    console.error('Vidgen4 error:', error);
+    state.vidgen4.error = error.message;
+    alert(error.message);
+  } finally {
+    state.vidgen4.isGenerating = false;
+    render();
+  }
+}
+
+async function pollVidgen4Task(taskId) {
+  const maxAttempts = 720;
+  let attempts = 0;
+  
+  const poll = async () => {
+    if (attempts >= maxAttempts) {
+      state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+      state.vidgen4.error = 'Timeout - video generation terlalu lama';
+      showToast('Timeout - video generation terlalu lama', 'error');
+      render();
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/vidgen4/tasks/${taskId}`, {
+        headers: { 'X-Xclip-Key': state.vidgen4.customApiKey }
+      });
+      
+      const data = await response.json();
+      
+      if (data.status === 'completed' && data.videoUrl) {
+        state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+        state.vidgen4.generatedVideos.unshift({
+          url: data.videoUrl,
+          model: data.model,
+          createdAt: new Date()
+        });
+        showToast('Video berhasil digenerate!', 'success');
+        render();
+        return;
+      }
+      
+      if (data.status === 'failed') {
+        state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+        state.vidgen4.error = data.error || 'Video generation failed';
+        showToast(data.error || 'Video generation failed', 'error');
+        render();
+        return;
+      }
+      
+      const task = state.vidgen4.tasks.find(t => t.taskId === taskId);
+      if (task && data.progress) {
+        task.progress = data.progress;
+        render();
+      }
+      
+      attempts++;
+      console.log(`[VIDGEN4] Poll attempt ${attempts}/${maxAttempts}, status: ${data.status}`);
+      setTimeout(poll, 5000);
+      
+    } catch (error) {
+      console.error('[VIDGEN4] Poll error:', error);
       attempts++;
       setTimeout(poll, 5000);
     }
