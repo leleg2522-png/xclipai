@@ -6372,7 +6372,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     }
     console.log('[VIDGEN4] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, aspectRatio, duration, resolution } = req.body;
+    const { model, prompt, image, aspectRatio, duration, watermark, thumbnail, isPrivate, style, storyboard } = req.body;
     
     if (!prompt && !image) {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
@@ -6380,47 +6380,51 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     
     // Model config for Apimart.ai
     const modelConfig = {
+      'sora-2': { 
+        apiModel: 'sora-2', 
+        supportedDurations: [10, 15],
+        defaultDuration: 10,
+        resolution: '720p',
+        desc: 'Standard 720p'
+      },
       'sora-2-pro': { 
         apiModel: 'sora-2-pro', 
-        maxDuration: 25, 
-        maxSize: '1024p',
-        supportedAspectRatios: ['16:9', '9:16', '1:1'],
-        supportsImage: true
-      },
-      'veo3.1-fast': { 
-        apiModel: 'veo3.1-fast', 
-        maxDuration: 8, 
-        maxSize: '1080p',
-        supportedAspectRatios: ['16:9', '9:16', '1:1'],
-        supportsImage: true
+        supportedDurations: [10, 15, 25],
+        defaultDuration: 10,
+        resolution: '1024p',
+        desc: 'Pro 1024p'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid' });
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2 atau sora-2-pro' });
     }
     
-    const videoDuration = Math.min(duration || config.maxDuration, config.maxDuration);
-    const videoResolution = model === 'veo3.1-fast' ? (resolution === '720p' ? '720p' : '1080p') : (resolution || '1024p');
+    const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
     const videoAspectRatio = aspectRatio || '16:9';
     
-    console.log(`[VIDGEN4] Generating with Apimart.ai model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
+    console.log(`[VIDGEN4] Generating with Apimart.ai model: ${config.apiModel}, duration: ${videoDuration}s, aspect: ${videoAspectRatio}`);
     
-    // Build Apimart.ai request body (OpenAI-compatible /v1/videos)
+    // Build Apimart.ai request body
     const requestBody = {
       model: config.apiModel,
       prompt: prompt || 'Generate a cinematic video with smooth motion',
-      size: videoResolution,
-      seconds: videoDuration,
+      duration: videoDuration,
       aspect_ratio: videoAspectRatio
     };
+    
+    // Optional playground parameters
+    if (watermark !== undefined) requestBody.watermark = watermark;
+    if (thumbnail !== undefined) requestBody.thumbnail = thumbnail;
+    if (isPrivate !== undefined) requestBody.private = isPrivate;
+    if (style && style !== 'none') requestBody.style = style;
+    if (storyboard !== undefined) requestBody.storyboard = storyboard;
     
     // Add image for image-to-video
     if (image) {
       let imageUrl = image;
       if (image.startsWith('data:')) {
-        // Convert base64 to publicly accessible URL using our server
         const protocol = req.headers['x-forwarded-proto'] || 'https';
         const host = req.headers['x-forwarded-host'] || req.headers.host;
         const baseUrl = `${protocol}://${host}`;
@@ -6428,13 +6432,13 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         imageUrl = imageFile.publicUrl;
         console.log(`[VIDGEN4] Image uploaded: ${imageUrl}`);
       }
-      requestBody.image_url = imageUrl;
+      requestBody.image_urls = [imageUrl];
     }
     
-    console.log(`[VIDGEN4] Request body:`, JSON.stringify({ ...requestBody, image_url: requestBody.image_url ? '[IMAGE]' : undefined }));
+    console.log(`[VIDGEN4] Request body:`, JSON.stringify({ ...requestBody, image_urls: requestBody.image_urls ? ['[IMAGE]'] : undefined }));
     
     const response = await axios.post(
-      'https://api.apimart.ai/v1/videos',
+      'https://api.apimart.ai/v1/videos/generations',
       requestBody,
       {
         headers: {
@@ -6447,7 +6451,11 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     
     console.log(`[VIDGEN4] Apimart.ai response:`, JSON.stringify(response.data));
     
-    const taskId = response.data?.id || response.data?.data?.id || response.data?.task_id;
+    // Parse response: { code: 200, data: [{ status: "submitted", task_id: "..." }] }
+    const taskId = response.data?.data?.[0]?.task_id || 
+                   response.data?.data?.task_id || 
+                   response.data?.task_id || 
+                   response.data?.id;
     
     if (!taskId) {
       console.error('[VIDGEN4] No task ID in response:', response.data);
@@ -6459,7 +6467,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
       INSERT INTO vidgen4_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, metadata)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
     `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt, roomKeyResult.keyName, 
-        JSON.stringify({ resolution: videoResolution, duration: videoDuration, aspectRatio: videoAspectRatio })]);
+        JSON.stringify({ duration: videoDuration, aspectRatio: videoAspectRatio, style: style || null, watermark: !!watermark })]);
     
     // Update request count
     await pool.query(
@@ -6544,12 +6552,17 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         
         console.log(`[VIDGEN4] Status response:`, JSON.stringify(statusResponse.data));
         
-        const data = statusResponse.data;
+        const rawData = statusResponse.data;
+        const data = rawData.data || rawData;
         const status = data.status || data.state;
         
         if (status === 'completed' || status === 'finished' || status === 'success') {
           // Try to get video URL from status response first
-          let videoUrl = data.video_url || data.url || data.output?.url;
+          let videoUrl = data.result?.videos?.[0]?.url || 
+                         data.result?.video_url || 
+                         data.video_url || 
+                         data.url || 
+                         data.output?.url;
           
           // If no direct URL, try /content endpoint
           if (!videoUrl) {

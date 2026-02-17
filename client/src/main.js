@@ -132,10 +132,14 @@ const state = {
   vidgen4: {
     sourceImage: null,
     prompt: '',
-    selectedModel: 'sora-2-pro',
+    selectedModel: 'sora-2',
     aspectRatio: '16:9',
     duration: 10,
-    resolution: '1080p',
+    watermark: false,
+    thumbnail: false,
+    isPrivate: false,
+    style: 'none',
+    storyboard: false,
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -260,7 +264,7 @@ const PERSIST_KEYS = {
   chat: ['selectedModel'],
   vidgen2RoomManager: ['xclipApiKey'],
   vidgen3RoomManager: ['xclipApiKey'],
-  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'customApiKey'],
+  vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'customApiKey'],
   vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
@@ -6462,14 +6466,23 @@ async function pollVidgen2Task(taskId) {
 }
 
 function renderVidgen4Page() {
-  const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
+  const isSora2 = state.vidgen4.selectedModel === 'sora-2';
   const models = [
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video hingga 25 detik, 1024p', badge: 'PRO', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Google Veo, 8 detik, max 1080p', badge: 'FAST', icon: '⚡' }
+    { id: 'sora-2', name: 'Sora 2', desc: 'Video hingga 15 detik, 720p', badge: 'STD', icon: '🎬' },
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video hingga 25 detik, 1024p', badge: 'PRO', icon: '🌟' }
   ];
   
-  const durationOptions = isVeo ? [8] : [5, 10, 15, 20, 25];
-  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['480p', '720p', '1024p'];
+  const durationOptions = isSora2 ? [10, 15] : [10, 15, 25];
+  
+  const styleOptions = [
+    { value: 'none', label: 'None' },
+    { value: 'thanksgiving', label: 'Thanksgiving' },
+    { value: 'comic', label: 'Comic' },
+    { value: 'news', label: 'News' },
+    { value: 'selfie', label: 'Selfie' },
+    { value: 'nostalgic', label: 'Nostalgic' },
+    { value: 'anime', label: 'Anime' }
+  ];
   
   return `
     <div class="container">
@@ -6483,7 +6496,7 @@ function renderVidgen4Page() {
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen4</span> AI Video
         </h1>
-        <p class="hero-subtitle">Generate video dengan Sora 2 Pro & Veo 3.1 Fast via Apimart.ai</p>
+        <p class="hero-subtitle">Generate video dengan Sora 2 & Sora 2 Pro via Apimart.ai</p>
       </div>
 
       <div class="xmaker-layout">
@@ -6497,7 +6510,7 @@ function renderVidgen4Page() {
                   <polyline points="21 15 16 10 5 21"/>
                 </svg>
               </div>
-              <h2 class="card-title">Upload Gambar</h2>
+              <h2 class="card-title">Reference Image</h2>
             </div>
             <div class="card-body">
               <div class="reference-upload ${state.vidgen4.sourceImage ? 'has-image' : ''}" id="vidgen4UploadZone">
@@ -6574,7 +6587,7 @@ function renderVidgen4Page() {
               </div>
 
               <div class="setting-group">
-                <label class="setting-label">Durasi (detik)</label>
+                <label class="setting-label">Duration</label>
                 <div class="aspect-ratio-selector">
                   ${durationOptions.map(d => `
                     <button class="aspect-btn ${state.vidgen4.duration === d ? 'active' : ''}" data-vidgen4-duration="${d}">
@@ -6585,13 +6598,53 @@ function renderVidgen4Page() {
               </div>
 
               <div class="setting-group">
-                <label class="setting-label">Resolusi</label>
-                <div class="aspect-ratio-selector">
-                  ${resolutionOptions.map(r => `
-                    <button class="aspect-btn ${state.vidgen4.resolution === r ? 'active' : ''}" data-vidgen4-resolution="${r}">
-                      <span>${r}</span>
-                    </button>
+                <label class="setting-label">Video Style</label>
+                <select class="form-select" id="vidgen4StyleSelect">
+                  ${styleOptions.map(s => `
+                    <option value="${s.value}" ${state.vidgen4.style === s.value ? 'selected' : ''}>${s.label}</option>
                   `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Advanced Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Watermark</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Watermark" ${state.vidgen4.watermark ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.watermark ? 'active' : ''}" data-vidgen4-toggle="watermark" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.watermark ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.watermark ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Video Thumbnail</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Thumbnail" ${state.vidgen4.thumbnail ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.thumbnail ? 'active' : ''}" data-vidgen4-toggle="thumbnail" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.thumbnail ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.thumbnail ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Private Mode</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Private" ${state.vidgen4.isPrivate ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.isPrivate ? 'active' : ''}" data-vidgen4-toggle="isPrivate" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.isPrivate ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.isPrivate ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Storyboard</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Storyboard" ${state.vidgen4.storyboard ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.storyboard ? 'active' : ''}" data-vidgen4-toggle="storyboard" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.storyboard ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.storyboard ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -6821,6 +6874,21 @@ function attachVidgen4EventListeners() {
       saveUserInputs('vidgen4');
     });
   }
+
+  const vidgen4StyleSelect = document.getElementById('vidgen4StyleSelect');
+  if (vidgen4StyleSelect) {
+    vidgen4StyleSelect.addEventListener('change', (e) => {
+      state.vidgen4.style = e.target.value;
+    });
+  }
+
+  document.querySelectorAll('[data-vidgen4-toggle]').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const field = toggle.getAttribute('data-vidgen4-toggle');
+      state.vidgen4[field] = !state.vidgen4[field];
+      render();
+    });
+  });
   
   if (!window._vidgen4DelegationAttached) {
     window._vidgen4DelegationAttached = true;
@@ -6830,13 +6898,9 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        if (newModel === 'veo3.1-fast') {
-          state.vidgen4.duration = 8;
-          if (state.vidgen4.resolution !== '720p' && state.vidgen4.resolution !== '1080p') {
-            state.vidgen4.resolution = '1080p';
-          }
-        } else {
-          if (state.vidgen4.duration === 8) state.vidgen4.duration = 10;
+        const validDurations = newModel === 'sora-2' ? [10, 15] : [10, 15, 25];
+        if (!validDurations.includes(state.vidgen4.duration)) {
+          state.vidgen4.duration = 10;
         }
         saveUserInputs('vidgen4');
         render();
@@ -6859,13 +6923,6 @@ function attachVidgen4EventListeners() {
         return;
       }
       
-      const resBtn = e.target.closest('[data-vidgen4-resolution]');
-      if (resBtn && state.currentPage === 'vidgen4') {
-        state.vidgen4.resolution = resBtn.dataset.vidgen4Resolution;
-        saveUserInputs('vidgen4');
-        render();
-        return;
-      }
     });
   }
   
@@ -6944,7 +7001,11 @@ async function generateVidgen4Video() {
         image: state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
         aspectRatio: state.vidgen4.aspectRatio,
         duration: state.vidgen4.duration,
-        resolution: state.vidgen4.resolution,
+        watermark: state.vidgen4.watermark,
+        thumbnail: state.vidgen4.thumbnail,
+        isPrivate: state.vidgen4.isPrivate,
+        style: state.vidgen4.style,
+        storyboard: state.vidgen4.storyboard,
         roomId: state.vidgen4.selectedRoom
       })
     });
