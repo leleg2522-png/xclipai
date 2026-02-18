@@ -8108,11 +8108,20 @@ async function initDatabase() {
 }
 
 initDatabase().then(async () => {
-  await ensureProxiesInitialized();
+  try {
+    await ensureProxiesInitialized();
+  } catch (e) {
+    console.error('Proxy init error (non-fatal):', e.message);
+  }
   setInterval(cleanupExpiredSubscriptions, 60000);
   cleanupExpiredSubscriptions();
   setInterval(cleanupInactiveUsers, 60000);
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Xclip server running on http://0.0.0.0:${PORT}`);
+  });
+}).catch(err => {
+  console.error('Database init failed:', err.message);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Xclip server running on http://0.0.0.0:${PORT} (without database)`);
   });
 });
