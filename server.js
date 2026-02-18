@@ -7748,33 +7748,33 @@ const XIMAGE2_MODELS = {
   'doubao-seedance-4-5': { 
     name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true,
     sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
-    resolutions: ['2K', '4K'],
+    resolutions: ['2K', '4K'], defaultResolution: '2K',
     hasWatermark: true, hasSequential: true,
-    desc: 'ByteDance Seedream 4.5 latest'
+    desc: 'ByteDance Seedream 4.5 latest (no 1K support)'
   },
   'flux-kontext-pro': { 
     name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], maxN: 1, maxRefs: 1,
-    hasSafetyTolerance: true, hasPromptUpsampling: true,
-    desc: 'FLUX Kontext Pro with safety control'
+    sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
+    hasSafetyTolerance: true, hasPromptUpsampling: true, noBase64: true,
+    desc: 'FLUX Kontext Pro - only public image URLs'
   },
   'flux-kontext-max': { 
     name: 'Flux Kontext Max', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], maxN: 1, maxRefs: 1,
-    hasSafetyTolerance: true, hasPromptUpsampling: true,
-    desc: 'FLUX Kontext Max highest quality'
+    sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
+    hasSafetyTolerance: true, hasPromptUpsampling: true, noBase64: true,
+    desc: 'FLUX Kontext Max highest quality - only public URLs'
   },
   'flux-2-flex': { 
     name: 'Flux 2.0 Flex', provider: 'Black Forest Labs', supportsI2I: true,
     sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
-    resolutions: ['1K', '2K'],
-    desc: 'FLUX 2.0 Flex flexible generation'
+    resolutions: ['1K', '2K'], noBase64: true,
+    desc: 'FLUX 2.0 Flex - only public image URLs'
   },
   'flux-2-pro': { 
     name: 'Flux 2.0 Pro', provider: 'Black Forest Labs', supportsI2I: true,
     sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
-    resolutions: ['1K', '2K'],
-    desc: 'FLUX 2.0 Pro higher quality'
+    resolutions: ['1K', '2K'], noBase64: true,
+    desc: 'FLUX 2.0 Pro higher quality - only public URLs'
   }
 };
 
@@ -7958,8 +7958,9 @@ app.post('/api/ximage2/generate', async (req, res) => {
       });
     }
     
-    const { model, prompt, images, size, n, resolution, 
+    const { model, prompt, images, size, resolution, 
             watermark, sequentialGeneration, safetyTolerance, inputMode, promptUpsampling } = req.body;
+    const n = req.body.numberOfImages || req.body.n || 1;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -8001,7 +8002,7 @@ app.post('/api/ximage2/generate', async (req, res) => {
     };
     
     if (size) requestBody.size = size;
-    if (n && n > 1 && modelConfig.maxN > 1) requestBody.n = Math.min(n, modelConfig.maxN);
+    requestBody.n = Math.min(parseInt(n) || 1, modelConfig.maxN || 1);
     if (imageUrls.length > 0) requestBody.image_urls = imageUrls.slice(0, modelConfig.maxRefs);
     
     if (modelConfig.resolutions && resolution) {
@@ -8099,9 +8100,12 @@ app.post('/api/ximage2/generate', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[XIMAGE2] Generate error:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: error.response?.data?.error?.message || error.response?.data?.message || 'Gagal generate image' 
+    const errData = error.response?.data;
+    const errMsg = errData?.error?.message || errData?.message || errData?.error || error.message;
+    console.error('[XIMAGE2] Generate error:', JSON.stringify(errData || error.message));
+    console.error('[XIMAGE2] Status:', error.response?.status, 'Model:', req.body?.model);
+    res.status(error.response?.status || 500).json({ 
+      error: typeof errMsg === 'string' ? errMsg : 'Gagal generate image'
     });
   }
 });
