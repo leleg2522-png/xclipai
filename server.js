@@ -6667,12 +6667,14 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         const status = data.status || data.state;
         
         if (status === 'completed' || status === 'finished' || status === 'success') {
-          // Official API response: { data: { result: { videos: [{ url: "..." }] } } }
-          let videoUrl = data.result?.videos?.[0]?.url || 
+          let videoUrl = data.result?.video?.url ||
+                         data.result?.videos?.[0]?.url ||
                          data.result?.video_url || 
                          data.video_url || 
                          data.url || 
                          data.output?.url;
+          
+          if (Array.isArray(videoUrl)) videoUrl = videoUrl[0];
           
           if (videoUrl) {
             console.log(`[VIDGEN4] Video URL found: ${videoUrl}`);
