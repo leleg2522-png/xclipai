@@ -6498,7 +6498,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           requestBody.generation_type = 'frame';
         }
       } else if (generationType === 'reference') {
-        // Reference image mode
+        // Reference image mode - enhance prompt for character consistency
         const refImg = referenceImage || image;
         if (refImg) {
           let refUrl = refImg;
@@ -6509,6 +6509,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           }
           requestBody.image_urls = [refUrl];
           requestBody.generation_type = 'reference';
+          
+          const consistencyBoost = 'Maintain exact character appearance, facial features, clothing, hair style and color from the reference image throughout the entire video. Keep the character identical to the reference. ';
+          requestBody.prompt = consistencyBoost + requestBody.prompt;
         }
       }
     }
