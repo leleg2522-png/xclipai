@@ -66,6 +66,25 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll: `{ code: 200, data: { status, result: { videos } } }`
   - Video history persistence in database
   - 5-minute cooldown timer between generations
+- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 9 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
+  - 9 AI models:
+    - GPT-4o Image (OpenAI, sizes: 1024x1024/1536x1024/1024x1536/auto, n: 1-4)
+    - Nano Banana (Google Gemini 2.5 Flash, sizes: 1:1/16:9/9:16/4:3/3:4)
+    - Nano Banana 2 (Google Gemini 3 Pro, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1K/2K/4K, max 14 refs)
+    - Seedream 4.0 (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, n: 1-4, watermark, sequential_generation)
+    - Seedream 4.5 (ByteDance, same as 4.0 but latest version)
+    - Flux Kontext Pro (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, safety_tolerance: 0-6, input_mode: auto/image/text, max 4 refs)
+    - Flux Kontext Max (Black Forest Labs, same as Pro but highest quality)
+    - Flux 2.0 Flex (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, resolution: 1K/2K)
+    - Flux 2.0 Pro (Black Forest Labs, same as Flex plus prompt_upsampling)
+  - Text-to-image and image-to-image modes with model-specific reference image limits
+  - Per-model playground settings (watermark, sequential, safety tolerance, input mode, prompt upsampling)
+  - Database tables: ximage2_rooms, ximage2_history
+  - Room assignment via ximage2_room_id in subscriptions
+  - Apimart.ai API: POST /v1/images/generations, GET /v1/tasks/{task_id}
+  - Supports both synchronous (direct URL) and asynchronous (task polling) responses
+  - 2-minute cooldown timer between generations
+  - Image history persistence in database
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Motion rooms have their own set of Freepik API keys (MOTION_ROOM1_KEY_1/2/3, etc.).
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
@@ -84,7 +103,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - Freepik API (for image-to-video generation and motion control with Kling models)
     - GeminiGen.AI API (for X Maker image generation with Nano Banana and Imagen 4 models)
     - Poyo.ai API (for Vidgen2 video generation with Sora 2, Sora 2 Pro, Hailuo models and X Image generation with GPT Image, Nano Banana, Seedream, FLUX, Z-Image, Grok models)
-    - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models)
+    - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
     - FFmpeg (for video processing)

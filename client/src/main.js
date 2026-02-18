@@ -213,6 +213,35 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  ximage2RoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
+  ximage2: {
+    sourceImages: [],
+    prompt: '',
+    selectedModel: 'gpt-4o-image',
+    size: '1024x1024',
+    mode: 'text-to-image',
+    isGenerating: false,
+    tasks: [],
+    generatedImages: [],
+    error: null,
+    customApiKey: '',
+    _historyLoaded: false,
+    resolution: '1K',
+    numberOfImages: 1,
+    watermark: false,
+    sequentialGeneration: false,
+    safetyTolerance: 2,
+    inputMode: 'auto',
+    promptUpsampling: false,
+    cooldownEnd: 0
+  },
   pricing: {
     plans: [],
     isLoading: false,
@@ -287,6 +316,8 @@ const PERSIST_KEYS = {
   vidgen4RoomManager: ['xclipApiKey'],
   xmakerRoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
+  ximage2: ['prompt', 'selectedModel', 'size', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'watermark', 'sequentialGeneration', 'safetyTolerance', 'inputMode', 'promptUpsampling'],
+  ximage2RoomManager: ['xclipApiKey'],
   motionRoomManager: ['xclipApiKey']
 };
 
@@ -1251,6 +1282,81 @@ async function joinXImageRoom(roomId) {
     showToast('Gagal bergabung ke room', 'error');
   } finally {
     state.ximageRoomManager.isLoading = false;
+    render();
+  }
+}
+
+// ==================== X IMAGE2 ROOM MANAGER FUNCTIONS ====================
+
+async function loadXImage2Rooms() {
+  try {
+    state.ximage2RoomManager.isLoading = true;
+    const response = await fetch(`${API_URL}/api/ximage2/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.ximage2RoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Load ximage2 rooms error:', error);
+    state.ximage2RoomManager.rooms = [];
+  } finally {
+    state.ximage2RoomManager.isLoading = false;
+    render();
+  }
+}
+
+async function loadXImage2SubscriptionStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/ximage2/subscription-status`, { credentials: 'include' });
+    if (!response.ok) {
+      state.ximage2RoomManager.hasSubscription = false;
+      state.ximage2RoomManager.subscription = null;
+      return;
+    }
+    const data = await response.json();
+    state.ximage2RoomManager.hasSubscription = data.hasSubscription || false;
+    state.ximage2RoomManager.subscription = data.subscription || null;
+  } catch (error) {
+    console.error('Load ximage2 subscription error:', error);
+    state.ximage2RoomManager.hasSubscription = false;
+    state.ximage2RoomManager.subscription = null;
+  }
+}
+
+async function joinXImage2Room(roomId) {
+  const apiKey = state.ximage2RoomManager.xclipApiKey;
+  
+  if (!apiKey) {
+    showToast('Masukkan Xclip API key terlebih dahulu', 'error');
+    return;
+  }
+  
+  try {
+    state.ximage2RoomManager.isLoading = true;
+    render();
+    
+    const response = await fetch(`${API_URL}/api/ximage2/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ xclipApiKey: apiKey, roomId: roomId })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(data.message || 'Berhasil bergabung ke X Image2 room!', 'success');
+      state.ximage2RoomManager.showRoomModal = false;
+      state.ximage2.customApiKey = apiKey;
+      saveUserInputs('ximage2');
+      await loadXImage2SubscriptionStatus();
+      await loadXImage2Rooms();
+    } else {
+      showToast(data.error || 'Gagal bergabung ke room', 'error');
+    }
+  } catch (error) {
+    console.error('Join ximage2 room error:', error);
+    showToast('Gagal bergabung ke room', 'error');
+  } finally {
+    state.ximage2RoomManager.isLoading = false;
     render();
   }
 }
@@ -2307,6 +2413,16 @@ function renderNavMenu() {
       </svg>
       X Image
     </button>
+    <button class="nav-btn ${state.currentPage === 'ximage2' ? 'active' : ''}" data-page="ximage2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+        <path d="M16 3l5 5" stroke-width="3"/>
+        <circle cx="18" cy="18" r="3" fill="currentColor"/>
+      </svg>
+      X Image2
+    </button>
     <button class="nav-btn ${state.currentPage === 'xmaker' ? 'active' : ''}" data-page="xmaker">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -2435,6 +2551,7 @@ function renderMainContent() {
       state.currentPage === 'vidgen3' ? renderVidgen3Page() :
       state.currentPage === 'vidgen4' ? renderVidgen4Page() :
       state.currentPage === 'ximage' ? renderXImagePage() :
+      state.currentPage === 'ximage2' ? renderXImage2Page() :
       state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'admin' ? '' :
@@ -2448,6 +2565,7 @@ function renderModals() {
     ${renderRoomModal()}
     ${renderMotionRoomModal()}
     ${renderXImageRoomModal()}
+    ${renderXImage2RoomModal()}
     ${renderXMakerRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
@@ -2581,6 +2699,77 @@ function renderXImageRoomModal() {
                     <span class="status-badge open">OPEN</span>
                     ${(room.max_users - (room.current_users || 0)) > 0 ? `
                       <button class="btn btn-sm btn-primary join-ximage-room-btn" data-room-id="${room.id}">
+                        Join
+                      </button>
+                    ` : `
+                      <span class="status-badge full">FULL</span>
+                    `}
+                  ` : `
+                    <span class="status-badge maintenance">MAINTENANCE</span>
+                  `}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderXImage2RoomModal() {
+  if (!state.ximage2RoomManager.showRoomModal) return '';
+  
+  return `
+    <div class="modal-overlay" id="ximage2RoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih X Image2 Room</h2>
+          <button class="modal-close" id="closeXimage2RoomModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section" style="margin-bottom: 20px;">
+            <label class="setting-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Xclip API Key
+            </label>
+            <input 
+              type="password" 
+              id="ximage2RoomApiKeyInput" 
+              class="form-input"
+              placeholder="Masukkan Xclip API key Anda..."
+              value="${state.ximage2RoomManager.xclipApiKey}"
+            >
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses X Image2 Room</p>
+          </div>
+          
+          <div class="rooms-list">
+            ${state.ximage2RoomManager.isLoading ? `
+              <div class="loading-rooms">
+                <div class="spinner"></div>
+                <p>Memuat rooms...</p>
+              </div>
+            ` : state.ximage2RoomManager.rooms.length === 0 ? `
+              <div class="empty-rooms">
+                <p>Tidak ada X Image2 room tersedia</p>
+              </div>
+            ` : state.ximage2RoomManager.rooms.map(room => `
+              <div class="room-item ${room.status !== 'OPEN' ? 'maintenance' : ''}" data-ximage2-room-id="${room.id}">
+                <div class="room-info">
+                  <div class="room-name">${room.name}</div>
+                  <div class="room-stats">
+                    <span class="room-users">${room.current_users || 0}/${room.max_users} users</span>
+                    <span class="room-slots">${(room.max_users - (room.current_users || 0))} slot tersedia</span>
+                  </div>
+                </div>
+                <div class="room-status">
+                  ${room.status === 'OPEN' ? `
+                    ${(room.max_users - (room.current_users || 0)) > 0 ? `
+                      <span class="status-badge open">OPEN</span>
+                      <button class="btn btn-sm btn-primary join-ximage2-room-btn" data-room-id="${room.id}">
                         Join
                       </button>
                     ` : `
@@ -3833,6 +4022,253 @@ function renderXImageGallery() {
     html += '</div></div>';
     return html;
   } else if (state.ximage.tasks.length === 0) {
+    return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div><h3>Belum Ada Gambar</h3><p>Masukkan prompt dan klik Generate untuk membuat gambar AI</p></div>';
+  }
+  return '';
+}
+
+function renderXImage2Page() {
+  var ximage2Models = [
+    { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxN: 4, sizes: ['1024x1024', '1536x1024', '1024x1536', 'auto'], group: 'openai' },
+    { id: 'nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'google' },
+    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: '4K', hasN: true, maxN: 4, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 14, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'google' },
+    { id: 'seedream-4.0', name: 'Seedream 4.0', icon: 'bytedance', supportsI2I: true, hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasWatermark: true, hasSequential: true, group: 'bytedance' },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasWatermark: true, hasSequential: true, group: 'bytedance' },
+    { id: 'flux-kontext-pro', name: 'FLUX Kontext Pro', icon: 'flux', supportsI2I: true, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasSafetyTolerance: true, hasInputMode: true, maxRefs: 4, group: 'flux' },
+    { id: 'flux-kontext-max', name: 'FLUX Kontext Max', icon: 'flux', supportsI2I: true, badge: 'MAX', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasSafetyTolerance: true, hasInputMode: true, maxRefs: 4, group: 'flux' },
+    { id: 'flux-2.0-flex', name: 'FLUX 2.0 Flex', icon: 'flux', supportsI2I: true, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasResolution: true, resolutions: ['1K', '2K'], group: 'flux' },
+    { id: 'flux-2.0-pro', name: 'FLUX 2.0 Pro', icon: 'flux', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], hasResolution: true, resolutions: ['1K', '2K'], hasPromptUpsampling: true, group: 'flux' }
+  ];
+
+  var currentModelConfig = ximage2Models.find(function(m) { return m.id === state.ximage2.selectedModel; }) || ximage2Models[0];
+  var sizeOptions = currentModelConfig.sizes || ['1024x1024'];
+  var maxRefs = currentModelConfig.maxRefs || 1;
+
+  var html = '<div class="container">';
+  html += '<div class="hero ximage-hero">';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator V2</div>';
+  html += '<h1 class="gradient-title">X Image2</h1>';
+  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan model AI generasi terbaru</p>';
+  html += '</div>';
+
+  html += '<div class="ximage-content">';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Mode</h3>';
+  html += '<div class="mode-selector">';
+  html += '<button class="mode-btn ' + (state.ximage2.mode === 'text-to-image' ? 'active' : '') + '" data-ximage2-mode="text-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Text to Image</button>';
+  html += '<button class="mode-btn ' + (state.ximage2.mode === 'image-to-image' ? 'active' : '') + '" data-ximage2-mode="image-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Image to Image</button>';
+  html += '</div></div>';
+
+  if (state.ximage2.mode === 'image-to-image') {
+    var numUploadZones = Math.min(maxRefs, 4);
+    for (var zi = 0; zi < numUploadZones; zi++) {
+      var hasImg = state.ximage2.sourceImages[zi];
+      html += '<div class="section-card">';
+      html += '<h3 class="section-title">Reference Image ' + (numUploadZones > 1 ? (zi + 1) : '') + (zi > 0 ? ' <span style="font-size:12px;color:#888;font-weight:normal">(opsional)</span>' : '') + '</h3>';
+      html += '<div class="reference-upload ' + (hasImg ? 'has-image' : '') + '" id="ximage2UploadZone' + zi + '">';
+      if (hasImg) {
+        html += '<img src="' + hasImg.data + '" alt="Reference" class="preview-image"/>';
+        html += '<button class="remove-image-btn ximage2-remove-ref" data-ref-index="' + zi + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+      } else {
+        html += '<div class="upload-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p>Klik atau drop gambar referensi' + (numUploadZones > 1 ? ' ke-' + (zi + 1) : '') + '</p></div>';
+      }
+      html += '<input type="file" id="ximage2FileInput' + zi + '" accept="image/*" style="display:none"/>';
+      html += '</div></div>';
+    }
+  }
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Pilih Model AI</h3>';
+  html += '<div class="ximage-models-grid">';
+  ximage2Models.forEach(function(model) {
+    var isDisabled = state.ximage2.mode === 'image-to-image' && !model.supportsI2I;
+    var iconSvg = getModelIcon(model.icon);
+    html += '<div class="ximage-model-card ' + (state.ximage2.selectedModel === model.id ? 'active' : '') + ' ' + (isDisabled ? 'disabled' : '') + '" data-ximage2-model="' + model.id + '"' + (isDisabled ? ' title="Tidak support Image-to-Image"' : '') + '>';
+    html += '<div class="ximage-model-icon">' + iconSvg + '</div>';
+    html += '<div class="ximage-model-name">' + model.name + '</div>';
+    if (model.badge) html += '<span class="ximage-model-badge badge-' + model.badge.toLowerCase() + '">' + model.badge + '</span>';
+    if (isDisabled) html += '<div class="ximage-model-disabled-text">Text Only</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Prompt</h3>';
+  html += '<textarea id="ximage2Prompt" class="prompt-input" placeholder="' + (state.ximage2.mode === 'image-to-image' ? 'Deskripsikan perubahan yang diinginkan...' : 'Deskripsikan gambar yang ingin dibuat...') + '" rows="4">' + state.ximage2.prompt + '</textarea>';
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Size</h3>';
+  html += '<div class="aspect-buttons">';
+  sizeOptions.forEach(function(size) {
+    html += '<button class="aspect-btn ' + (state.ximage2.size === size ? 'active' : '') + '" data-ximage2-size="' + size + '">' + size + '</button>';
+  });
+  html += '</div></div>';
+
+  if (currentModelConfig.hasResolution) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Resolution</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.resolutions.forEach(function(res) {
+      html += '<button class="aspect-btn ' + (state.ximage2.resolution === res ? 'active' : '') + '" data-ximage2-resolution="' + res + '">' + res + '</button>';
+    });
+    html += '</div></div>';
+  }
+
+  if (currentModelConfig.hasN) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Number of Images</h3>';
+    html += '<div class="number-input-wrapper">';
+    html += '<button class="num-btn" data-ximage2-num-action="decrease" ' + (state.ximage2.numberOfImages <= 1 ? 'disabled' : '') + '>-</button>';
+    html += '<span class="num-value">' + state.ximage2.numberOfImages + '</span>';
+    html += '<button class="num-btn" data-ximage2-num-action="increase" ' + (state.ximage2.numberOfImages >= (currentModelConfig.maxN || 4) ? 'disabled' : '') + '>+</button>';
+    html += '</div></div>';
+  }
+
+  if (currentModelConfig.hasWatermark || currentModelConfig.hasSequential || currentModelConfig.hasSafetyTolerance || currentModelConfig.hasInputMode || currentModelConfig.hasPromptUpsampling) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Playground Settings</h3>';
+
+    if (currentModelConfig.hasWatermark) {
+      html += '<div class="setting-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
+      html += '<span class="setting-label">Watermark</span>';
+      html += '<label class="toggle-switch"><input type="checkbox" id="ximage2Watermark" ' + (state.ximage2.watermark ? 'checked' : '') + '><span class="toggle-slider"></span></label>';
+      html += '</div>';
+    }
+
+    if (currentModelConfig.hasSequential) {
+      html += '<div class="setting-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
+      html += '<span class="setting-label">Sequential Generation</span>';
+      html += '<label class="toggle-switch"><input type="checkbox" id="ximage2Sequential" ' + (state.ximage2.sequentialGeneration ? 'checked' : '') + '><span class="toggle-slider"></span></label>';
+      html += '</div>';
+    }
+
+    if (currentModelConfig.hasSafetyTolerance) {
+      html += '<div class="setting-row" style="margin-bottom:12px;">';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><span class="setting-label">Safety Tolerance</span><span class="setting-value">' + state.ximage2.safetyTolerance + '</span></div>';
+      html += '<input type="range" id="ximage2SafetyTolerance" min="0" max="6" value="' + state.ximage2.safetyTolerance + '" class="range-slider" style="width:100%;">';
+      html += '</div>';
+    }
+
+    if (currentModelConfig.hasInputMode) {
+      html += '<div class="setting-row" style="margin-bottom:12px;">';
+      html += '<span class="setting-label" style="margin-bottom:6px;display:block;">Input Mode</span>';
+      html += '<div class="aspect-buttons">';
+      ['auto', 'image', 'text'].forEach(function(mode) {
+        html += '<button class="aspect-btn ' + (state.ximage2.inputMode === mode ? 'active' : '') + '" data-ximage2-input-mode="' + mode + '">' + mode.charAt(0).toUpperCase() + mode.slice(1) + '</button>';
+      });
+      html += '</div></div>';
+    }
+
+    if (currentModelConfig.hasPromptUpsampling) {
+      html += '<div class="setting-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
+      html += '<span class="setting-label">Prompt Upsampling</span>';
+      html += '<label class="toggle-switch"><input type="checkbox" id="ximage2PromptUpsampling" ' + (state.ximage2.promptUpsampling ? 'checked' : '') + '><span class="toggle-slider"></span></label>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">X Image2 Room</h3>';
+  if (state.ximage2RoomManager.subscription && state.ximage2RoomManager.subscription.roomName) {
+    html += '<div class="room-status-card active">';
+    html += '<div class="room-status-info">';
+    html += '<span class="room-status-label">Room Aktif:</span>';
+    html += '<span class="room-status-name">' + state.ximage2RoomManager.subscription.roomName + '</span>';
+    html += '</div>';
+    html += '<button class="btn btn-sm btn-outline" id="changeXimage2Room">Ganti Room</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="room-status-card">';
+    html += '<p class="room-status-text">Belum bergabung ke room. Pilih room untuk menggunakan X Image2.</p>';
+    html += '<button class="btn btn-primary" id="openXimage2RoomModal">Pilih Room</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Xclip API Key</h3>';
+  html += '<input type="password" id="ximage2ApiKey" class="api-key-input" placeholder="Masukkan Xclip API Key" value="' + state.ximage2.customApiKey + '"/>';
+  html += '</div>';
+
+  var now = Date.now();
+  var cooldownRemaining = Math.max(0, Math.ceil((state.ximage2.cooldownEnd - now) / 1000));
+  var btnDisabled = state.ximage2.isGenerating || (state.ximage2.mode === 'image-to-image' && state.ximage2.sourceImages.length === 0) || state.ximage2.tasks.length >= 3 || cooldownRemaining > 0;
+  html += '<button class="btn btn-primary btn-lg btn-full" id="ximage2GenerateBtn" ' + (btnDisabled ? 'disabled' : '') + '>';
+  if (state.ximage2.isGenerating) {
+    html += '<span class="loading-spinner"></span><span>Generating...</span>';
+  } else if (cooldownRemaining > 0) {
+    html += '<span>Cooldown ' + cooldownRemaining + 's</span>';
+  } else {
+    html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+    html += '<span>Generate Image' + (state.ximage2.tasks.length > 0 ? ' (' + state.ximage2.tasks.length + '/3)' : '') + '</span>';
+  }
+  html += '</button>';
+
+  if (state.ximage2.error) {
+    html += '<div class="error-message">' + state.ximage2.error + '</div>';
+  }
+
+  html += '<div class="ximage-results">';
+  html += renderXImage2Tasks();
+  html += renderXImage2Gallery();
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImage2Tasks() {
+  if (state.ximage2.tasks.length === 0) return '';
+
+  var html = '<div class="tasks-section"><h3>Sedang Diproses</h3><div class="tasks-list">';
+
+  state.ximage2.tasks.forEach(function(task) {
+    var elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    var minutes = Math.floor(elapsed / 60);
+    var seconds = elapsed % 60;
+
+    html += '<div class="task-card">';
+    html += '<div class="task-info"><span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + minutes + ':' + seconds.toString().padStart(2, '0') + '</span></div>';
+    html += '<div class="task-progress"><div class="progress-bar"><div class="progress-fill" style="width: ' + (task.progress || 30) + '%"></div></div>';
+    html += '<span class="task-status">' + (task.status || 'Processing...') + '</span></div></div>';
+  });
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImage2Gallery() {
+  if (state.ximage2.generatedImages.length > 0) {
+    var html = '<div class="gallery-section">';
+    html += '<div class="gallery-header">Gambar yang Dihasilkan (' + state.ximage2.generatedImages.length + ')</div>';
+    html += '<div class="images-grid">';
+
+    state.ximage2.generatedImages.forEach(function(image, index) {
+      html += '<div class="image-card">';
+      html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
+      html += '<div class="image-card-footer">';
+      html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
+      html += '<div style="display:flex;gap:4px;">';
+      html += '<button class="btn btn-sm btn-secondary ximage2-download-btn" data-url="' + encodeURIComponent(image.url) + '" data-filename="ximage2-' + index + '.png">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      html += ' Download</button>';
+      html += '<button class="btn btn-sm btn-danger ximage2-delete-btn" data-index="' + index + '">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+      html += '</button>';
+      html += '</div>';
+      html += '</div></div>';
+    });
+
+    html += '</div></div>';
+    return html;
+  } else if (state.ximage2.tasks.length === 0) {
     return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div><h3>Belum Ada Gambar</h3><p>Masukkan prompt dan klik Generate untuk membuat gambar AI</p></div>';
   }
   return '';
@@ -5552,6 +5988,8 @@ function attachEventListeners() {
     attachVidgen3EventListeners();
   } else if (state.currentPage === 'ximage') {
     attachXImageEventListeners();
+  } else if (state.currentPage === 'ximage2') {
+    attachXImage2EventListeners();
   } else if (state.currentPage === 'xmaker') {
     attachXMakerEventListeners();
   } else if (state.currentPage === 'motion') {
@@ -8267,6 +8705,469 @@ async function loadXImageHistory() {
     state.ximage._historyLoaded = true;
   } catch (error) {
     console.error('Failed to load X Image history:', error);
+  }
+}
+
+function attachXImage2EventListeners() {
+  console.log('[XIMAGE2] attachXImage2EventListeners called');
+
+  if (state.ximage2.generatedImages.length === 0 && !state.ximage2._historyLoaded) {
+    loadXImage2History().then(function() { render(); });
+  }
+
+  if (!state.ximage2RoomManager._statusLoaded) {
+    state.ximage2RoomManager._statusLoaded = true;
+    loadXImage2SubscriptionStatus().then(function() { render(); });
+  }
+
+  var maxRefSlots = 4;
+  for (var zi = 0; zi < maxRefSlots; zi++) {
+    (function(idx) {
+      var uploadZone = document.getElementById('ximage2UploadZone' + idx);
+      var imageInput = document.getElementById('ximage2FileInput' + idx);
+      if (uploadZone && imageInput) {
+        uploadZone.addEventListener('click', function() { imageInput.click(); });
+        uploadZone.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          uploadZone.classList.add('drag-over');
+        });
+        uploadZone.addEventListener('dragleave', function() {
+          uploadZone.classList.remove('drag-over');
+        });
+        uploadZone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          uploadZone.classList.remove('drag-over');
+          if (e.dataTransfer.files.length > 0) {
+            handleXImage2Upload({ target: { files: e.dataTransfer.files } }, idx);
+          }
+        });
+        imageInput.addEventListener('change', function(e) {
+          handleXImage2Upload(e, idx);
+        });
+      }
+    })(zi);
+  }
+
+  document.querySelectorAll('.ximage2-remove-ref').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var idx = parseInt(btn.dataset.refIndex);
+      state.ximage2.sourceImages.splice(idx, 1);
+      render();
+    });
+  });
+
+  var generateBtn = document.getElementById('ximage2GenerateBtn');
+  var promptInput = document.getElementById('ximage2Prompt');
+  var apiKeyInput = document.getElementById('ximage2ApiKey');
+
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateXImage2);
+  }
+
+  if (promptInput) {
+    promptInput.addEventListener('input', function(e) {
+      state.ximage2.prompt = e.target.value;
+      saveUserInputs('ximage2');
+    });
+  }
+
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', function(e) {
+      state.ximage2.customApiKey = e.target.value;
+      saveUserInputs('ximage2');
+    });
+  }
+
+  var watermarkToggle = document.getElementById('ximage2Watermark');
+  if (watermarkToggle) {
+    watermarkToggle.addEventListener('change', function(e) {
+      state.ximage2.watermark = e.target.checked;
+      saveUserInputs('ximage2');
+    });
+  }
+
+  var sequentialToggle = document.getElementById('ximage2Sequential');
+  if (sequentialToggle) {
+    sequentialToggle.addEventListener('change', function(e) {
+      state.ximage2.sequentialGeneration = e.target.checked;
+      saveUserInputs('ximage2');
+    });
+  }
+
+  var safetySlider = document.getElementById('ximage2SafetyTolerance');
+  if (safetySlider) {
+    safetySlider.addEventListener('input', function(e) {
+      state.ximage2.safetyTolerance = parseInt(e.target.value);
+      saveUserInputs('ximage2');
+      var valueDisplay = safetySlider.parentElement.querySelector('.setting-value');
+      if (valueDisplay) valueDisplay.textContent = state.ximage2.safetyTolerance;
+    });
+  }
+
+  var promptUpsamplingToggle = document.getElementById('ximage2PromptUpsampling');
+  if (promptUpsamplingToggle) {
+    promptUpsamplingToggle.addEventListener('change', function(e) {
+      state.ximage2.promptUpsampling = e.target.checked;
+      saveUserInputs('ximage2');
+    });
+  }
+
+  if (!window._ximage2DelegationAttached) {
+    window._ximage2DelegationAttached = true;
+
+    document.addEventListener('click', function(e) {
+      var modeBtn = e.target.closest('[data-ximage2-mode]');
+      if (modeBtn && state.currentPage === 'ximage2') {
+        var newMode = modeBtn.dataset.ximage2Mode;
+        state.ximage2.mode = newMode;
+        state.ximage2.sourceImages = [];
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+
+      var modelCard = e.target.closest('[data-ximage2-model]');
+      if (modelCard && state.currentPage === 'ximage2' && !modelCard.classList.contains('disabled')) {
+        state.ximage2.selectedModel = modelCard.dataset.ximage2Model;
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+
+      var sizeBtn = e.target.closest('[data-ximage2-size]');
+      if (sizeBtn && state.currentPage === 'ximage2') {
+        state.ximage2.size = sizeBtn.dataset.ximage2Size;
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+
+      var resBtn = e.target.closest('[data-ximage2-resolution]');
+      if (resBtn && state.currentPage === 'ximage2') {
+        state.ximage2.resolution = resBtn.dataset.ximage2Resolution;
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+
+      var numBtn = e.target.closest('[data-ximage2-num-action]');
+      if (numBtn && state.currentPage === 'ximage2') {
+        var action = numBtn.dataset.ximage2NumAction;
+        if (action === 'increase' && state.ximage2.numberOfImages < 4) {
+          state.ximage2.numberOfImages++;
+        } else if (action === 'decrease' && state.ximage2.numberOfImages > 1) {
+          state.ximage2.numberOfImages--;
+        }
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+
+      var inputModeBtn = e.target.closest('[data-ximage2-input-mode]');
+      if (inputModeBtn && state.currentPage === 'ximage2') {
+        state.ximage2.inputMode = inputModeBtn.dataset.ximage2InputMode;
+        saveUserInputs('ximage2');
+        render();
+        return;
+      }
+    });
+  }
+
+  var openXimage2RoomModal = document.getElementById('openXimage2RoomModal');
+  var changeXimage2Room = document.getElementById('changeXimage2Room');
+  if (openXimage2RoomModal) {
+    openXimage2RoomModal.onclick = async function(e) {
+      e.preventDefault();
+      state.ximage2RoomManager.showRoomModal = true;
+      render();
+      await loadXImage2Rooms();
+    };
+  }
+  if (changeXimage2Room) {
+    changeXimage2Room.onclick = async function(e) {
+      e.preventDefault();
+      state.ximage2RoomManager.showRoomModal = true;
+      render();
+      await loadXImage2Rooms();
+    };
+  }
+
+  var closeXimage2RoomModal = document.getElementById('closeXimage2RoomModal');
+  var ximage2RoomModalOverlay = document.getElementById('ximage2RoomModalOverlay');
+  if (closeXimage2RoomModal) {
+    closeXimage2RoomModal.addEventListener('click', function() {
+      state.ximage2RoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (ximage2RoomModalOverlay) {
+    ximage2RoomModalOverlay.addEventListener('click', function(e) {
+      if (e.target === ximage2RoomModalOverlay) {
+        state.ximage2RoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+
+  var ximage2RoomApiKeyInput = document.getElementById('ximage2RoomApiKeyInput');
+  if (ximage2RoomApiKeyInput) {
+    ximage2RoomApiKeyInput.addEventListener('input', function(e) {
+      state.ximage2RoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('ximage2RoomManager');
+    });
+  }
+
+  document.querySelectorAll('.join-ximage2-room-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var roomId = parseInt(btn.dataset.roomId);
+      joinXImage2Room(roomId);
+    });
+  });
+
+  document.querySelectorAll('.ximage2-download-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var url = decodeURIComponent(btn.dataset.url);
+      var filename = btn.dataset.filename;
+      await downloadImage(url, filename);
+    });
+  });
+
+  document.querySelectorAll('.ximage2-delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      var index = parseInt(btn.dataset.index);
+      state.ximage2.generatedImages.splice(index, 1);
+      render();
+    });
+  });
+
+  if (state.ximage2.cooldownEnd > Date.now()) {
+    startXImage2CooldownTimer();
+  }
+}
+
+function handleXImage2Upload(e, refIndex) {
+  var file = e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Pilih file gambar');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(event) {
+    while (state.ximage2.sourceImages.length <= refIndex) {
+      state.ximage2.sourceImages.push(null);
+    }
+    state.ximage2.sourceImages[refIndex] = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateXImage2() {
+  if (state.ximage2.mode === 'image-to-image' && state.ximage2.sourceImages.filter(Boolean).length === 0) {
+    alert('Upload gambar referensi terlebih dahulu');
+    return;
+  }
+
+  if (!state.ximage2.prompt) {
+    alert('Masukkan prompt');
+    return;
+  }
+
+  if (!state.ximage2.customApiKey) {
+    alert('Masukkan Xclip API Key');
+    return;
+  }
+
+  if (state.ximage2.tasks.length >= 3) {
+    alert('Maks 3 gambar bersamaan. Tunggu salah satu selesai.');
+    return;
+  }
+
+  var now = Date.now();
+  if (state.ximage2.cooldownEnd > now) {
+    alert('Cooldown aktif. Tunggu ' + Math.ceil((state.ximage2.cooldownEnd - now) / 1000) + ' detik.');
+    return;
+  }
+
+  state.ximage2.isGenerating = true;
+  state.ximage2.error = null;
+  render();
+
+  try {
+    var requestBody = {
+      model: state.ximage2.selectedModel,
+      prompt: state.ximage2.prompt,
+      size: state.ximage2.size,
+      mode: state.ximage2.mode,
+      resolution: state.ximage2.resolution,
+      numberOfImages: state.ximage2.numberOfImages,
+      watermark: state.ximage2.watermark,
+      sequentialGeneration: state.ximage2.sequentialGeneration,
+      safetyTolerance: state.ximage2.safetyTolerance,
+      inputMode: state.ximage2.inputMode,
+      promptUpsampling: state.ximage2.promptUpsampling
+    };
+
+    if (state.ximage2.mode === 'image-to-image') {
+      var images = state.ximage2.sourceImages.filter(Boolean).map(function(img) { return img.data; });
+      if (images.length > 0) {
+        requestBody.images = images;
+      }
+    }
+
+    var response = await fetch(API_URL + '/api/ximage2/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-xclip-key': state.ximage2.customApiKey
+      },
+      credentials: 'include',
+      body: JSON.stringify(requestBody)
+    });
+
+    var data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Gagal generate image');
+    }
+
+    if (data.imageUrl) {
+      state.ximage2.generatedImages.unshift({
+        url: data.imageUrl,
+        model: state.ximage2.selectedModel,
+        prompt: state.ximage2.prompt,
+        createdAt: new Date().toISOString()
+      });
+      state.ximage2.cooldownEnd = Date.now() + (data.cooldown || 10) * 1000;
+      startXImage2CooldownTimer();
+    } else if (data.taskId) {
+      state.ximage2.tasks.push({
+        taskId: data.taskId,
+        model: state.ximage2.selectedModel,
+        startTime: Date.now()
+      });
+      pollXImage2Task(data.taskId);
+      state.ximage2.cooldownEnd = Date.now() + (data.cooldown || 10) * 1000;
+      startXImage2CooldownTimer();
+    }
+
+  } catch (error) {
+    console.error('X Image2 error:', error);
+    state.ximage2.error = error.message;
+    alert(error.message);
+  } finally {
+    state.ximage2.isGenerating = false;
+    render();
+  }
+}
+
+function startXImage2CooldownTimer() {
+  if (window._ximage2CooldownInterval) clearInterval(window._ximage2CooldownInterval);
+  window._ximage2CooldownInterval = setInterval(function() {
+    if (Date.now() >= state.ximage2.cooldownEnd) {
+      clearInterval(window._ximage2CooldownInterval);
+      window._ximage2CooldownInterval = null;
+      render();
+    } else {
+      var btn = document.getElementById('ximage2GenerateBtn');
+      if (btn) {
+        var remaining = Math.ceil((state.ximage2.cooldownEnd - Date.now()) / 1000);
+        btn.disabled = true;
+        btn.innerHTML = '<span>Cooldown ' + remaining + 's</span>';
+      }
+    }
+  }, 1000);
+}
+
+async function pollXImage2Task(taskId) {
+  var maxAttempts = 120;
+  var attempts = 0;
+
+  var poll = async function() {
+    if (attempts >= maxAttempts) {
+      state.ximage2.tasks = state.ximage2.tasks.filter(function(t) { return t.taskId !== taskId; });
+      state.ximage2.error = 'Timeout: Image generation terlalu lama';
+      render();
+      return;
+    }
+
+    attempts++;
+
+    try {
+      var response = await fetch(API_URL + '/api/ximage2/status/' + taskId, {
+        headers: { 'x-xclip-key': state.ximage2.customApiKey },
+        credentials: 'include'
+      });
+
+      var data = await response.json();
+
+      if (data.status === 'completed' && data.imageUrl) {
+        state.ximage2.tasks = state.ximage2.tasks.filter(function(t) { return t.taskId !== taskId; });
+        state.ximage2.generatedImages.unshift({
+          url: data.imageUrl,
+          model: state.ximage2.selectedModel,
+          prompt: state.ximage2.prompt,
+          createdAt: new Date().toISOString()
+        });
+        render();
+        return;
+      }
+
+      if (data.status === 'failed') {
+        state.ximage2.tasks = state.ximage2.tasks.filter(function(t) { return t.taskId !== taskId; });
+        state.ximage2.error = data.error || 'Image generation failed';
+        render();
+        return;
+      }
+
+      var task = state.ximage2.tasks.find(function(t) { return t.taskId === taskId; });
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 3);
+        task.status = data.message || 'Processing...';
+      }
+      render();
+
+      console.log('[XIMAGE2] Poll attempt ' + attempts + '/' + maxAttempts + ', status: ' + data.status);
+      setTimeout(poll, 3000);
+
+    } catch (error) {
+      console.error('[XIMAGE2] Poll error:', error);
+      attempts++;
+      setTimeout(poll, 3000);
+    }
+  };
+
+  poll();
+}
+
+async function loadXImage2History() {
+  try {
+    var response = await fetch(API_URL + '/api/ximage2/history', { credentials: 'include' });
+    var data = await response.json();
+
+    if (data.images) {
+      state.ximage2.generatedImages = data.images.map(function(img) {
+        return {
+          url: img.imageUrl,
+          model: img.model,
+          prompt: img.prompt,
+          createdAt: img.createdAt
+        };
+      });
+    }
+    state.ximage2._historyLoaded = true;
+  } catch (error) {
+    console.error('Failed to load X Image2 history:', error);
   }
 }
 
