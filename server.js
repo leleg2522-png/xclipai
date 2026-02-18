@@ -7915,11 +7915,6 @@ app.post('/api/ximage2/join-room', async (req, res) => {
           'UPDATE subscriptions SET ximage2_room_id = $1 WHERE id = $2',
           [roomId, existingSub.rows[0].id]
         );
-      } else {
-        await pool.query(`
-          INSERT INTO subscriptions (user_id, status, ximage2_room_id, created_at)
-          VALUES ($1, 'pending', $2, NOW())
-        `, [keyInfo.user_id, roomId]);
       }
     }
     
