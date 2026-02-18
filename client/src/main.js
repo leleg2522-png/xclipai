@@ -225,7 +225,7 @@ const state = {
     sourceImages: [],
     prompt: '',
     selectedModel: 'gpt-4o-image',
-    size: '1024x1024',
+    size: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
     tasks: [],
@@ -4041,7 +4041,7 @@ function renderXImage2Page() {
   ];
 
   var currentModelConfig = ximage2Models.find(function(m) { return m.id === state.ximage2.selectedModel; }) || ximage2Models[0];
-  var sizeOptions = currentModelConfig.sizes || ['1024x1024'];
+  var sizeOptions = currentModelConfig.sizes || ['1:1'];
   var maxRefs = currentModelConfig.maxRefs || 1;
 
   var html = '<div class="container">';
