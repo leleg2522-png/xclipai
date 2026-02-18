@@ -7785,8 +7785,7 @@ async function getXImage2RoomApiKey(xclipApiKey) {
   const subResult = await pool.query(`
     SELECT s.ximage2_room_id 
     FROM subscriptions s 
-    WHERE s.user_id = $1 AND s.status = 'active' 
-    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    WHERE s.user_id = $1 AND s.ximage2_room_id IS NOT NULL
     ORDER BY s.created_at DESC LIMIT 1
   `, [keyInfo.user_id]);
   
@@ -7849,8 +7848,7 @@ app.get('/api/ximage2/subscription-status', async (req, res) => {
       SELECT s.ximage2_room_id, r.name as room_name
       FROM subscriptions s
       LEFT JOIN ximage2_rooms r ON r.id = s.ximage2_room_id
-      WHERE s.user_id = $1 AND s.status = 'active'
-      AND (s.expired_at IS NULL OR s.expired_at > NOW())
+      WHERE s.user_id = $1 AND s.ximage2_room_id IS NOT NULL
       ORDER BY s.created_at DESC LIMIT 1
     `, [req.session.userId]);
     
@@ -7919,8 +7917,8 @@ app.post('/api/ximage2/join-room', async (req, res) => {
         );
       } else {
         await pool.query(`
-          INSERT INTO subscriptions (user_id, status, ximage2_room_id, created_at, expired_at)
-          VALUES ($1, 'active', $2, NOW(), NOW() + INTERVAL '365 days')
+          INSERT INTO subscriptions (user_id, status, ximage2_room_id, created_at)
+          VALUES ($1, 'pending', $2, NOW())
         `, [keyInfo.user_id, roomId]);
       }
     }
