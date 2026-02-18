@@ -7902,10 +7902,28 @@ app.post('/api/ximage2/join-room', async (req, res) => {
       return res.status(400).json({ error: 'Room sudah penuh' });
     }
     
-    await pool.query(`
+    const updateResult = await pool.query(`
       UPDATE subscriptions SET ximage2_room_id = $1 
       WHERE user_id = $2 AND status = 'active'
-    `, [roomId, req.session.userId]);
+    `, [roomId, keyInfo.user_id]);
+    
+    if (updateResult.rowCount === 0) {
+      const existingSub = await pool.query(
+        'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY id DESC LIMIT 1',
+        [keyInfo.user_id]
+      );
+      if (existingSub.rows.length > 0) {
+        await pool.query(
+          'UPDATE subscriptions SET ximage2_room_id = $1 WHERE id = $2',
+          [roomId, existingSub.rows[0].id]
+        );
+      } else {
+        await pool.query(`
+          INSERT INTO subscriptions (user_id, status, ximage2_room_id, created_at, expired_at)
+          VALUES ($1, 'active', $2, NOW(), NOW() + INTERVAL '365 days')
+        `, [keyInfo.user_id, roomId]);
+      }
+    }
     
     await pool.query(`
       UPDATE ximage2_rooms SET current_users = current_users + 1 WHERE id = $1
