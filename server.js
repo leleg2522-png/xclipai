@@ -2148,14 +2148,14 @@ const RATE_LIMIT_CONFIG = {
     label: 'Motion'
   },
   vidgen4: {
-    cooldownMs: 180 * 1000,
+    cooldownMs: 240 * 1000,
     dailyQuotaPerKey: 50,
     jitterMinMs: 1000,
     jitterMaxMs: 3000,
     label: 'Vidgen4'
   },
   ximage2: {
-    cooldownMs: 120 * 1000,
+    cooldownMs: 60 * 1000,
     dailyQuotaPerKey: 50,
     jitterMinMs: 1000,
     jitterMaxMs: 3000,
