@@ -7724,55 +7724,57 @@ app.get('/api/ximage/history', async (req, res) => {
 const XIMAGE2_MODELS = {
   'gpt-4o-image': { 
     name: 'GPT-4o Image', provider: 'OpenAI', supportsI2I: true, 
-    sizes: ['1024x1024', '1536x1024', '1024x1536', 'auto'], maxN: 4, maxRefs: 1,
+    sizes: ['1:1', '2:3', '3:2'], maxN: 4, maxRefs: 5,
     desc: 'OpenAI GPT-4o image generation'
   },
-  'nano-banana': { 
+  'gemini-2.5-flash-image-preview': { 
     name: 'Nano Banana', provider: 'Google', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1,
+    sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxN: 1, maxRefs: 14,
     desc: 'Google Gemini 2.5 Flash'
   },
-  'nano-banana-2': { 
+  'gemini-3-pro-image-preview': { 
     name: 'Nano Banana 2', provider: 'Google', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14,
+    sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxN: 1, maxRefs: 14,
     resolutions: ['1K', '2K', '4K'],
     desc: 'Google Gemini 3 Pro with resolution control'
   },
-  'seedream-4.0': { 
+  'doubao-seedance-4-0': { 
     name: 'Seedream 4.0', provider: 'ByteDance', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 4, maxRefs: 1,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
+    resolutions: ['1K', '2K', '4K'],
     hasWatermark: true, hasSequential: true,
     desc: 'ByteDance Seedream 4.0'
   },
-  'seedream-4.5': { 
+  'doubao-seedance-4-5': { 
     name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 4, maxRefs: 1,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
+    resolutions: ['2K', '4K'],
     hasWatermark: true, hasSequential: true,
     desc: 'ByteDance Seedream 4.5 latest'
   },
   'flux-kontext-pro': { 
     name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 4, maxRefs: 4,
-    hasSafetyTolerance: true, hasInputMode: true,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], maxN: 1, maxRefs: 1,
+    hasSafetyTolerance: true, hasPromptUpsampling: true,
     desc: 'FLUX Kontext Pro with safety control'
   },
   'flux-kontext-max': { 
     name: 'Flux Kontext Max', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 4, maxRefs: 4,
-    hasSafetyTolerance: true, hasInputMode: true,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], maxN: 1, maxRefs: 1,
+    hasSafetyTolerance: true, hasPromptUpsampling: true,
     desc: 'FLUX Kontext Max highest quality'
   },
-  'flux-2.0-flex': { 
+  'flux-2-flex': { 
     name: 'Flux 2.0 Flex', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 1,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
     resolutions: ['1K', '2K'],
     desc: 'FLUX 2.0 Flex flexible generation'
   },
-  'flux-2.0-pro': { 
+  'flux-2-pro': { 
     name: 'Flux 2.0 Pro', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 1,
-    resolutions: ['1K', '2K'], hasPromptUpsampling: true,
-    desc: 'FLUX 2.0 Pro with prompt upsampling'
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
+    resolutions: ['1K', '2K'],
+    desc: 'FLUX 2.0 Pro higher quality'
   }
 };
 
@@ -8009,13 +8011,10 @@ app.post('/api/ximage2/generate', async (req, res) => {
       requestBody.watermark = watermark;
     }
     if (modelConfig.hasSequential && sequentialGeneration !== undefined) {
-      requestBody.sequential_generation = sequentialGeneration;
+      requestBody.sequential_image_generation = sequentialGeneration ? 'auto' : 'disabled';
     }
     if (modelConfig.hasSafetyTolerance && safetyTolerance !== undefined) {
       requestBody.safety_tolerance = parseInt(safetyTolerance);
-    }
-    if (modelConfig.hasInputMode && inputMode) {
-      requestBody.input_mode = inputMode;
     }
     if (modelConfig.hasPromptUpsampling && promptUpsampling !== undefined) {
       requestBody.prompt_upsampling = promptUpsampling;
