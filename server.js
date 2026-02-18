@@ -19,7 +19,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
+
+pool.on('error', (err) => {
+  console.error('Database pool error (non-fatal):', err.message);
 });
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
@@ -6718,6 +6725,31 @@ app.get('/api/vidgen4/history', async (req, res) => {
   } catch (error) {
     console.error('[VIDGEN4] History error:', error.message);
     res.status(500).json({ error: 'Gagal load history' });
+  }
+});
+
+app.get('/api/vidgen4/download', async (req, res) => {
+  try {
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    
+    const response = await axios.get(videoUrl, {
+      responseType: 'stream',
+      timeout: 60000
+    });
+    
+    res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+    res.setHeader('Content-Disposition', 'attachment; filename="vidgen4_video.mp4"');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('[VIDGEN4] Download proxy error:', error.message);
+    res.status(500).json({ error: 'Gagal download video' });
   }
 });
 
