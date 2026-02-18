@@ -6526,7 +6526,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${roomKeyResult.apiKey}`
         },
-        timeout: 60000
+        timeout: 600000
       }
     );
     
@@ -6740,7 +6740,7 @@ app.get('/api/vidgen4/download', async (req, res) => {
     
     const response = await axios.get(videoUrl, {
       responseType: 'stream',
-      timeout: 60000
+      timeout: 600000
     });
     
     res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
