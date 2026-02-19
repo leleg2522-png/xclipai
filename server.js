@@ -29,6 +29,8 @@ pool.on('error', (err) => {
   console.error('Database pool error (non-fatal):', err.message);
 });
 
+app.set('trust proxy', 1);
+
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : [];
@@ -117,9 +119,9 @@ app.use(session({
   saveUninitialized: false,
   proxy: true,
   cookie: {
-    secure: false,
+    secure: true,
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'none',
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
 }));
