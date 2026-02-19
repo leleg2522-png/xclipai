@@ -9722,7 +9722,7 @@ async function generateVideo() {
     });
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Server error' }));
       if (response.status === 429 && error.cooldown) {
         startCooldownTimer('videogen', error.cooldown);
       }
@@ -9731,11 +9731,10 @@ async function generateVideo() {
     
     const data = await response.json();
     
-    if (data.cooldown) {
-      startCooldownTimer('videogen', data.cooldown);
-    }
-    
     if (data.taskId) {
+      if (data.cooldown) {
+        startCooldownTimer('videogen', data.cooldown);
+      }
       const newTask = {
         taskId: data.taskId,
         model: data.model || state.videogen.selectedModel,
@@ -9750,10 +9749,15 @@ async function generateVideo() {
       pollVideoStatus(data.taskId, newTask.model);
       showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
+      if (data.cooldown) {
+        startCooldownTimer('videogen', data.cooldown);
+      }
       state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now() });
       state.videogen.isGenerating = false;
       showToast('Video berhasil di-generate!', 'success');
       render();
+    } else {
+      throw new Error('Tidak mendapat response dari server');
     }
     
   } catch (error) {
