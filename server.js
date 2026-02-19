@@ -8105,12 +8105,21 @@ app.post('/api/ximage2/generate', async (req, res) => {
     
   } catch (error) {
     const errData = error.response?.data;
-    const errMsg = errData?.error?.message || errData?.message || errData?.error || error.message;
+    const rawMsg = errData?.error?.message || errData?.message || errData?.error || error.message;
+    const errCode = errData?.error?.code || errData?.code || '';
     console.error('[XIMAGE2] Generate error:', JSON.stringify(errData || error.message));
     console.error('[XIMAGE2] Status:', error.response?.status, 'Model:', req.body?.model);
-    res.status(error.response?.status || 500).json({ 
-      error: typeof errMsg === 'string' ? errMsg : 'Gagal generate image'
-    });
+    
+    let userMsg = typeof rawMsg === 'string' ? rawMsg : 'Gagal generate image';
+    if (userMsg.includes('OOM') || userMsg.includes('maxmemory') || userMsg.includes('redis')) {
+      userMsg = 'Server Apimart.ai sedang overload. Silakan coba lagi dalam beberapa menit.';
+    } else if (userMsg.includes('timeout') || userMsg.includes('ETIMEDOUT')) {
+      userMsg = 'Request timeout. Server Apimart.ai terlalu lama merespon, coba lagi.';
+    } else if (errCode === 'enqueue_task_failed') {
+      userMsg = 'Server Apimart.ai gagal memproses request. Silakan coba lagi.';
+    }
+    
+    res.status(error.response?.status || 500).json({ error: userMsg });
   }
 });
 
