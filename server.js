@@ -1701,9 +1701,10 @@ app.post('/api/webhook/freepik', async (req, res) => {
       console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}, SSE sent: ${sent}`);
     } else if (isFailed) {
       releaseProxyForTask(taskId);
+      const failReason = data.error || data.message || 'Video generation failed';
       await pool.query(
-        'UPDATE video_generation_tasks SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE task_id = $2',
-        ['failed', taskId]
+        'UPDATE video_generation_tasks SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
+        ['failed', failReason, taskId]
       );
       
       const isMotionFailed = task.model && task.model.startsWith('motion-');
@@ -3188,7 +3189,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       console.log(`[MOTION] Task ${taskId} already failed (via webhook), returning from DB`);
       return res.json({
         status: 'failed',
-        error: 'Task gagal diproses',
+        error: savedTask.error_message || 'Task gagal diproses',
         taskId: taskId
       });
     }

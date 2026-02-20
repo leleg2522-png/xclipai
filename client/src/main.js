@@ -71,7 +71,8 @@ const state = {
     error: null,
     customApiKey: '',
     selectedRoom: 1,
-    roomUsage: { 1: 0, 2: 0, 3: 0 }
+    roomUsage: { 1: 0, 2: 0, 3: 0 },
+    _handledTaskIds: new Set()
   },
   roomManager: {
     rooms: [],
@@ -9525,10 +9526,15 @@ function pollMotionStatus(taskId, model, apiKey) {
     try {
       let task = state.motion.tasks.find(t => t.taskId === taskId);
       if (!task) {
-        console.log('[MOTION POLL] Task not found in state, checking if already in generatedVideos');
+        console.log('[MOTION POLL] Task not found in state, checking if already handled');
         const alreadyGenerated = state.motion.generatedVideos.some(v => v.taskId === taskId);
         if (alreadyGenerated) {
           console.log('[MOTION POLL] Task already completed via SSE, stopping poll');
+          stopPolling();
+          return;
+        }
+        if (state.motion._handledTaskIds && state.motion._handledTaskIds.has(taskId)) {
+          console.log('[MOTION POLL] Task already handled (failed/removed via SSE), stopping poll');
           stopPolling();
           return;
         }
@@ -10515,6 +10521,7 @@ function handleSSEEvent(data) {
     
     case 'motion_completed':
       console.log('[SSE] Motion completed event received:', data.taskId, data.videoUrl);
+      state.motion._handledTaskIds.add(data.taskId);
       const motionExists = state.motion.generatedVideos.some(v => v.taskId === data.taskId);
       if (!motionExists && data.videoUrl) {
         state.motion.generatedVideos.unshift({ 
@@ -10551,15 +10558,16 @@ function handleSSEEvent(data) {
       break;
     
     case 'motion_failed':
+      state.motion._handledTaskIds.add(data.taskId);
       const failedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
       if (failedMotionTask) {
         failedMotionTask.status = 'failed';
         failedMotionTask.error = data.error;
-        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
-        state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
-        showToast('Gagal generate motion: ' + data.error, 'error');
-        render(true);
       }
+      state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+      showToast('Gagal generate motion: ' + (data.error || 'Generation failed'), 'error');
+      render(true);
       break;
 
     case 'vidgen3_completed':
