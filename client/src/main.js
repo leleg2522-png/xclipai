@@ -9180,7 +9180,7 @@ async function loadXImage2History() {
 function attachMotionEventListeners() {
   if (!state.motion._historyLoaded) {
     state.motion._historyLoaded = true;
-    loadMotionHistory().then(() => render());
+    loadMotionHistory().then(() => render(true));
   }
   
   const imageUploadZone = document.getElementById('motionImageUploadZone');
@@ -9550,7 +9550,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = 'Xclip API key diperlukan';
         stopPolling();
-        render();
+        render(true);
         return;
       }
       
@@ -9577,7 +9577,7 @@ function pollMotionStatus(taskId, model, apiKey) {
             task.status = 'failed';
             task.error = 'Task expired atau tidak ditemukan';
             stopPolling();
-            render();
+            render(true);
             return;
           }
           attempts++;
@@ -9592,12 +9592,12 @@ function pollMotionStatus(taskId, model, apiKey) {
           task._serverErrorCount++;
           console.log(`[MOTION POLL] Server error ${response.status} count: ${task._serverErrorCount}/15 for task ${taskId}`);
           task.statusText = 'Server Freepik sedang sibuk, mencoba lagi...';
-          render();
+          updateMotionTaskUI(taskId);
           if (task._serverErrorCount >= 15) {
             task.status = 'failed';
             task.error = 'Server Freepik tidak merespon setelah beberapa kali percobaan';
             stopPolling();
-            render();
+            render(true);
             return;
           }
           attempts++;
@@ -9660,7 +9660,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = 'Timeout - motion generation terlalu lama';
         stopPolling();
-        render();
+        render(true);
       }
       
     } catch (error) {
@@ -9670,7 +9670,7 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = error.message;
         stopPolling();
-        render();
+        render(true);
       }
     }
   };
@@ -10534,7 +10534,7 @@ function handleSSEEvent(data) {
       render(true);
       setTimeout(() => {
         state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
-        render();
+        render(true);
       }, 10000);
       break;
       
@@ -10544,8 +10544,9 @@ function handleSSEEvent(data) {
         failedTask.status = 'failed';
         failedTask.error = data.error;
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
+        state.videogen.isPolling = state.videogen.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
         showToast('Gagal generate video: ' + data.error, 'error');
-        render();
+        render(true);
       }
       break;
     
@@ -10555,9 +10556,9 @@ function handleSSEEvent(data) {
         failedMotionTask.status = 'failed';
         failedMotionTask.error = data.error;
         state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
-        state.motion.isPolling = !state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+        state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
         showToast('Gagal generate motion: ' + data.error, 'error');
-        render();
+        render(true);
       }
       break;
 
@@ -10589,7 +10590,7 @@ function handleSSEEvent(data) {
         failedVidgen3Task.error = data.error;
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== data.taskId);
         showToast('Gagal generate video: ' + data.error, 'error');
-        render();
+        render(true);
       }
       break;
       
