@@ -5057,8 +5057,8 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                       ` : task.status === 'completed' && task.videoUrl ? `
                         <div class="task-result">
                           <video src="${task.videoUrl}" controls class="result-video"></video>
-                          <div class="task-actions">
-                            <a href="${task.videoUrl}" download="motion-${Date.now()}.mp4" class="btn btn-primary btn-sm">
+                          <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
+                            <a href="${task.videoUrl}" download="motion-${Date.now()}.mp4" class="btn btn-primary btn-sm" style="flex:1">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>
@@ -5066,6 +5066,12 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                               </svg>
                               Download
                             </a>
+                            <button class="btn btn-sm" style="opacity:0.6" onclick="deleteMotionTask('${task.taskId}')">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-2 14H7L5 6"/>
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       ` : task.status === 'failed' ? `
@@ -9677,7 +9683,7 @@ async function deleteMotionHistory(index) {
   if (!video) return;
   
   state.motion.generatedVideos.splice(index, 1);
-  render();
+  render(true);
   
   if (video.taskId) {
     try {
@@ -9688,6 +9694,21 @@ async function deleteMotionHistory(index) {
     } catch (error) {
       console.error('Failed to delete motion history:', error);
     }
+  }
+}
+
+function deleteMotionTask(taskId) {
+  state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
+  state.motion.generatedVideos = state.motion.generatedVideos.filter(v => v.taskId !== taskId);
+  render(true);
+  
+  try {
+    fetch(`${API_URL}/api/motion/history/${taskId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+  } catch (error) {
+    console.error('Failed to delete motion task:', error);
   }
 }
 
