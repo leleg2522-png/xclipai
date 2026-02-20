@@ -9567,6 +9567,26 @@ function pollMotionStatus(taskId, model, apiKey) {
           return;
         }
         
+        if (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
+          if (!task._serverErrorCount) task._serverErrorCount = 0;
+          task._serverErrorCount++;
+          console.log(`[MOTION POLL] Server error ${response.status} count: ${task._serverErrorCount}/15 for task ${taskId}`);
+          task.statusText = 'Server Freepik sedang sibuk, mencoba lagi...';
+          render();
+          if (task._serverErrorCount >= 15) {
+            task.status = 'failed';
+            task.error = 'Server Freepik tidak merespon setelah beberapa kali percobaan';
+            stopPolling();
+            render();
+            return;
+          }
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 8000);
+          }
+          return;
+        }
+        
         throw new Error(errorData.error || `Gagal mengambil status task (${response.status})`);
       }
       

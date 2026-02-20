@@ -3359,7 +3359,11 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Motion poll error:', error.response?.data || error.message);
+    const status = error.response?.status;
+    console.error('Motion poll error:', status, error.response?.data || error.message);
+    if (status === 503 || status === 502 || status === 504) {
+      return res.status(status).json({ error: 'Server Freepik sedang tidak tersedia sementara. Polling akan mencoba lagi otomatis.' });
+    }
     res.status(500).json({ error: 'Gagal mengambil status motion task' });
   }
 });
