@@ -9608,20 +9608,26 @@ function pollMotionStatus(taskId, model, apiKey) {
             model: task.model || model || 'unknown'
           });
         }
-        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
         showToast('Motion video selesai!', 'success');
         stopPolling();
         render();
+        setTimeout(() => {
+          state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
+          render();
+        }, 10000);
         return;
       }
       
       if (data.status === 'failed') {
         task.status = 'failed';
         task.error = data.error || 'Motion generation gagal';
-        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
         showToast('Motion generation gagal', 'error');
         stopPolling();
         render();
+        setTimeout(() => {
+          state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
+          render();
+        }, 5000);
         return;
       }
       
@@ -10488,10 +10494,13 @@ function handleSSEEvent(data) {
         sseMotionTask.status = 'completed';
         sseMotionTask.videoUrl = data.videoUrl;
       }
-      state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
-      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed' && t.taskId !== data.taskId);
       showToast('Motion video selesai!', 'success');
       render(true);
+      setTimeout(() => {
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+        render();
+      }, 10000);
       break;
       
     case 'video_failed':
