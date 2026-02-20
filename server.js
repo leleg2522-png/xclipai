@@ -15,6 +15,15 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const https = require('https');
 require('dotenv').config();
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception (non-fatal):', err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection (non-fatal):', reason);
+});
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -108,12 +117,17 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+const sessionStore = new pgSession({
+  pool: pool,
+  tableName: 'sessions',
+  createTableIfMissing: true,
+  errorLog: (err) => {
+    console.error('Session store error (non-fatal):', err.message);
+  }
+});
+
 app.use(session({
-  store: new pgSession({
-    pool: pool,
-    tableName: 'sessions',
-    createTableIfMissing: true
-  }),
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || 'xclip-secret-key-2024',
   resave: false,
   saveUninitialized: false,
