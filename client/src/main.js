@@ -9597,7 +9597,18 @@ function pollMotionStatus(taskId, model, apiKey) {
       task.statusText = data.status === 'processing' ? 'Generating motion video...' : data.status;
       
       if (data.status === 'completed' && data.videoUrl) {
+        task.status = 'completed';
         task.videoUrl = data.videoUrl;
+        const alreadyExists = state.motion.generatedVideos.some(v => v.taskId === taskId);
+        if (!alreadyExists) {
+          state.motion.generatedVideos.unshift({
+            url: data.videoUrl,
+            createdAt: Date.now(),
+            taskId: taskId,
+            model: task.model || model || 'unknown'
+          });
+        }
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
         showToast('Motion video selesai!', 'success');
         stopPolling();
         render();
@@ -9605,7 +9616,9 @@ function pollMotionStatus(taskId, model, apiKey) {
       }
       
       if (data.status === 'failed') {
-        task.error = 'Motion generation gagal';
+        task.status = 'failed';
+        task.error = data.error || 'Motion generation gagal';
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
         showToast('Motion generation gagal', 'error');
         stopPolling();
         render();
@@ -10470,17 +10483,15 @@ function handleSSEEvent(data) {
           model: data.model || 'unknown'
         });
       }
-      
-      const completedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
-      if (completedMotionTask) {
-        completedMotionTask.status = 'completed';
-        completedMotionTask.videoUrl = data.videoUrl;
-        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+      const sseMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
+      if (sseMotionTask) {
+        sseMotionTask.status = 'completed';
+        sseMotionTask.videoUrl = data.videoUrl;
       }
-      
-      state.motion.isPolling = !state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
-      showToast('Motion video berhasil di-generate!', 'success');
-      render();
+      state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+      showToast('Motion video selesai!', 'success');
+      render(true);
       break;
       
     case 'video_failed':
