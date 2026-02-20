@@ -2327,7 +2327,7 @@ function render(force = false) {
   if (state.videogen.isPolling && !force && state.currentPage === 'videogen') {
     return;
   }
-  if (state.motion.isPolling && state.currentPage === 'motion') {
+  if (state.motion.isPolling && !force && state.currentPage === 'motion') {
     return;
   }
   
@@ -9517,9 +9517,22 @@ function pollMotionStatus(taskId, model, apiKey) {
   
   const poll = async () => {
     try {
-      const task = state.motion.tasks.find(t => t.taskId === taskId);
+      let task = state.motion.tasks.find(t => t.taskId === taskId);
       if (!task) {
-        console.log('[MOTION POLL] Task not found in state, stopping poll');
+        console.log('[MOTION POLL] Task not found in state, checking if already in generatedVideos');
+        const alreadyGenerated = state.motion.generatedVideos.some(v => v.taskId === taskId);
+        if (alreadyGenerated) {
+          console.log('[MOTION POLL] Task already completed via SSE, stopping poll');
+          stopPolling();
+          return;
+        }
+        task = { taskId, model, apiKey };
+        state.motion.tasks.push(task);
+        console.log('[MOTION POLL] Re-added task to state for polling');
+      }
+      
+      if (task.status === 'completed' && task.videoUrl) {
+        console.log('[MOTION POLL] Task already completed, stopping');
         stopPolling();
         return;
       }
@@ -9542,7 +9555,8 @@ function pollMotionStatus(taskId, model, apiKey) {
       
       const response = await fetch(`${API_URL}/api/motion/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
         method: 'GET',
-        headers: headers
+        headers: headers,
+        credentials: 'include'
       });
       
       if (!response.ok) {
@@ -9608,12 +9622,12 @@ function pollMotionStatus(taskId, model, apiKey) {
             model: task.model || model || 'unknown'
           });
         }
-        showToast('Motion video selesai!', 'success');
         stopPolling();
-        render();
+        showToast('Motion video selesai!', 'success');
+        render(true);
         setTimeout(() => {
           state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
-          render();
+          render(true);
         }, 10000);
         return;
       }
@@ -9621,12 +9635,12 @@ function pollMotionStatus(taskId, model, apiKey) {
       if (data.status === 'failed') {
         task.status = 'failed';
         task.error = data.error || 'Motion generation gagal';
-        showToast('Motion generation gagal', 'error');
         stopPolling();
-        render();
+        showToast('Motion generation gagal', 'error');
+        render(true);
         setTimeout(() => {
           state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
-          render();
+          render(true);
         }, 5000);
         return;
       }
