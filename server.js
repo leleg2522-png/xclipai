@@ -27,6 +27,13 @@ process.on('unhandledRejection', (reason, promise) => {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+console.log(`[STARTUP] Xclip server starting... PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
+console.log(`[STARTUP] Database URL configured: ${!!(process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL)}`);
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL,
   max: 10,
@@ -117,14 +124,26 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-const sessionStore = new pgSession({
-  pool: pool,
-  tableName: 'sessions',
-  createTableIfMissing: true,
-  errorLog: (err) => {
-    console.error('Session store error (non-fatal):', err.message);
-  }
-});
+let sessionStore;
+try {
+  sessionStore = new pgSession({
+    pool: pool,
+    tableName: 'sessions',
+    createTableIfMissing: true,
+    errorLog: (err) => {
+      console.error('Session store error (non-fatal):', err.message);
+    }
+  });
+  console.log('[STARTUP] Session store initialized');
+} catch (e) {
+  console.error('[STARTUP] Session store init error:', e.message);
+  sessionStore = new pgSession({
+    pool: pool,
+    tableName: 'sessions',
+    createTableIfMissing: true,
+    errorLog: () => {}
+  });
+}
 
 app.use(session({
   store: sessionStore,
@@ -1494,10 +1513,6 @@ app.get('/api/job/:jobId', (req, res) => {
     error: job.error,
     metadata: job.metadata
   });
-});
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
 });
 
 // ============ SSE & WEBHOOK FOR REAL-TIME VIDEO UPDATES ============
@@ -8357,6 +8372,17 @@ app.get('/{*splat}', (req, res) => {
 
 async function initDatabase() {
   try {
+    console.log('[DB] Starting database initialization...');
+    
+    // Test database connection first
+    try {
+      await pool.query('SELECT 1');
+      console.log('[DB] Database connection successful');
+    } catch (connErr) {
+      console.error('[DB] Database connection FAILED:', connErr.message);
+      throw connErr;
+    }
+    
     // Create core tables first
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -8848,27 +8874,35 @@ async function initDatabase() {
       console.log('X Image2 rooms seeded');
     }
     
-    console.log('Database initialized');
+    console.log('[DB] Database initialized successfully');
   } catch (error) {
-    console.error('Database init error:', error.message);
+    console.error('[DB] Database init error:', error.message);
+    console.error('[DB] Stack:', error.stack);
   }
 }
 
+function startServer() {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[STARTUP] Xclip server running on http://0.0.0.0:${PORT}`);
+  });
+}
+
 initDatabase().then(async () => {
+  console.log('[STARTUP] Database init completed, starting server...');
   try {
     await ensureProxiesInitialized();
   } catch (e) {
     console.error('Proxy init error (non-fatal):', e.message);
   }
-  setInterval(cleanupExpiredSubscriptions, 60000);
-  cleanupExpiredSubscriptions();
-  setInterval(cleanupInactiveUsers, 60000);
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Xclip server running on http://0.0.0.0:${PORT}`);
-  });
+  try {
+    setInterval(cleanupExpiredSubscriptions, 60000);
+    cleanupExpiredSubscriptions();
+    setInterval(cleanupInactiveUsers, 60000);
+  } catch (e) {
+    console.error('Cleanup scheduler error (non-fatal):', e.message);
+  }
+  startServer();
 }).catch(err => {
-  console.error('Database init failed:', err.message);
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Xclip server running on http://0.0.0.0:${PORT} (without database)`);
-  });
+  console.error('[STARTUP] Database init failed:', err.message);
+  startServer();
 });
