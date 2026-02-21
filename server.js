@@ -8441,12 +8441,17 @@ async function initDatabase() {
         model VARCHAR(100),
         status VARCHAR(50) DEFAULT 'pending',
         video_url TEXT,
+        error_message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         completed_at TIMESTAMP,
         room_id INTEGER REFERENCES rooms(id),
         key_index INTEGER
       )
     `);
+
+    // Migration: add error_message column to video_generation_tasks if missing
+    await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS error_message TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS used_key_name VARCHAR(255)`).catch(() => {});
 
     // Seed rooms if empty
     const existingRooms = await pool.query('SELECT COUNT(*) FROM rooms');
