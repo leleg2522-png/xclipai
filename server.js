@@ -8881,28 +8881,26 @@ async function initDatabase() {
   }
 }
 
-function startServer() {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[STARTUP] Xclip server running on http://0.0.0.0:${PORT}`);
+// Start listening IMMEDIATELY so Railway health check passes
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[STARTUP] Xclip server running on http://0.0.0.0:${PORT}`);
+  
+  // Initialize database in background AFTER server is already listening
+  initDatabase().then(async () => {
+    console.log('[STARTUP] Database init completed');
+    try {
+      await ensureProxiesInitialized();
+    } catch (e) {
+      console.error('Proxy init error (non-fatal):', e.message);
+    }
+    try {
+      setInterval(cleanupExpiredSubscriptions, 60000);
+      cleanupExpiredSubscriptions();
+      setInterval(cleanupInactiveUsers, 60000);
+    } catch (e) {
+      console.error('Cleanup scheduler error (non-fatal):', e.message);
+    }
+  }).catch(err => {
+    console.error('[STARTUP] Database init failed (non-fatal):', err.message);
   });
-}
-
-initDatabase().then(async () => {
-  console.log('[STARTUP] Database init completed, starting server...');
-  try {
-    await ensureProxiesInitialized();
-  } catch (e) {
-    console.error('Proxy init error (non-fatal):', e.message);
-  }
-  try {
-    setInterval(cleanupExpiredSubscriptions, 60000);
-    cleanupExpiredSubscriptions();
-    setInterval(cleanupInactiveUsers, 60000);
-  } catch (e) {
-    console.error('Cleanup scheduler error (non-fatal):', e.message);
-  }
-  startServer();
-}).catch(err => {
-  console.error('[STARTUP] Database init failed:', err.message);
-  startServer();
 });
