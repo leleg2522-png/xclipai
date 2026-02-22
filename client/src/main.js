@@ -8,20 +8,32 @@ if ('serviceWorker' in navigator) {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    document.body.style.display = 'none';
-    document.body.offsetHeight;
-    document.body.style.display = '';
-    
     if (state.auth.user) {
       console.log('[VISIBILITY] Page visible again, reconnecting SSE and recovering tasks...');
       connectSSE();
       recoverPendingTasks();
-      fetchSubscriptionStatus().then(() => render());
-    } else {
-      checkAuth();
+      refreshSubscriptionSilent();
     }
   }
 });
+
+async function refreshSubscriptionSilent() {
+  try {
+    const response = await fetch(`${API_URL}/api/subscription/status`, { credentials: 'include' });
+    if (response.ok) {
+      const data = await response.json();
+      state.roomManager.hasSubscription = data.hasSubscription || false;
+      state.roomManager.subscription = data.subscription || null;
+      if (data.subscription?.remainingSeconds) {
+        state.pricing.remainingSeconds = data.subscription.remainingSeconds;
+        startCountdownTimer();
+      }
+      render();
+    }
+  } catch (e) {
+    console.log('[VISIBILITY] Subscription refresh failed, keeping current state');
+  }
+}
 
 function savePendingTasks() {
   try {
@@ -974,12 +986,15 @@ async function fetchRooms() {
 }
 
 async function fetchSubscriptionStatus() {
+  const hadSubscription = state.roomManager.hasSubscription;
   try {
     const response = await fetch(`${API_URL}/api/subscription/status`, { credentials: 'include' });
     if (!response.ok) {
-      state.roomManager.hasSubscription = false;
-      state.roomManager.subscription = null;
-      state.pricing.remainingSeconds = 0;
+      if (response.status === 401) {
+        state.roomManager.hasSubscription = false;
+        state.roomManager.subscription = null;
+        state.pricing.remainingSeconds = 0;
+      }
       return;
     }
     const data = await response.json();
@@ -992,13 +1007,16 @@ async function fetchSubscriptionStatus() {
       state.pricing.remainingSeconds = 0;
     }
   } catch (error) {
-    // Only log actual errors, not network timeouts during SSE reconnection
     if (error && error.message) {
       console.error('Fetch subscription error:', error.message);
     }
-    state.roomManager.hasSubscription = false;
-    state.roomManager.subscription = null;
-    state.pricing.remainingSeconds = 0;
+    if (hadSubscription) {
+      console.log('[SUB] Keeping existing subscription state due to network error');
+    } else {
+      state.roomManager.hasSubscription = false;
+      state.roomManager.subscription = null;
+      state.pricing.remainingSeconds = 0;
+    }
   }
 }
 
