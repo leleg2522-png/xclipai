@@ -8120,12 +8120,6 @@ const XIMAGE2_MODELS = {
     sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxN: 1, maxRefs: 14,
     desc: 'Google Gemini 2.5 Flash'
   },
-  'gemini-3-pro-image-preview': { 
-    name: 'Nano Banana 2', provider: 'Google', supportsI2I: true,
-    sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxN: 1, maxRefs: 14,
-    resolutions: ['1K', '2K', '4K'],
-    desc: 'Google Gemini 3 Pro with resolution control'
-  },
   'doubao-seedance-4-0': { 
     name: 'Seedream 4.0', provider: 'ByteDance', supportsI2I: true,
     sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
