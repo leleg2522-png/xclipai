@@ -94,6 +94,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
   - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
   - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
+- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for Poyo.ai, Apimart.ai, and Freepik APIs.
 
 ## External Dependencies
 - **Database**: PostgreSQL

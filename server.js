@@ -2279,6 +2279,322 @@ setInterval(() => {
 
 // ============ END RATE LIMITING ============
 
+// ============ SERVER-SIDE BACKGROUND POLLING ============
+const serverBgPolls = new Map();
+
+function startServerBgPoll(taskId, apiType, apiKey, extraData = {}) {
+  if (serverBgPolls.has(taskId)) return;
+  serverBgPolls.set(taskId, {
+    taskId,
+    apiType,
+    apiKey,
+    startTime: Date.now(),
+    attempts: 0,
+    maxAttempts: 360,
+    ...extraData
+  });
+  console.log(`[BG-POLL] Started background polling for ${apiType} task: ${taskId}`);
+}
+
+async function pollPoyoTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://api.poyo.ai/api/generate/status/${taskId}`,
+    { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const raw = statusResponse.data;
+  const data = raw.data || raw;
+  const status = data.status || data.state || data.to_status || raw.status;
+  
+  if (status === 'finished' || status === 'completed' || status === 'success') {
+    let url = null;
+    if (data.files && data.files.length > 0) {
+      const f = data.files[0];
+      url = typeof f === 'string' ? f : (f.url || f.file_url || f.video_url || f.image_url);
+    } else if (data.images && data.images.length > 0) {
+      url = data.images[0].url || data.images[0];
+    } else if (raw.files && raw.files.length > 0) {
+      const f = raw.files[0];
+      url = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
+    } else if (raw.images && raw.images.length > 0) {
+      url = raw.images[0].url || raw.images[0];
+    } else if (data.output?.video_url) {
+      url = data.output.video_url;
+    } else if (data.video_url) {
+      url = data.video_url;
+    } else if (data.result?.video_url) {
+      url = data.result.video_url;
+    } else if (data.output?.images?.[0]?.url) {
+      url = data.output.images[0].url;
+    } else if (data.output?.image_url) {
+      url = data.output.image_url;
+    } else if (data.media_url) {
+      url = data.media_url;
+    } else if (data.url) {
+      url = data.url;
+    }
+    return { status: 'completed', url };
+  }
+  
+  if (status === 'failed' || status === 'error') {
+    return { status: 'failed', error: data.error_message || data.error || 'Generation failed' };
+  }
+  
+  return { status: 'processing' };
+}
+
+async function pollApimartTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://api.apimart.ai/v1/tasks/${taskId}`,
+    { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const rawData = statusResponse.data;
+  const data = rawData.data || rawData;
+  const status = data.status || data.state;
+  
+  if (status === 'completed' || status === 'finished' || status === 'success') {
+    let url = data.result?.video?.url ||
+              data.result?.videos?.[0]?.url ||
+              data.result?.video_url ||
+              data.result?.images?.[0]?.url ||
+              data.result?.image_url ||
+              data.images?.[0]?.url ||
+              data.image_url ||
+              data.video_url ||
+              data.url ||
+              data.output?.url ||
+              data.output?.images?.[0]?.url ||
+              data.output?.image_url ||
+              data.media_url;
+    
+    if (Array.isArray(url)) url = url[0];
+    if (!url && data.result?.images?.[0]) {
+      url = typeof data.result.images[0] === 'string' ? data.result.images[0] : null;
+    }
+    return { status: 'completed', url };
+  }
+  
+  if (status === 'failed' || status === 'error') {
+    return { status: 'failed', error: data.error?.message || data.error_message || data.message || 'Generation failed' };
+  }
+  
+  return { status: 'processing' };
+}
+
+async function pollFreepikMotionTask(taskId, apiKey, model) {
+  const isPro = (model || '').includes('pro');
+  const pollEndpoints = [
+    `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
+    isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
+    `/v1/ai/video/kling-v2-6/${taskId}`
+  ];
+  
+  for (const endpoint of pollEndpoints) {
+    try {
+      const pollResponse = await axios.get(
+        `https://api.freepik.com${endpoint}`,
+        { headers: { 'x-freepik-api-key': apiKey }, timeout: 30000 }
+      );
+      
+      if (pollResponse.data && typeof pollResponse.data === 'object') {
+        const taskData = pollResponse.data.data || pollResponse.data;
+        const status = taskData.status || '';
+        
+        if (status === 'COMPLETED' || status === 'completed') {
+          const videoUrl = taskData.video?.url || taskData.result?.url || taskData.url;
+          if (videoUrl) return { status: 'completed', url: videoUrl };
+        }
+        if (status === 'FAILED' || status === 'failed') {
+          return { status: 'failed', error: taskData.error || 'Generation failed' };
+        }
+        if (status && status !== 'CREATED') {
+          return { status: 'processing' };
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  return { status: 'processing' };
+}
+
+async function pollFreepikVideoTask(taskId, apiKey, model) {
+  const vidgen3Endpoints = {
+    'minimax-live': '/v1/ai/image-to-video/minimax-live',
+    'seedance-1.5-pro-1080p': '/v1/ai/video/seedance-1-5-pro-1080p',
+    'seedance-1.5-pro-720p': '/v1/ai/video/seedance-1-5-pro-720p',
+    'ltx-2-pro-t2v': '/v1/ai/text-to-video/ltx-2-pro',
+    'ltx-2-pro-i2v': '/v1/ai/image-to-video/ltx-2-pro',
+    'ltx-2-fast-t2v': '/v1/ai/text-to-video/ltx-2-fast',
+    'ltx-2-fast-i2v': '/v1/ai/image-to-video/ltx-2-fast',
+    'runway-4.5-t2v': '/v1/ai/text-to-video/runway-4-5',
+    'runway-4.5-i2v': '/v1/ai/image-to-video/runway-4-5',
+    'runway-gen4-turbo': '/v1/ai/image-to-video/runway-gen4-turbo',
+    'omnihuman-1.5': '/v1/ai/video/omni-human-1-5'
+  };
+  
+  const videogenEndpoints = {
+    'kling-v2-5-pro': '/v1/ai/image-to-video/kling-v2-5-pro',
+    'kling-v2-1-master': '/v1/ai/image-to-video/kling-v2-1-master',
+    'kling-v2-1-pro': '/v1/ai/image-to-video/kling-v2-1-pro',
+    'kling-v2-1-std': '/v1/ai/image-to-video/kling-v2-1-std',
+    'kling-v2': '/v1/ai/image-to-video/kling-v2',
+    'kling-pro': '/v1/ai/image-to-video/kling-pro',
+    'kling-std': '/v1/ai/image-to-video/kling-std',
+    'minimax-hailuo-02-1080p': '/v1/ai/image-to-video/minimax-hailuo-02-1080p',
+    'minimax-hailuo-02-768p': '/v1/ai/image-to-video/minimax-hailuo-02-768p',
+    'seedance-lite-1080p': '/v1/ai/image-to-video/seedance-lite-1080p',
+    'seedance-lite-720p': '/v1/ai/image-to-video/seedance-lite-720p',
+    'pixverse-v5': '/v1/ai/image-to-video/pixverse-v5'
+  };
+  
+  const basePath = vidgen3Endpoints[model] || videogenEndpoints[model] || `/v1/ai/image-to-video/${model}`;
+  const endpoint = `${basePath}/${taskId}`;
+  
+  try {
+    const pollResponse = await axios.get(
+      `https://api.freepik.com${endpoint}`,
+      { headers: { 'x-freepik-api-key': apiKey }, timeout: 30000 }
+    );
+    
+    if (pollResponse.data && typeof pollResponse.data === 'object') {
+      const taskData = pollResponse.data.data || pollResponse.data;
+      const status = (taskData.status || '').toUpperCase();
+      
+      if (status === 'COMPLETED') {
+        const videoUrl = taskData.video?.url || taskData.result?.url || taskData.url;
+        if (videoUrl) return { status: 'completed', url: videoUrl };
+      }
+      if (status === 'FAILED') {
+        return { status: 'failed', error: taskData.error || 'Generation failed' };
+      }
+    }
+  } catch (e) {
+    // retry next cycle
+  }
+  return { status: 'processing' };
+}
+
+setInterval(async () => {
+  if (serverBgPolls.size === 0) return;
+  
+  for (const [taskId, task] of serverBgPolls) {
+    task.attempts++;
+    
+    if (task.attempts > task.maxAttempts || (Date.now() - task.startTime > 3600000)) {
+      console.log(`[BG-POLL] Task ${taskId} timed out after ${task.attempts} attempts`);
+      serverBgPolls.delete(taskId);
+      try {
+        const table = task.dbTable || 'vidgen2_tasks';
+        const urlCol = task.urlColumn || 'video_url';
+        if (table === 'ximage_history' || table === 'ximage2_history') {
+          await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
+        } else {
+          await pool.query(`UPDATE ${table} SET status = 'failed', error_message = 'Timeout', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
+        }
+      } catch (e) {}
+      continue;
+    }
+    
+    try {
+      let result;
+      if (task.apiType === 'poyo') {
+        result = await pollPoyoTask(taskId, task.apiKey);
+      } else if (task.apiType === 'apimart') {
+        result = await pollApimartTask(taskId, task.apiKey);
+      } else if (task.apiType === 'freepik-motion') {
+        result = await pollFreepikMotionTask(taskId, task.apiKey, task.model);
+      } else if (task.apiType === 'freepik-video') {
+        result = await pollFreepikVideoTask(taskId, task.apiKey, task.model);
+      }
+      
+      if (!result) continue;
+      
+      const table = task.dbTable || 'vidgen2_tasks';
+      const urlCol = task.urlColumn || 'video_url';
+      
+      if (result.status === 'completed' && result.url) {
+        console.log(`[BG-POLL] Task ${taskId} completed! URL: ${result.url.substring(0, 80)}...`);
+        await pool.query(
+          `UPDATE ${table} SET status = 'completed', ${urlCol} = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`,
+          [result.url, taskId]
+        );
+        serverBgPolls.delete(taskId);
+      } else if (result.status === 'failed') {
+        console.log(`[BG-POLL] Task ${taskId} failed: ${result.error}`);
+        if (table === 'ximage_history' || table === 'ximage2_history') {
+          await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
+        } else {
+          await pool.query(`UPDATE ${table} SET status = 'failed', error_message = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`, [result.error, taskId]);
+        }
+        serverBgPolls.delete(taskId);
+      }
+    } catch (e) {
+      if (task.attempts % 10 === 0) {
+        console.log(`[BG-POLL] Poll error for ${taskId} (attempt ${task.attempts}):`, e.message);
+      }
+    }
+  }
+}, 15000);
+
+async function resumePendingTaskPolling() {
+  try {
+    const tables = [
+      { table: 'vidgen2_tasks', apiType: 'poyo', urlCol: 'video_url', keyCol: 'used_key_name' },
+      { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
+      { table: 'ximage_history', apiType: 'poyo', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
+      { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
+    ];
+    
+    let resumed = 0;
+    for (const { table, apiType, urlCol, keyCol } of tables) {
+      try {
+        const result = await pool.query(
+          `SELECT task_id, model ${keyCol ? ', ' + keyCol : ''} FROM ${table} WHERE status IN ('pending', 'processing') AND created_at > NOW() - INTERVAL '1 hour'`
+        );
+        
+        for (const row of result.rows) {
+          let apiKey = null;
+          if (keyCol && row[keyCol]) {
+            apiKey = process.env[row[keyCol]];
+          }
+          if (!apiKey && (apiType === 'apimart' || apiType === 'apimart')) {
+            apiKey = process.env.APIMART_API_KEY;
+          }
+          if (!apiKey && (apiType === 'poyo')) {
+            apiKey = process.env.POYO_API_KEY;
+          }
+          if (!apiKey && (apiType === 'freepik-auto' || apiType === 'freepik-motion' || apiType === 'freepik-video')) {
+            apiKey = process.env.FREEPIK_API_KEY;
+          }
+          if (apiKey) {
+            let resolvedType = apiType;
+            if (apiType === 'freepik-auto') {
+              resolvedType = (row.model || '').startsWith('motion-') ? 'freepik-motion' : 'freepik-video';
+            }
+            startServerBgPoll(row.task_id, resolvedType, apiKey, {
+              dbTable: table,
+              urlColumn: urlCol,
+              model: row.model
+            });
+            resumed++;
+          }
+        }
+      } catch (e) {
+        console.log(`[BG-POLL] Could not resume tasks from ${table}:`, e.message);
+      }
+    }
+    
+    if (resumed > 0) {
+      console.log(`[BG-POLL] Resumed ${resumed} pending tasks from database`);
+    }
+  } catch (e) {
+    console.error('[BG-POLL] Resume error:', e.message);
+  }
+}
+
+// ============ END BACKGROUND POLLING ============
+
 async function validateXclipApiKey(apiKey) {
   // First check if the API key exists and is active
   const keyResult = await pool.query(
@@ -2694,6 +3010,12 @@ app.post('/api/videogen/proxy', async (req, res) => {
         [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, usedKeyName]
       );
       console.log(`[SAVED] Task ${taskId} saved with key_name: ${usedKeyName}`);
+      
+      startServerBgPoll(taskId, 'freepik-video', freepikApiKey, {
+        dbTable: 'video_generation_tasks',
+        urlColumn: 'video_url',
+        model: model
+      });
     }
     
     res.json({
@@ -3148,6 +3470,12 @@ app.post('/api/motion/generate', async (req, res) => {
         [keyInfo.id, keyInfo.user_id, selectedRoomId, taskId, 'motion-' + model, usedKeyName]
       );
       console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}, motion_room: ${selectedRoomId}`);
+      
+      startServerBgPoll(taskId, 'freepik-motion', freepikApiKey, {
+        dbTable: 'video_generation_tasks',
+        urlColumn: 'video_url',
+        model: 'motion-' + model
+      });
     }
     
     res.json({
@@ -5906,6 +6234,12 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] Task created: ${taskId}`);
     
+    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+      dbTable: 'vidgen2_tasks',
+      urlColumn: 'video_url',
+      model: model
+    });
+    
     res.json({
       success: true,
       taskId: taskId,
@@ -6625,6 +6959,12 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     setUserCooldown(roomKeyResult.userId, 'vidgen4');
     
     console.log(`[VIDGEN4] Task created: ${taskId}`);
+    
+    startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
+      dbTable: 'vidgen4_tasks',
+      urlColumn: 'video_url',
+      model: model
+    });
     
     res.json({
       success: true,
@@ -7565,6 +7905,12 @@ app.post('/api/ximage/generate', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
     `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
     
+    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+      dbTable: 'ximage_history',
+      urlColumn: 'image_url',
+      model: model
+    });
+    
     res.json({ 
       taskId, 
       model,
@@ -8132,6 +8478,12 @@ app.post('/api/ximage2/generate', async (req, res) => {
     );
     
     setUserCooldown(roomKeyResult.userId, 'ximage2');
+    
+    startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
+      dbTable: 'ximage2_history',
+      urlColumn: 'image_url',
+      model: model
+    });
     
     res.json({
       success: true,
@@ -8875,6 +9227,10 @@ async function initDatabase() {
     }
     
     console.log('[DB] Database initialized successfully');
+    
+    setTimeout(() => {
+      resumePendingTaskPolling();
+    }, 5000);
   } catch (error) {
     console.error('[DB] Database init error:', error.message);
     console.error('[DB] Stack:', error.stack);
