@@ -11,8 +11,79 @@ document.addEventListener('visibilitychange', () => {
     document.body.style.display = 'none';
     document.body.offsetHeight;
     document.body.style.display = '';
+    
+    if (state.auth.user) {
+      console.log('[VISIBILITY] Page visible again, reconnecting SSE and recovering tasks...');
+      connectSSE();
+      recoverPendingTasks();
+    }
   }
 });
+
+function savePendingTasks() {
+  try {
+    const pending = {};
+    const features = ['vidgen2', 'vidgen3', 'vidgen4', 'ximage', 'ximage2', 'videogen', 'motion'];
+    features.forEach(f => {
+      if (state[f] && state[f].tasks && state[f].tasks.length > 0) {
+        pending[f] = state[f].tasks.filter(t => t.status !== 'completed' && t.status !== 'failed').map(t => ({
+          taskId: t.taskId,
+          model: t.model || '',
+          status: t.status || 'pending',
+          apiKey: t.apiKey || ''
+        }));
+      }
+    });
+    const activeIds = new Set();
+    Object.values(pending).forEach(tasks => tasks.forEach(t => activeIds.add(t.taskId)));
+    _activePolls.forEach(id => { if (!activeIds.has(id)) _activePolls.delete(id); });
+    
+    if (Object.keys(pending).length > 0) {
+      localStorage.setItem('xclip_pending_tasks', JSON.stringify(pending));
+    } else {
+      localStorage.removeItem('xclip_pending_tasks');
+    }
+  } catch (e) {}
+}
+
+const _activePolls = new Set();
+
+function recoverPendingTasks() {
+  try {
+    const saved = localStorage.getItem('xclip_pending_tasks');
+    if (!saved) return;
+    const pending = JSON.parse(saved);
+    let recovered = false;
+    
+    const tryRecover = (feature, tasks, pollFn) => {
+      if (!tasks || tasks.length === 0) return;
+      tasks.forEach(t => {
+        if (_activePolls.has(t.taskId)) return;
+        if (!state[feature].tasks.some(x => x.taskId === t.taskId)) {
+          state[feature].tasks.push({ taskId: t.taskId, model: t.model, status: 'processing', apiKey: t.apiKey || '' });
+        }
+        _activePolls.add(t.taskId);
+        recovered = true;
+        pollFn(t);
+      });
+    };
+    
+    tryRecover('vidgen2', pending.vidgen2, (t) => pollVidgen2Task(t.taskId));
+    tryRecover('vidgen3', pending.vidgen3, (t) => pollVidgen3Task(t.taskId, t.model));
+    tryRecover('vidgen4', pending.vidgen4, (t) => pollVidgen4Task(t.taskId));
+    tryRecover('ximage', pending.ximage, (t) => pollXImageTask(t.taskId));
+    tryRecover('ximage2', pending.ximage2, (t) => pollXImage2Task(t.taskId));
+    tryRecover('videogen', pending.videogen, (t) => pollVideoStatus(t.taskId, t.model));
+    tryRecover('motion', pending.motion, (t) => pollMotionStatus(t.taskId, t.model, t.apiKey || undefined));
+    
+    if (recovered) {
+      render();
+      console.log('[RECOVERY] Recovered pending tasks:', pending);
+    }
+  } catch (e) {
+    console.error('[RECOVERY] Error recovering tasks:', e);
+  }
+}
 
 // Debounce render to prevent too many updates
 let renderTimeout = null;
@@ -6851,7 +6922,7 @@ async function generateVidgen2Video() {
     localStorage.setItem('vidgen2_cooldown', cooldownEnd.toString());
     startVidgen2CooldownTimer();
     
-    // Start polling for this task
+    savePendingTasks();
     pollVidgen2Task(data.taskId);
     
   } catch (error) {
@@ -7747,6 +7818,7 @@ async function generateVidgen4Video() {
     localStorage.setItem('vidgen4_cooldown', cooldownEnd.toString());
     startVidgen4CooldownTimer();
     
+    savePendingTasks();
     pollVidgen4Task(data.taskId);
     
   } catch (error) {
@@ -8157,6 +8229,7 @@ async function generateVidgen3Video() {
     localStorage.setItem('vidgen3_cooldown', state.vidgen3.cooldownEndTime.toString());
     startVidgen3CooldownTimer();
 
+    savePendingTasks();
     pollVidgen3Task(result.taskId, actualModel);
     showToast('Video sedang diproses...', 'success');
 
@@ -8620,7 +8693,7 @@ async function generateXImage() {
       startTime: Date.now()
     });
     
-    // Start polling for this task
+    savePendingTasks();
     pollXImageTask(data.taskId);
     
   } catch (error) {
@@ -9063,6 +9136,7 @@ async function generateXImage2() {
         model: state.ximage2.selectedModel,
         startTime: Date.now()
       });
+      savePendingTasks();
       pollXImage2Task(data.taskId);
       state.ximage2.cooldownEnd = Date.now() + (data.cooldown || 10) * 1000;
       startXImage2CooldownTimer();
@@ -9458,6 +9532,7 @@ async function generateMotion() {
       apiKey: motionApiKey  // Store API key with task for polling
     });
     
+    savePendingTasks();
     state.motion.isGenerating = false;
     render();
     
@@ -9824,6 +9899,7 @@ async function generateVideo() {
         createdAt: Date.now()
       };
       state.videogen.tasks.push(newTask);
+      savePendingTasks();
       state.videogen.isGenerating = false;
       render();
       pollVideoStatus(data.taskId, newTask.model);
@@ -10515,6 +10591,7 @@ function handleSSEEvent(data) {
         state.videogen.isPolling = false;
       }
       
+      savePendingTasks();
       showToast('Video berhasil di-generate!', 'success');
       render(true);
       break;
@@ -10537,6 +10614,7 @@ function handleSSEEvent(data) {
         sseMotionTask.videoUrl = data.videoUrl;
       }
       state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed' && t.taskId !== data.taskId);
+      savePendingTasks();
       showToast('Motion video selesai!', 'success');
       render(true);
       setTimeout(() => {
@@ -10552,6 +10630,7 @@ function handleSSEEvent(data) {
         failedTask.error = data.error;
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
         state.videogen.isPolling = state.videogen.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+        savePendingTasks();
         showToast('Gagal generate video: ' + data.error, 'error');
         render(true);
       }
@@ -10566,6 +10645,7 @@ function handleSSEEvent(data) {
       }
       state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
       state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+      savePendingTasks();
       showToast('Gagal generate motion: ' + (data.error || 'Generation failed'), 'error');
       render(true);
       break;
@@ -10587,6 +10667,7 @@ function handleSSEEvent(data) {
         completedVidgen3Task.videoUrl = data.videoUrl;
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== data.taskId);
       }
+      savePendingTasks();
       showToast('Vidgen3 video berhasil di-generate!', 'success');
       render(true);
       break;
@@ -10597,6 +10678,7 @@ function handleSSEEvent(data) {
         failedVidgen3Task.status = 'failed';
         failedVidgen3Task.error = data.error;
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== data.taskId);
+        savePendingTasks();
         showToast('Gagal generate video: ' + data.error, 'error');
         render(true);
       }
@@ -10628,13 +10710,11 @@ window.addEventListener('beforeunload', () => {
 // Wrap checkAuth to connect SSE after auth is verified
 async function initApp() {
   await checkAuth();
-  // Connect SSE after auth check completes
   if (state.auth.user) {
     connectSSE();
-    // Fetch video history from database
     fetchVideoHistory();
-    // Fetch X Maker subscription
     fetchXMakerSubscription();
+    recoverPendingTasks();
   }
 }
 
