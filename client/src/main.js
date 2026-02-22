@@ -16,6 +16,9 @@ document.addEventListener('visibilitychange', () => {
       console.log('[VISIBILITY] Page visible again, reconnecting SSE and recovering tasks...');
       connectSSE();
       recoverPendingTasks();
+      fetchSubscriptionStatus().then(() => render());
+    } else {
+      checkAuth();
     }
   }
 });
