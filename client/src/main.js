@@ -6978,11 +6978,14 @@ async function pollVidgen2Task(taskId) {
         return;
       }
       
-      // Update task progress
+      // Update task progress (partial DOM update - no full re-render)
       const task = state.vidgen2.tasks.find(t => t.taskId === taskId);
-      if (task && data.progress) {
-        task.progress = data.progress;
-        render();
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 2);
+        const progressEl = document.querySelector(`[data-task-id="${taskId}"] .task-progress-fill`);
+        const progressText = document.querySelector(`[data-task-id="${taskId}"] .task-progress-text`);
+        if (progressEl) progressEl.style.width = `${task.progress}%`;
+        if (progressText) progressText.textContent = `${task.progress}%`;
       }
       
       // Still processing, poll again
@@ -7872,9 +7875,12 @@ async function pollVidgen4Task(taskId) {
       }
       
       const task = state.vidgen4.tasks.find(t => t.taskId === taskId);
-      if (task && data.progress) {
-        task.progress = data.progress;
-        render();
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 2);
+        const progressEl = document.querySelector(`[data-task-id="${taskId}"] .task-progress-fill`);
+        const progressText = document.querySelector(`[data-task-id="${taskId}"] .task-progress-text`);
+        if (progressEl) progressEl.style.width = `${task.progress}%`;
+        if (progressText) progressText.textContent = `${task.progress}%`;
       }
       
       attempts++;
@@ -8298,7 +8304,12 @@ function pollVidgen3Task(taskId, model) {
         return;
       }
 
-      render();
+      // Partial DOM update for progress (no full re-render)
+      const progressEl = document.querySelector(`[data-task-id="${taskId}"] .task-progress-fill`);
+      const progressText = document.querySelector(`[data-task-id="${taskId}"] .task-progress-text`);
+      if (progressEl) progressEl.style.width = `${task.progress}%`;
+      if (progressText) progressText.textContent = `${task.progress}%`;
+      
       attempts++;
       if (attempts < maxAttempts) {
         setTimeout(poll, 5000);
@@ -8746,13 +8757,16 @@ async function pollXImageTask(taskId) {
         return;
       }
       
-      // Update task progress
+      // Update task progress (partial DOM update - no full re-render)
       var task = state.ximage.tasks.find(function(t) { return t.taskId === taskId; });
       if (task) {
         task.progress = data.progress || Math.min(90, attempts * 3);
         task.status = data.message || 'Processing...';
+        var progressEl = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-fill');
+        var progressText = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-text');
+        if (progressEl) progressEl.style.width = task.progress + '%';
+        if (progressText) progressText.textContent = task.progress + '%';
       }
-      render();
       
       console.log('[XIMAGE] Poll attempt ' + attempts + '/' + maxAttempts + ', status: ' + data.status);
       setTimeout(poll, 5000);
@@ -9215,8 +9229,11 @@ async function pollXImage2Task(taskId) {
       if (task) {
         task.progress = data.progress || Math.min(90, attempts * 3);
         task.status = data.message || 'Processing...';
+        var progressEl = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-fill');
+        var progressText = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-text');
+        if (progressEl) progressEl.style.width = task.progress + '%';
+        if (progressText) progressText.textContent = task.progress + '%';
       }
-      render();
 
       console.log('[XIMAGE2] Poll attempt ' + attempts + '/' + maxAttempts + ', status: ' + data.status);
       setTimeout(poll, 3000);
