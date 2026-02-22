@@ -7126,10 +7126,10 @@ function renderVidgen4Page() {
               </div>
 
               ${state.vidgen4.generationType === 'frame' ? `
-              <div style="display:flex;gap:12px;margin-top:8px;">
-                <div style="flex:1;">
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:0;">
                   <label class="setting-label" style="font-size:12px;margin-bottom:6px;">Start Frame</label>
-                  <div class="reference-upload ${state.vidgen4.startFrame ? 'has-image' : ''}" id="vidgen4StartFrameZone" style="min-height:120px;">
+                  <div class="reference-upload ${state.vidgen4.startFrame ? 'has-image' : ''}" id="vidgen4StartFrameZone" style="min-height:100px;">
                     ${state.vidgen4.startFrame ? `
                       <img src="${state.vidgen4.startFrame.data}" alt="Start" class="reference-preview">
                       <button class="remove-reference" id="removeVidgen4StartFrame">
@@ -7151,9 +7151,9 @@ function renderVidgen4Page() {
                   </div>
                   <input type="file" id="vidgen4StartFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
                 </div>
-                <div style="flex:1;">
+                <div style="flex:1;min-width:0;">
                   <label class="setting-label" style="font-size:12px;margin-bottom:6px;">End Frame</label>
-                  <div class="reference-upload ${state.vidgen4.endFrame ? 'has-image' : ''}" id="vidgen4EndFrameZone" style="min-height:120px;">
+                  <div class="reference-upload ${state.vidgen4.endFrame ? 'has-image' : ''}" id="vidgen4EndFrameZone" style="min-height:100px;">
                     ${state.vidgen4.endFrame ? `
                       <img src="${state.vidgen4.endFrame.data}" alt="End" class="reference-preview">
                       <button class="remove-reference" id="removeVidgen4EndFrame">

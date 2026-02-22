@@ -4742,6 +4742,32 @@ textarea.form-input {
   .card:hover {
     box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
   }
+
+  .card-body {
+    padding: var(--space-4) !important;
+  }
+
+  .aspect-ratio-selector {
+    flex-wrap: wrap;
+  }
+
+  .aspect-btn {
+    min-width: 0;
+    padding: var(--space-2) !important;
+    font-size: 13px;
+  }
+
+  .aspect-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+
+  .setting-group {
+    overflow: hidden;
+    max-width: 100%;
+  }
 }
 
 /* ===== MOTION CONTROL PAGE STYLES ===== */
