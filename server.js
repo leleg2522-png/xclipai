@@ -1909,21 +1909,79 @@ app.get('/api/stats/purchases', async (req, res) => {
   }
 });
 
+const registerTracker = new Map();
+const REGISTER_COOLDOWN = 300000;
+const REGISTER_MAX_PER_HOUR = 3;
+const registerHourly = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, ts] of registerTracker) {
+    if (now - ts > REGISTER_COOLDOWN) registerTracker.delete(ip);
+  }
+  for (const [ip, data] of registerHourly) {
+    if (now - data.start > 3600000) registerHourly.delete(ip);
+  }
+}, 120000);
+
 app.post('/api/auth/register', async (req, res) => {
   try {
+    const ip = getClientIP(req);
+    const now = Date.now();
+
+    const lastRegister = registerTracker.get(ip);
+    if (lastRegister && now - lastRegister < REGISTER_COOLDOWN) {
+      const waitSec = Math.ceil((REGISTER_COOLDOWN - (now - lastRegister)) / 1000);
+      return res.status(429).json({ error: `Terlalu cepat. Tunggu ${waitSec} detik sebelum mendaftar lagi.` });
+    }
+
+    let hourData = registerHourly.get(ip);
+    if (!hourData || now - hourData.start > 3600000) {
+      hourData = { count: 0, start: now };
+      registerHourly.set(ip, hourData);
+    }
+    if (hourData.count >= REGISTER_MAX_PER_HOUR) {
+      return res.status(429).json({ error: 'Batas pendaftaran tercapai. Coba lagi dalam 1 jam.' });
+    }
+
     const { username, email, password } = req.body;
     
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Username, email, dan password diperlukan' });
     }
+
+    const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 30) {
+      return res.status(400).json({ error: 'Username harus 3-30 karakter' });
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+      return res.status(400).json({ error: 'Username hanya boleh huruf, angka, dan underscore' });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmedEmail)) {
+      return res.status(400).json({ error: 'Format email tidak valid' });
+    }
+
+    const disposableDomains = ['tempmail.com','throwaway.email','guerrillamail.com','mailinator.com','yopmail.com','sharklasers.com','guerrillamail.info','grr.la','tempail.com','dispostable.com','fakeinbox.com','trashmail.com','10minutemail.com','temp-mail.org','getnada.com','mohmal.com'];
+    const emailDomain = trimmedEmail.split('@')[1];
+    if (disposableDomains.includes(emailDomain)) {
+      return res.status(400).json({ error: 'Email temporary/disposable tidak diperbolehkan' });
+    }
     
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password minimal 6 karakter' });
     }
+
+    if (password.length > 128) {
+      return res.status(400).json({ error: 'Password terlalu panjang' });
+    }
     
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email, username]
+      'SELECT id FROM users WHERE LOWER(email) = $1 OR LOWER(username) = $2',
+      [trimmedEmail, trimmedUsername.toLowerCase()]
     );
     
     if (existingUser.rows.length > 0) {
@@ -1934,11 +1992,16 @@ app.post('/api/auth/register', async (req, res) => {
     
     const result = await pool.query(
       'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
-      [username, email, passwordHash]
+      [trimmedUsername, trimmedEmail, passwordHash]
     );
     
     const user = result.rows[0];
     req.session.userId = user.id;
+
+    registerTracker.set(ip, now);
+    hourData.count++;
+
+    console.log(`[REGISTER] New user: ${trimmedUsername} (${trimmedEmail}) from IP: ${ip}`);
     
     res.json({ 
       success: true, 
