@@ -94,122 +94,12 @@ function isAllowedOrigin(origin) {
   }
 }
 
-// ============ ANTI-DDOS PROTECTION ============
-const ddos = {
-  requests: new Map(),
-  blocked: new Map(),
-  strikes: new Map(),
-  WINDOW_MS: 30000,
-  MAX_REQUESTS: 300,
-  API_MAX_REQUESTS: 40,
-  AUTH_MAX_REQUESTS: 5,
-  GENERATE_MAX_REQUESTS: 8,
-  BLOCK_DURATIONS: [600000, 1800000, 3600000, 86400000],
-  CLEANUP_INTERVAL: 60000,
-  BURST_WINDOW: 3000,
-  BURST_LIMIT: 40
-};
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, data] of ddos.requests) {
-    if (now - data.windowStart > ddos.WINDOW_MS) ddos.requests.delete(ip);
-  }
-  for (const [ip, expiry] of ddos.blocked) {
-    if (now > expiry) {
-      ddos.blocked.delete(ip);
-      console.log(`[DDOS] Unblocked IP: ${ip}`);
-    }
-  }
-  for (const [ip, data] of ddos.strikes) {
-    if (now - data.lastStrike > 86400000) ddos.strikes.delete(ip);
-  }
-}, ddos.CLEANUP_INTERVAL);
-
 function getClientIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
          req.headers['x-real-ip'] || 
          req.connection?.remoteAddress || 
          req.ip || 'unknown';
 }
-
-function blockIP(ip, reason, path) {
-  const now = Date.now();
-  let strike = ddos.strikes.get(ip);
-  if (!strike) {
-    strike = { count: 0, lastStrike: now };
-    ddos.strikes.set(ip, strike);
-  }
-  strike.count++;
-  strike.lastStrike = now;
-  
-  const idx = Math.min(strike.count - 1, ddos.BLOCK_DURATIONS.length - 1);
-  const duration = ddos.BLOCK_DURATIONS[idx];
-  ddos.blocked.set(ip, now + duration);
-  console.log(`[DDOS] BLOCKED IP: ${ip} | Strike #${strike.count} | Duration: ${Math.round(duration / 60000)}min | Reason: ${reason} | Path: ${path}`);
-}
-
-app.use((req, res, next) => {
-  const isStaticFile = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|mp4|webm)$/i.test(req.path);
-  if (isStaticFile) return next();
-  
-  const ip = getClientIP(req);
-  
-  if (ddos.blocked.has(ip)) {
-    const remaining = Math.ceil((ddos.blocked.get(ip) - Date.now()) / 1000);
-    res.setHeader('Retry-After', remaining);
-    return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
-  }
-  
-  const now = Date.now();
-  let record = ddos.requests.get(ip);
-  
-  if (!record || now - record.windowStart > ddos.WINDOW_MS) {
-    record = { count: 0, windowStart: now, apiCount: 0, authCount: 0, burstStart: now, burstCount: 0 };
-    ddos.requests.set(ip, record);
-  }
-  
-  record.count++;
-  
-  if (now - record.burstStart < ddos.BURST_WINDOW) {
-    record.burstCount++;
-    if (record.burstCount > ddos.BURST_LIMIT) {
-      blockIP(ip, `Burst: ${record.burstCount} reqs in ${now - record.burstStart}ms`, req.path);
-      return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
-    }
-  } else {
-    record.burstStart = now;
-    record.burstCount = 1;
-  }
-  
-  const isApi = req.path.startsWith('/api/');
-  const isAuth = req.path.startsWith('/api/auth/');
-  const isGenerate = req.path.includes('/generate') || req.path.includes('/create');
-  
-  if (isApi) record.apiCount++;
-  if (isAuth) record.authCount++;
-  
-  let limit = ddos.MAX_REQUESTS;
-  let current = record.count;
-  
-  if (isAuth) {
-    limit = ddos.AUTH_MAX_REQUESTS;
-    current = record.authCount;
-  } else if (isGenerate) {
-    limit = ddos.GENERATE_MAX_REQUESTS;
-    current = record.apiCount;
-  } else if (isApi) {
-    limit = ddos.API_MAX_REQUESTS;
-    current = record.apiCount;
-  }
-  
-  if (current > limit) {
-    blockIP(ip, `Rate limit: ${current}/${limit}`, req.path);
-    return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
-  }
-  
-  next();
-});
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -522,6 +412,58 @@ let iproyalFailCount = 0;
 let iproyalBlockedUntil = 0;
 let proxyProviderToggle = 0;
 
+// ============ PER-PROXY RATE LIMITER ============
+// Prevents proxy IPs from getting banned by external APIs
+const proxyRateLimiter = {
+  usage: new Map(), // key: "ip:port" -> { count, windowStart, lastUsed }
+  MAX_PER_MINUTE: 12,   // max outbound requests per proxy per minute
+  MIN_INTERVAL_MS: 2500 // minimum 2.5s between requests through same proxy
+};
+
+function canUseProxy(proxy) {
+  if (!proxy) return true;
+  const key = `${proxy.proxy_address}:${proxy.port}`;
+  const now = Date.now();
+  const rec = proxyRateLimiter.usage.get(key);
+  if (!rec) return true;
+  if (now - rec.lastUsed < proxyRateLimiter.MIN_INTERVAL_MS) return false;
+  if (now - rec.windowStart < 60000 && rec.count >= proxyRateLimiter.MAX_PER_MINUTE) return false;
+  return true;
+}
+
+function recordProxyUsage(proxy) {
+  if (!proxy) return;
+  const key = `${proxy.proxy_address}:${proxy.port}`;
+  const now = Date.now();
+  const rec = proxyRateLimiter.usage.get(key) || { count: 0, windowStart: now, lastUsed: 0 };
+  if (now - rec.windowStart > 60000) { rec.count = 0; rec.windowStart = now; }
+  rec.count++;
+  rec.lastUsed = now;
+  proxyRateLimiter.usage.set(key, rec);
+}
+
+// Wait up to maxWaitMs for a proxy slot to become available
+async function waitForProxySlot(proxy, maxWaitMs = 8000) {
+  if (!proxy) return;
+  const start = Date.now();
+  while (!canUseProxy(proxy)) {
+    if (Date.now() - start > maxWaitMs) {
+      console.log(`[PROXY] Rate limit wait exceeded for ${proxy.proxy_address}:${proxy.port}`);
+      return;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  recordProxyUsage(proxy);
+}
+
+// Cleanup old proxy usage records every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, rec] of proxyRateLimiter.usage) {
+    if (now - rec.lastUsed > 300000) proxyRateLimiter.usage.delete(key);
+  }
+}, 300000);
+
 function initIpRoyalProxy() {
   if (iproyalInitialized) return;
   iproyalInitialized = true;
@@ -778,11 +720,21 @@ function getNextProxy() {
   if (hasWebshare && hasProxyingIo) {
     proxyProviderToggle++;
     if (proxyProviderToggle % 3 !== 0) {
-      const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
-      webshareIndex++;
-      return wp;
+      // Pick a Webshare proxy that is not rate-limited
+      for (let i = 0; i < WEBSHARE_PROXIES.length; i++) {
+        const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+        webshareIndex++;
+        if (canUseProxy(wp)) return wp;
+      }
     }
+    // Pick a Proxying.io proxy that is not blocked and not rate-limited
     const totalProxies = PROXYING_IO_PROXIES.length;
+    for (let i = 0; i < totalProxies; i++) {
+      const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+      proxyIndex++;
+      if (!isProxyBlocked(proxy) && canUseProxy(proxy)) return proxy;
+    }
+    // Fallback: any non-blocked proxy
     for (let i = 0; i < totalProxies; i++) {
       const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
       proxyIndex++;
@@ -794,12 +746,26 @@ function getNextProxy() {
   }
   
   if (hasWebshare) {
+    // Pick a Webshare proxy that is not rate-limited
+    for (let i = 0; i < WEBSHARE_PROXIES.length; i++) {
+      const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+      webshareIndex++;
+      if (canUseProxy(wp)) return wp;
+    }
+    // Fallback to any Webshare proxy
     const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
     webshareIndex++;
     return wp;
   }
   
   const totalProxies = PROXYING_IO_PROXIES.length;
+  // Prefer non-blocked, non-rate-limited proxies
+  for (let i = 0; i < totalProxies; i++) {
+    const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
+    proxyIndex++;
+    if (!isProxyBlocked(proxy) && canUseProxy(proxy)) return proxy;
+  }
+  // Fallback: any non-blocked proxy
   for (let i = 0; i < totalProxies; i++) {
     const proxy = PROXYING_IO_PROXIES[proxyIndex % totalProxies];
     proxyIndex++;
@@ -957,6 +923,9 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
     if (!usedProxy) break;
 
+    // Wait for proxy slot (per-proxy rate limiting to avoid IP bans)
+    await waitForProxySlot(usedProxy);
+
     console.log(`[PROXY] Attempt ${proxyAttempt + 1}/${maxProxyAttempts} via ${usedProxy.provider}: ${usedProxy.proxy_address}:${usedProxy.port}`);
     try {
       const resp = await axios(proxyConfig);
@@ -1036,6 +1005,8 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
       }
       
       if (proxy) {
+        // Per-proxy rate limit: wait for available slot
+        await waitForProxySlot(proxy);
         console.log(`Using Proxying.io proxy: ${proxy.proxy_address}:${proxy.port}`);
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         const response = await axios({
