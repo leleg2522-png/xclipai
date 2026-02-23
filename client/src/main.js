@@ -912,7 +912,7 @@ async function handleLogout() {
     // Reset ALL state to initial values
     state.auth.user = null;
     state.auth.showModal = false;
-    state.auth.isLogin = true;
+    state.auth.modalMode = 'login';
     state.videogen.customApiKey = '';
     state.videogen.tasks = [];
     state.roomManager.hasSubscription = false;
@@ -5920,7 +5920,7 @@ function attachEventListeners() {
   if (openLoginBtn) {
     openLoginBtn.addEventListener('click', () => {
       state.auth.showModal = true;
-      state.auth.isLogin = true;
+      state.auth.modalMode = 'login';
       render();
     });
   }
