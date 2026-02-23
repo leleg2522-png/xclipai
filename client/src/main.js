@@ -9860,11 +9860,19 @@ function pollMotionStatus(taskId, model, apiKey) {
       const xclipKey = apiKey || task.apiKey || state.motion.customApiKey || state.motionRoomManager.xclipApiKey || state.videogen.customApiKey;
       
       if (!xclipKey) {
-        console.error('[MOTION POLL] No API key available');
-        task.status = 'failed';
-        task.error = 'Xclip API key diperlukan';
-        stopPolling();
-        render(true);
+        if (!task._noKeyCount) task._noKeyCount = 0;
+        task._noKeyCount++;
+        console.warn(`[MOTION POLL] No API key yet, waiting... (${task._noKeyCount}/10)`);
+        if (task._noKeyCount >= 10) {
+          task.status = 'failed';
+          task.error = 'Xclip API key diperlukan - silakan isi API key di pengaturan';
+          stopPolling();
+          render(true);
+          return;
+        }
+        task.statusText = 'Menunggu API key...';
+        updateMotionTaskUI(taskId);
+        setTimeout(poll, 5000);
         return;
       }
       
@@ -9981,10 +9989,24 @@ function pollMotionStatus(taskId, model, apiKey) {
       console.error('Poll motion error:', error);
       const task = state.motion.tasks.find(t => t.taskId === taskId);
       if (task) {
-        task.status = 'failed';
-        task.error = error.message;
-        stopPolling();
-        render(true);
+        if (!task._networkErrorCount) task._networkErrorCount = 0;
+        task._networkErrorCount++;
+        console.warn(`[MOTION POLL] Network error #${task._networkErrorCount} for task ${taskId}:`, error.message);
+
+        if (task._networkErrorCount >= 20) {
+          task.status = 'failed';
+          task.error = 'Koneksi bermasalah, generation gagal setelah beberapa percobaan';
+          stopPolling();
+          render(true);
+          return;
+        }
+
+        task.statusText = 'Koneksi sesaat bermasalah, mencoba lagi...';
+        updateMotionTaskUI(taskId);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000);
+        }
       }
     }
   };
