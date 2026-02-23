@@ -3638,8 +3638,13 @@ app.post('/api/motion/generate', async (req, res) => {
         } else if (isNetworkError) {
           console.log(`[MOTION] Key ${currentKey.name} network error: ${errorMsg}, trying next key...`);
           continue;
+        } else if (status === 403) {
+          const fullErr = JSON.stringify(error.response?.data || {});
+          console.warn(`[MOTION] Key ${currentKey.name} got 403 (invalid/no access), trying next key... | Detail: ${fullErr}`);
+          continue;
         } else {
-          console.error(`[MOTION] Key ${currentKey.name} failed with status ${status}:`, errorMsg);
+          const fullErr = JSON.stringify(error.response?.data || {});
+          console.error(`[MOTION] Key ${currentKey.name} failed with status ${status}: ${errorMsg} | Full: ${fullErr}`);
           break;
         }
       }
