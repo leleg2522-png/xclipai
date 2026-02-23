@@ -4952,6 +4952,40 @@ app.post('/api/admin/rooms/:id/test-droplet', requireAdmin, async (req, res) => 
 
 // ==================== ROOM MANAGER API ====================
 
+app.get('/api/admin/ddos/blocked', requireAdmin, (req, res) => {
+  const blocked = [];
+  const now = Date.now();
+  for (const [ip, expiry] of ddos.blocked) {
+    const strike = ddos.strikes.get(ip);
+    blocked.push({
+      ip,
+      remaining: Math.ceil((expiry - now) / 1000),
+      strikes: strike ? strike.count : 0,
+      expiresAt: new Date(expiry).toISOString()
+    });
+  }
+  res.json({ blocked, total: blocked.length });
+});
+
+app.post('/api/admin/ddos/unblock', requireAdmin, (req, res) => {
+  const { ip } = req.body;
+  if (!ip) return res.status(400).json({ error: 'IP diperlukan' });
+  
+  ddos.blocked.delete(ip);
+  ddos.strikes.delete(ip);
+  ddos.requests.delete(ip);
+  console.log(`[DDOS] Admin unblocked IP: ${ip}`);
+  res.json({ success: true, message: `IP ${ip} berhasil di-unblock` });
+});
+
+app.post('/api/admin/ddos/unblock-all', requireAdmin, (req, res) => {
+  const count = ddos.blocked.size;
+  ddos.blocked.clear();
+  ddos.strikes.clear();
+  console.log(`[DDOS] Admin unblocked ALL IPs (${count} total)`);
+  res.json({ success: true, message: `${count} IP berhasil di-unblock` });
+});
+
 // Get all rooms with status (filter by feature: videogen or xmaker)
 app.get('/api/rooms', async (req, res) => {
   try {
