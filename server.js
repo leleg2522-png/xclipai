@@ -100,14 +100,14 @@ const ddos = {
   blocked: new Map(),
   strikes: new Map(),
   WINDOW_MS: 30000,
-  MAX_REQUESTS: 100,
-  API_MAX_REQUESTS: 30,
+  MAX_REQUESTS: 300,
+  API_MAX_REQUESTS: 40,
   AUTH_MAX_REQUESTS: 5,
   GENERATE_MAX_REQUESTS: 8,
   BLOCK_DURATIONS: [600000, 1800000, 3600000, 86400000],
   CLEANUP_INTERVAL: 60000,
-  BURST_WINDOW: 5000,
-  BURST_LIMIT: 20
+  BURST_WINDOW: 3000,
+  BURST_LIMIT: 40
 };
 
 setInterval(() => {
@@ -150,12 +150,15 @@ function blockIP(ip, reason, path) {
 }
 
 app.use((req, res, next) => {
+  const isStaticFile = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|mp4|webm)$/i.test(req.path);
+  if (isStaticFile) return next();
+  
   const ip = getClientIP(req);
   
   if (ddos.blocked.has(ip)) {
     const remaining = Math.ceil((ddos.blocked.get(ip) - Date.now()) / 1000);
     res.setHeader('Retry-After', remaining);
-    return res.status(429).end();
+    return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
   }
   
   const now = Date.now();
@@ -172,7 +175,7 @@ app.use((req, res, next) => {
     record.burstCount++;
     if (record.burstCount > ddos.BURST_LIMIT) {
       blockIP(ip, `Burst: ${record.burstCount} reqs in ${now - record.burstStart}ms`, req.path);
-      return res.status(429).end();
+      return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
     }
   } else {
     record.burstStart = now;
@@ -202,7 +205,7 @@ app.use((req, res, next) => {
   
   if (current > limit) {
     blockIP(ip, `Rate limit: ${current}/${limit}`, req.path);
-    return res.status(429).end();
+    return res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
   }
   
   next();
