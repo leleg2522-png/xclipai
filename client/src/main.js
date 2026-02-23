@@ -366,7 +366,10 @@ const state = {
     isAdmin: false,
     payments: [],
     isLoading: false,
-    filter: 'pending'
+    filter: 'pending',
+    blockedIPs: [],
+    blockedLoading: false,
+    activeTab: 'payments'
   },
   xmaker: {
     selectedModel: 'nano-banana',
@@ -2017,63 +2020,174 @@ function renderMyPaymentsModal() {
   `;
 }
 
+async function fetchBlockedIPs() {
+  try {
+    state.admin.blockedLoading = true;
+    render();
+    const response = await fetch(`${API_URL}/api/admin/ddos/blocked`, { credentials: 'include' });
+    const data = await response.json();
+    state.admin.blockedIPs = data.blocked || [];
+  } catch (error) {
+    console.error('Fetch blocked IPs error:', error);
+    state.admin.blockedIPs = [];
+  } finally {
+    state.admin.blockedLoading = false;
+    render();
+  }
+}
+
+async function unblockIP(ip) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/ddos/unblock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ip })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast(`IP ${ip} berhasil di-unblock`, 'success');
+      await fetchBlockedIPs();
+    } else {
+      showToast(data.error || 'Gagal unblock IP', 'error');
+    }
+  } catch (error) {
+    showToast('Gagal unblock IP', 'error');
+  }
+}
+
+async function unblockAllIPs() {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/ddos/unblock-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      await fetchBlockedIPs();
+    } else {
+      showToast('Gagal unblock semua IP', 'error');
+    }
+  } catch (error) {
+    showToast('Gagal unblock semua IP', 'error');
+  }
+}
+
+function formatDuration(seconds) {
+  if (seconds <= 0) return 'Expired';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
 function renderAdminPage() {
   if (!state.admin.isAdmin) return '';
+  
+  const tab = state.admin.activeTab;
   
   return `
     <div class="container admin-page">
       <div class="admin-header">
         <h1>Admin Dashboard</h1>
-        <p>Verifikasi pembayaran user</p>
         <button class="btn btn-secondary" id="backToMainBtn">Kembali</button>
       </div>
       
-      <div class="admin-filters">
-        <button class="filter-btn ${state.admin.filter === 'all' ? 'active' : ''}" data-filter="all">Semua</button>
-        <button class="filter-btn ${state.admin.filter === 'pending' ? 'active' : ''}" data-filter="pending">Menunggu</button>
-        <button class="filter-btn ${state.admin.filter === 'approved' ? 'active' : ''}" data-filter="approved">Approved</button>
-        <button class="filter-btn ${state.admin.filter === 'rejected' ? 'active' : ''}" data-filter="rejected">Rejected</button>
-        <button class="btn btn-secondary refresh-btn" id="refreshAdminPayments">Refresh</button>
+      <div class="admin-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn ${tab === 'payments' ? 'btn-primary' : 'btn-secondary'}" id="adminTabPayments">Pembayaran</button>
+        <button class="btn ${tab === 'ddos' ? 'btn-primary' : 'btn-secondary'}" id="adminTabDdos">IP Blocked</button>
       </div>
       
-      <div class="admin-payments-list">
-        ${state.admin.isLoading ? `
-          <div class="loading-spinner">Loading...</div>
-        ` : state.admin.payments.length === 0 ? `
-          <div class="no-payments">Tidak ada pembayaran ${state.admin.filter !== 'all' ? 'dengan status ini' : ''}</div>
-        ` : state.admin.payments.map(payment => `
-          <div class="admin-payment-card">
-            <div class="payment-user-info">
-              <strong>${payment.username}</strong>
-              <span>${payment.email}</span>
+      ${tab === 'payments' ? renderAdminPayments() : renderAdminDdos()}
+    </div>
+  `;
+}
+
+function renderAdminPayments() {
+  return `
+    <div class="admin-filters">
+      <button class="filter-btn ${state.admin.filter === 'all' ? 'active' : ''}" data-filter="all">Semua</button>
+      <button class="filter-btn ${state.admin.filter === 'pending' ? 'active' : ''}" data-filter="pending">Menunggu</button>
+      <button class="filter-btn ${state.admin.filter === 'approved' ? 'active' : ''}" data-filter="approved">Approved</button>
+      <button class="filter-btn ${state.admin.filter === 'rejected' ? 'active' : ''}" data-filter="rejected">Rejected</button>
+      <button class="btn btn-secondary refresh-btn" id="refreshAdminPayments">Refresh</button>
+    </div>
+    
+    <div class="admin-payments-list">
+      ${state.admin.isLoading ? `
+        <div class="loading-spinner">Loading...</div>
+      ` : state.admin.payments.length === 0 ? `
+        <div class="no-payments">Tidak ada pembayaran ${state.admin.filter !== 'all' ? 'dengan status ini' : ''}</div>
+      ` : state.admin.payments.map(payment => `
+        <div class="admin-payment-card">
+          <div class="payment-user-info">
+            <strong>${payment.username}</strong>
+            <span>${payment.email}</span>
+          </div>
+          <div class="payment-details">
+            <span class="package">${payment.package}</span>
+            <span class="amount">${formatPrice(payment.amount)}</span>
+            <span class="date">${new Date(payment.created_at).toLocaleString('id-ID')}</span>
+          </div>
+          <div class="payment-proof">
+            <a href="${payment.proof_image}" target="_blank" class="view-proof-btn">
+              <img src="${payment.proof_image}" alt="Bukti" class="proof-thumbnail">
+              Lihat Bukti
+            </a>
+          </div>
+          <div class="payment-status">
+            <span class="status-badge-${payment.status}">
+              ${payment.status === 'pending' ? 'Menunggu' : 
+                payment.status === 'approved' ? 'Approved' : 'Rejected'}
+            </span>
+          </div>
+          ${payment.status === 'pending' ? `
+            <div class="payment-actions">
+              <button class="btn btn-success approve-btn" data-payment-id="${payment.id}">ACC</button>
+              <button class="btn btn-danger reject-btn" data-payment-id="${payment.id}">Tolak</button>
             </div>
-            <div class="payment-details">
-              <span class="package">${payment.package}</span>
-              <span class="amount">${formatPrice(payment.amount)}</span>
-              <span class="date">${new Date(payment.created_at).toLocaleString('id-ID')}</span>
-            </div>
-            <div class="payment-proof">
-              <a href="${payment.proof_image}" target="_blank" class="view-proof-btn">
-                <img src="${payment.proof_image}" alt="Bukti" class="proof-thumbnail">
-                Lihat Bukti
-              </a>
-            </div>
-            <div class="payment-status">
-              <span class="status-badge-${payment.status}">
-                ${payment.status === 'pending' ? 'Menunggu' : 
-                  payment.status === 'approved' ? 'Approved' : 'Rejected'}
-              </span>
-            </div>
-            ${payment.status === 'pending' ? `
-              <div class="payment-actions">
-                <button class="btn btn-success approve-btn" data-payment-id="${payment.id}">ACC</button>
-                <button class="btn btn-danger reject-btn" data-payment-id="${payment.id}">Tolak</button>
+          ` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderAdminDdos() {
+  const ips = state.admin.blockedIPs;
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <h3 style="margin:0;color:#fff;">IP yang Diblokir (${ips.length})</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" id="refreshBlockedIPs">Refresh</button>
+        ${ips.length > 0 ? `<button class="btn btn-danger" id="unblockAllIPs">Unblock Semua</button>` : ''}
+      </div>
+    </div>
+    
+    ${state.admin.blockedLoading ? `
+      <div class="loading-spinner">Loading...</div>
+    ` : ips.length === 0 ? `
+      <div class="no-payments" style="text-align:center;padding:40px;color:#aaa;">
+        Tidak ada IP yang diblokir saat ini
+      </div>
+    ` : `
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${ips.map(item => `
+          <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;">
+              <span style="font-family:monospace;font-size:14px;color:#fff;word-break:break-all;">${item.ip}</span>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:#f59e0b;">Strike: ${item.strikes}x</span>
+                <span style="font-size:12px;color:#ef4444;">Sisa: ${formatDuration(item.remaining)}</span>
+                <span style="font-size:12px;color:#888;">Expires: ${new Date(item.expiresAt).toLocaleString('id-ID')}</span>
               </div>
-            ` : ''}
+            </div>
+            <button class="btn btn-success unblock-ip-btn" data-ip="${item.ip}" style="white-space:nowrap;padding:6px 14px;font-size:13px;">Unblock</button>
           </div>
         `).join('')}
       </div>
-    </div>
+    `}
   `;
 }
 
@@ -6069,6 +6183,46 @@ function attachEventListeners() {
       const paymentId = parseInt(e.currentTarget.dataset.paymentId);
       const reason = prompt('Alasan penolakan (opsional):');
       rejectPayment(paymentId, reason);
+    });
+  });
+
+  const adminTabPayments = document.getElementById('adminTabPayments');
+  if (adminTabPayments) {
+    adminTabPayments.addEventListener('click', () => {
+      state.admin.activeTab = 'payments';
+      fetchAdminPayments();
+      render();
+    });
+  }
+
+  const adminTabDdos = document.getElementById('adminTabDdos');
+  if (adminTabDdos) {
+    adminTabDdos.addEventListener('click', () => {
+      state.admin.activeTab = 'ddos';
+      fetchBlockedIPs();
+    });
+  }
+
+  const refreshBlockedIPs = document.getElementById('refreshBlockedIPs');
+  if (refreshBlockedIPs) {
+    refreshBlockedIPs.addEventListener('click', fetchBlockedIPs);
+  }
+
+  const unblockAllBtn = document.getElementById('unblockAllIPs');
+  if (unblockAllBtn) {
+    unblockAllBtn.addEventListener('click', () => {
+      if (confirm('Yakin ingin unblock semua IP?')) {
+        unblockAllIPs();
+      }
+    });
+  }
+
+  document.querySelectorAll('.unblock-ip-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const ip = e.currentTarget.dataset.ip;
+      if (confirm(`Unblock IP ${ip}?`)) {
+        unblockIP(ip);
+      }
     });
   });
 
