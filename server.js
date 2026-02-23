@@ -1930,7 +1930,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Email atau username sudah terdaftar' });
     }
     
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 10);
     
     const result = await pool.query(
       'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
