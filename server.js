@@ -2541,6 +2541,8 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
     `/v1/ai/video/kling-v2-6/${taskId}`
   ];
   
+  let forbiddenCount = 0;
+
   for (const endpoint of pollEndpoints) {
     try {
       const pollResponse = await axios.get(
@@ -2577,10 +2579,24 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         }
       }
     } catch (e) {
-      console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} error: ${e.message}`);
+      const httpStatus = e.response?.status;
+      if (httpStatus === 403) {
+        forbiddenCount++;
+        console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 403 Forbidden (wrong API key or task not owned by this key)`);
+      } else {
+        console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} error: ${e.message}`);
+      }
       continue;
     }
   }
+
+  // If ALL endpoints returned 403, the API key is wrong for this task
+  // This usually happens after server restart when the wrong key is used
+  if (forbiddenCount === pollEndpoints.length) {
+    console.log(`[MOTION] Poll ${taskId} - ALL endpoints returned 403. API key mismatch. Will rely on webhook only.`);
+    return { status: 'forbidden' };
+  }
+
   return { status: 'processing' };
 }
 
@@ -2694,6 +2710,11 @@ setInterval(async () => {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`, [result.error, taskId]);
         }
         serverBgPolls.delete(taskId);
+      } else if (result.status === 'forbidden') {
+        // 403 on all endpoints = wrong API key resumed after restart
+        // Stop BG-POLL spam, rely on webhook to deliver result
+        console.log(`[BG-POLL] Task ${taskId} → 403 API key mismatch, stopping BG-POLL. Relying on webhook.`);
+        serverBgPolls.delete(taskId);
       }
     } catch (e) {
       if (task.attempts % 10 === 0) {
@@ -2722,14 +2743,26 @@ async function resumePendingTaskPolling() {
         
         for (const row of result.rows) {
           let apiKey = null;
+          const isMotionTask = (row.model || '').startsWith('motion-');
+
           if (keyCol && row[keyCol]) {
             apiKey = process.env[row[keyCol]];
           }
-          if (!apiKey && (apiType === 'apimart' || apiType === 'apimart')) {
+          if (!apiKey && (apiType === 'apimart')) {
             apiKey = process.env.APIMART_API_KEY;
           }
           if (!apiKey && (apiType === 'poyo')) {
             apiKey = process.env.POYO_API_KEY;
+          }
+          // For motion tasks: try all MOTION_ROOM keys before falling back to FREEPIK_API_KEY
+          if (!apiKey && isMotionTask) {
+            const totalRooms = 5;
+            outer: for (let r = 1; r <= totalRooms; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const motionKey = process.env[`MOTION_ROOM${r}_KEY_${k}`];
+                if (motionKey) { apiKey = motionKey; break outer; }
+              }
+            }
           }
           if (!apiKey && (apiType === 'freepik-auto' || apiType === 'freepik-motion' || apiType === 'freepik-video')) {
             apiKey = process.env.FREEPIK_API_KEY;
@@ -2737,7 +2770,7 @@ async function resumePendingTaskPolling() {
           if (apiKey) {
             let resolvedType = apiType;
             if (apiType === 'freepik-auto') {
-              resolvedType = (row.model || '').startsWith('motion-') ? 'freepik-motion' : 'freepik-video';
+              resolvedType = isMotionTask ? 'freepik-motion' : 'freepik-video';
             }
             startServerBgPoll(row.task_id, resolvedType, apiKey, {
               dbTable: table,
