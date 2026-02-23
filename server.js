@@ -1910,17 +1910,17 @@ app.get('/api/stats/purchases', async (req, res) => {
 });
 
 const registerTracker = new Map();
-const REGISTER_COOLDOWN = 300000;
-const REGISTER_MAX_PER_HOUR = 3;
-const registerHourly = new Map();
+const REGISTER_COOLDOWN = 86400000;
+const REGISTER_MAX_PER_DAY = 1;
+const registerDaily = new Map();
 
 setInterval(() => {
   const now = Date.now();
   for (const [ip, ts] of registerTracker) {
     if (now - ts > REGISTER_COOLDOWN) registerTracker.delete(ip);
   }
-  for (const [ip, data] of registerHourly) {
-    if (now - data.start > 3600000) registerHourly.delete(ip);
+  for (const [ip, data] of registerDaily) {
+    if (now - data.start > 86400000) registerDaily.delete(ip);
   }
 }, 120000);
 
@@ -1935,13 +1935,13 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(429).json({ error: `Terlalu cepat. Tunggu ${waitSec} detik sebelum mendaftar lagi.` });
     }
 
-    let hourData = registerHourly.get(ip);
-    if (!hourData || now - hourData.start > 3600000) {
-      hourData = { count: 0, start: now };
-      registerHourly.set(ip, hourData);
+    let dayData = registerDaily.get(ip);
+    if (!dayData || now - dayData.start > 86400000) {
+      dayData = { count: 0, start: now };
+      registerDaily.set(ip, dayData);
     }
-    if (hourData.count >= REGISTER_MAX_PER_HOUR) {
-      return res.status(429).json({ error: 'Batas pendaftaran tercapai. Coba lagi dalam 1 jam.' });
+    if (dayData.count >= REGISTER_MAX_PER_DAY) {
+      return res.status(429).json({ error: 'Batas pendaftaran tercapai. Hanya 1 akun per hari dari IP ini.' });
     }
 
     const { username, email, password } = req.body;
@@ -1999,7 +1999,7 @@ app.post('/api/auth/register', async (req, res) => {
     req.session.userId = user.id;
 
     registerTracker.set(ip, now);
-    hourData.count++;
+    dayData.count++;
 
     console.log(`[REGISTER] New user: ${trimmedUsername} (${trimmedEmail}) from IP: ${ip}`);
     
