@@ -94,16 +94,23 @@ function isAllowedOrigin(origin) {
   }
 }
 
-// ============ ANTI-DDOS PROTECTION ============
+// ============ ANTI-DDOS PROTECTION (AGGRESSIVE) ============
 const ddos = {
   requests: new Map(),
   blocked: new Map(),
-  WINDOW_MS: 60000,
-  MAX_REQUESTS: 300,
-  API_MAX_REQUESTS: 60,
-  AUTH_MAX_REQUESTS: 10,
-  BLOCK_DURATION: 300000,
-  CLEANUP_INTERVAL: 120000
+  strikes: new Map(),
+  suspicious: new Map(),
+  WINDOW_MS: 30000,
+  MAX_REQUESTS: 100,
+  API_MAX_REQUESTS: 30,
+  AUTH_MAX_REQUESTS: 5,
+  GENERATE_MAX_REQUESTS: 8,
+  BLOCK_DURATIONS: [600000, 1800000, 3600000, 86400000],
+  CLEANUP_INTERVAL: 60000,
+  BURST_WINDOW: 5000,
+  BURST_LIMIT: 20,
+  LARGE_BODY_LIMIT: 10 * 1024 * 1024,
+  SLOWLORIS_TIMEOUT: 10000
 };
 
 setInterval(() => {
@@ -117,6 +124,12 @@ setInterval(() => {
       console.log(`[DDOS] Unblocked IP: ${ip}`);
     }
   }
+  for (const [ip, data] of ddos.suspicious) {
+    if (now - data.lastSeen > 300000) ddos.suspicious.delete(ip);
+  }
+  for (const [ip, data] of ddos.strikes) {
+    if (now - data.lastStrike > 86400000) ddos.strikes.delete(ip);
+  }
 }, ddos.CLEANUP_INTERVAL);
 
 function getClientIP(req) {
@@ -126,22 +139,73 @@ function getClientIP(req) {
          req.ip || 'unknown';
 }
 
+function getBlockDuration(ip) {
+  const strike = ddos.strikes.get(ip);
+  const count = strike ? strike.count : 0;
+  const idx = Math.min(count, ddos.BLOCK_DURATIONS.length - 1);
+  return ddos.BLOCK_DURATIONS[idx];
+}
+
+function blockIP(ip, reason, path) {
+  const now = Date.now();
+  let strike = ddos.strikes.get(ip);
+  if (!strike) {
+    strike = { count: 0, lastStrike: now };
+    ddos.strikes.set(ip, strike);
+  }
+  strike.count++;
+  strike.lastStrike = now;
+  
+  const duration = getBlockDuration(ip);
+  ddos.blocked.set(ip, now + duration);
+  const mins = Math.round(duration / 60000);
+  console.log(`[DDOS] BLOCKED IP: ${ip} | Strike #${strike.count} | Duration: ${mins}min | Reason: ${reason} | Path: ${path}`);
+}
+
 app.use((req, res, next) => {
   const ip = getClientIP(req);
   
   if (ddos.blocked.has(ip)) {
-    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    const remaining = Math.ceil((ddos.blocked.get(ip) - Date.now()) / 1000);
+    res.setHeader('Retry-After', remaining);
+    return res.status(429).end();
+  }
+  
+  const ua = req.headers['user-agent'] || '';
+  if (!ua || ua.length < 10) {
+    const isStaticFile = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|map)$/i.test(req.path);
+    if (!isStaticFile && req.path.startsWith('/api/')) {
+      let sus = ddos.suspicious.get(ip);
+      if (!sus) { sus = { noUA: 0, lastSeen: Date.now() }; ddos.suspicious.set(ip, sus); }
+      sus.noUA++;
+      sus.lastSeen = Date.now();
+      if (sus.noUA > 5) {
+        blockIP(ip, `No User-Agent bot (${sus.noUA} hits)`, req.path);
+        return res.status(429).end();
+      }
+    }
   }
   
   const now = Date.now();
   let record = ddos.requests.get(ip);
   
   if (!record || now - record.windowStart > ddos.WINDOW_MS) {
-    record = { count: 0, windowStart: now, apiCount: 0, authCount: 0 };
+    record = { count: 0, windowStart: now, apiCount: 0, authCount: 0, burstStart: now, burstCount: 0 };
     ddos.requests.set(ip, record);
   }
   
   record.count++;
+  
+  if (now - record.burstStart < ddos.BURST_WINDOW) {
+    record.burstCount++;
+    if (record.burstCount > ddos.BURST_LIMIT) {
+      blockIP(ip, `Burst attack: ${record.burstCount} requests in ${now - record.burstStart}ms`, req.path);
+      return res.status(429).end();
+    }
+  } else {
+    record.burstStart = now;
+    record.burstCount = 1;
+  }
   
   const isApi = req.path.startsWith('/api/');
   const isAuth = req.path.startsWith('/api/auth/');
@@ -157,7 +221,7 @@ app.use((req, res, next) => {
     limit = ddos.AUTH_MAX_REQUESTS;
     current = record.authCount;
   } else if (isGenerate) {
-    limit = 15;
+    limit = ddos.GENERATE_MAX_REQUESTS;
     current = record.apiCount;
   } else if (isApi) {
     limit = ddos.API_MAX_REQUESTS;
@@ -165,16 +229,28 @@ app.use((req, res, next) => {
   }
   
   if (current > limit) {
-    ddos.blocked.set(ip, now + ddos.BLOCK_DURATION);
-    console.log(`[DDOS] Blocked IP: ${ip} | Reason: ${current} requests in ${Math.round((now - record.windowStart) / 1000)}s (limit: ${limit}) | Path: ${req.path}`);
-    return res.status(429).json({ error: 'Rate limit exceeded. You are temporarily blocked.' });
+    blockIP(ip, `Rate limit: ${current}/${limit} in ${Math.round((now - record.windowStart) / 1000)}s`, req.path);
+    return res.status(429).end();
   }
   
   if (current > limit * 0.8) {
-    res.setHeader('X-RateLimit-Warning', 'approaching-limit');
     res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - current));
   }
   
+  req.setTimeout(ddos.SLOWLORIS_TIMEOUT, () => {
+    blockIP(ip, 'Slowloris timeout', req.path);
+    req.destroy();
+  });
+  
+  next();
+});
+
+app.use((req, res, next) => {
+  if (req.headers['content-length'] && parseInt(req.headers['content-length']) > ddos.LARGE_BODY_LIMIT) {
+    const ip = getClientIP(req);
+    blockIP(ip, `Oversized payload: ${req.headers['content-length']} bytes`, req.path);
+    return res.status(413).json({ error: 'Payload too large' });
+  }
   next();
 });
 
@@ -183,6 +259,8 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.removeHeader('X-Powered-By');
   next();
 });
 
