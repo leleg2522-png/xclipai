@@ -94,10 +94,101 @@ function isAllowedOrigin(origin) {
   }
 }
 
+// ============ ANTI-DDOS PROTECTION ============
+const ddos = {
+  requests: new Map(),
+  blocked: new Map(),
+  WINDOW_MS: 60000,
+  MAX_REQUESTS: 300,
+  API_MAX_REQUESTS: 60,
+  AUTH_MAX_REQUESTS: 10,
+  BLOCK_DURATION: 300000,
+  CLEANUP_INTERVAL: 120000
+};
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of ddos.requests) {
+    if (now - data.windowStart > ddos.WINDOW_MS) ddos.requests.delete(ip);
+  }
+  for (const [ip, expiry] of ddos.blocked) {
+    if (now > expiry) {
+      ddos.blocked.delete(ip);
+      console.log(`[DDOS] Unblocked IP: ${ip}`);
+    }
+  }
+}, ddos.CLEANUP_INTERVAL);
+
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.headers['x-real-ip'] || 
+         req.connection?.remoteAddress || 
+         req.ip || 'unknown';
+}
+
+app.use((req, res, next) => {
+  const ip = getClientIP(req);
+  
+  if (ddos.blocked.has(ip)) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+  
+  const now = Date.now();
+  let record = ddos.requests.get(ip);
+  
+  if (!record || now - record.windowStart > ddos.WINDOW_MS) {
+    record = { count: 0, windowStart: now, apiCount: 0, authCount: 0 };
+    ddos.requests.set(ip, record);
+  }
+  
+  record.count++;
+  
+  const isApi = req.path.startsWith('/api/');
+  const isAuth = req.path.startsWith('/api/auth/');
+  const isGenerate = req.path.includes('/generate') || req.path.includes('/create');
+  
+  if (isApi) record.apiCount++;
+  if (isAuth) record.authCount++;
+  
+  let limit = ddos.MAX_REQUESTS;
+  let current = record.count;
+  
+  if (isAuth) {
+    limit = ddos.AUTH_MAX_REQUESTS;
+    current = record.authCount;
+  } else if (isGenerate) {
+    limit = 15;
+    current = record.apiCount;
+  } else if (isApi) {
+    limit = ddos.API_MAX_REQUESTS;
+    current = record.apiCount;
+  }
+  
+  if (current > limit) {
+    ddos.blocked.set(ip, now + ddos.BLOCK_DURATION);
+    console.log(`[DDOS] Blocked IP: ${ip} | Reason: ${current} requests in ${Math.round((now - record.windowStart) / 1000)}s (limit: ${limit}) | Path: ${req.path}`);
+    return res.status(429).json({ error: 'Rate limit exceeded. You are temporarily blocked.' });
+  }
+  
+  if (current > limit * 0.8) {
+    res.setHeader('X-RateLimit-Warning', 'approaching-limit');
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - current));
+  }
+  
+  next();
+});
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // ============ PERFORMANCE MONITORING ============
 app.use((req, res, next) => {
   const start = Date.now();
-  // Set cache control for better performance
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.on('finish', () => {
     const duration = Date.now() - start;
