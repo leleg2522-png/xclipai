@@ -1738,16 +1738,17 @@ app.post('/api/webhook/freepik', async (req, res) => {
         console.log(`[VIDGEN3] Webhook: Video completed! Task ${taskId}`);
       } else if (isFailed) {
         releaseProxyForTask(taskId);
+        const v3FailReason = data.error_message || data.error || data.message || data.detail || req.body.error_message || req.body.error || 'Generation failed';
+        console.log(`[VIDGEN3] Webhook: Video failed! Task ${taskId} | Reason: ${v3FailReason} | Full payload: ${JSON.stringify(req.body)}`);
         await pool.query(
           'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-          ['failed', data.error || 'Generation failed', taskId]
+          ['failed', v3FailReason, taskId]
         );
         sendSSEToUser(v3Task.user_id, {
           type: 'vidgen3_failed',
           taskId: taskId,
-          error: data.error || 'Video generation failed'
+          error: v3FailReason
         });
-        console.log(`[VIDGEN3] Webhook: Video failed! Task ${taskId}`);
       }
       
       return res.status(200).json({ received: true });
@@ -1810,24 +1811,19 @@ app.post('/api/webhook/freepik', async (req, res) => {
       console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}, SSE sent: ${sent}`);
     } else if (isFailed) {
       releaseProxyForTask(taskId);
-      const failReason = data.error || data.message || 'Video generation failed';
+      const failReason = data.error_message || data.error || data.message || data.detail || req.body.error_message || req.body.error || 'Video generation failed';
+      console.log(`Webhook: Video failed! Task ${taskId} | Reason: ${failReason} | Full payload: ${JSON.stringify(req.body)}`);
       await pool.query(
-        'UPDATE video_generation_tasks SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE task_id = $2',
-        ['failed', taskId]
+        'UPDATE video_generation_tasks SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
+        ['failed', failReason, taskId]
       );
-      await pool.query(
-        'UPDATE video_generation_tasks SET error_message = $1 WHERE task_id = $2',
-        [failReason, taskId]
-      ).catch(() => {});
       
       const isMotionFailed = task.model && task.model.startsWith('motion-');
       sendSSEToUser(task.user_id, {
         type: isMotionFailed ? 'motion_failed' : 'video_failed',
         taskId: taskId,
-        error: data.error || 'Video generation failed'
+        error: failReason
       });
-      
-      console.log(`Webhook: Video failed! Task ${taskId}`);
     } else {
       // Progress update
       sendSSEToUser(task.user_id, {
@@ -2556,18 +2552,32 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         const taskData = pollResponse.data.data || pollResponse.data;
         const status = taskData.status || '';
         
+        console.log(`[MOTION] Poll ${taskId} | Endpoint: ${endpoint} | Status: ${status} | Generated: ${JSON.stringify(taskData.generated || [])}`);
+        
         if (status === 'COMPLETED' || status === 'completed') {
-          const videoUrl = taskData.video?.url || taskData.result?.url || taskData.url;
+          // Check all possible URL locations (generated[] is primary for motion tasks)
+          const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
+            || taskData.video?.url
+            || taskData.result?.url
+            || taskData.url;
           if (videoUrl) return { status: 'completed', url: videoUrl };
+          // Completed but no URL yet — keep polling
+          return { status: 'processing' };
         }
         if (status === 'FAILED' || status === 'failed') {
-          return { status: 'failed', error: taskData.error || 'Generation failed' };
+          const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || 'Generation failed';
+          console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg} | Full data: ${JSON.stringify(taskData)}`);
+          return { status: 'failed', error: errMsg };
         }
-        if (status && status !== 'CREATED') {
+        if (status === 'IN_PROGRESS' || status === 'CREATED' || status === 'processing' || status === 'pending') {
+          return { status: 'processing' };
+        }
+        if (status) {
           return { status: 'processing' };
         }
       }
     } catch (e) {
+      console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} error: ${e.message}`);
       continue;
     }
   }
