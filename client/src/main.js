@@ -584,7 +584,10 @@ function renderAuthModal() {
 
 async function checkAuth() {
   try {
-    const response = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include', signal: controller.signal });
+    clearTimeout(timeoutId);
     const data = await response.json();
     state.auth.user = data.user;
     state.auth.isLoading = false;
@@ -606,7 +609,7 @@ async function checkAuth() {
   } catch (error) {
     console.error('Auth check error:', error);
     state.auth.isLoading = false;
-    render();
+    try { render(); } catch(e) { showFallbackLoginUI(); }
   }
 }
 
@@ -2530,6 +2533,33 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 4000);
 }
 
+function showFallbackLoginUI() {
+  const mainContent = document.getElementById('mainContent');
+  if (mainContent) {
+    mainContent.innerHTML = `
+      <div style="display:flex;justify-content:center;align-items:center;min-height:80vh;">
+        <div style="text-align:center;padding:40px;">
+          <div style="font-size:48px;margin-bottom:16px;">✦</div>
+          <h2 style="color:#fff;margin-bottom:8px;">Xclip AI</h2>
+          <p style="color:#aaa;margin-bottom:24px;">Platform AI Creative Suite Terlengkap</p>
+          <button id="fallbackLoginBtn" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:14px 32px;border-radius:12px;font-size:16px;cursor:pointer;">
+            Login / Daftar
+          </button>
+        </div>
+      </div>
+    `;
+    const btn = document.getElementById('fallbackLoginBtn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        state.auth.showModal = true;
+        state.auth.modalMode = 'login';
+        state.auth.isLoading = false;
+        render(true);
+      });
+    }
+  }
+}
+
 function render(force = false) {
   if (state.videogen.isPolling && !force && state.currentPage === 'videogen') {
     return;
@@ -2555,30 +2585,42 @@ function render(force = false) {
   
   if (!navMenu || !headerRight || !mainContent) return;
   
-  // Update nav menu (only active states change)
-  navMenu.innerHTML = renderNavMenu();
+  try {
+    navMenu.innerHTML = renderNavMenu();
+  } catch(e) { console.error('renderNavMenu error:', e); navMenu.innerHTML = ''; }
   
-  // Update header right (user menu, timer)
-  headerRight.innerHTML = renderHeaderRight();
+  try {
+    headerRight.innerHTML = renderHeaderRight();
+  } catch(e) { console.error('renderHeaderRight error:', e); headerRight.innerHTML = ''; }
   
-  // Update main content
-  mainContent.innerHTML = renderMainContent();
+  try {
+    mainContent.innerHTML = renderMainContent();
+  } catch(e) {
+    console.error('renderMainContent error:', e);
+    showFallbackLoginUI();
+    return;
+  }
   
-  // Update modals
-  if (modalsContainer) modalsContainer.innerHTML = renderModals();
+  try {
+    if (modalsContainer) modalsContainer.innerHTML = renderModals();
+  } catch(e) { console.error('renderModals error:', e); }
   
-  attachEventListeners();
+  try {
+    attachEventListeners();
+  } catch(e) { console.error('attachEventListeners error:', e); }
   
-  Object.keys(cooldownTimers).forEach(feature => {
-    const btn = document.querySelector(`[data-cooldown="${feature}"]`);
-    if (btn && cooldownTimers[feature]) {
-      btn.disabled = true;
-      btn.style.opacity = '0.6';
-    }
-  });
+  try {
+    Object.keys(cooldownTimers).forEach(feature => {
+      const btn = document.querySelector(`[data-cooldown="${feature}"]`);
+      if (btn && cooldownTimers[feature]) {
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+      }
+    });
+  } catch(e) {}
   
   if (state.currentPage === 'chat') {
-    scrollChatToBottom();
+    try { scrollChatToBottom(); } catch(e) {}
   }
 }
 
@@ -10900,7 +10942,26 @@ window.addEventListener('beforeunload', () => {
 
 // Wrap checkAuth to connect SSE after auth is verified
 async function initApp() {
-  await checkAuth();
+  // Fallback: if app is still showing "Loading Xclip..." after 10s, show login UI
+  const fallbackTimer = setTimeout(() => {
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent && mainContent.innerHTML.includes('Loading Xclip')) {
+      console.warn('[INIT] Timeout fallback triggered - showing login UI');
+      state.auth.isLoading = false;
+      try { render(true); } catch(e) { showFallbackLoginUI(); }
+    }
+  }, 10000);
+
+  try {
+    await checkAuth();
+  } catch(e) {
+    console.error('[INIT] checkAuth failed:', e);
+    state.auth.isLoading = false;
+    try { render(true); } catch(e2) { showFallbackLoginUI(); }
+  } finally {
+    clearTimeout(fallbackTimer);
+  }
+
   if (state.auth.user) {
     connectSSE();
     fetchVideoHistory();

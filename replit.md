@@ -112,14 +112,23 @@ The application is built on a Node.js Express.js server, combining frontend and 
 
 ## Replit Environment Setup
 - **Runtime**: Node.js 20
-- **Database**: PostgreSQL (Replit built-in via DATABASE_URL)
+- **Database**: PostgreSQL Railway (via DATABASE_PUBLIC_URL secret)
 - **Port**: 5000 (Express server serves both API and static frontend)
 - **Workflow**: `npm start` runs server.js
 - **Deployment**: Configured for autoscale deployment
+
+## Known Fixes Applied
+- **Loading Stuck Issue**: Changed `client/src/main.js` script tag from `type="module"` to `defer`. ES module loading caused silent failures in some environments (Railway, mobile), resulting in the page stuck at "Loading Xclip..." indefinitely.
+- **X-Frame-Options Removed**: Removed `X-Frame-Options: SAMEORIGIN` header from server.js that was blocking the Replit preview iframe.
+- **render() Error Handling**: Added try-catch in `render()` function with a `showFallbackLoginUI()` fallback to prevent silent render failures.
+- **checkAuth() Timeout**: Added 8-second AbortController timeout to the auth check fetch to prevent indefinite hanging.
+- **initApp() Fallback**: Added 10-second timeout fallback in `initApp()` to force-show the login UI if loading takes too long.
+- **Service Worker Cache**: Updated CACHE_NAME to 'xclip-v2' to bust old cached JS files.
 
 ## Running the Application
 The application starts with `npm start` which runs `node server.js`. The server:
 - Listens on 0.0.0.0:5000
 - Serves static files from the `client/` directory
 - Provides API endpoints for all features
+- Connects to Railway PostgreSQL via DATABASE_PUBLIC_URL
 - Uses PostgreSQL for sessions, users, subscriptions, and payments
