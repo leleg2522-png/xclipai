@@ -2843,10 +2843,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
       };
     } else if (config.api === 'minimax') {
       requestBody = {
-        image: image,
+        first_frame_image: image,
         prompt: prompt || '',
         prompt_optimizer: true,
-        negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy'
+        duration: 6
       };
     } else if (config.api === 'seedance') {
       requestBody = {
