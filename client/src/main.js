@@ -3852,9 +3852,14 @@ function renderXImageGallery() {
       html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
       html += '<div class="image-card-footer">';
       html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
+      html += '<div style="display:flex;gap:4px;flex-shrink:0;">';
       html += '<button class="btn btn-sm btn-secondary ximage-download-btn" data-url="' + encodeURIComponent(image.url) + '" data-filename="ximage-' + index + '.png">';
       html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
       html += ' Download</button>';
+      html += '<button class="btn btn-sm btn-danger ximage-delete-btn" data-index="' + index + '">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+      html += '</button>';
+      html += '</div>';
       html += '</div></div>';
     });
     
@@ -4093,7 +4098,7 @@ function renderXImage2Gallery() {
       html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
       html += '<div class="image-card-footer">';
       html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
-      html += '<div style="display:flex;gap:4px;">';
+      html += '<div style="display:flex;gap:4px;flex-shrink:0;">';
       html += '<button class="btn btn-sm btn-secondary ximage2-download-btn" data-url="' + encodeURIComponent(image.url) + '" data-filename="ximage2-' + index + '.png">';
       html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
       html += ' Download</button>';
@@ -5024,10 +5029,10 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                               </svg>
                               Download
                             </a>
-                            <button class="btn btn-sm" style="opacity:0.6" onclick="deleteMotionTask('${task.taskId}')">
+                            <button class="btn btn-sm btn-danger" onclick="deleteMotionTask('${task.taskId}')">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-2 14H7L5 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                               </svg>
                             </button>
                           </div>
@@ -5056,10 +5061,10 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                           </svg>
                           Download
                         </a>
-                        <button class="btn btn-sm" style="opacity:0.6" onclick="deleteMotionHistory(${idx})">
+                        <button class="btn btn-sm btn-danger" onclick="deleteMotionHistory(${idx})">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-2 14H7L5 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                           </svg>
                         </button>
                       </div>
@@ -7230,6 +7235,16 @@ function attachXImageEventListeners() {
       var filename = btn.dataset.filename;
       console.log('[XIMAGE] Download clicked:', url, filename);
       await downloadImage(url, filename);
+    });
+  });
+
+  // X Image delete buttons
+  document.querySelectorAll('.ximage-delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      var index = parseInt(btn.dataset.index);
+      state.ximage.generatedImages.splice(index, 1);
+      render();
     });
   });
 }
