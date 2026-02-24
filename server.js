@@ -9219,18 +9219,28 @@ app.post('/api/voiceover/generate', async (req, res) => {
     for (let attempt = 0; attempt < 60; attempt++) {
       await new Promise(r => setTimeout(r, 3000));
       const statusRes = await axios.get(
-        `https://api.kie.ai/api/v1/jobs/${taskId}`,
-        { headers: { 'Authorization': `Bearer ${kieKey}` }, timeout: 15000 }
+        `https://api.kie.ai/api/v1/jobs/recordInfo`,
+        {
+          params: { taskId },
+          headers: { 'Authorization': `Bearer ${kieKey}` },
+          timeout: 15000
+        }
       );
       const taskData = statusRes.data?.data || statusRes.data;
-      const status = taskData?.status;
-      console.log(`[VOICEOVER] Poll ${attempt + 1} | status: ${status}`);
-      if (status === 'success' || status === 'succeeded' || status === 'completed') {
-        audioKieUrl = taskData?.result?.audio_url || taskData?.output?.audio_url || taskData?.audioUrl;
+      const state = taskData?.state;
+      console.log(`[VOICEOVER] Poll ${attempt + 1} | state: ${state} | taskId: ${taskId}`);
+      if (state === 'success' || state === 'succeeded' || state === 'completed') {
+        try {
+          const resultObj = typeof taskData.resultJson === 'string' ? JSON.parse(taskData.resultJson) : taskData.resultJson;
+          audioKieUrl = resultObj?.resultUrls?.[0] || resultObj?.audio_url || resultObj?.audioUrl;
+        } catch (e) {
+          audioKieUrl = taskData?.result?.audio_url || taskData?.audioUrl;
+        }
+        if (!audioKieUrl) throw new Error(`kie.ai task selesai tapi tidak ada URL audio: ${JSON.stringify(taskData)}`);
         break;
       }
-      if (status === 'failed' || status === 'error') {
-        throw new Error(`kie.ai task gagal: ${JSON.stringify(taskData)}`);
+      if (state === 'failed' || state === 'error') {
+        throw new Error(`kie.ai task gagal: ${taskData?.failMsg || JSON.stringify(taskData)}`);
       }
     }
 
