@@ -6156,6 +6156,98 @@ function attachChatEventListeners() {
     });
   });
 }
+function attachVideoGenEventListeners() {
+  // Load history if not loaded yet
+  if (!state.videogen._historyLoaded) {
+    state.videogen._historyLoaded = true;
+    loadVideoGenHistory().then(() => render());
+  }
+  
+  const uploadZone = document.getElementById('videoGenUploadZone');
+  const fileInput = document.getElementById('videoGenImageInput');
+  const removeBtn = document.getElementById('removeVideoGenImage');
+  const generateBtn = document.getElementById('generateVideoBtn');
+  const promptInput = document.getElementById('videoGenPrompt');
+  const clearResult = document.getElementById('clearVideoResult');
+  const retryBtn = document.getElementById('retryVideoGen');
+  
+  if (uploadZone && fileInput) {
+    uploadZone.addEventListener('click', (e) => {
+      if (!e.target.closest('.remove-reference')) {
+        fileInput.click();
+      }
+    });
+    
+    fileInput.addEventListener('change', handleVideoGenImageUpload);
+  }
+  
+  if (removeBtn) {
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.videogen.sourceImage = null;
+      render();
+    });
+  }
+  
+  document.querySelectorAll('[data-videogen-model]').forEach(option => {
+    option.addEventListener('click', () => {
+      state.videogen.selectedModel = option.dataset.videogenModel;
+      saveUserInputs('videogen');
+      render();
+    });
+  });
+  
+  document.querySelectorAll('[data-videogen-duration]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.videogen.duration = btn.dataset.videogenDuration;
+      saveUserInputs('videogen');
+      render();
+    });
+  });
+  
+  document.querySelectorAll('[data-videogen-ratio]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.videogen.aspectRatio = btn.dataset.videogenRatio;
+      saveUserInputs('videogen');
+      render();
+    });
+  });
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', (e) => {
+      state.videogen.prompt = e.target.value;
+      saveUserInputs('videogen');
+    });
+  }
+  
+  const apiKeyInput = document.getElementById('videoGenApiKey');
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+      state.videogen.customApiKey = e.target.value;
+      saveUserInputs('videogen');
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateVideo);
+  }
+  
+  if (clearResult) {
+    clearResult.addEventListener('click', () => {
+      state.videogen.generatedVideo = null;
+      state.videogen.error = null;
+      render();
+    });
+  }
+  
+  if (retryBtn) {
+    retryBtn.addEventListener('click', () => {
+      state.videogen.error = null;
+      render();
+    });
+  }
+}
+
 
 function renderVidgen4Page() {
   const isSora2 = state.vidgen4.selectedModel === 'sora-2-vip';
@@ -9934,6 +10026,169 @@ async function initApp() {
     fetchVideoHistory();
     recoverPendingTasks();
   }
+}
+
+async function loadVoiceoverRooms() {
+  state.voiceoverRoomManager.isLoading = true;
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/rooms`, { credentials: 'include' });
+    const data = await res.json();
+    state.voiceoverRoomManager.rooms = data.rooms || [];
+  } catch (e) {
+    state.voiceoverRoomManager.rooms = [];
+  }
+  state.voiceoverRoomManager.isLoading = false;
+}
+
+async function loadVoiceoverSubscriptionStatus() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { state.voiceoverRoomManager.hasSubscription = false; return; }
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/subscription/status`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    state.voiceoverRoomManager.hasSubscription = data.hasSubscription || false;
+    state.voiceoverRoomManager.subscription = data.subscription || null;
+  } catch (e) {
+    state.voiceoverRoomManager.hasSubscription = false;
+  }
+}
+
+async function loadVoiceoverVoices() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API key terlebih dahulu', 'error'); return; }
+  state.voiceover.voicesLoading = true;
+  render(true);
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/voices`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Gagal memuat suara', 'error'); }
+    else {
+      state.voiceover.voices = data.voices || [];
+      showToast(`${state.voiceover.voices.length} suara dimuat`, 'success');
+    }
+  } catch (e) { showToast('Gagal memuat suara', 'error'); }
+  state.voiceover.voicesLoading = false;
+  render(true);
+}
+
+async function loadVoiceoverHistory() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) return;
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/history`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    state.voiceover.history = data.history || [];
+  } catch (e) {}
+}
+
+async function joinVoiceoverRoom(roomId) {
+  const apiKey = state.voiceoverRoomManager.xclipApiKey || state.voiceover.customApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API Key terlebih dahulu', 'error'); return; }
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Xclip-Key': apiKey },
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Gagal join room', 'error'); return; }
+    state.voiceoverRoomManager.subscription = data.subscription;
+    state.voiceoverRoomManager.hasSubscription = true;
+    state.voiceoverRoomManager.showRoomModal = false;
+    if (!state.voiceover.customApiKey) state.voiceover.customApiKey = apiKey;
+    showToast(data.message, 'success');
+    await loadVoiceoverVoices();
+    await loadVoiceoverHistory();
+    render();
+  } catch (e) { showToast('Gagal join room', 'error'); }
+}
+
+async function generateVoiceover() {
+  const vo = state.voiceover;
+  const apiKey = vo.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API key terlebih dahulu', 'error'); return; }
+
+  const isDialogue = vo.selectedModel === 'elevenlabs/text-to-dialogue-v3';
+
+  if (isDialogue) {
+    const validSegs = (vo.dialogueSegments || []).filter(s => s.text.trim());
+    if (validSegs.length === 0) { showToast('Masukkan teks di minimal 1 segment', 'error'); return; }
+  } else {
+    if (!vo.text.trim()) { showToast('Masukkan teks terlebih dahulu', 'error'); return; }
+    if (!vo.selectedVoiceId) { showToast('Pilih suara terlebih dahulu', 'error'); return; }
+  }
+
+  vo.isGenerating = true;
+  render(true);
+
+  try {
+    const body = isDialogue
+      ? {
+          modelId: vo.selectedModel,
+          dialogue: (vo.dialogueSegments || []).filter(s => s.text.trim()).map(s => ({ text: s.text, voice: s.voice })),
+          stability: vo.stability
+        }
+      : {
+          text: vo.text,
+          voiceId: vo.selectedVoiceId,
+          voiceName: vo.selectedVoiceName,
+          modelId: vo.selectedModel,
+          stability: vo.stability,
+          similarityBoost: vo.similarityBoost,
+          style: vo.style,
+          useSpeakerBoost: vo.useSpeakerBoost
+        };
+
+    showToast('Mengirim ke kie.ai...', 'info');
+
+    const res = await fetch(`${API_URL}/api/voiceover/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Xclip-Key': apiKey },
+      credentials: 'include',
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Gagal generate voice over', 'error');
+      if (res.status === 429 && data.cooldownMs) {
+        vo.cooldownEnd = Date.now() + data.cooldownMs;
+        startVoiceoverCooldown();
+      }
+    } else {
+      vo.currentAudioUrl = data.audioUrl;
+      showToast('Voice over berhasil dibuat!', 'success');
+      if (data.cooldown) {
+        vo.cooldownEnd = Date.now() + (data.cooldown * 1000);
+        startVoiceoverCooldown();
+      }
+      await loadVoiceoverHistory();
+    }
+  } catch (e) {
+    showToast('Gagal generate voice over', 'error');
+  }
+  vo.isGenerating = false;
+  render(true);
+}
+
+let voiceoverCooldownInterval = null;
+function startVoiceoverCooldown() {
+  if (voiceoverCooldownInterval) clearInterval(voiceoverCooldownInterval);
+  voiceoverCooldownInterval = setInterval(() => {
+    if (state.currentPage !== 'voiceover') return;
+    if (Date.now() >= state.voiceover.cooldownEnd) {
+      clearInterval(voiceoverCooldownInterval);
+      voiceoverCooldownInterval = null;
+      state.voiceover.cooldownEnd = 0;
+      showToast('Voice Over siap digunakan kembali!', 'success');
+    }
+    render(true);
+  }, 1000);
 }
 
 function attachVoiceoverEventListeners() {
