@@ -2537,6 +2537,46 @@ async function pollApimartTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
+async function pollKie4oImageTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://api.kie.ai/api/v1/gpt4o-image/record-info`,
+    { params: { taskId }, headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const data = statusResponse.data?.data || statusResponse.data;
+  const successFlag = data?.successFlag;
+  if (successFlag === 1) {
+    const url = data?.response?.result_urls?.[0];
+    return { status: 'completed', url };
+  }
+  if (successFlag === 2) {
+    return { status: 'failed', error: data?.errorMessage || 'Generation failed' };
+  }
+  return { status: 'processing' };
+}
+
+async function pollKieMarketImageTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://api.kie.ai/api/v1/jobs/recordInfo`,
+    { params: { taskId }, headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const data = statusResponse.data?.data || statusResponse.data;
+  const state = data?.state;
+  if (state === 'success' || state === 'succeeded' || state === 'completed') {
+    let url = null;
+    try {
+      const resultObj = typeof data.resultJson === 'string' ? JSON.parse(data.resultJson) : data.resultJson;
+      url = resultObj?.resultUrls?.[0] || resultObj?.image_url || resultObj?.imageUrl;
+    } catch (e) {
+      url = data?.result?.image_url;
+    }
+    return { status: 'completed', url };
+  }
+  if (state === 'failed' || state === 'error') {
+    return { status: 'failed', error: data?.failMsg || 'Generation failed' };
+  }
+  return { status: 'processing' };
+}
+
 async function pollFreepikMotionTask(taskId, apiKey, model) {
   const isPro = (model || '').includes('pro');
   const pollEndpoints = [
@@ -2688,6 +2728,10 @@ setInterval(async () => {
         result = await pollPoyoTask(taskId, task.apiKey);
       } else if (task.apiType === 'apimart') {
         result = await pollApimartTask(taskId, task.apiKey);
+      } else if (task.apiType === 'kie-4o-image') {
+        result = await pollKie4oImageTask(taskId, task.apiKey);
+      } else if (task.apiType === 'kie-market') {
+        result = await pollKieMarketImageTask(taskId, task.apiKey);
       } else if (task.apiType === 'freepik-motion') {
         result = await pollFreepikMotionTask(taskId, task.apiKey, task.model);
       } else if (task.apiType === 'freepik-video') {
@@ -2733,7 +2777,7 @@ async function resumePendingTaskPolling() {
     const tables = [
       { table: 'vidgen2_tasks', apiType: 'poyo', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
-      { table: 'ximage_history', apiType: 'poyo', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage_history', apiType: 'kie-ximage', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
       { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
     ];
@@ -2755,8 +2799,15 @@ async function resumePendingTaskPolling() {
           if (!apiKey && (apiType === 'apimart')) {
             apiKey = process.env.APIMART_API_KEY;
           }
-          if (!apiKey && (apiType === 'poyo')) {
-            apiKey = process.env.POYO_API_KEY;
+          if (!apiKey && (apiType === 'kie-ximage')) {
+            // Try ximage room keys then fallback
+            outer2: for (let r = 1; r <= 5; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const xk = process.env[`XIMAGE_ROOM${r}_KEY_${k}`];
+                if (xk) { apiKey = xk; break outer2; }
+              }
+            }
+            if (!apiKey) apiKey = process.env.XIMAGE_API_KEY;
           }
           // For motion tasks: try all MOTION_ROOM keys before falling back to FREEPIK_API_KEY
           if (!apiKey && isMotionTask) {
@@ -2775,6 +2826,10 @@ async function resumePendingTaskPolling() {
             let resolvedType = apiType;
             if (apiType === 'freepik-auto') {
               resolvedType = isMotionTask ? 'freepik-motion' : 'freepik-video';
+            }
+            if (apiType === 'kie-ximage') {
+              const mc = XIMAGE_MODELS[row.model];
+              resolvedType = (!mc || mc.apiType === 'kie-4o-image') ? 'kie-4o-image' : 'kie-market';
             }
             startServerBgPoll(row.task_id, resolvedType, apiKey, {
               dbTable: table,
@@ -7840,18 +7895,15 @@ app.delete('/api/vidgen3/videos/all', async (req, res) => {
   }
 });
 
-// ============ X IMAGE (Poyo.ai Image Generation) ============
+// ============ X IMAGE (kie.ai Image Generation) ============
 
 // X Image model configuration
 const XIMAGE_MODELS = {
-  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', price: 0.01, supportsI2I: true, apiModel: 'gpt-image-1.5', editModel: 'gpt-image-1.5-edit' },
-  'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', price: 0.02, supportsI2I: true, apiModel: 'gpt-4o-image', editModel: 'gpt-4o-image-edit' },
-  'nano-banana': { name: 'Nano Banana', provider: 'Google', price: 0.03, supportsI2I: true, apiModel: 'nano-banana', editModel: 'nano-banana-edit' },
-  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', price: 0.03, supportsI2I: true, apiModel: 'nano-banana-2', editModel: 'nano-banana-2-edit', supportsResolution: true },
-  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', price: 0.03, supportsI2I: true, apiModel: 'seedream-4.5', editModel: 'seedream-4.5-edit' },
-  'flux-2-pro': { name: 'FLUX.2', provider: 'Black Forest', price: 0.03, supportsI2I: true, apiModel: 'flux-2-pro', editModel: 'flux-2-pro-edit', supportsResolution: true },
-  'z-image': { name: 'Z-Image', provider: 'Alibaba', price: 0.01, supportsI2I: false, apiModel: 'z-image' },
-  'grok-imagine-image': { name: 'Grok Imagine', provider: 'xAI', price: 0.03, supportsI2I: true, apiModel: 'grok-imagine-image' }
+  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1.5' },
+  'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
+  'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
+  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'grok-imagine/text-to-image' },
+  'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: false, apiType: 'kie-market', apiModel: 'google/nano-banana', useImageSize: true },
 };
 
 // Get X Image room API key
@@ -7877,11 +7929,10 @@ async function getXImageRoomApiKey(xclipApiKey) {
   const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
-    // Fallback to global Poyo.ai key
-    if (process.env.POYO_API_KEY) {
+    if (process.env.XIMAGE_API_KEY) {
       return { 
-        apiKey: process.env.POYO_API_KEY, 
-        keyName: 'POYO_API_KEY',
+        apiKey: process.env.XIMAGE_API_KEY, 
+        keyName: 'XIMAGE_API_KEY',
         roomId: ximageRoomId,
         userId: keyInfo.user_id,
         keyInfoId: keyInfo.id
@@ -8034,131 +8085,117 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt diperlukan' });
     }
     
-    if (!XIMAGE_MODELS[model]) {
+    const modelConfig = XIMAGE_MODELS[model];
+    if (!modelConfig) {
       return res.status(400).json({ error: 'Model tidak valid' });
     }
     
-    // For image-to-image mode, check if model supports it
-    if (mode === 'image-to-image' && !XIMAGE_MODELS[model].supportsI2I) {
-      return res.status(400).json({ error: `Model ${XIMAGE_MODELS[model].name} tidak mendukung image-to-image` });
+    if (mode === 'image-to-image' && !modelConfig.supportsI2I) {
+      return res.status(400).json({ error: `Model ${modelConfig.name} tidak mendukung image-to-image` });
     }
     
     console.log(`[XIMAGE] Generating with model: ${model}, mode: ${mode || 'text-to-image'}, resolution: ${resolution || 'default'}, n: ${numberOfImages || 1}`);
     
-    // Helper to upload a base64 image to Poyo storage
-    async function uploadImageToPoyo(imageData, label) {
-      if (!imageData) return null;
-      if (!imageData.startsWith('data:')) return imageData;
-      console.log(`[XIMAGE] Uploading ${label} base64 image to Poyo.ai storage...`);
-      const uploadResponse = await axios.post(
-        'https://api.poyo.ai/api/common/upload/base64',
-        { base64_data: imageData, upload_path: 'xclip-ximage' },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${roomKeyResult.apiKey}`
-          },
-          timeout: 60000
-        }
-      );
-      if (uploadResponse.data?.data?.file_url) {
-        console.log(`[XIMAGE] ${label} uploaded: ${uploadResponse.data.data.file_url}`);
-        return uploadResponse.data.data.file_url;
-      }
-      throw new Error(`Failed to get ${label} URL`);
-    }
-
-    // If image-to-image mode, upload images to Poyo storage
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+    
+    // Upload base64 images to local storage for public URLs
     let imageUrls = [];
     if (mode === 'image-to-image' && image) {
       try {
-        const url1 = await uploadImageToPoyo(image, 'Reference image 1');
-        if (url1) imageUrls.push(url1);
+        if (image.startsWith('data:')) {
+          const saved = await saveBase64ToFile(image, 'image', baseUrl);
+          imageUrls.push(saved.publicUrl);
+          console.log(`[XIMAGE] Reference image 1 saved: ${saved.publicUrl}`);
+        } else {
+          imageUrls.push(image);
+        }
         if (image2) {
-          const url2 = await uploadImageToPoyo(image2, 'Reference image 2');
-          if (url2) imageUrls.push(url2);
+          if (image2.startsWith('data:')) {
+            const saved2 = await saveBase64ToFile(image2, 'image', baseUrl);
+            imageUrls.push(saved2.publicUrl);
+            console.log(`[XIMAGE] Reference image 2 saved: ${saved2.publicUrl}`);
+          } else {
+            imageUrls.push(image2);
+          }
         }
       } catch (uploadError) {
-        console.error('[XIMAGE] Image upload error:', uploadError.response?.data || uploadError.message);
-        return res.status(500).json({ error: 'Gagal upload image' });
+        console.error('[XIMAGE] Image upload error:', uploadError.message);
+        return res.status(500).json({ error: 'Gagal memproses gambar referensi' });
       }
     }
     
-    // Prepare request to Poyo.ai with correct model and format
-    const modelConfig = XIMAGE_MODELS[model];
     const isI2I = mode === 'image-to-image' && imageUrls.length > 0;
-    const apiModelId = isI2I && modelConfig.editModel ? modelConfig.editModel : modelConfig.apiModel;
+    const kieApiKey = roomKeyResult.apiKey;
+    const reqHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${kieApiKey}` };
     
-    const requestBody = {
-      model: apiModelId,
-      input: {
-        prompt: prompt,
-        size: aspectRatio || '1:1'
+    let taskId;
+    let bgPollType;
+    
+    if (modelConfig.apiType === 'kie-4o-image') {
+      // GPT Image 1.5 via kie.ai 4o-image API
+      const body = {
+        prompt,
+        size: aspectRatio || '1:1',
+        nVariants: modelConfig.supportsN ? (parseInt(numberOfImages) || 1) : 1
+      };
+      if (isI2I && imageUrls.length > 0) {
+        body.filesUrl = imageUrls;
       }
-    };
-    
-    // Add n parameter for models that support it (GPT, Nano Banana, Seedream)
-    if (['gpt-image-1.5', 'gpt-4o-image', 'nano-banana', 'nano-banana-2', 'seedream-4.5'].includes(model)) {
-      requestBody.input.n = numberOfImages || 1;
+      console.log('[XIMAGE] 4o-image request:', JSON.stringify({ ...body, filesUrl: body.filesUrl ? ['[IMAGES]'] : undefined }));
+      const response = await axios.post(
+        'https://api.kie.ai/api/v1/gpt4o-image/generate',
+        body,
+        { headers: reqHeaders, timeout: 60000 }
+      );
+      console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(response.data));
+      taskId = response.data?.data?.taskId || response.data?.taskId;
+      bgPollType = 'kie-4o-image';
+    } else {
+      // Market API models (FLUX.2, Grok, Nano Banana)
+      const kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+      const inputBody = { prompt };
+      if (modelConfig.useImageSize) {
+        inputBody.image_size = aspectRatio || '1:1';
+        inputBody.output_format = 'png';
+      } else {
+        inputBody.aspect_ratio = aspectRatio || '1:1';
+      }
+      if (modelConfig.supportsResolution && resolution) {
+        inputBody.resolution = resolution;
+      }
+      if (isI2I && imageUrls.length > 0) {
+        inputBody.input_urls = imageUrls;
+      }
+      const body = { model: kieModelId, input: inputBody };
+      console.log('[XIMAGE] Market API request:', JSON.stringify({ ...body, input: { ...body.input, input_urls: body.input.input_urls ? ['[IMAGES]'] : undefined } }));
+      const response = await axios.post(
+        'https://api.kie.ai/api/v1/jobs/createTask',
+        body,
+        { headers: reqHeaders, timeout: 60000 }
+      );
+      console.log('[XIMAGE] kie.ai market response:', JSON.stringify(response.data));
+      taskId = response.data?.data?.taskId || response.data?.taskId;
+      bgPollType = 'kie-market';
     }
-    
-    // Add resolution for models that support it (nano-banana-2, flux-2-pro)
-    if (modelConfig.supportsResolution && resolution) {
-      requestBody.input.resolution = resolution;
-    }
-    
-    // Add images for image-to-image mode
-    if (imageUrls.length > 0) {
-      requestBody.input.image_urls = imageUrls;
-    }
-    
-    console.log('[XIMAGE] Request body:', JSON.stringify(requestBody));
-    
-    // Setup request config
-    const requestConfig = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${roomKeyResult.apiKey}`
-      },
-      timeout: 60000
-    };
-    
-    // X Image uses direct connection (no proxy)
-    const response = await axios.post(
-      'https://api.poyo.ai/api/generate/submit',
-      requestBody,
-      requestConfig
-    );
-    
-    console.log('[XIMAGE] Poyo.ai response:', JSON.stringify(response.data));
-    
-    const taskId = response.data?.data?.task_id || 
-                   response.data?.task_id || 
-                   response.data?.data?.id || 
-                   response.data?.id;
     
     if (!taskId) {
-      console.error('[XIMAGE] No task ID in response:', response.data);
-      return res.status(500).json({ error: 'Gagal mendapatkan task ID' });
+      return res.status(500).json({ error: 'Gagal mendapatkan task ID dari kie.ai' });
     }
     
-    // Save to history
     await pool.query(`
       INSERT INTO ximage_history (user_id, task_id, model, prompt, mode, aspect_ratio, reference_image, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
     `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
     
-    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+    startServerBgPoll(taskId, bgPollType, kieApiKey, {
       dbTable: 'ximage_history',
       urlColumn: 'image_url',
-      model: model
+      model
     });
     
-    res.json({ 
-      taskId, 
-      model,
-      message: 'Image generation started' 
-    });
+    res.json({ taskId, model, message: 'Image generation started' });
     
   } catch (error) {
     console.error('[XIMAGE] Generate error:', error.response?.data || error.message);
@@ -8181,136 +8218,53 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    // X Image status uses direct connection (no proxy) with retry
-    const statusConfig = {
-      headers: {
-        'Authorization': `Bearer ${roomKeyResult.apiKey}`
-      },
-      timeout: 30000
-    };
+    // Check DB first for cached completed/failed status
+    const dbResult = await pool.query(
+      `SELECT status, image_url, model FROM ximage_history WHERE task_id = $1`,
+      [taskId]
+    );
     
-    let statusResponse;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        statusResponse = await axios.get(
-          `https://api.poyo.ai/api/generate/status/${taskId}`,
-          statusConfig
+    if (dbResult.rows.length > 0) {
+      const row = dbResult.rows[0];
+      if (row.status === 'completed' && row.image_url) {
+        return res.json({ status: 'completed', imageUrl: row.image_url });
+      }
+      if (row.status === 'failed') {
+        return res.json({ status: 'failed', error: 'Image generation gagal' });
+      }
+      
+      // Still processing - poll kie.ai
+      const model = row.model;
+      const modelConfig = XIMAGE_MODELS[model];
+      const kieApiKey = roomKeyResult.apiKey;
+      
+      let result;
+      if (!modelConfig || modelConfig.apiType === 'kie-4o-image') {
+        result = await pollKie4oImageTask(taskId, kieApiKey);
+      } else {
+        result = await pollKieMarketImageTask(taskId, kieApiKey);
+      }
+      
+      if (result.status === 'completed' && result.url) {
+        await pool.query(
+          `UPDATE ximage_history SET status = 'completed', image_url = $1, completed_at = NOW() WHERE task_id = $2`,
+          [result.url, taskId]
         );
-        break;
-      } catch (retryErr) {
-        const msg = (retryErr.message || '').toLowerCase();
-        const isNetErr = !retryErr.response && (msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('etimedout'));
-        if (isNetErr && attempt < 2) {
-          console.log(`[XIMAGE] Status poll network error, retry ${attempt + 1}/3: ${retryErr.message}`);
-          await new Promise(r => setTimeout(r, 2000));
-          continue;
-        }
-        throw retryErr;
+        return res.json({ status: 'completed', imageUrl: result.url });
       }
+      
+      if (result.status === 'failed') {
+        await pool.query(
+          `UPDATE ximage_history SET status = 'failed', completed_at = NOW() WHERE task_id = $1`,
+          [taskId]
+        );
+        return res.json({ status: 'failed', error: result.error || 'Generation failed' });
+      }
+      
+      return res.json({ status: 'processing', message: 'Image sedang diproses...' });
     }
     
-    console.log('[XIMAGE] Status response:', JSON.stringify(statusResponse.data));
-    
-    // Keep raw response for proper parsing
-    const raw = statusResponse.data;
-    
-    // Status can be at outer level or in data
-    const status = raw.status || raw.data?.status || raw.state || raw.to_status;
-    
-    if (status === 'finished' || status === 'completed' || status === 'success') {
-      // Poyo.ai documented format: { status: 'completed', data: { images: [{ url }] } }
-      let imageUrl = null;
-      
-      // Priority 1: Poyo.ai format - raw.data.files[0].url
-      if (raw.data?.files && raw.data.files.length > 0) {
-        const file = raw.data.files[0];
-        imageUrl = typeof file === 'string' ? file : (file.url || file.file_url || file.image_url);
-        console.log('[XIMAGE] Found image in files array:', imageUrl);
-      }
-      // Priority 2: Documented format - raw.data.images[0].url
-      else if (raw.data?.images && raw.data.images.length > 0) {
-        imageUrl = raw.data.images[0].url || raw.data.images[0];
-      }
-      // Priority 3: Direct files/images array at root
-      else if (raw.files && raw.files.length > 0) {
-        const file = raw.files[0];
-        imageUrl = typeof file === 'string' ? file : (file.url || file.file_url || file.image_url);
-      }
-      else if (raw.images && raw.images.length > 0) {
-        imageUrl = raw.images[0].url || raw.images[0];
-      }
-      // Priority 4: Legacy output formats
-      else if (raw.data?.output?.images && raw.data.output.images.length > 0) {
-        imageUrl = raw.data.output.images[0].url || raw.data.output.images[0];
-      }
-      else if (raw.output?.images && raw.output.images.length > 0) {
-        imageUrl = raw.output.images[0].url || raw.output.images[0];
-      }
-      else if (raw.data?.output?.image_url) {
-        imageUrl = raw.data.output.image_url;
-      }
-      else if (raw.output?.image_url) {
-        imageUrl = raw.output.image_url;
-      }
-      else if (raw.data?.media_url) {
-        imageUrl = raw.data.media_url;
-      }
-      else if (raw.media_url) {
-        imageUrl = raw.media_url;
-      }
-      else if (raw.data?.url) {
-        imageUrl = raw.data.url;
-      }
-      else if (raw.url) {
-        imageUrl = raw.url;
-      }
-      
-      console.log('[XIMAGE] Extracted image URL:', imageUrl);
-      
-      // Defensive check - if completed but no URL, return error
-      if (!imageUrl) {
-        console.error('[XIMAGE] Status completed but no image URL found in response:', raw);
-        return res.status(500).json({ 
-          status: 'failed', 
-          error: 'Image generation completed but no URL returned' 
-        });
-      }
-      
-      // Update history
-      await pool.query(`
-        UPDATE ximage_history 
-        SET status = 'completed', image_url = $1, completed_at = NOW()
-        WHERE task_id = $2
-      `, [imageUrl, taskId]);
-      
-      return res.json({
-        status: 'completed',
-        imageUrl
-      });
-    }
-    
-    if (status === 'failed' || status === 'error') {
-      const errorMsg = raw.error || raw.data?.error || raw.error_message || 'Generation failed';
-      
-      await pool.query(`
-        UPDATE ximage_history 
-        SET status = 'failed', completed_at = NOW()
-        WHERE task_id = $1
-      `, [taskId]);
-      
-      return res.json({
-        status: 'failed',
-        error: errorMsg
-      });
-    }
-    
-    // Still processing
-    const progress = raw.progress || raw.data?.progress || raw.percent || 0;
-    res.json({
-      status: 'processing',
-      progress,
-      message: status === 'running' ? 'Image sedang diproses...' : 'Menunggu antrian...'
-    });
+    return res.json({ status: 'processing', message: 'Menunggu antrian...' });
     
   } catch (error) {
     console.error('[XIMAGE] Status check error:', error.response?.data || error.message);

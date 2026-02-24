@@ -4107,13 +4107,10 @@ function getModelIcon(iconType) {
 function renderXImagePage() {
   var ximageModels = [
     { id: 'gpt-image-1.5', name: 'GPT Image 1.5', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'PRO', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'nano-banana-2', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: '4K', hasN: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: '4K', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, badge: 'ULTRA', hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 8, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'z-image', name: 'Z-Image', icon: 'alibaba', supportsI2I: false, badge: 'FAST', sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'grok-imagine-image', name: 'Grok Imagine', icon: 'xai', supportsI2I: true, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '2:3', '3:2'] }
+    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, badge: 'ULTRA', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '2:3', '3:2'] },
+    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] }
   ];
   
   var currentModelConfig = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; }) || ximageModels[0];
@@ -4199,7 +4196,7 @@ function renderXImagePage() {
   });
   html += '</div></div>';
   
-  // Resolution - only for models that support it (nano-banana-2, flux-2-pro)
+  // Resolution - only for models that support it (flux-2-flex, flux-2-pro)
   if (currentModelConfig.hasResolution) {
     html += '<div class="section-card">';
     html += '<h3 class="section-title">Resolution</h3>';
@@ -9212,13 +9209,10 @@ function attachXImageEventListeners() {
         if (newMode === 'image-to-image') {
           var ximageModels = [
             { id: 'gpt-image-1.5', supportsI2I: true },
-            { id: 'gpt-4o-image', supportsI2I: true },
-            { id: 'nano-banana', supportsI2I: true },
-            { id: 'nano-banana-2', supportsI2I: true },
-            { id: 'seedream-4.5', supportsI2I: true },
+            { id: 'flux-2-flex', supportsI2I: true },
             { id: 'flux-2-pro', supportsI2I: true },
-            { id: 'z-image', supportsI2I: false },
-            { id: 'grok-imagine-image', supportsI2I: true }
+            { id: 'grok-imagine', supportsI2I: false },
+            { id: 'google-nano-banana', supportsI2I: false }
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {
@@ -9236,7 +9230,7 @@ function attachXImageEventListeners() {
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
         var newModelId = modelCard.dataset.ximageModel;
-        var modelsWithMultiRef = ['nano-banana-2', 'flux-2-pro'];
+        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro'];
         if (!modelsWithMultiRef.includes(newModelId)) {
           state.ximage.sourceImage2 = null;
         }
@@ -9412,7 +9406,7 @@ async function generateXImage() {
   }
   
   // Validate model compatibility with mode
-  var modelsNotSupportingI2I = ['z-image'];
+  var modelsNotSupportingI2I = ['grok-imagine', 'google-nano-banana'];
   if (state.ximage.mode === 'image-to-image' && modelsNotSupportingI2I.includes(state.ximage.selectedModel)) {
     alert('Model ini tidak mendukung mode Image-to-Image. Pilih model lain.');
     return;
@@ -9434,7 +9428,7 @@ async function generateXImage() {
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['nano-banana-2', 'flux-2-pro'];
+      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }

@@ -22,18 +22,18 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Aspect ratios: 16:9 (landscape), 9:16 (portrait)
   - Video history persistence in database
   - Real-time task status polling via Poyo.ai status API
-- **X Image (Poyo.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}). Features include:
-  - 8 AI models with Poyo.ai-compatible IDs:
-    - gpt-image-1.5 / gpt-image-1.5-edit (OpenAI GPT Image 1.5)
-    - gpt-4o-image / gpt-4o-image-edit (OpenAI GPT-4o)
-    - nano-banana / nano-banana-edit (Google Gemini 2.5 Flash)
-    - nano-banana-2 / nano-banana-2-edit (Google Gemini 3 Pro, supports 1K/2K/4K resolution)
-    - seedream-4.5 / seedream-4.5-edit (ByteDance, 4K)
-    - flux-2-pro / flux-2-pro-edit (Black Forest Labs FLUX.2, supports resolution)
-    - z-image (Alibaba, text-to-image only)
-    - grok-imagine-image (xAI Grok)
-  - Request format: `{ model, input: { prompt, size, n, resolution, image_urls } }`
-  - Size parameter: 1:1, 16:9, 9:16, 4:3, 3:4
+- **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
+  - 5 AI models via kie.ai APIs:
+    - gpt-image-1.5: GPT Image 1.5 (OpenAI) via kie.ai 4o-image API, supports I2I, supports N variants
+    - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via kie.ai Market API, supports I2I, 1K/2K resolution
+    - flux-2-pro: FLUX.2 Pro (Black Forest Labs) via kie.ai Market API, supports I2I, 1K/2K resolution
+    - grok-imagine: Grok Imagine (xAI) via kie.ai Market API, text-only
+    - google-nano-banana: Nano Banana (Google) via kie.ai Market API, text-only
+  - Two kie.ai API paths:
+    - 4o-image: POST https://api.kie.ai/api/v1/gpt4o-image/generate, poll /record-info?taskId=
+    - Market: POST https://api.kie.ai/api/v1/jobs/createTask, poll /jobs/recordInfo?taskId=
+  - Base64 images converted to public URLs via local file storage for kie.ai I2I
+  - Background polling types: kie-4o-image, kie-market
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
