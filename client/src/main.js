@@ -408,7 +408,8 @@ const state = {
     currentAudioUrl: null,
     isPlaying: false,
     voiceSearch: '',
-    showVoicePanel: false
+    showVoicePanel: false,
+    cooldownEnd: 0
   },
   voiceoverRoomManager: {
     rooms: [],
@@ -5005,17 +5006,29 @@ function renderVoiceoverPage() {
             `}
           </div>
 
-          <button class="btn btn-primary btn-generate" id="generateVoiceoverBtn" style="width:100%;height:52px;font-size:16px;"
-                  ${vo.isGenerating || (isDialogueMode ? !(vo.dialogueSegments || []).some(s => s.text.trim()) : (!vo.text.trim() || !vo.selectedVoiceId)) ? 'disabled' : ''}>
+          ${(() => {
+            const now = Date.now();
+            const cooldownSecs = vo.cooldownEnd > now ? Math.ceil((vo.cooldownEnd - now) / 1000) : 0;
+            const isOnCooldown = cooldownSecs > 0;
+            const isDisabled = vo.isGenerating || isOnCooldown ||
+              (isDialogueMode ? !(vo.dialogueSegments || []).some(s => s.text.trim()) : (!vo.text.trim() || !vo.selectedVoiceId));
+            return `
+          <button class="btn btn-primary btn-generate" id="generateVoiceoverBtn" style="width:100%;height:52px;font-size:16px;" ${isDisabled ? 'disabled' : ''}>
             ${vo.isGenerating ? `
               <div class="spinner" style="width:18px;height:18px;margin-right:8px;"></div> Generating...
+            ` : isOnCooldown ? `
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Tunggu ${cooldownSecs}s
             ` : `
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
                 <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
               </svg>
               Generate Voice Over
             `}
-          </button>
+          </button>`;
+          })()}
 
           ${vo.currentAudioUrl ? `
             <div class="glass-card" style="padding:20px;margin-top:20px;">
@@ -7180,9 +7193,17 @@ async function generateVoiceover() {
     const data = await res.json();
     if (!res.ok) {
       showToast(data.error || 'Gagal generate voice over', 'error');
+      if (res.status === 429 && data.cooldownMs) {
+        vo.cooldownEnd = Date.now() + data.cooldownMs;
+        startVoiceoverCooldown();
+      }
     } else {
       vo.currentAudioUrl = data.audioUrl;
       showToast('Voice over berhasil dibuat!', 'success');
+      if (data.cooldown) {
+        vo.cooldownEnd = Date.now() + (data.cooldown * 1000);
+        startVoiceoverCooldown();
+      }
       await loadVoiceoverHistory();
     }
   } catch (e) {
@@ -7190,6 +7211,21 @@ async function generateVoiceover() {
   }
   vo.isGenerating = false;
   render(true);
+}
+
+let voiceoverCooldownInterval = null;
+function startVoiceoverCooldown() {
+  if (voiceoverCooldownInterval) clearInterval(voiceoverCooldownInterval);
+  voiceoverCooldownInterval = setInterval(() => {
+    if (state.currentPage !== 'voiceover') return;
+    if (Date.now() >= state.voiceover.cooldownEnd) {
+      clearInterval(voiceoverCooldownInterval);
+      voiceoverCooldownInterval = null;
+      state.voiceover.cooldownEnd = 0;
+      showToast('Voice Over siap digunakan kembali!', 'success');
+    }
+    render(true);
+  }, 1000);
 }
 
 // ======== END VOICEOVER FUNCTIONS ========

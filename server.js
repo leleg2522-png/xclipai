@@ -2349,6 +2349,10 @@ const RATE_LIMIT_CONFIG = {
     jitterMinMs: 1000,
     jitterMaxMs: 3000,
     label: 'X Image2'
+  },
+  voiceover: {
+    cooldownMs: 120 * 1000,
+    label: 'Voice Over'
   }
 };
 
@@ -9184,6 +9188,16 @@ app.post('/api/voiceover/generate', async (req, res) => {
     const kieKey = roomKeyData.apiKey;
     const keyInfo = roomKeyData.keyInfo;
 
+    const cooldownRemaining = getUserCooldownRemaining(keyInfo.user_id, 'voiceover');
+    if (cooldownRemaining > 0) {
+      const cooldownSec = Math.ceil(cooldownRemaining / 1000);
+      return res.status(429).json({
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate voice over berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: cooldownRemaining
+      });
+    }
+
     console.log(`[VOICEOVER] Generating via kie.ai | user: ${keyInfo.user_id} | voice: ${voiceId || 'dialogue'} | model: ${kieModel} | chars: ${text ? text.length : 'n/a'}`);
 
     const kieInput = isDialogue
@@ -9266,13 +9280,15 @@ app.post('/api/voiceover/generate', async (req, res) => {
       [keyInfo.user_id, keyInfo.id, displayVoice, voiceName || displayVoice, kieModel, (text || '').substring(0, 500), audioUrl, charsUsed, roomKeyData.roomId]
     );
 
+    setUserCooldown(keyInfo.user_id, 'voiceover');
     console.log(`[VOICEOVER] Generated successfully | URL: ${audioUrl}`);
 
     res.json({
       success: true,
       audioUrl,
       historyId: historyResult.rows[0].id,
-      charactersUsed: charsUsed
+      charactersUsed: charsUsed,
+      cooldown: 120
     });
   } catch (e) {
     console.error('[VOICEOVER] Generate error:', e.response?.data ? JSON.stringify(e.response.data) : e.message);
