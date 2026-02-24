@@ -6157,6 +6157,508 @@ function attachChatEventListeners() {
   });
 }
 
+function renderVidgen4Page() {
+  const isSora2 = state.vidgen4.selectedModel === 'sora-2-vip';
+  const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
+  const models = [
+    { id: 'sora-2-vip', name: 'Sora 2 VIP', desc: 'Video hingga 15 detik, 720p, kualitas premium', badge: 'VIP', icon: '🎬' },
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
+  ];
+  
+  const durationOptions = isSora2 ? [10, 15] : [8];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
+  
+  const styleOptions = [
+    { value: 'none', label: 'None' },
+    { value: 'thanksgiving', label: 'Thanksgiving' },
+    { value: 'comic', label: 'Comic' },
+    { value: 'news', label: 'News' },
+    { value: 'selfie', label: 'Selfie' },
+    { value: 'nostalgic', label: 'Nostalgic' },
+    { value: 'anime', label: 'Anime' }
+  ];
+  
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Vidgen4 - AI Video
+        </div>
+        <h1 class="hero-title">
+          <span class="gradient-text">Vidgen4</span> AI Video
+        </h1>
+        <p class="hero-subtitle">Generate video dengan Sora 2 & Veo 3.1 Fast</p>
+      </div>
+
+      <div class="xmaker-layout">
+        <div class="xmaker-settings">
+          ${isSora2 ? `
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Reference Image</h2>
+            </div>
+            <div class="card-body">
+              <div class="reference-upload ${state.vidgen4.sourceImage ? 'has-image' : ''}" id="vidgen4UploadZone">
+                ${state.vidgen4.sourceImage ? `
+                  <img src="${state.vidgen4.sourceImage.data}" alt="Source" class="reference-preview">
+                  <button class="remove-reference" id="removeVidgen4Image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Klik untuk upload gambar (opsional)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                  </div>
+                `}
+              </div>
+              <input type="file" id="vidgen4ImageInput" accept="image/*" style="display: none">
+            </div>
+          </div>
+          ` : `
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Image to Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Generation Type</label>
+                <div class="aspect-ratio-selector">
+                  <button class="aspect-btn ${state.vidgen4.generationType === 'frame' ? 'active' : ''}" data-vidgen4-gentype="frame">
+                    <span>🎞️ Start/End Frame</span>
+                  </button>
+                  <button class="aspect-btn ${state.vidgen4.generationType === 'reference' ? 'active' : ''}" data-vidgen4-gentype="reference">
+                    <span>🖼️ Reference</span>
+                  </button>
+                </div>
+                <p class="setting-hint">${state.vidgen4.generationType === 'frame' ? 'Upload start frame dan end frame untuk mengontrol awal & akhir video' : 'Upload gambar referensi untuk gaya video (max 3)'}</p>
+              </div>
+
+              ${state.vidgen4.generationType === 'frame' ? `
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:0;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">Start Frame</label>
+                  <div class="reference-upload ${state.vidgen4.startFrame ? 'has-image' : ''}" id="vidgen4StartFrameZone" style="min-height:100px;">
+                    ${state.vidgen4.startFrame ? `
+                      <img src="${state.vidgen4.startFrame.data}" alt="Start" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen4StartFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 8 16 12"/>
+                          <line x1="12" y1="16" x2="12" y2="8"/>
+                        </svg>
+                        <span style="font-size:11px;">Start Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen4StartFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">End Frame</label>
+                  <div class="reference-upload ${state.vidgen4.endFrame ? 'has-image' : ''}" id="vidgen4EndFrameZone" style="min-height:100px;">
+                    ${state.vidgen4.endFrame ? `
+                      <img src="${state.vidgen4.endFrame.data}" alt="End" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen4EndFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 16 16 12"/>
+                          <line x1="12" y1="8" x2="12" y2="16"/>
+                        </svg>
+                        <span style="font-size:11px;">End Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen4EndFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+              </div>
+              ` : `
+              <div style="margin-top:8px;">
+                <div class="reference-upload ${state.vidgen4.sourceImage ? 'has-image' : ''}" id="vidgen4UploadZone">
+                  ${state.vidgen4.sourceImage ? `
+                    <img src="${state.vidgen4.sourceImage.data}" alt="Source" class="reference-preview">
+                    <button class="remove-reference" id="removeVidgen4Image">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  ` : `
+                    <div class="reference-placeholder">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>Klik untuk upload referensi (opsional, max 3)</span>
+                      <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                    </div>
+                  `}
+                </div>
+                <input type="file" id="vidgen4ImageInput" accept="image/*" style="display: none">
+              </div>
+              `}
+            </div>
+          </div>
+          `}
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pilih Model</h2>
+            </div>
+            <div class="card-body">
+              <div class="model-selector-grid">
+                ${models.map(model => `
+                  <div class="model-card ${state.vidgen4.selectedModel === model.id ? 'active' : ''}" data-vidgen4-model="${model.id}">
+                    <div class="model-card-icon">${model.icon}</div>
+                    <div class="model-card-info">
+                      <div class="model-card-name">${model.name}</div>
+                      <div class="model-card-desc">${model.desc}</div>
+                    </div>
+                    ${model.badge ? `<span class="model-card-badge ${model.badge.toLowerCase()}">${model.badge}</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pengaturan Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Aspect Ratio</label>
+                <div class="aspect-ratio-selector">
+                  ${['16:9', '9:16'].map(ratio => `
+                    <button class="aspect-btn ${state.vidgen4.aspectRatio === ratio ? 'active' : ''}" data-vidgen4-ratio="${ratio}">
+                      <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
+                      <span>${ratio}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Duration</label>
+                <div class="aspect-ratio-selector">
+                  ${durationOptions.map(d => `
+                    <button class="aspect-btn ${state.vidgen4.duration === d ? 'active' : ''}" data-vidgen4-duration="${d}">
+                      <span>${d}s</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              ${isVeo ? `
+              <div class="setting-group">
+                <label class="setting-label">Resolution</label>
+                <div class="aspect-ratio-selector">
+                  ${resolutionOptions.map(r => `
+                    <button class="aspect-btn ${state.vidgen4.resolution === r ? 'active' : ''}" data-vidgen4-resolution="${r}">
+                      <span>${r}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+              ` : ''}
+
+              ${isSora2 ? `
+              <div class="setting-group">
+                <label class="setting-label">Video Style</label>
+                <select class="form-select" id="vidgen4StyleSelect">
+                  ${styleOptions.map(s => `
+                    <option value="${s.value}" ${state.vidgen4.style === s.value ? 'selected' : ''}>${s.label}</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Sora 2 Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Watermark</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Watermark" ${state.vidgen4.watermark ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.watermark ? 'active' : ''}" data-vidgen4-toggle="watermark" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.watermark ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.watermark ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Video Thumbnail</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Thumbnail" ${state.vidgen4.thumbnail ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.thumbnail ? 'active' : ''}" data-vidgen4-toggle="thumbnail" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.thumbnail ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.thumbnail ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Private Mode</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Private" ${state.vidgen4.isPrivate ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.isPrivate ? 'active' : ''}" data-vidgen4-toggle="isPrivate" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.isPrivate ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.isPrivate ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Storyboard</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4Storyboard" ${state.vidgen4.storyboard ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.storyboard ? 'active' : ''}" data-vidgen4-toggle="storyboard" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.storyboard ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.storyboard ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              ` : ''}
+
+              ${isVeo ? `
+              <div class="setting-group">
+                <label class="setting-label">Veo 3.1 Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Enable GIF</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen4EnableGif" ${state.vidgen4.enableGif ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen4.enableGif ? 'active' : ''}" data-vidgen4-toggle="enableGif" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen4.enableGif ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen4.enableGif ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                ${state.vidgen4.enableGif ? `<p class="setting-hint" style="color:#f59e0b;margin-top:4px;">⚠️ GIF tidak bisa digunakan dengan resolusi 1080p/4K</p>` : ''}
+              </div>
+              ` : ''}
+
+              <div class="setting-group">
+                <label class="setting-label">Prompt</label>
+                <textarea 
+                  class="form-textarea" 
+                  id="vidgen4Prompt" 
+                  placeholder="Deskripsikan video yang ingin dibuat..."
+                  rows="3"
+                >${state.vidgen4.prompt}</textarea>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  Room
+                </label>
+                <select class="form-select" id="vidgen4RoomSelect">
+                  <option value="">-- Pilih Room --</option>
+                  ${state.vidgen4RoomManager.rooms.map(room => `
+                    <option value="${room.id}" ${state.vidgen4.selectedRoom == room.id ? 'selected' : ''}>
+                      ${room.name} (${room.active_users}/${room.max_users} users)
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Xclip API Key
+                </label>
+                <input 
+                  type="password" 
+                  class="form-input" 
+                  id="vidgen4ApiKey" 
+                  placeholder="Masukkan Xclip API key..."
+                  value="${state.vidgen4.customApiKey}"
+                >
+                <p class="setting-hint">Buat Xclip API key di panel "Xclip Keys"</p>
+              </div>
+
+              ${(() => {
+                const now = Date.now();
+                const isOnCooldown = state.vidgen4.cooldownEndTime > now;
+                const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen4.cooldownEndTime - now) / 1000) : 0;
+                const cooldownMins = Math.floor(cooldownSecs / 60);
+                const cooldownRemSecs = cooldownSecs % 60;
+                const hasImage = state.vidgen4.sourceImage || state.vidgen4.startFrame || state.vidgen4.endFrame;
+                const needsPrompt = !state.vidgen4.prompt.trim() && !hasImage;
+                const isDisabled = state.vidgen4.isGenerating || needsPrompt || state.vidgen4.tasks.length >= 3 || isOnCooldown;
+                
+                return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen4Btn" ${isDisabled ? 'disabled' : ''}>
+                ${state.vidgen4.isGenerating ? `
+                  <div class="spinner"></div>
+                  <span>Generating...</span>
+                ` : isOnCooldown ? `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span>Cooldown ${cooldownMins}:${cooldownRemSecs.toString().padStart(2, '0')}</span>
+                ` : `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span>Generate Video${state.vidgen4.tasks.length > 0 ? ' (' + state.vidgen4.tasks.length + '/3)' : ''}</span>
+                `}
+              </button>`;
+              })()}
+              ${!state.vidgen4.prompt.trim() && !state.vidgen4.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
+              ${state.vidgen4.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="xmaker-preview">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Hasil Video</h2>
+            </div>
+            <div class="card-body">
+              ${renderVidgen4Tasks()}
+              ${renderVidgen4Videos()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVidgen4Tasks() {
+  if (state.vidgen4.tasks.length === 0) return '';
+  
+  let html = '<div class="processing-tasks">';
+  html += '<div class="tasks-header"><span class="pulse-dot"></span> Sedang Diproses (' + state.vidgen4.tasks.length + '/3)</div>';
+  html += '<div class="tasks-list">';
+  
+  state.vidgen4.tasks.forEach(task => {
+    const elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    html += '<div class="task-item">';
+    html += '<div class="task-info">';
+    html += '<span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + mins + ':' + secs.toString().padStart(2, '0') + '</span>';
+    html += '</div>';
+    html += '<div class="task-progress"><div class="task-progress-bar" style="width:' + (task.progress || 0) + '%"></div></div>';
+    html += '</div>';
+  });
+  
+  html += '</div></div>';
+  return html;
+}
+
+function renderVidgen4Videos() {
+  if (state.vidgen4.generatedVideos.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div><p>Belum ada video yang dihasilkan</p></div>';
+  }
+  
+  let html = '<div class="video-grid">';
+  state.vidgen4.generatedVideos.forEach(video => {
+    html += '<div class="video-result-card" style="position:relative;">';
+    html += '<video controls playsinline preload="metadata" class="result-video">';
+    html += '<source src="' + video.url + '" type="video/mp4">';
+    html += '</video>';
+    html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<span class="video-model-tag">' + video.model + '</span>';
+    if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+    html += '<a href="/api/vidgen4/download?url=' + encodeURIComponent(video.url) + '" download="vidgen4_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen4Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    html += '</a>';
+    html += '<button class="btn-icon deleteVidgen4Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    html += '</button>';
+    html += '</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// ============ VIDGEN4 EVENT HANDLERS ============
+
+let vidgen4CooldownInterval = null;
+
+function startVidgen4CooldownTimer() {
+  if (vidgen4CooldownInterval) clearInterval(vidgen4CooldownInterval);
+  vidgen4CooldownInterval = setInterval(() => {
+    const now = Date.now();
+    if (state.vidgen4.cooldownEndTime <= now) {
+      clearInterval(vidgen4CooldownInterval);
+      vidgen4CooldownInterval = null;
+      state.vidgen4.cooldownEndTime = 0;
+      localStorage.removeItem('vidgen4_cooldown');
+      if (state.currentPage === 'vidgen4') render();
+    } else if (state.currentPage === 'vidgen4') {
+      render();
+    }
+  }, 1000);
+}
+
 function attachVidgen4EventListeners() {
   if (state.vidgen4RoomManager.rooms.length === 0 && !state.vidgen4RoomManager.isLoading) {
     loadVidgen4Rooms().then(() => render());
