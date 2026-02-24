@@ -6464,3 +6464,26 @@ textarea.form-input {
   border-color: var(--primary);
   color: var(--primary);
 }
+
+/* ============ VOICE OVER ============ */
+@media (max-width: 768px) {
+  .voiceover-layout {
+    grid-template-columns: 1fr !important;
+  }
+  .voiceover-sidebar {
+    order: -1;
+  }
+}
+
+.voice-card:hover {
+  border-color: var(--primary) !important;
+  transform: translateY(-1px);
+}
+
+.voice-card.selected {
+  border-color: var(--primary) !important;
+}
+
+.model-option:hover {
+  border-color: var(--primary) !important;
+}

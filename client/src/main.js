@@ -389,6 +389,34 @@ const state = {
     isLoading: false,
     showRoomModal: false,
     xclipApiKey: ''
+  },
+  voiceover: {
+    text: '',
+    selectedVoiceId: '',
+    selectedVoiceName: '',
+    selectedModel: 'elevenlabs/text-to-speech-multilingual-v2',
+    stability: 0.5,
+    similarityBoost: 0.75,
+    style: 0,
+    useSpeakerBoost: true,
+    customApiKey: '',
+    dialogueSegments: [{ voice: 'Rachel', text: '' }],
+    isGenerating: false,
+    history: [],
+    voices: [],
+    voicesLoading: false,
+    currentAudioUrl: null,
+    isPlaying: false,
+    voiceSearch: '',
+    showVoicePanel: false
+  },
+  voiceoverRoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
   }
 };
 
@@ -408,7 +436,9 @@ const PERSIST_KEYS = {
   ximageRoomManager: ['xclipApiKey'],
   ximage2: ['prompt', 'selectedModel', 'size', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'watermark', 'sequentialGeneration', 'safetyTolerance', 'inputMode', 'promptUpsampling'],
   ximage2RoomManager: ['xclipApiKey'],
-  motionRoomManager: ['xclipApiKey']
+  motionRoomManager: ['xclipApiKey'],
+  voiceover: ['selectedModel', 'stability', 'similarityBoost', 'style', 'useSpeakerBoost', 'customApiKey'],
+  voiceoverRoomManager: ['xclipApiKey']
 };
 
 function saveUserInputs(section) {
@@ -2688,6 +2718,15 @@ function renderNavMenu() {
       </svg>
       Motion
     </button>
+    <button class="nav-btn ${state.currentPage === 'voiceover' ? 'active' : ''}" data-page="voiceover">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="8" y1="22" x2="16" y2="22"/>
+      </svg>
+      Voice Over
+    </button>
     <button class="nav-btn ${state.currentPage === 'vidgen3' ? 'active' : ''}" data-page="vidgen3">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="5 3 19 12 5 21 5 3"/>
@@ -2803,6 +2842,7 @@ function renderMainContent() {
       state.currentPage === 'ximage2' ? renderXImage2Page() :
       state.currentPage === 'xmaker' ? renderXMakerPage() :
       state.currentPage === 'motion' ? renderMotionPage() :
+      state.currentPage === 'voiceover' ? renderVoiceoverPage() :
       state.currentPage === 'admin' ? '' :
       state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
   `;
@@ -2816,6 +2856,7 @@ function renderModals() {
     ${renderXImageRoomModal()}
     ${renderXImage2RoomModal()}
     ${renderXMakerRoomModal()}
+    ${renderVoiceoverRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
     ${renderPaymentModal()}
@@ -4756,6 +4797,325 @@ function renderXMakerRoomModal() {
   `;
 }
 
+function renderVoiceoverRoomModal() {
+  if (!state.voiceoverRoomManager.showRoomModal) return '';
+  return `
+    <div class="modal-overlay" id="voiceoverRoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih Voice Room</h2>
+          <button class="modal-close" id="closeVoiceoverRoomModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section" style="margin-bottom:20px;">
+            <label class="setting-label">Xclip API Key</label>
+            <input type="password" id="voiceoverRoomApiKeyInput" class="form-input"
+                   placeholder="Masukkan Xclip API Key..." value="${state.voiceoverRoomManager.xclipApiKey}">
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys"</p>
+          </div>
+          <div class="rooms-list">
+            ${state.voiceoverRoomManager.isLoading ? `
+              <div class="loading-rooms"><div class="spinner"></div><p>Memuat rooms...</p></div>
+            ` : state.voiceoverRoomManager.rooms.length === 0 ? `
+              <div class="empty-rooms"><p>Tidak ada voice room tersedia</p></div>
+            ` : state.voiceoverRoomManager.rooms.map(room => `
+              <div class="room-item ${room.status !== 'open' ? 'maintenance' : ''}">
+                <div class="room-info">
+                  <div class="room-name">${room.name}</div>
+                  <div class="room-stats">
+                    <span class="room-users">${room.active_users}/${room.max_users} users</span>
+                    <span class="room-slots">${room.available_slots} slot tersedia</span>
+                  </div>
+                </div>
+                <div class="room-status">
+                  ${room.status === 'open' ? `
+                    <span class="status-badge open">OPEN</span>
+                    ${room.available_slots > 0 ? `
+                      <button class="btn btn-sm btn-primary join-voiceover-room-btn" data-room-id="${room.id}">Join</button>
+                    ` : `<span class="status-badge full">FULL</span>`}
+                  ` : `<span class="status-badge maintenance">MAINTENANCE</span>`}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVoiceoverPage() {
+  const vo = state.voiceover;
+  const rm = state.voiceoverRoomManager;
+  const ELEVENLABS_MODELS = [
+    { id: 'elevenlabs/text-to-speech-multilingual-v2', name: 'Multilingual v2', desc: 'Kualitas terbaik, 70+ bahasa', badge: '' },
+    { id: 'elevenlabs/text-to-speech-turbo-2-5', name: 'Turbo v2.5', desc: 'Tercepat, ultra low latency', badge: '⚡' },
+    { id: 'elevenlabs/text-to-dialogue-v3', name: 'Eleven v3 Dialogue', desc: 'Paling ekspresif, multi-speaker', badge: '🆕' }
+  ];
+  const isDialogueMode = vo.selectedModel === 'elevenlabs/text-to-dialogue-v3';
+  const availableVoiceNames = vo.voices.map(v => v.name);
+  const filteredVoices = vo.voices.filter(v =>
+    !vo.voiceSearch || v.name.toLowerCase().includes(vo.voiceSearch.toLowerCase()) ||
+    (v.labels?.accent || '').toLowerCase().includes(vo.voiceSearch.toLowerCase()) ||
+    (v.labels?.gender || '').toLowerCase().includes(vo.voiceSearch.toLowerCase())
+  );
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          ElevenLabs TTS
+        </div>
+        <h1 class="hero-title"><span class="gradient-text">AI Voice</span> Over</h1>
+        <p class="hero-subtitle">Ubah teks menjadi suara natural dengan ElevenLabs</p>
+      </div>
+
+      ${state.auth.user ? `
+      <div class="room-manager-panel glass-card" style="margin-bottom:20px;">
+        <div class="room-manager-header">
+          <div class="room-manager-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            <span>Voice Room</span>
+          </div>
+          ${rm.hasSubscription ? `
+            <div class="subscription-info">
+              <span class="sub-badge active">Aktif</span>
+              <span class="sub-time">${rm.subscription?.roomName || 'Voice Room'}</span>
+            </div>
+          ` : ''}
+        </div>
+        <div class="room-manager-content">
+          <div class="api-key-row" style="margin-bottom:12px;">
+            <label class="setting-label" style="font-size:12px;">Xclip API Key</label>
+            <input type="password" id="voiceoverApiKeyInput" class="form-input" style="font-size:13px;"
+                   placeholder="Masukkan Xclip API key..." value="${vo.customApiKey}">
+          </div>
+          ${rm.hasSubscription ? `
+            <div class="room-info-bar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <span style="font-size:13px;color:var(--text-secondary);">
+                Room: <strong style="color:var(--text-primary);">${rm.subscription?.roomName}</strong>
+              </span>
+              <button class="btn btn-sm btn-secondary" id="changeVoiceRoomBtn">Ganti Room</button>
+            </div>
+          ` : `
+            <button class="btn btn-primary" id="openVoiceoverRoomModalBtn" style="width:100%;">
+              Pilih Voice Room untuk Mulai
+            </button>
+          `}
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="voiceover-layout" style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
+        
+        <div class="voiceover-main">
+          ${isDialogueMode ? `
+          <div class="glass-card" style="padding:24px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <label class="setting-label">Dialogue Segments</label>
+              <button class="btn btn-sm btn-secondary" id="addDialogueSegmentBtn">+ Tambah Segment</button>
+            </div>
+            <div id="dialogueSegmentsContainer">
+              ${(vo.dialogueSegments || []).map((seg, idx) => `
+                <div class="dialogue-segment" data-seg-idx="${idx}" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--surface);">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <span style="font-size:12px;color:var(--text-muted);min-width:70px;">Speaker ${idx + 1}</span>
+                    <select class="form-input dialogue-voice-select" data-seg-idx="${idx}" style="flex:1;font-size:13px;padding:6px 10px;height:36px;">
+                      ${vo.voices.length > 0 ? vo.voices.map(v => `<option value="${v.name}" ${seg.voice === v.name ? 'selected' : ''}>${v.name}</option>`).join('') : `<option value="${seg.voice}">${seg.voice}</option>`}
+                    </select>
+                    ${(vo.dialogueSegments || []).length > 1 ? `
+                      <button class="btn btn-sm remove-dialogue-seg-btn" data-seg-idx="${idx}" 
+                              style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);padding:4px 8px;">✕</button>
+                    ` : ''}
+                  </div>
+                  <textarea class="form-input dialogue-text-input" data-seg-idx="${idx}" rows="3" 
+                            placeholder="Teks untuk Speaker ${idx + 1}..."
+                            style="resize:vertical;font-size:13px;">${seg.text}</textarea>
+                </div>
+              `).join('')}
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Eleven v3 Dialogue mendukung multi-speaker dalam satu audio.</p>
+          </div>
+          ` : `
+          <div class="glass-card" style="padding:24px;margin-bottom:20px;">
+            <label class="setting-label" style="margin-bottom:8px;display:block;">
+              Teks
+              <span style="float:right;font-size:12px;color:var(--text-muted);">${vo.text.length}/5000</span>
+            </label>
+            <textarea id="voiceoverText" class="form-input" rows="8" maxlength="5000"
+                      placeholder="Masukkan teks yang ingin diubah menjadi suara..." 
+                      style="resize:vertical;min-height:160px;">${vo.text}</textarea>
+          </div>
+          `}
+
+          <div class="glass-card" style="padding:24px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <label class="setting-label">Pilih Suara</label>
+              ${rm.hasSubscription || state.admin.isAdmin ? `
+                <button class="btn btn-sm btn-secondary" id="refreshVoicesBtn" ${vo.voicesLoading ? 'disabled' : ''}>
+                  ${vo.voicesLoading ? '...' : 'Muat Suara'}
+                </button>
+              ` : ''}
+            </div>
+            
+            ${vo.voices.length > 0 ? `
+              <input type="text" id="voiceSearchInput" class="form-input" style="margin-bottom:12px;font-size:13px;"
+                     placeholder="Cari suara..." value="${vo.voiceSearch}">
+              <div class="voices-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;max-height:320px;overflow-y:auto;">
+                ${filteredVoices.map(v => `
+                  <div class="voice-card ${vo.selectedVoiceId === v.voice_id ? 'selected' : ''}"
+                       data-voice-id="${v.voice_id}" data-voice-name="${v.name}"
+                       style="padding:12px;border:1px solid ${vo.selectedVoiceId === v.voice_id ? 'var(--primary)' : 'var(--border)'};
+                              border-radius:10px;cursor:pointer;transition:all 0.2s;background:${vo.selectedVoiceId === v.voice_id ? 'rgba(99,102,241,0.1)' : 'var(--surface)'};
+                              position:relative;">
+                    <div style="font-weight:600;font-size:13px;margin-bottom:4px;">${v.name}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">
+                      ${[v.labels?.gender, v.labels?.accent, v.labels?.age].filter(Boolean).join(' • ') || v.category || 'Voice'}
+                    </div>
+                    ${v.preview_url ? `
+                      <button class="preview-voice-btn" data-preview="${v.preview_url}" data-name="${v.name}"
+                              style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;
+                                     color:var(--text-muted);padding:4px;" title="Preview">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </button>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+              ${vo.selectedVoiceId ? `
+                <div style="margin-top:12px;padding:10px;background:rgba(99,102,241,0.08);border-radius:8px;font-size:13px;">
+                  Suara dipilih: <strong>${vo.selectedVoiceName}</strong>
+                </div>
+              ` : ''}
+            ` : `
+              <div style="text-align:center;padding:32px;color:var(--text-muted);">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px;opacity:0.4;">
+                  <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                </svg>
+                <p>${rm.hasSubscription || state.admin.isAdmin ? 'Klik "Muat Suara" untuk melihat daftar suara ElevenLabs' : 'Join Voice Room terlebih dahulu untuk melihat suara'}</p>
+              </div>
+            `}
+          </div>
+
+          <button class="btn btn-primary btn-generate" id="generateVoiceoverBtn" style="width:100%;height:52px;font-size:16px;"
+                  ${vo.isGenerating || (isDialogueMode ? !(vo.dialogueSegments || []).some(s => s.text.trim()) : (!vo.text.trim() || !vo.selectedVoiceId)) ? 'disabled' : ''}>
+            ${vo.isGenerating ? `
+              <div class="spinner" style="width:18px;height:18px;margin-right:8px;"></div> Generating...
+            ` : `
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              </svg>
+              Generate Voice Over
+            `}
+          </button>
+
+          ${vo.currentAudioUrl ? `
+            <div class="glass-card" style="padding:20px;margin-top:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <span class="setting-label">Hasil</span>
+                <a href="${vo.currentAudioUrl}" download class="btn btn-sm btn-secondary">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Download
+                </a>
+              </div>
+              <audio controls style="width:100%;" src="${vo.currentAudioUrl}"></audio>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="voiceover-sidebar">
+          <div class="glass-card" style="padding:20px;margin-bottom:16px;">
+            <label class="setting-label" style="margin-bottom:12px;display:block;">Model</label>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${ELEVENLABS_MODELS.map(m => `
+                <div class="model-option ${vo.selectedModel === m.id ? 'selected' : ''}" data-vo-model="${m.id}"
+                     style="padding:12px;border:1px solid ${vo.selectedModel === m.id ? 'var(--primary)' : 'var(--border)'};
+                            border-radius:8px;cursor:pointer;transition:all 0.2s;
+                            background:${vo.selectedModel === m.id ? 'rgba(99,102,241,0.1)' : 'var(--surface)'};">
+                  <div style="font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px;">
+                    ${m.badge ? `<span>${m.badge}</span>` : ''}${m.name}
+                  </div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${m.desc}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="glass-card" style="padding:20px;margin-bottom:16px;">
+            <label class="setting-label" style="margin-bottom:16px;display:block;">Voice Settings</label>
+            
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <label style="font-size:13px;">Stability</label>
+                <span style="font-size:13px;color:var(--primary);">${(vo.stability * 100).toFixed(0)}%</span>
+              </div>
+              <input type="range" id="voStability" min="0" max="1" step="0.01" value="${vo.stability}"
+                     style="width:100%;accent-color:var(--primary);">
+              <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Rendah = lebih ekspresif, Tinggi = lebih konsisten</p>
+            </div>
+            
+            ${!isDialogueMode ? `
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <label style="font-size:13px;">Clarity</label>
+                <span style="font-size:13px;color:var(--primary);">${(vo.similarityBoost * 100).toFixed(0)}%</span>
+              </div>
+              <input type="range" id="voSimilarity" min="0" max="1" step="0.01" value="${vo.similarityBoost}"
+                     style="width:100%;accent-color:var(--primary);">
+            </div>
+            
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <label style="font-size:13px;">Style Exaggeration</label>
+                <span style="font-size:13px;color:var(--primary);">${(vo.style * 100).toFixed(0)}%</span>
+              </div>
+              <input type="range" id="voStyle" min="0" max="1" step="0.01" value="${vo.style}"
+                     style="width:100%;accent-color:var(--primary);">
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="checkbox" id="voSpeakerBoost" ${vo.useSpeakerBoost ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary);">
+              <label for="voSpeakerBoost" style="font-size:13px;cursor:pointer;">Speaker Boost</label>
+            </div>
+            ` : `<p style="font-size:12px;color:var(--text-muted);">Eleven v3 Dialogue hanya mendukung Stability.</p>`}
+          </div>
+
+          ${vo.history.length > 0 ? `
+            <div class="glass-card" style="padding:20px;">
+              <label class="setting-label" style="margin-bottom:12px;display:block;">Riwayat</label>
+              <div style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;">
+                ${vo.history.map(h => `
+                  <div style="padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+                    <div style="font-size:12px;font-weight:600;margin-bottom:4px;">${h.voice_name} • ${h.model_id.replace('eleven_','').replace('_',' ')}</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${h.text_input}">${h.text_input || ''}</div>
+                    <audio controls style="width:100%;height:32px;" src="${h.audio_url}"></audio>
+                    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+                      <span style="font-size:11px;color:var(--text-muted);">${new Date(h.created_at).toLocaleDateString('id-ID')}</span>
+                      <a href="${h.audio_url}" download style="font-size:11px;color:var(--primary);">Download</a>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderVideoGenPage() {
   return `
     <div class="container">
@@ -6288,6 +6648,8 @@ function attachEventListeners() {
     attachXMakerEventListeners();
   } else if (state.currentPage === 'motion') {
     attachMotionEventListeners();
+  } else if (state.currentPage === 'voiceover') {
+    attachVoiceoverEventListeners();
   }
 }
 
@@ -6687,6 +7049,150 @@ async function leaveXMakerRoom() {
     showToast('Gagal keluar room', 'error');
   }
 }
+
+// ======== VOICEOVER FUNCTIONS ========
+
+async function loadVoiceoverRooms() {
+  state.voiceoverRoomManager.isLoading = true;
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/rooms`, { credentials: 'include' });
+    const data = await res.json();
+    state.voiceoverRoomManager.rooms = data.rooms || [];
+  } catch (e) {
+    state.voiceoverRoomManager.rooms = [];
+  }
+  state.voiceoverRoomManager.isLoading = false;
+}
+
+async function loadVoiceoverSubscriptionStatus() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { state.voiceoverRoomManager.hasSubscription = false; return; }
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/subscription/status`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    state.voiceoverRoomManager.hasSubscription = data.hasSubscription || false;
+    state.voiceoverRoomManager.subscription = data.subscription || null;
+  } catch (e) {
+    state.voiceoverRoomManager.hasSubscription = false;
+  }
+}
+
+async function loadVoiceoverVoices() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API key terlebih dahulu', 'error'); return; }
+  state.voiceover.voicesLoading = true;
+  render(true);
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/voices`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Gagal memuat suara', 'error'); }
+    else {
+      state.voiceover.voices = data.voices || [];
+      showToast(`${state.voiceover.voices.length} suara dimuat`, 'success');
+    }
+  } catch (e) { showToast('Gagal memuat suara', 'error'); }
+  state.voiceover.voicesLoading = false;
+  render(true);
+}
+
+async function loadVoiceoverHistory() {
+  const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) return;
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/history`, {
+      headers: { 'X-Xclip-Key': apiKey }, credentials: 'include'
+    });
+    const data = await res.json();
+    state.voiceover.history = data.history || [];
+  } catch (e) {}
+}
+
+async function joinVoiceoverRoom(roomId) {
+  const apiKey = state.voiceoverRoomManager.xclipApiKey || state.voiceover.customApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API Key terlebih dahulu', 'error'); return; }
+  try {
+    const res = await fetch(`${API_URL}/api/voiceover/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Xclip-Key': apiKey },
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Gagal join room', 'error'); return; }
+    state.voiceoverRoomManager.subscription = data.subscription;
+    state.voiceoverRoomManager.hasSubscription = true;
+    state.voiceoverRoomManager.showRoomModal = false;
+    if (!state.voiceover.customApiKey) state.voiceover.customApiKey = apiKey;
+    showToast(data.message, 'success');
+    await loadVoiceoverVoices();
+    await loadVoiceoverHistory();
+    render();
+  } catch (e) { showToast('Gagal join room', 'error'); }
+}
+
+async function generateVoiceover() {
+  const vo = state.voiceover;
+  const apiKey = vo.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+  if (!apiKey) { showToast('Masukkan Xclip API key terlebih dahulu', 'error'); return; }
+
+  const isDialogue = vo.selectedModel === 'elevenlabs/text-to-dialogue-v3';
+
+  if (isDialogue) {
+    const validSegs = (vo.dialogueSegments || []).filter(s => s.text.trim());
+    if (validSegs.length === 0) { showToast('Masukkan teks di minimal 1 segment', 'error'); return; }
+  } else {
+    if (!vo.text.trim()) { showToast('Masukkan teks terlebih dahulu', 'error'); return; }
+    if (!vo.selectedVoiceId) { showToast('Pilih suara terlebih dahulu', 'error'); return; }
+  }
+
+  vo.isGenerating = true;
+  render(true);
+
+  try {
+    const body = isDialogue
+      ? {
+          modelId: vo.selectedModel,
+          dialogue: (vo.dialogueSegments || []).filter(s => s.text.trim()).map(s => ({ text: s.text, voice: s.voice })),
+          stability: vo.stability
+        }
+      : {
+          text: vo.text,
+          voiceId: vo.selectedVoiceId,
+          voiceName: vo.selectedVoiceName,
+          modelId: vo.selectedModel,
+          stability: vo.stability,
+          similarityBoost: vo.similarityBoost,
+          style: vo.style,
+          useSpeakerBoost: vo.useSpeakerBoost
+        };
+
+    showToast('Mengirim ke kie.ai...', 'info');
+
+    const res = await fetch(`${API_URL}/api/voiceover/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Xclip-Key': apiKey },
+      credentials: 'include',
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Gagal generate voice over', 'error');
+    } else {
+      vo.currentAudioUrl = data.audioUrl;
+      showToast('Voice over berhasil dibuat!', 'success');
+      await loadVoiceoverHistory();
+    }
+  } catch (e) {
+    showToast('Gagal generate voice over', 'error');
+  }
+  vo.isGenerating = false;
+  render(true);
+}
+
+// ======== END VOICEOVER FUNCTIONS ========
 
 async function generateXMakerImages() {
   const validScenes = state.xmaker.scenes.filter(s => s.description.trim());
@@ -10989,6 +11495,200 @@ async function initApp() {
     fetchVideoHistory();
     fetchXMakerSubscription();
     recoverPendingTasks();
+  }
+}
+
+function attachVoiceoverEventListeners() {
+  if (!state.voiceover._historyLoaded) {
+    state.voiceover._historyLoaded = true;
+    const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+    if (apiKey) {
+      loadVoiceoverSubscriptionStatus().then(() => render(true));
+      loadVoiceoverHistory().then(() => render(true));
+    }
+  }
+
+  const openRoomModalBtn = document.getElementById('openVoiceoverRoomModalBtn');
+  if (openRoomModalBtn) {
+    openRoomModalBtn.addEventListener('click', async () => {
+      state.voiceoverRoomManager.showRoomModal = true;
+      await loadVoiceoverRooms();
+      render();
+    });
+  }
+
+  const changeRoomBtn = document.getElementById('changeVoiceRoomBtn');
+  if (changeRoomBtn) {
+    changeRoomBtn.addEventListener('click', async () => {
+      state.voiceoverRoomManager.showRoomModal = true;
+      await loadVoiceoverRooms();
+      render();
+    });
+  }
+
+  const closeRoomModal = document.getElementById('closeVoiceoverRoomModal');
+  if (closeRoomModal) {
+    closeRoomModal.addEventListener('click', () => {
+      state.voiceoverRoomManager.showRoomModal = false;
+      render();
+    });
+  }
+
+  const modalOverlay = document.getElementById('voiceoverRoomModalOverlay');
+  if (modalOverlay) {
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) { state.voiceoverRoomManager.showRoomModal = false; render(); }
+    });
+  }
+
+  const roomApiKeyInput = document.getElementById('voiceoverRoomApiKeyInput');
+  if (roomApiKeyInput) {
+    roomApiKeyInput.addEventListener('input', (e) => {
+      state.voiceoverRoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('voiceoverRoomManager');
+    });
+  }
+
+  document.querySelectorAll('.join-voiceover-room-btn').forEach(btn => {
+    btn.addEventListener('click', () => joinVoiceoverRoom(parseInt(btn.dataset.roomId)));
+  });
+
+  const voApiKeyInput = document.getElementById('voiceoverApiKeyInput');
+  if (voApiKeyInput) {
+    voApiKeyInput.addEventListener('input', (e) => {
+      state.voiceover.customApiKey = e.target.value;
+      saveUserInputs('voiceover');
+    });
+  }
+
+  const textArea = document.getElementById('voiceoverText');
+  if (textArea) {
+    textArea.addEventListener('input', (e) => {
+      state.voiceover.text = e.target.value;
+    });
+  }
+
+  const refreshVoicesBtn = document.getElementById('refreshVoicesBtn');
+  if (refreshVoicesBtn) {
+    refreshVoicesBtn.addEventListener('click', () => loadVoiceoverVoices());
+  }
+
+  const voiceSearchInput = document.getElementById('voiceSearchInput');
+  if (voiceSearchInput) {
+    voiceSearchInput.addEventListener('input', (e) => {
+      state.voiceover.voiceSearch = e.target.value;
+      render(true);
+    });
+  }
+
+  document.querySelectorAll('.voice-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.preview-voice-btn')) return;
+      state.voiceover.selectedVoiceId = card.dataset.voiceId;
+      state.voiceover.selectedVoiceName = card.dataset.voiceName;
+      render(true);
+    });
+  });
+
+  document.querySelectorAll('.preview-voice-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = btn.dataset.preview;
+      if (url) {
+        const audio = new Audio(url);
+        audio.play().catch(() => showToast('Tidak dapat memutar preview', 'error'));
+        showToast(`Preview: ${btn.dataset.name}`, 'info');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-vo-model]').forEach(el => {
+    el.addEventListener('click', () => {
+      state.voiceover.selectedModel = el.dataset.voModel;
+      saveUserInputs('voiceover');
+      render(true);
+    });
+  });
+
+  const voStability = document.getElementById('voStability');
+  if (voStability) {
+    voStability.addEventListener('input', (e) => {
+      state.voiceover.stability = parseFloat(e.target.value);
+      saveUserInputs('voiceover');
+      render(true);
+    });
+  }
+
+  const voSimilarity = document.getElementById('voSimilarity');
+  if (voSimilarity) {
+    voSimilarity.addEventListener('input', (e) => {
+      state.voiceover.similarityBoost = parseFloat(e.target.value);
+      saveUserInputs('voiceover');
+      render(true);
+    });
+  }
+
+  const voStyle = document.getElementById('voStyle');
+  if (voStyle) {
+    voStyle.addEventListener('input', (e) => {
+      state.voiceover.style = parseFloat(e.target.value);
+      saveUserInputs('voiceover');
+      render(true);
+    });
+  }
+
+  const voSpeakerBoost = document.getElementById('voSpeakerBoost');
+  if (voSpeakerBoost) {
+    voSpeakerBoost.addEventListener('change', (e) => {
+      state.voiceover.useSpeakerBoost = e.target.checked;
+      saveUserInputs('voiceover');
+    });
+  }
+
+  const addSegBtn = document.getElementById('addDialogueSegmentBtn');
+  if (addSegBtn) {
+    addSegBtn.addEventListener('click', () => {
+      const voices = state.voiceover.voices;
+      const defaultVoice = voices.length > 0 ? voices[0].name : 'Adam';
+      state.voiceover.dialogueSegments = [...(state.voiceover.dialogueSegments || []), { voice: defaultVoice, text: '' }];
+      render(true);
+    });
+  }
+
+  document.querySelectorAll('.dialogue-voice-select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.segIdx);
+      if (!isNaN(idx) && state.voiceover.dialogueSegments[idx]) {
+        state.voiceover.dialogueSegments[idx].voice = e.target.value;
+      }
+    });
+  });
+
+  document.querySelectorAll('.dialogue-text-input').forEach(ta => {
+    ta.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.segIdx);
+      if (!isNaN(idx) && state.voiceover.dialogueSegments[idx]) {
+        state.voiceover.dialogueSegments[idx].text = e.target.value;
+        const btn = document.getElementById('generateVoiceoverBtn');
+        if (btn) {
+          const hasText = state.voiceover.dialogueSegments.some(s => s.text.trim());
+          btn.disabled = !hasText || state.voiceover.isGenerating;
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.remove-dialogue-seg-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.segIdx);
+      state.voiceover.dialogueSegments = state.voiceover.dialogueSegments.filter((_, i) => i !== idx);
+      render(true);
+    });
+  });
+
+  const generateBtn = document.getElementById('generateVoiceoverBtn');
+  if (generateBtn) {
+    generateBtn.addEventListener('click', () => generateVoiceover());
   }
 }
 

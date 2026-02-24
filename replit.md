@@ -1,7 +1,7 @@
 # Xclip - AI-Powered Creative Suite
 
 ## Overview
-Xclip is an AI-powered creative suite designed to transform content creation. It features tools for video clipping, consistent character image generation, image-to-video conversion, motion transfer, and AI chat. The project aims to provide users with a comprehensive platform for leveraging AI in visual content production and communication.
+Xclip is an AI-powered creative suite designed to transform content creation. It features tools for video clipping, consistent character image generation, image-to-video conversion, motion transfer, voice over, and AI chat. The project aims to provide users with a comprehensive platform for leveraging AI in visual content production and communication.
 
 ## User Preferences
 - Clean, premium UI with white theme and gradient accents

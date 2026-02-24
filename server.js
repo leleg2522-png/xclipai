@@ -8950,6 +8950,389 @@ app.get('/api/ximage2/download', async (req, res) => {
   }
 });
 
+// ============ VOICE OVER (ELEVENLABS) API ============
+
+const voiceCache = new Map(); // apiKey -> { voices, fetchedAt }
+
+async function getVoiceoverRoomKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) return { error: 'Xclip API key tidak valid' };
+
+  const subResult = await pool.query(
+    `SELECT vs.voiceover_room_id, vr.key_name_1, vr.key_name_2, vr.key_name_3
+     FROM voiceover_subscriptions vs
+     JOIN voiceover_rooms vr ON vr.id = vs.voiceover_room_id
+     WHERE vs.user_id = $1 AND vs.is_active = true
+       AND (vs.expired_at IS NULL OR vs.expired_at > NOW())
+     ORDER BY vs.created_at DESC LIMIT 1`,
+    [keyInfo.user_id]
+  );
+
+  if (subResult.rows.length === 0) return { error: 'Tidak ada subscription Voice Over aktif', keyInfo };
+
+  const room = subResult.rows[0];
+  const keys = [room.key_name_1, room.key_name_2, room.key_name_3]
+    .filter(Boolean)
+    .map(n => ({ name: n, key: process.env[n] }))
+    .filter(k => k.key);
+
+  if (keys.length === 0) return { error: 'Voice Room belum dikonfigurasi', keyInfo };
+
+  const idx = Math.floor(Date.now() / (3 * 60 * 1000)) % keys.length;
+  return { apiKey: keys[idx].key, keyName: keys[idx].name, roomId: room.voiceover_room_id, keyInfo, allKeys: keys };
+}
+
+app.get('/api/voiceover/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, max_users, active_users, status,
+              (max_users - active_users) as available_slots
+       FROM voiceover_rooms ORDER BY id`
+    );
+    res.json({ rooms: result.rows.map(r => ({ ...r, status: r.status.toLowerCase() })) });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal memuat rooms' });
+  }
+});
+
+app.get('/api/voiceover/subscription/status', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.json({ hasSubscription: false });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.json({ hasSubscription: false });
+
+    const subResult = await pool.query(
+      `SELECT vs.*, vr.name as room_name, vr.status as room_status
+       FROM voiceover_subscriptions vs
+       JOIN voiceover_rooms vr ON vr.id = vs.voiceover_room_id
+       WHERE vs.user_id = $1 AND vs.is_active = true
+         AND (vs.expired_at IS NULL OR vs.expired_at > NOW())
+       ORDER BY vs.created_at DESC LIMIT 1`,
+      [keyInfo.user_id]
+    );
+
+    if (subResult.rows.length === 0) return res.json({ hasSubscription: false });
+    const sub = subResult.rows[0];
+    res.json({
+      hasSubscription: true,
+      subscription: {
+        roomId: sub.voiceover_room_id,
+        roomName: sub.room_name,
+        expiredAt: sub.expired_at
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal cek status' });
+  }
+});
+
+app.post('/api/voiceover/rooms/:roomId/join', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.status(401).json({ error: 'Xclip API key tidak valid' });
+
+    const roomId = parseInt(req.params.roomId);
+    const roomResult = await pool.query('SELECT * FROM voiceover_rooms WHERE id = $1', [roomId]);
+    if (roomResult.rows.length === 0) return res.status(404).json({ error: 'Room tidak ditemukan' });
+
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN') return res.status(400).json({ error: 'Room sedang maintenance' });
+    if (room.active_users >= room.max_users) return res.status(400).json({ error: 'Room sudah penuh' });
+
+    const existing = await pool.query(
+      'SELECT * FROM voiceover_subscriptions WHERE user_id = $1 AND is_active = true AND (expired_at IS NULL OR expired_at > NOW()) LIMIT 1',
+      [keyInfo.user_id]
+    );
+
+    if (existing.rows.length > 0) {
+      const oldRoomId = existing.rows[0].voiceover_room_id;
+      await pool.query('UPDATE voiceover_subscriptions SET is_active = false WHERE id = $1', [existing.rows[0].id]);
+      await pool.query('UPDATE voiceover_rooms SET active_users = GREATEST(0, active_users - 1) WHERE id = $1', [oldRoomId]);
+    }
+
+    const expiredAt = req.body.expiredAt || null;
+    await pool.query(
+      'INSERT INTO voiceover_subscriptions (user_id, voiceover_room_id, expired_at, is_active) VALUES ($1, $2, $3, true)',
+      [keyInfo.user_id, roomId, expiredAt]
+    );
+    await pool.query('UPDATE voiceover_rooms SET active_users = active_users + 1 WHERE id = $1', [roomId]);
+
+    res.json({ success: true, message: `Berhasil join ${room.name}`, subscription: { roomId, roomName: room.name } });
+  } catch (e) {
+    console.error('Voiceover join room error:', e);
+    res.status(500).json({ error: 'Gagal join room' });
+  }
+});
+
+app.post('/api/voiceover/rooms/leave', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.status(401).json({ error: 'Xclip API key tidak valid' });
+
+    const subResult = await pool.query(
+      'SELECT * FROM voiceover_subscriptions WHERE user_id = $1 AND is_active = true LIMIT 1',
+      [keyInfo.user_id]
+    );
+    if (subResult.rows.length === 0) return res.json({ success: true });
+
+    const sub = subResult.rows[0];
+    await pool.query('UPDATE voiceover_subscriptions SET is_active = false WHERE id = $1', [sub.id]);
+    await pool.query('UPDATE voiceover_rooms SET active_users = GREATEST(0, active_users - 1) WHERE id = $1', [sub.voiceover_room_id]);
+    res.json({ success: true, message: 'Berhasil keluar room' });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal leave room' });
+  }
+});
+
+const KIE_BUILTIN_VOICES = [
+  { voice_id: 'Rachel', name: 'Rachel', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Professional female, calm & clear' },
+  { voice_id: 'Drew', name: 'Drew', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'news' }, description: 'Well-rounded male, relaxed' },
+  { voice_id: 'Clyde', name: 'Clyde', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'video-games' }, description: 'War veteran, confident' },
+  { voice_id: 'Paul', name: 'Paul', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'news' }, description: 'Newscaster, authoritative' },
+  { voice_id: 'Domi', name: 'Domi', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Strong, energetic female' },
+  { voice_id: 'Dave', name: 'Dave', category: 'premade', labels: { gender: 'male', accent: 'british-essex', age: 'young', use_case: 'video-games' }, description: 'Conversational British male' },
+  { voice_id: 'Fin', name: 'Fin', category: 'premade', labels: { gender: 'male', accent: 'irish', age: 'old', use_case: 'video-games' }, description: 'Sailor, old Irish accent' },
+  { voice_id: 'Sarah', name: 'Sarah', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'news' }, description: 'Soft, empathetic female' },
+  { voice_id: 'Antoni', name: 'Antoni', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Well-rounded male voice' },
+  { voice_id: 'Thomas', name: 'Thomas', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'meditation' }, description: 'Calm, meditative male' },
+  { voice_id: 'Charlie', name: 'Charlie', category: 'premade', labels: { gender: 'male', accent: 'australian', age: 'middle-aged', use_case: 'conversational' }, description: 'Casual Australian male' },
+  { voice_id: 'George', name: 'George', category: 'premade', labels: { gender: 'male', accent: 'british', age: 'middle-aged', use_case: 'narration' }, description: 'Warm, authoritative British' },
+  { voice_id: 'Emily', name: 'Emily', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'meditation' }, description: 'Calm, meditation female' },
+  { voice_id: 'Elli', name: 'Elli', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Emotional, youthful female' },
+  { voice_id: 'Callum', name: 'Callum', category: 'premade', labels: { gender: 'male', accent: 'transatlantic', age: 'middle-aged', use_case: 'video-games' }, description: 'Intense, hoarse male' },
+  { voice_id: 'Patrick', name: 'Patrick', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'video-games' }, description: 'Shouty, aggressive male' },
+  { voice_id: 'Harry', name: 'Harry', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'video-games' }, description: 'Anxious, whisper male' },
+  { voice_id: 'Liam', name: 'Liam', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Articulate, clear male' },
+  { voice_id: 'Dorothy', name: 'Dorothy', category: 'premade', labels: { gender: 'female', accent: 'british', age: 'young', use_case: 'children-stories' }, description: 'Pleasant, evocative British' },
+  { voice_id: 'Josh', name: 'Josh', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Deep, resonant male' },
+  { voice_id: 'Arnold', name: 'Arnold', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'narration' }, description: 'Crisp, authoritative male' },
+  { voice_id: 'Charlotte', name: 'Charlotte', category: 'premade', labels: { gender: 'female', accent: 'swedish', age: 'young', use_case: 'video-games' }, description: 'Seductive, confident female' },
+  { voice_id: 'Matilda', name: 'Matilda', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Warm, nurturing female' },
+  { voice_id: 'Matthew', name: 'Matthew', category: 'premade', labels: { gender: 'male', accent: 'british', age: 'middle-aged', use_case: 'narration' }, description: 'Audiobook, warm British' },
+  { voice_id: 'James', name: 'James', category: 'premade', labels: { gender: 'male', accent: 'australian', age: 'old', use_case: 'news' }, description: 'Calm, Australian news' },
+  { voice_id: 'Joseph', name: 'Joseph', category: 'premade', labels: { gender: 'male', accent: 'british', age: 'middle-aged', use_case: 'news' }, description: 'Grounded, British news' },
+  { voice_id: 'Jeremy', name: 'Jeremy', category: 'premade', labels: { gender: 'male', accent: 'american-irish', age: 'young', use_case: 'narration' }, description: 'Excited, male narrator' },
+  { voice_id: 'Michael', name: 'Michael', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'old', use_case: 'narration' }, description: 'Orotund, authoritative' },
+  { voice_id: 'Ethan', name: 'Ethan', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'ASMR' }, description: 'Soft, ASMR male' },
+  { voice_id: 'Chris', name: 'Chris', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'conversational' }, description: 'Conversational, friendly' },
+  { voice_id: 'Gigi', name: 'Gigi', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'children-stories' }, description: 'Childlike, playful female' },
+  { voice_id: 'Freya', name: 'Freya', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'video-games' }, description: 'Overhyped, expressive female' },
+  { voice_id: 'Grace', name: 'Grace', category: 'premade', labels: { gender: 'female', accent: 'southern-american', age: 'young', use_case: 'audiobook' }, description: 'Gentle southern female' },
+  { voice_id: 'Daniel', name: 'Daniel', category: 'premade', labels: { gender: 'male', accent: 'british', age: 'middle-aged', use_case: 'news' }, description: 'Deep, authoritative British' },
+  { voice_id: 'Lily', name: 'Lily', category: 'premade', labels: { gender: 'female', accent: 'british', age: 'young', use_case: 'narration' }, description: 'Warm, British female' },
+  { voice_id: 'Serena', name: 'Serena', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'middle-aged', use_case: 'interactive' }, description: 'Polished, interactive AI' },
+  { voice_id: 'Adam', name: 'Adam', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'narration' }, description: 'Deep, professional male' },
+  { voice_id: 'Nicole', name: 'Nicole', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'audiobook' }, description: 'Whispery, intimate female' },
+  { voice_id: 'Bill', name: 'Bill', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'old', use_case: 'documentary' }, description: 'Trustworthy documentary' },
+  { voice_id: 'Jessie', name: 'Jessie', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'old', use_case: 'video-games' }, description: 'Raspy, old-fashioned male' },
+  { voice_id: 'Ryan', name: 'Ryan', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'audiobook' }, description: 'Soldier, intense audiobook' },
+  { voice_id: 'Sam', name: 'Sam', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'narration' }, description: 'Raspy, strong male' },
+  { voice_id: 'Glinda', name: 'Glinda', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'middle-aged', use_case: 'video-games' }, description: 'Witch, dramatic female' },
+  { voice_id: 'Giovanni', name: 'Giovanni', category: 'premade', labels: { gender: 'male', accent: 'english-italian', age: 'young', use_case: 'audiobook' }, description: 'Foreigner, Italian accent' },
+  { voice_id: 'Mimi', name: 'Mimi', category: 'premade', labels: { gender: 'female', accent: 'english-swedish', age: 'young', use_case: 'video-games' }, description: 'Childlike, Swedish accent' },
+  { voice_id: 'Brian', name: 'Brian', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'narration' }, description: 'Deep, broadcast male' },
+  { voice_id: 'Jessica', name: 'Jessica', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'conversational' }, description: 'Expressive, lively female' },
+  { voice_id: 'Eric', name: 'Eric', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'conversational' }, description: 'Friendly, conversational' },
+  { voice_id: 'Chris', name: 'Chris', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'conversational' }, description: 'Casual male, versatile' },
+  { voice_id: 'Laura', name: 'Laura', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'social-media' }, description: 'Upbeat, social media' },
+  { voice_id: 'Aria', name: 'Aria', category: 'premade', labels: { gender: 'female', accent: 'american', age: 'young', use_case: 'social-media' }, description: 'Expressive, modern female' },
+  { voice_id: 'Roger', name: 'Roger', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'middle-aged', use_case: 'news' }, description: 'Confident, professional' },
+  { voice_id: 'Will', name: 'Will', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'social-media' }, description: 'Friendly, social media' },
+  { voice_id: 'Alice', name: 'Alice', category: 'premade', labels: { gender: 'female', accent: 'british', age: 'middle-aged', use_case: 'news' }, description: 'Mature, British news' },
+  { voice_id: 'Marcus', name: 'Marcus', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'young', use_case: 'conversational' }, description: 'Confident, casual male' },
+  { voice_id: 'Valentino', name: 'Valentino', category: 'premade', labels: { gender: 'male', accent: 'american', age: 'old', use_case: 'narration' }, description: 'Great storytelling male' },
+];
+
+app.get('/api/voiceover/voices', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const roomKeyData = await getVoiceoverRoomKey(xclipApiKey);
+    if (roomKeyData.error && !roomKeyData.keyInfo) return res.status(401).json({ error: roomKeyData.error });
+    res.json({ voices: KIE_BUILTIN_VOICES });
+  } catch (e) {
+    console.error('[VOICEOVER] Fetch voices error:', e.message);
+    res.status(500).json({ error: 'Gagal memuat daftar suara' });
+  }
+});
+
+app.post('/api/voiceover/generate', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+
+    const { text, voiceId, voiceName, modelId, stability, similarityBoost, style, useSpeakerBoost, dialogue } = req.body;
+    const kieModel = modelId || 'elevenlabs/text-to-speech-multilingual-v2';
+    const isDialogue = kieModel === 'elevenlabs/text-to-dialogue-v3';
+
+    if (isDialogue) {
+      if (!dialogue || !Array.isArray(dialogue) || dialogue.length === 0) return res.status(400).json({ error: 'Dialogue array diperlukan untuk model v3' });
+    } else {
+      if (!text || !voiceId) return res.status(400).json({ error: 'Teks dan voice diperlukan' });
+      if (text.length > 5000) return res.status(400).json({ error: 'Teks maksimal 5000 karakter' });
+    }
+
+    const roomKeyData = await getVoiceoverRoomKey(xclipApiKey);
+    if (roomKeyData.error && !roomKeyData.keyInfo) return res.status(401).json({ error: roomKeyData.error });
+    if (roomKeyData.error) return res.status(403).json({ error: roomKeyData.error });
+
+    const kieKey = roomKeyData.apiKey;
+    const keyInfo = roomKeyData.keyInfo;
+
+    console.log(`[VOICEOVER] Generating via kie.ai | user: ${keyInfo.user_id} | voice: ${voiceId || 'dialogue'} | model: ${kieModel} | chars: ${text ? text.length : 'n/a'}`);
+
+    const kieInput = isDialogue
+      ? { dialogue, stability: stability ?? 0.5 }
+      : {
+          text,
+          voice: voiceId,
+          stability: stability ?? 0.5,
+          similarity_boost: similarityBoost ?? 0.75,
+          style: style ?? 0,
+          use_speaker_boost: useSpeakerBoost ?? true,
+          speed: 1
+        };
+
+    const createRes = await axios.post(
+      'https://api.kie.ai/api/v1/jobs/createTask',
+      { model: kieModel, input: kieInput },
+      {
+        headers: {
+          'Authorization': `Bearer ${kieKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    const taskId = createRes.data?.data?.taskId;
+    if (!taskId) throw new Error('Tidak mendapat taskId dari kie.ai');
+
+    console.log(`[VOICEOVER] Task submitted: ${taskId}`);
+
+    let audioKieUrl = null;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const statusRes = await axios.get(
+        `https://api.kie.ai/api/v1/jobs/${taskId}`,
+        { headers: { 'Authorization': `Bearer ${kieKey}` }, timeout: 15000 }
+      );
+      const taskData = statusRes.data?.data || statusRes.data;
+      const status = taskData?.status;
+      console.log(`[VOICEOVER] Poll ${attempt + 1} | status: ${status}`);
+      if (status === 'success' || status === 'succeeded' || status === 'completed') {
+        audioKieUrl = taskData?.result?.audio_url || taskData?.output?.audio_url || taskData?.audioUrl;
+        break;
+      }
+      if (status === 'failed' || status === 'error') {
+        throw new Error(`kie.ai task gagal: ${JSON.stringify(taskData)}`);
+      }
+    }
+
+    if (!audioKieUrl) throw new Error('Timeout menunggu audio dari kie.ai');
+
+    const audioDownload = await axios.get(audioKieUrl, { responseType: 'arraybuffer', timeout: 60000 });
+    const audioBuffer = Buffer.from(audioDownload.data);
+    const filename = `voiceover_${Date.now()}_${Math.random().toString(36).substr(2, 8)}.mp3`;
+    const uploadDir = path.join(__dirname, 'uploads');
+    if (!require('fs').existsSync(uploadDir)) require('fs').mkdirSync(uploadDir, { recursive: true });
+    require('fs').writeFileSync(path.join(uploadDir, filename), audioBuffer);
+
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const audioUrl = `${protocol}://${host}/uploads/${filename}`;
+
+    const charsUsed = text ? text.length : (dialogue || []).reduce((sum, d) => sum + (d.text || '').length, 0);
+    const displayVoice = isDialogue ? (dialogue.map(d => d.voice).join(', ')) : (voiceId || 'unknown');
+
+    const historyResult = await pool.query(
+      `INSERT INTO voiceover_history (user_id, xclip_api_key_id, voice_id, voice_name, model_id, text_input, audio_url, characters_used, room_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [keyInfo.user_id, keyInfo.id, displayVoice, voiceName || displayVoice, kieModel, (text || '').substring(0, 500), audioUrl, charsUsed, roomKeyData.roomId]
+    );
+
+    console.log(`[VOICEOVER] Generated successfully | URL: ${audioUrl}`);
+
+    res.json({
+      success: true,
+      audioUrl,
+      historyId: historyResult.rows[0].id,
+      charactersUsed: charsUsed
+    });
+  } catch (e) {
+    console.error('[VOICEOVER] Generate error:', e.response?.data ? JSON.stringify(e.response.data) : e.message);
+    const status = e.response?.status;
+    if (status === 401 || status === 403) return res.status(500).json({ error: 'kie.ai API key tidak valid atau tidak punya akses' });
+    if (status === 429) return res.status(429).json({ error: 'Rate limit kie.ai tercapai. Coba lagi nanti.' });
+    res.status(500).json({ error: e.message || 'Gagal generate voice over' });
+  }
+});
+
+app.get('/api/voiceover/history', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.status(401).json({ error: 'Xclip API key tidak valid' });
+
+    const result = await pool.query(
+      `SELECT id, voice_id, voice_name, model_id, text_input, audio_url, characters_used, created_at
+       FROM voiceover_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [keyInfo.user_id]
+    );
+    res.json({ history: result.rows });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal ambil history' });
+  }
+});
+
+app.delete('/api/voiceover/history/:id', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.status(401).json({ error: 'Xclip API key tidak valid' });
+
+    await pool.query('DELETE FROM voiceover_history WHERE id = $1 AND user_id = $2', [req.params.id, keyInfo.user_id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal hapus history' });
+  }
+});
+
+// Admin: Subscribe user to voiceover room
+app.post('/api/admin/voiceover/subscribe', requireAdmin, async (req, res) => {
+  try {
+    const { userId, roomId, expiredAt } = req.body;
+    if (!userId || !roomId) return res.status(400).json({ error: 'userId dan roomId diperlukan' });
+
+    const existing = await pool.query(
+      'SELECT * FROM voiceover_subscriptions WHERE user_id = $1 AND is_active = true LIMIT 1',
+      [userId]
+    );
+    if (existing.rows.length > 0) {
+      await pool.query('UPDATE voiceover_subscriptions SET is_active = false WHERE id = $1', [existing.rows[0].id]);
+      await pool.query('UPDATE voiceover_rooms SET active_users = GREATEST(0, active_users - 1) WHERE id = $1', [existing.rows[0].voiceover_room_id]);
+    }
+
+    await pool.query(
+      'INSERT INTO voiceover_subscriptions (user_id, voiceover_room_id, expired_at, is_active) VALUES ($1, $2, $3, true)',
+      [userId, roomId, expiredAt || null]
+    );
+    await pool.query('UPDATE voiceover_rooms SET active_users = active_users + 1 WHERE id = $1', [roomId]);
+    res.json({ success: true, message: 'User berhasil di-subscribe ke voice room' });
+  } catch (e) {
+    res.status(500).json({ error: 'Gagal subscribe user' });
+  }
+});
+
+// ============ END VOICE OVER API ============
+
 // Catch-all route - must be last
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'index.html'));
@@ -9459,6 +9842,60 @@ async function initDatabase() {
       console.log('X Image2 rooms seeded');
     }
     
+    // Create voiceover_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS voiceover_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        active_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const existingVoiceoverRooms = await pool.query('SELECT COUNT(*) FROM voiceover_rooms');
+    if (parseInt(existingVoiceoverRooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO voiceover_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('Voice Room 1', 10, 'OPEN', 'VOICEOVER_ROOM1_KEY_1', 'VOICEOVER_ROOM1_KEY_2', 'VOICEOVER_ROOM1_KEY_3'),
+          ('Voice Room 2', 10, 'OPEN', 'VOICEOVER_ROOM2_KEY_1', 'VOICEOVER_ROOM2_KEY_2', 'VOICEOVER_ROOM2_KEY_3'),
+          ('Voice Room 3', 10, 'OPEN', 'VOICEOVER_ROOM3_KEY_1', 'VOICEOVER_ROOM3_KEY_2', 'VOICEOVER_ROOM3_KEY_3')
+      `);
+      console.log('Voiceover rooms seeded');
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS voiceover_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        voiceover_room_id INTEGER REFERENCES voiceover_rooms(id),
+        expired_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS voiceover_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        xclip_api_key_id INTEGER REFERENCES xclip_api_keys(id),
+        voice_id VARCHAR(100),
+        voice_name VARCHAR(200),
+        model_id VARCHAR(100),
+        text_input TEXT,
+        audio_url TEXT,
+        duration_ms INTEGER,
+        characters_used INTEGER,
+        room_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('[DB] Database initialized successfully');
     
     setTimeout(() => {
