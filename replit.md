@@ -8,20 +8,13 @@ Xclip is an AI-powered creative suite designed to transform content creation. It
 - Indonesian language support prioritized
 - MANAZIL credit prominently displayed
 - Animated elements and glassmorphism effects
-- Navigation menu for switching between Video Clipper, X Maker, and AI Chat
+- Navigation menu for switching between Video Clipper, X Image, and AI Chat
 
 ## System Architecture
 The application is built on a Node.js Express.js server, combining frontend and API functionalities. It uses FFmpeg for video processing and Multer for handling file uploads. The UI/UX features a modern SaaS-style design with a dark theme, neon glow effects, cyber grid background, and animated components. Key features include:
 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
-- **X Maker (Image Generator)**: Powered by GeminiGen.AI with models including Nano Banana (free, supports image reference for character consistency), Imagen 4 Fast, Imagen 4 Standard, and Imagen 4 Ultra (highest quality 2K). Uses a 3-room system (XMaker Room 1-3) with hidden GeminiGen API keys, accessed via Xclip API key as proxy.
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
-- **Vidgen2 (Poyo.ai Video Generator)**: Video generation feature using Poyo.ai API with Sora 2, Sora 2 Pro, and Hailuo 02 models. Uses POYO_API_KEY or room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}). Features include:
-  - Image-to-video conversion with AI models (text-to-video and image reference support)
-  - Models: Sora 2 (10s), Sora 2 (15s), Veo 3.1 Fast (8s)
-  - Aspect ratios: 16:9 (landscape), 9:16 (portrait)
-  - Video history persistence in database
-  - Real-time task status polling via Poyo.ai status API
 - **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
   - 5 AI models via kie.ai APIs:
     - gpt-image-1.5: GPT Image 1.5 (OpenAI) via kie.ai 4o-image API, supports I2I, supports N variants
@@ -94,7 +87,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
   - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
   - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
-- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for Poyo.ai, Apimart.ai, and Freepik APIs.
+- **Server-Side Background Polling**: All generation tasks (vidgen3, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, and Freepik APIs.
 
 ## External Dependencies
 - **Database**: PostgreSQL
@@ -102,8 +95,6 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - ElevenLabs API (for speech-to-text transcription)
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
-    - GeminiGen.AI API (for X Maker image generation with Nano Banana and Imagen 4 models)
-    - Poyo.ai API (for Vidgen2 video generation with Sora 2, Sora 2 Pro, Hailuo models and X Image generation with GPT Image, Nano Banana, Seedream, FLUX, Z-Image, Grok models)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
