@@ -7903,7 +7903,7 @@ const XIMAGE_MODELS = {
   'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
   'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
   'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'grok-imagine/text-to-image' },
-  'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: false, apiType: 'kie-market', apiModel: 'google/nano-banana', useImageSize: true },
+  'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'kie-market', apiModel: 'google/nano-banana', i2iModel: 'google/nano-banana-edit', useImageSize: true },
 };
 
 // Get X Image room API key
@@ -8166,10 +8166,16 @@ app.post('/api/ximage/generate', async (req, res) => {
         inputBody.resolution = resolution;
       }
       if (isI2I && imageUrls.length > 0) {
-        inputBody.input_urls = imageUrls;
+        // Nano Banana edit uses "image_urls", FLUX.2 uses "input_urls"
+        if (modelConfig.useImageSize) {
+          inputBody.image_urls = imageUrls;
+        } else {
+          inputBody.input_urls = imageUrls;
+        }
       }
       const body = { model: kieModelId, input: inputBody };
-      console.log('[XIMAGE] Market API request:', JSON.stringify({ ...body, input: { ...body.input, input_urls: body.input.input_urls ? ['[IMAGES]'] : undefined } }));
+      const logBody = { ...body, input: { ...body.input, image_urls: body.input.image_urls ? ['[IMAGES]'] : undefined, input_urls: body.input.input_urls ? ['[IMAGES]'] : undefined } };
+      console.log('[XIMAGE] Market API request:', JSON.stringify(logBody));
       const response = await axios.post(
         'https://api.kie.ai/api/v1/jobs/createTask',
         body,

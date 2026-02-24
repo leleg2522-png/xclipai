@@ -4110,7 +4110,7 @@ function renderXImagePage() {
     { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, badge: 'ULTRA', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '2:3', '3:2'] },
-    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] }
+    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] }
   ];
   
   var currentModelConfig = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; }) || ximageModels[0];
@@ -9212,7 +9212,7 @@ function attachXImageEventListeners() {
             { id: 'flux-2-flex', supportsI2I: true },
             { id: 'flux-2-pro', supportsI2I: true },
             { id: 'grok-imagine', supportsI2I: false },
-            { id: 'google-nano-banana', supportsI2I: false }
+            { id: 'google-nano-banana', supportsI2I: true }
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {
@@ -9406,7 +9406,7 @@ async function generateXImage() {
   }
   
   // Validate model compatibility with mode
-  var modelsNotSupportingI2I = ['grok-imagine', 'google-nano-banana'];
+  var modelsNotSupportingI2I = ['grok-imagine'];
   if (state.ximage.mode === 'image-to-image' && modelsNotSupportingI2I.includes(state.ximage.selectedModel)) {
     alert('Model ini tidak mendukung mode Image-to-Image. Pilih model lain.');
     return;
