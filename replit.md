@@ -23,11 +23,11 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - google-nano-banana: Nano Banana (Google) via Market API, supports I2I
     - seedream-api: Seedream API/V4 (ByteDance) via Market API, supports I2I, named sizes, 1K/2K/4K resolution
     - gpt-image-1.5: 4o Image (OpenAI) via 4o-image API, supports I2I, N variants
-    - flux-1-kontext: Flux.1 Kontext (Black Forest Labs) via Flux Kontext API, supports I2I
-    - imagen-4: Imagen 4 (Google) via Market API, text-only, N images
-    - ideogram-v3: Ideogram V3 (Ideogram) via Market API, supports I2I, named sizes
-    - ideogram-character: Ideogram Character (Ideogram) via Market API, supports I2I via image_url
-    - qwen-image: Qwen Image Edit (Alibaba) via Market API, supports I2I via image_url
+    - flux-1-kontext: Flux.1 Kontext (Black Forest Labs) via Flux Kontext API, supports I2I, variant (pro/max)
+    - imagen-4: Imagen 4 (Google) via Market API, text-only, N images, variant (fast/ultra/standard → google/imagen4-fast/ultra/imagen4)
+    - ideogram-v3: Ideogram V3 (Ideogram) via Market API, supports I2I, named sizes, rendering_speed (TURBO/BALANCED/QUALITY), style (AUTO/GENERAL/REALISTIC/DESIGN)
+    - ideogram-character: Ideogram Character (Ideogram) via Market API, supports I2I via image_url, N images, rendering_speed, style (AUTO/REALISTIC/FICTION)
+    - qwen-image: Qwen Image Edit (Alibaba) via Market API, supports I2I via image_url, acceleration (none/regular/high)
     - z-image: Z-Image (Tongyi-MAI) via Market API, text-only
   - Three kie.ai API paths:
     - 4o-image: POST https://api.kie.ai/api/v1/gpt4o-image/generate, poll /record-info?taskId=

@@ -266,7 +266,11 @@ const state = {
     _historyLoaded: false,
     resolution: '1K',
     numberOfImages: 1,
-    quality: 'basic'
+    quality: 'basic',
+    modelVariant: '',
+    renderingSpeed: 'BALANCED',
+    imageStyle: 'AUTO',
+    acceleration: 'none'
   },
   ximageRoomManager: {
     rooms: [],
@@ -382,7 +386,7 @@ const PERSIST_KEYS = {
   vidgen3: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'fps', 'generateAudio', 'cameraFixed', 'turboMode', 'ratio', 'customApiKey'],
   videogen: ['prompt', 'selectedModel', 'duration', 'aspectRatio', 'customApiKey'],
   motion: ['prompt', 'selectedModel', 'characterOrientation'],
-  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality'],
+  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality', 'modelVariant', 'renderingSpeed', 'imageStyle', 'acceleration'],
   chat: ['selectedModel'],
   vidgen3RoomManager: ['xclipApiKey'],
   vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
@@ -3661,16 +3665,16 @@ function getModelIcon(iconType) {
 function renderXImagePage() {
   var ximageModels = [
     { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasQuality: true, qualities: ['basic', 'high'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] },
-    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] },
-    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] },
-    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '16:9', '9:16', '3:2', '2:3'] },
-    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9'] },
-    { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: false, badge: 'NEW', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
-    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
-    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
+    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
+    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
+    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
+    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '3:2', '2:3'] },
+    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
+    { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: false, badge: 'NEW', hasN: true, hasVariant: true, variants: [{id:'fast',name:'Fast'},{id:'ultra',name:'Ultra'},{id:'standard',name:'Standard'}], sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'GENERAL', 'REALISTIC', 'DESIGN'], sizes: ['Square', 'Square HD', '3:4', '9:16', '4:3', '16:9'] },
+    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'REALISTIC', 'FICTION'], hasN: true, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, hasAcceleration: true, accelerations: ['none', 'regular', 'high'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] }
   ];
   
@@ -3773,6 +3777,47 @@ function renderXImagePage() {
     html += '<div class="aspect-buttons">';
     currentModelConfig.qualities.forEach(function(q) {
       html += '<button class="aspect-btn ' + (state.ximage.quality === q ? 'active' : '') + '" data-ximage-quality="' + q + '">' + q.charAt(0).toUpperCase() + q.slice(1) + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasVariant) {
+    var currentVariant = state.ximage.modelVariant || currentModelConfig.variants[0].id;
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Model Variant</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.variants.forEach(function(v) {
+      html += '<button class="aspect-btn ' + (currentVariant === v.id ? 'active' : '') + '" data-ximage-variant="' + v.id + '">' + v.name + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasRenderingSpeed) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Rendering Speed</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.renderingSpeeds.forEach(function(s) {
+      html += '<button class="aspect-btn ' + (state.ximage.renderingSpeed === s ? 'active' : '') + '" data-ximage-speed="' + s + '">' + s.charAt(0) + s.slice(1).toLowerCase() + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasStyle) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Style</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.styles.forEach(function(s) {
+      html += '<button class="aspect-btn ' + (state.ximage.imageStyle === s ? 'active' : '') + '" data-ximage-style="' + s + '">' + s.charAt(0) + s.slice(1).toLowerCase() + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasAcceleration) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Acceleration</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.accelerations.forEach(function(a) {
+      html += '<button class="aspect-btn ' + (state.ximage.acceleration === a ? 'active' : '') + '" data-ximage-accel="' + a + '">' + a.charAt(0).toUpperCase() + a.slice(1) + '</button>';
     });
     html += '</div></div>';
   }
@@ -7783,6 +7828,38 @@ function attachXImageEventListeners() {
         return;
       }
       
+      var variantBtn = e.target.closest('[data-ximage-variant]');
+      if (variantBtn && state.currentPage === 'ximage') {
+        state.ximage.modelVariant = variantBtn.dataset.ximageVariant;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
+      var speedBtn = e.target.closest('[data-ximage-speed]');
+      if (speedBtn && state.currentPage === 'ximage') {
+        state.ximage.renderingSpeed = speedBtn.dataset.ximageSpeed;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
+      var styleBtn = e.target.closest('[data-ximage-style]');
+      if (styleBtn && state.currentPage === 'ximage') {
+        state.ximage.imageStyle = styleBtn.dataset.ximageStyle;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
+      var accelBtn = e.target.closest('[data-ximage-accel]');
+      if (accelBtn && state.currentPage === 'ximage') {
+        state.ximage.acceleration = accelBtn.dataset.ximageAccel;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
       var numBtn = e.target.closest('[data-ximage-num-action]');
       if (numBtn && state.currentPage === 'ximage') {
         var action = numBtn.dataset.ximageNumAction;
@@ -7958,7 +8035,11 @@ async function generateXImage() {
       mode: state.ximage.mode,
       resolution: state.ximage.resolution,
       numberOfImages: state.ximage.numberOfImages,
-      quality: state.ximage.quality
+      quality: state.ximage.quality,
+      modelVariant: state.ximage.modelVariant,
+      renderingSpeed: state.ximage.renderingSpeed,
+      imageStyle: state.ximage.imageStyle,
+      acceleration: state.ximage.acceleration
     };
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {

@@ -6816,10 +6816,10 @@ const XIMAGE_MODELS = {
   'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution' },
   'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1.5' },
   'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'kie-flux-kontext' },
-  'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, supportsN: true, apiType: 'kie-market', apiModel: 'google/imagen4-fast' },
-  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true },
-  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', i2iImageField: 'image_url' },
-  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/text-to-image', i2iModel: 'qwen/image-to-image', i2iImageField: 'image_url' },
+  'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, supportsN: true, apiType: 'kie-market', apiModel: 'google/imagen4-fast', variantModels: { fast: 'google/imagen4-fast', ultra: 'google/imagen4-ultra', standard: 'google/imagen4' } },
+  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true, supportsRenderingSpeed: true, supportsStyle: true },
+  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', i2iImageField: 'image_url', supportsRenderingSpeed: true, supportsStyle: true },
+  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/text-to-image', i2iModel: 'qwen/image-to-image', i2iImageField: 'image_url', supportsAcceleration: true },
   'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'z-image' },
 };
 
@@ -6996,7 +6996,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality } = req.body;
+    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality, modelVariant, renderingSpeed, imageStyle, acceleration } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -7051,7 +7051,8 @@ app.post('/api/ximage/generate', async (req, res) => {
     let bgPollType;
     
     const NAMED_SIZE_MAP = {
-      '1:1': 'square', '16:9': 'landscape_16_9', '9:16': 'portrait_16_9',
+      '1:1': 'square', 'Square': 'square', 'Square HD': 'square_hd',
+      '16:9': 'landscape_16_9', '9:16': 'portrait_16_9',
       '4:3': 'landscape_4_3', '3:4': 'portrait_4_3',
       '3:2': 'landscape_3_2', '2:3': 'portrait_3_2',
       '21:9': 'landscape_21_9'
@@ -7076,10 +7077,11 @@ app.post('/api/ximage/generate', async (req, res) => {
       taskId = response.data?.data?.taskId || response.data?.taskId;
       bgPollType = 'kie-4o-image';
     } else if (modelConfig.apiType === 'kie-flux-kontext') {
+      const kontextModel = modelVariant === 'max' ? 'flux-kontext-max' : 'flux-kontext-pro';
       const body = {
         prompt,
         aspectRatio: aspectRatio || '1:1',
-        model: 'flux-kontext-pro',
+        model: kontextModel,
         outputFormat: 'jpeg'
       };
       if (isI2I && imageUrls.length > 0) {
@@ -7095,7 +7097,10 @@ app.post('/api/ximage/generate', async (req, res) => {
       taskId = response.data?.data?.taskId || response.data?.taskId;
       bgPollType = 'kie-flux-kontext';
     } else {
-      const kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+      let kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+      if (modelConfig.variantModels && modelVariant && modelConfig.variantModels[modelVariant]) {
+        kieModelId = modelConfig.variantModels[modelVariant];
+      }
       const inputBody = { prompt };
       if (modelConfig.useNamedSize) {
         inputBody.image_size = NAMED_SIZE_MAP[aspectRatio] || 'square';
@@ -7114,6 +7119,15 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
       if (modelConfig.supportsN && numberOfImages && parseInt(numberOfImages) > 1) {
         inputBody.num_images = String(parseInt(numberOfImages));
+      }
+      if (renderingSpeed && modelConfig.supportsRenderingSpeed) {
+        inputBody.rendering_speed = renderingSpeed;
+      }
+      if (imageStyle && modelConfig.supportsStyle) {
+        inputBody.style = imageStyle;
+      }
+      if (acceleration && modelConfig.supportsAcceleration) {
+        inputBody.acceleration = acceleration;
       }
       if (isI2I && imageUrls.length > 0) {
         if (modelConfig.i2iImageField) {
