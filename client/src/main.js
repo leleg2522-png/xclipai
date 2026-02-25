@@ -3664,17 +3664,17 @@ function getModelIcon(iconType) {
 
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasQuality: true, qualities: ['basic', 'high'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] },
-    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
-    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
-    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
-    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
-    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '3:2', '2:3'] },
-    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasQuality: true, qualities: ['basic', 'high'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] },
+    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
+    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
+    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, maxRefs: 2, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
+    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
+    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxRefs: 2, sizes: ['1:1', '3:2', '2:3'] },
+    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], maxRefs: 1, sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
     { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: false, badge: 'NEW', hasN: true, hasVariant: true, variants: [{id:'fast',name:'Fast'},{id:'ultra',name:'Ultra'},{id:'standard',name:'Standard'}], sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'GENERAL', 'REALISTIC', 'DESIGN'], sizes: ['Square', 'Square HD', '3:4', '9:16', '4:3', '16:9'] },
-    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'REALISTIC', 'FICTION'], hasN: true, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
-    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, hasAcceleration: true, accelerations: ['none', 'regular', 'high'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'GENERAL', 'REALISTIC', 'DESIGN'], maxRefs: 1, sizes: ['Square', 'Square HD', '3:4', '9:16', '4:3', '16:9'] },
+    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'REALISTIC', 'FICTION'], hasN: true, maxRefs: 1, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, hasAcceleration: true, accelerations: ['none', 'regular', 'high'], maxRefs: 1, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
     { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] }
   ];
   
@@ -8044,7 +8044,7 @@ async function generateXImage() {
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana'];
+      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'seedream-4.5', 'seedream-api'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }
