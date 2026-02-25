@@ -16,17 +16,26 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
 - **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
-  - 5 AI models via kie.ai APIs:
-    - gpt-image-1.5: GPT Image 1.5 (OpenAI) via kie.ai 4o-image API, supports I2I, supports N variants
-    - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via kie.ai Market API, supports I2I, 1K/2K resolution
-    - flux-2-pro: FLUX.2 Pro (Black Forest Labs) via kie.ai Market API, supports I2I, 1K/2K resolution
-    - grok-imagine: Grok Imagine (xAI) via kie.ai Market API, text-only
-    - google-nano-banana: Nano Banana (Google) via kie.ai Market API, text-only
-  - Two kie.ai API paths:
+  - 12 AI models via kie.ai APIs:
+    - seedream-4.5: Seedream 4.5 (ByteDance) via Market API, supports I2I, quality (basic/high)
+    - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
+    - flux-2-pro: FLUX.2 Pro (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
+    - google-nano-banana: Nano Banana (Google) via Market API, supports I2I
+    - seedream-api: Seedream API/V4 (ByteDance) via Market API, supports I2I, named sizes, 1K/2K/4K resolution
+    - gpt-image-1.5: 4o Image (OpenAI) via 4o-image API, supports I2I, N variants
+    - flux-1-kontext: Flux.1 Kontext (Black Forest Labs) via Flux Kontext API, supports I2I
+    - imagen-4: Imagen 4 (Google) via Market API, text-only, N images
+    - ideogram-v3: Ideogram V3 (Ideogram) via Market API, supports I2I, named sizes
+    - ideogram-character: Ideogram Character (Ideogram) via Market API, supports I2I via image_url
+    - qwen-image: Qwen Image Edit (Alibaba) via Market API, supports I2I via image_url
+    - z-image: Z-Image (Tongyi-MAI) via Market API, text-only
+  - Three kie.ai API paths:
     - 4o-image: POST https://api.kie.ai/api/v1/gpt4o-image/generate, poll /record-info?taskId=
     - Market: POST https://api.kie.ai/api/v1/jobs/createTask, poll /jobs/recordInfo?taskId=
+    - Flux Kontext: POST https://api.kie.ai/api/v1/flux/kontext/generate, poll /flux/kontext/record-info?taskId=
+  - Market API size formats: aspect_ratio (ratio string), image_size (ratio string), or named sizes (square/portrait_4_3/landscape_16_9 etc.)
   - Base64 images converted to public URLs via local file storage for kie.ai I2I
-  - Background polling types: kie-4o-image, kie-market
+  - Background polling types: kie-4o-image, kie-market, kie-flux-kontext
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)

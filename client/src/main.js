@@ -252,7 +252,7 @@ const state = {
     sourceImage: null,
     sourceImage2: null,
     prompt: '',
-    selectedModel: 'gpt-image-1.5',
+    selectedModel: 'seedream-4.5',
     aspectRatio: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -265,7 +265,8 @@ const state = {
     models: [],
     _historyLoaded: false,
     resolution: '1K',
-    numberOfImages: 1
+    numberOfImages: 1,
+    quality: 'basic'
   },
   ximageRoomManager: {
     rooms: [],
@@ -381,7 +382,7 @@ const PERSIST_KEYS = {
   vidgen3: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'fps', 'generateAudio', 'cameraFixed', 'turboMode', 'ratio', 'customApiKey'],
   videogen: ['prompt', 'selectedModel', 'duration', 'aspectRatio', 'customApiKey'],
   motion: ['prompt', 'selectedModel', 'characterOrientation'],
-  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages'],
+  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality'],
   chat: ['selectedModel'],
   vidgen3RoomManager: ['xclipApiKey'],
   vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
@@ -3650,18 +3651,27 @@ function getModelIcon(iconType) {
     bytedance: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.53.02C6.44.02 1.5 4.97 1.5 11.06c0 4.56 2.79 8.48 6.76 10.14v-7.17H6.15V11.1h2.11V8.7c0-2.08 1.24-3.23 3.13-3.23.91 0 1.86.16 1.86.16v2.04h-1.05c-1.03 0-1.35.64-1.35 1.3v1.56h2.3l-.37 2.93h-1.93v7.17c3.97-1.66 6.76-5.58 6.76-10.14 0-6.09-4.94-11.04-11.03-11.04h-.05z"/></svg>',
     flux: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     alibaba: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    xai: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>'
+    xai: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+    ideogram: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
+    tongyi: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
   };
   return icons[iconType] || '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>';
 }
 
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'gpt-image-1.5', name: 'GPT Image 1.5', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, badge: 'ULTRA', hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '2:3', '3:2'] },
-    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] }
+    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasQuality: true, qualities: ['basic', 'high'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] },
+    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] },
+    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] },
+    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, sizes: ['1:1', '16:9', '9:16', '3:2', '2:3'] },
+    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '21:9'] },
+    { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: false, badge: 'NEW', hasN: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
+    { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] }
   ];
   
   var currentModelConfig = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; }) || ximageModels[0];
@@ -3747,13 +3757,22 @@ function renderXImagePage() {
   });
   html += '</div></div>';
   
-  // Resolution - only for models that support it (flux-2-flex, flux-2-pro)
   if (currentModelConfig.hasResolution) {
     html += '<div class="section-card">';
     html += '<h3 class="section-title">Resolution</h3>';
     html += '<div class="aspect-buttons">';
     currentModelConfig.resolutions.forEach(function(res) {
       html += '<button class="aspect-btn ' + (state.ximage.resolution === res ? 'active' : '') + '" data-ximage-resolution="' + res + '">' + res + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasQuality) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Quality</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.qualities.forEach(function(q) {
+      html += '<button class="aspect-btn ' + (state.ximage.quality === q ? 'active' : '') + '" data-ximage-quality="' + q + '">' + q.charAt(0).toUpperCase() + q.slice(1) + '</button>';
     });
     html += '</div></div>';
   }
@@ -7699,11 +7718,18 @@ function attachXImageEventListeners() {
         // Auto-select compatible model when switching to image-to-image
         if (newMode === 'image-to-image') {
           var ximageModels = [
-            { id: 'gpt-image-1.5', supportsI2I: true },
+            { id: 'seedream-4.5', supportsI2I: true },
             { id: 'flux-2-flex', supportsI2I: true },
             { id: 'flux-2-pro', supportsI2I: true },
-            { id: 'grok-imagine', supportsI2I: false },
-            { id: 'google-nano-banana', supportsI2I: true }
+            { id: 'google-nano-banana', supportsI2I: true },
+            { id: 'seedream-api', supportsI2I: true },
+            { id: 'gpt-image-1.5', supportsI2I: true },
+            { id: 'flux-1-kontext', supportsI2I: true },
+            { id: 'imagen-4', supportsI2I: false },
+            { id: 'ideogram-v3', supportsI2I: true },
+            { id: 'ideogram-character', supportsI2I: true },
+            { id: 'qwen-image', supportsI2I: true },
+            { id: 'z-image', supportsI2I: false }
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {
@@ -7721,7 +7747,7 @@ function attachXImageEventListeners() {
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
         var newModelId = modelCard.dataset.ximageModel;
-        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro'];
+        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana'];
         if (!modelsWithMultiRef.includes(newModelId)) {
           state.ximage.sourceImage2 = null;
         }
@@ -7749,7 +7775,14 @@ function attachXImageEventListeners() {
         return;
       }
       
-      // Number of images
+      var qualityBtn = e.target.closest('[data-ximage-quality]');
+      if (qualityBtn && state.currentPage === 'ximage') {
+        state.ximage.quality = qualityBtn.dataset.ximageQuality;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
       var numBtn = e.target.closest('[data-ximage-num-action]');
       if (numBtn && state.currentPage === 'ximage') {
         var action = numBtn.dataset.ximageNumAction;
@@ -7907,7 +7940,7 @@ async function generateXImage() {
   }
   
   // Validate model compatibility with mode
-  var modelsNotSupportingI2I = ['grok-imagine'];
+  var modelsNotSupportingI2I = ['imagen-4', 'z-image'];
   if (state.ximage.mode === 'image-to-image' && modelsNotSupportingI2I.includes(state.ximage.selectedModel)) {
     alert('Model ini tidak mendukung mode Image-to-Image. Pilih model lain.');
     return;
@@ -7924,12 +7957,13 @@ async function generateXImage() {
       aspectRatio: state.ximage.aspectRatio,
       mode: state.ximage.mode,
       resolution: state.ximage.resolution,
-      numberOfImages: state.ximage.numberOfImages
+      numberOfImages: state.ximage.numberOfImages,
+      quality: state.ximage.quality
     };
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro'];
+      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }

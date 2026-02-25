@@ -2558,6 +2558,23 @@ async function pollKieMarketImageTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
+async function pollKieFluxKontextTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://api.kie.ai/api/v1/flux/kontext/record-info`,
+    { params: { taskId }, headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const data = statusResponse.data?.data || statusResponse.data;
+  const successFlag = data?.successFlag;
+  if (successFlag === 1) {
+    const url = data?.response?.resultImageUrl || data?.response?.originImageUrl;
+    return { status: 'completed', url };
+  }
+  if (successFlag === 2) {
+    return { status: 'failed', error: data?.errorMessage || 'Generation failed' };
+  }
+  return { status: 'processing' };
+}
+
 async function pollFreepikMotionTask(taskId, apiKey, model) {
   const isPro = (model || '').includes('pro');
   const pollEndpoints = [
@@ -2713,6 +2730,8 @@ setInterval(async () => {
         result = await pollKie4oImageTask(taskId, task.apiKey);
       } else if (task.apiType === 'kie-market') {
         result = await pollKieMarketImageTask(taskId, task.apiKey);
+      } else if (task.apiType === 'kie-flux-kontext') {
+        result = await pollKieFluxKontextTask(taskId, task.apiKey);
       } else if (task.apiType === 'freepik-motion') {
         result = await pollFreepikMotionTask(taskId, task.apiKey, task.model);
       } else if (task.apiType === 'freepik-video') {
@@ -2809,7 +2828,7 @@ async function resumePendingTaskPolling() {
             }
             if (apiType === 'kie-ximage') {
               const mc = XIMAGE_MODELS[row.model];
-              resolvedType = (!mc || mc.apiType === 'kie-4o-image') ? 'kie-4o-image' : 'kie-market';
+              resolvedType = mc ? mc.apiType : 'kie-4o-image';
             }
             startServerBgPoll(row.task_id, resolvedType, apiKey, {
               dbTable: table,
@@ -6790,11 +6809,18 @@ app.delete('/api/vidgen3/videos/all', async (req, res) => {
 
 // X Image model configuration
 const XIMAGE_MODELS = {
-  'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1.5' },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, apiType: 'kie-market', apiModel: 'seedream/4.5-text-to-image', i2iModel: 'seedream/4.5-edit', supportsQuality: true },
   'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
   'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
-  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'grok-imagine/text-to-image' },
   'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'kie-market', apiModel: 'google/nano-banana', i2iModel: 'google/nano-banana-edit', useImageSize: true },
+  'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution' },
+  'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1.5' },
+  'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'kie-flux-kontext' },
+  'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, supportsN: true, apiType: 'kie-market', apiModel: 'google/imagen4-fast' },
+  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true },
+  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', i2iImageField: 'image_url' },
+  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/text-to-image', i2iModel: 'qwen/image-to-image', i2iImageField: 'image_url' },
+  'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'z-image' },
 };
 
 // Get X Image room API key
@@ -6970,7 +6996,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages } = req.body;
+    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -7024,8 +7050,14 @@ app.post('/api/ximage/generate', async (req, res) => {
     let taskId;
     let bgPollType;
     
+    const NAMED_SIZE_MAP = {
+      '1:1': 'square', '16:9': 'landscape_16_9', '9:16': 'portrait_16_9',
+      '4:3': 'landscape_4_3', '3:4': 'portrait_4_3',
+      '3:2': 'landscape_3_2', '2:3': 'portrait_3_2',
+      '21:9': 'landscape_21_9'
+    };
+
     if (modelConfig.apiType === 'kie-4o-image') {
-      // GPT Image 1.5 via kie.ai 4o-image API
       const body = {
         prompt,
         size: aspectRatio || '1:1',
@@ -7043,30 +7075,57 @@ app.post('/api/ximage/generate', async (req, res) => {
       console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(response.data));
       taskId = response.data?.data?.taskId || response.data?.taskId;
       bgPollType = 'kie-4o-image';
+    } else if (modelConfig.apiType === 'kie-flux-kontext') {
+      const body = {
+        prompt,
+        aspectRatio: aspectRatio || '1:1',
+        model: 'flux-kontext-pro',
+        outputFormat: 'jpeg'
+      };
+      if (isI2I && imageUrls.length > 0) {
+        body.inputImage = imageUrls[0];
+      }
+      console.log('[XIMAGE] Flux Kontext request:', JSON.stringify({ ...body, inputImage: body.inputImage ? '[IMAGE]' : undefined }));
+      const response = await axios.post(
+        'https://api.kie.ai/api/v1/flux/kontext/generate',
+        body,
+        { headers: reqHeaders, timeout: 60000 }
+      );
+      console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(response.data));
+      taskId = response.data?.data?.taskId || response.data?.taskId;
+      bgPollType = 'kie-flux-kontext';
     } else {
-      // Market API models (FLUX.2, Grok, Nano Banana)
       const kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
       const inputBody = { prompt };
-      if (modelConfig.useImageSize) {
+      if (modelConfig.useNamedSize) {
+        inputBody.image_size = NAMED_SIZE_MAP[aspectRatio] || 'square';
+      } else if (modelConfig.useImageSize) {
         inputBody.image_size = aspectRatio || '1:1';
         inputBody.output_format = 'png';
       } else {
         inputBody.aspect_ratio = aspectRatio || '1:1';
       }
       if (modelConfig.supportsResolution && resolution) {
-        inputBody.resolution = resolution;
+        const resField = modelConfig.resolutionField || 'resolution';
+        inputBody[resField] = resolution;
+      }
+      if (modelConfig.supportsQuality && quality) {
+        inputBody.quality = quality;
+      }
+      if (modelConfig.supportsN && numberOfImages && parseInt(numberOfImages) > 1) {
+        inputBody.num_images = String(parseInt(numberOfImages));
       }
       if (isI2I && imageUrls.length > 0) {
-        // Nano Banana edit uses "image_urls", FLUX.2 uses "input_urls"
-        if (modelConfig.useImageSize) {
+        if (modelConfig.i2iImageField) {
+          inputBody[modelConfig.i2iImageField] = imageUrls[0];
+        } else if (modelConfig.useImageSize) {
           inputBody.image_urls = imageUrls;
         } else {
           inputBody.input_urls = imageUrls;
         }
       }
       const body = { model: kieModelId, input: inputBody };
-      const logBody = { ...body, input: { ...body.input, image_urls: body.input.image_urls ? ['[IMAGES]'] : undefined, input_urls: body.input.input_urls ? ['[IMAGES]'] : undefined } };
-      console.log('[XIMAGE] Market API request:', JSON.stringify(logBody));
+      console.log('[XIMAGE] Market API request:', JSON.stringify(body).replace(/"(image_urls|input_urls|image_url)":\s*("[^"]*"|\[[^\]]*\])/g, '"$1":"[IMAGE]"'));
       const response = await axios.post(
         'https://api.kie.ai/api/v1/jobs/createTask',
         body,
@@ -7138,6 +7197,8 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
       let result;
       if (!modelConfig || modelConfig.apiType === 'kie-4o-image') {
         result = await pollKie4oImageTask(taskId, kieApiKey);
+      } else if (modelConfig.apiType === 'kie-flux-kontext') {
+        result = await pollKieFluxKontextTask(taskId, kieApiKey);
       } else {
         result = await pollKieMarketImageTask(taskId, kieApiKey);
       }
