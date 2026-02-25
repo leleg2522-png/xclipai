@@ -8,3 +8,8 @@ replit.md
 .cache
 .config
 .upm
+.dockerignore
+Dockerfile
+railway.toml
+nixpacks.toml
+database_backup*.sql
