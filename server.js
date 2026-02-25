@@ -30,15 +30,22 @@ const PORT = process.env.PORT || 5000;
 console.log(`[STARTUP] Xclip server starting... PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 console.log(`[STARTUP] Database URL configured: ${!!(process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL)}`);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
-});
-
+const dbUrl = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
 const pool = new Pool({
-  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL,
+  connectionString: dbUrl,
   max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000,
+  ssl: dbUrl && (dbUrl.includes('railway') || dbUrl.includes('neon') || dbUrl.includes('supabase') || dbUrl.includes('render')) ? { rejectUnauthorized: false } : false
+});
+
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', uptime: process.uptime(), db: 'connected' });
+  } catch (err) {
+    res.status(503).json({ status: 'degraded', uptime: process.uptime(), db: 'disconnected' });
+  }
 });
 
 pool.on('error', (err) => {
