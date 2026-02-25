@@ -7310,6 +7310,13 @@ const XIMAGE2_MODELS = {
     hasWatermark: true, hasSequential: true,
     desc: 'ByteDance Seedream 4.5 latest (no 1K support)'
   },
+  'seedream-5-0-lite': { 
+    name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 15, maxRefs: 10,
+    resolutions: ['1K', '2K', '3K', '4K'], defaultResolution: '2K',
+    hasWatermark: true, hasSequential: true,
+    desc: 'ByteDance Seedream 5.0 Lite - 4K output, perfect text rendering'
+  },
   'flux-kontext-pro': { 
     name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
     sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
