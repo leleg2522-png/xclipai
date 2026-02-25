@@ -6766,6 +6766,11 @@ function renderVidgen4Tasks() {
   return html;
 }
 
+function getVidgen4ProxyUrl(originalUrl) {
+  if (!originalUrl) return '';
+  return API_URL + '/api/vidgen4/proxy-video?url=' + encodeURIComponent(originalUrl);
+}
+
 function renderVidgen4Videos() {
   if (state.vidgen4.generatedVideos.length === 0) {
     return '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div><p>Belum ada video yang dihasilkan</p></div>';
@@ -6773,9 +6778,10 @@ function renderVidgen4Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen4.generatedVideos.forEach(video => {
+    var proxyUrl = getVidgen4ProxyUrl(video.url);
     html += '<div class="video-result-card" style="position:relative;">';
-    html += '<video controls playsinline preload="metadata" class="result-video">';
-    html += '<source src="' + video.url + '" type="video/mp4">';
+    html += '<video controls playsinline preload="metadata" class="result-video" crossorigin="anonymous">';
+    html += '<source src="' + proxyUrl + '" type="video/mp4">';
     html += '</video>';
     html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
     html += '<div style="flex:1;min-width:0;">';
@@ -7168,6 +7174,7 @@ async function pollVidgen4Task(taskId) {
       if (data.status === 'completed' && data.videoUrl) {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
         state.vidgen4.generatedVideos.unshift({
+          id: taskId,
           url: data.videoUrl,
           model: data.model,
           createdAt: new Date()

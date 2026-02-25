@@ -6354,6 +6354,33 @@ app.get('/api/vidgen4/history', async (req, res) => {
   }
 });
 
+app.get('/api/vidgen4/proxy-video', async (req, res) => {
+  try {
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    
+    const response = await axios.get(videoUrl, {
+      responseType: 'stream',
+      timeout: 600000
+    });
+    
+    const contentType = response.headers['content-type'] || 'video/mp4';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('[VIDGEN4] Video proxy error:', error.message);
+    res.status(500).json({ error: 'Gagal memuat video' });
+  }
+});
+
 app.get('/api/vidgen4/download', async (req, res) => {
   try {
     const videoUrl = req.query.url;
