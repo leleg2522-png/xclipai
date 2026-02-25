@@ -1,0 +1,10 @@
+node_modules
+attached_assets
+.local
+.git
+.replit
+replit.md
+*.md
+.cache
+.config
+.upm
