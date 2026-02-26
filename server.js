@@ -7108,7 +7108,7 @@ app.post('/api/ximage/generate', async (req, res) => {
         { headers: reqHeaders, timeout: 60000 }
       );
       console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.taskId;
+      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
       bgPollType = 'kie-4o-image';
     } else if (modelConfig.apiType === 'kie-flux-kontext') {
       const kontextModel = modelVariant === 'max' ? 'flux-kontext-max' : 'flux-kontext-pro';
@@ -7128,7 +7128,7 @@ app.post('/api/ximage/generate', async (req, res) => {
         { headers: reqHeaders, timeout: 60000 }
       );
       console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.taskId;
+      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
       bgPollType = 'kie-flux-kontext';
     } else {
       let kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
@@ -7180,12 +7180,19 @@ app.post('/api/ximage/generate', async (req, res) => {
         { headers: reqHeaders, timeout: 60000 }
       );
       console.log('[XIMAGE] kie.ai market response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.taskId;
+      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
       bgPollType = 'kie-market';
     }
     
     if (!taskId) {
-      return res.status(500).json({ error: 'Gagal mendapatkan task ID dari kie.ai' });
+      const respBody = typeof response?.data === 'object' ? response.data : {};
+      console.error('[XIMAGE] No taskId found in response:', JSON.stringify(respBody));
+      const apiCode = respBody.code || respBody.status;
+      const apiError = respBody.msg || respBody.message || respBody.error?.message || respBody.error || '';
+      if (apiCode === 401 || apiCode === 403) {
+        return res.status(500).json({ error: 'API key kie.ai tidak valid atau expired. Hubungi admin untuk update key.' });
+      }
+      return res.status(500).json({ error: apiError ? `kie.ai: ${apiError}` : 'Gagal mendapatkan task ID dari kie.ai' });
     }
     
     await pool.query(`
@@ -7202,8 +7209,14 @@ app.post('/api/ximage/generate', async (req, res) => {
     res.json({ taskId, model, message: 'Image generation started' });
     
   } catch (error) {
-    console.error('[XIMAGE] Generate error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Gagal generate image: ' + (error.response?.data?.message || error.message) });
+    const errData = error.response?.data;
+    console.error('[XIMAGE] Generate error:', JSON.stringify(errData) || error.message);
+    const statusCode = error.response?.status;
+    let errMsg = errData?.msg || errData?.message || errData?.error?.message || errData?.error || error.message;
+    if (statusCode === 401 || statusCode === 403) {
+      errMsg = 'API key kie.ai tidak valid atau expired. Hubungi admin untuk update key.';
+    }
+    res.status(500).json({ error: errMsg });
   }
 });
 
