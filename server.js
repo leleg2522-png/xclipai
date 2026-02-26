@@ -6843,17 +6843,17 @@ app.delete('/api/vidgen3/videos/all', async (req, res) => {
 
 // X Image model configuration
 const XIMAGE_MODELS = {
-  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, apiType: 'kie-market', apiModel: 'seedream/4.5-text-to-image', i2iModel: 'seedream/4.5-edit', supportsQuality: true },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, apiType: 'kie-market', apiModel: 'seedream/4.5-text-to-image', i2iModel: 'seedream/4.5-edit', supportsQuality: true, i2iImageField: 'image_urls', i2iImageArray: true },
   'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
   'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
   'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'kie-market', apiModel: 'google/nano-banana', i2iModel: 'google/nano-banana-edit', useImageSize: true },
-  'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution' },
-  'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1.5' },
+  'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution', i2iImageField: 'image_urls', i2iImageArray: true },
+  'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1' },
   'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'kie-flux-kontext' },
   'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, supportsN: true, apiType: 'kie-market', apiModel: 'google/imagen4-fast', variantModels: { fast: 'google/imagen4-fast', ultra: 'google/imagen4-ultra', standard: 'google/imagen4' } },
-  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true, supportsRenderingSpeed: true, supportsStyle: true },
-  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', i2iImageField: 'image_url', supportsRenderingSpeed: true, supportsStyle: true },
-  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/text-to-image', i2iModel: 'qwen/image-to-image', i2iImageField: 'image_url', supportsAcceleration: true },
+  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true, supportsRenderingSpeed: true, supportsStyle: true, i2iImageField: 'image_url' },
+  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', useNamedSize: true, i2iImageField: 'image_url', supportsRenderingSpeed: true, supportsStyle: true },
+  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/image-edit', i2iModel: 'qwen/image-edit', useNamedSize: true, i2iImageField: 'image_url', supportsAcceleration: true },
   'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'z-image' },
 };
 
@@ -7165,7 +7165,11 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
       if (isI2I && imageUrls.length > 0) {
         if (modelConfig.i2iImageField) {
-          inputBody[modelConfig.i2iImageField] = imageUrls[0];
+          if (modelConfig.i2iImageArray) {
+            inputBody[modelConfig.i2iImageField] = imageUrls;
+          } else {
+            inputBody[modelConfig.i2iImageField] = imageUrls[0];
+          }
         } else if (modelConfig.useImageSize) {
           inputBody.image_urls = imageUrls;
         } else {
