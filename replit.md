@@ -68,11 +68,11 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll: `{ code: 200, data: { status, result: { videos } } }`
   - Video history persistence in database
   - 5-minute cooldown timer between generations
-- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 10 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
-  - 10 AI models:
+- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 11 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
+  - 11 AI models:
     - GPT-4o Image (OpenAI, sizes: 1024x1024/1536x1024/1024x1536/auto, n: 1-4)
     - Nano Banana (Google Gemini 2.5 Flash, sizes: 1:1/16:9/9:16/4:3/3:4)
-    - Nano Banana 2 (Google Gemini 3 Pro, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1K/2K/4K, max 14 refs)
+    - Nano Banana 2 (Google Gemini 3 Pro Preview, sizes: 1:1/4:3/3:4/16:9/9:16/3:2/2:3/21:9/9:21, resolution: 1K/2K/3K/4K, n: 1-4, max 5 refs, mask image support (PNG only, max 4MB))
     - Seedream 4.0 (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, n: 1-4, watermark, sequential_generation)
     - Seedream 4.5 (ByteDance, same as 4.0 but latest version)
     - Seedream 5.0 Lite (ByteDance, sizes: 1:1/4:3/3:4/16:9/9:16/3:2/2:3/21:9/9:21, resolution: 1K/2K/3K/4K, n: 1-15, watermark, sequential, 4K output, perfect text rendering)

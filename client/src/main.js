@@ -307,6 +307,7 @@ const state = {
     safetyTolerance: 2,
     inputMode: 'auto',
     promptUpsampling: false,
+    maskImage: null,
     cooldownEnd: 0
   },
   pricing: {
@@ -3939,6 +3940,7 @@ function renderXImage2Page() {
   var ximage2Models = [
     { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxN: 4, sizes: ['1:1', '2:3', '3:2'], maxRefs: 5, group: 'openai' },
     { id: 'gemini-2.5-flash-image-preview', name: 'Nano Banana', icon: 'google', supportsI2I: true, hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 14, group: 'google' },
+    { id: 'gemini-3-pro-image-preview', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 4, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], hasResolution: true, resolutions: ['1K', '2K', '3K', '4K'], maxRefs: 5, hasMask: true, group: 'google' },
     { id: 'doubao-seedance-4-0', name: 'Seedream 4.0', icon: 'bytedance', supportsI2I: true, hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
     { id: 'doubao-seedance-4-5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], hasResolution: true, resolutions: ['2K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
     { id: 'seedream-5-0-lite', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], hasResolution: true, resolutions: ['1K', '2K', '3K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
@@ -4033,6 +4035,20 @@ function renderXImage2Page() {
     html += '<button class="num-btn" data-ximage2-num-action="decrease" ' + (state.ximage2.numberOfImages <= 1 ? 'disabled' : '') + '>-</button>';
     html += '<span class="num-value">' + state.ximage2.numberOfImages + '</span>';
     html += '<button class="num-btn" data-ximage2-num-action="increase" ' + (state.ximage2.numberOfImages >= (currentModelConfig.maxN || 4) ? 'disabled' : '') + '>+</button>';
+    html += '</div></div>';
+  }
+
+  if (currentModelConfig.hasMask) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Mask Image <span style="font-size:12px;color:#888;font-weight:normal">(opsional, PNG only, max 4MB)</span></h3>';
+    html += '<div class="reference-upload ' + (state.ximage2.maskImage ? 'has-image' : '') + '" id="ximage2MaskUploadZone">';
+    if (state.ximage2.maskImage) {
+      html += '<img src="' + state.ximage2.maskImage.data + '" alt="Mask" class="preview-image"/>';
+      html += '<button class="remove-image-btn" id="ximage2RemoveMask"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+    } else {
+      html += '<div class="upload-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9-9 9-9-1.8-9-9 1.8-9 9-9z"/><path d="M8 12h8"/><path d="M12 8v8"/></svg><p>Klik atau drop mask image (PNG)</p></div>';
+    }
+    html += '<input type="file" id="ximage2MaskFileInput" accept="image/png" style="display:none"/>';
     html += '</div></div>';
   }
 
@@ -8283,6 +8299,36 @@ function attachXImage2EventListeners() {
     });
   }
 
+  var maskUploadZone = document.getElementById('ximage2MaskUploadZone');
+  var maskFileInput = document.getElementById('ximage2MaskFileInput');
+  if (maskUploadZone && maskFileInput) {
+    maskUploadZone.addEventListener('click', function() { maskFileInput.click(); });
+    maskUploadZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      maskUploadZone.classList.add('drag-over');
+    });
+    maskUploadZone.addEventListener('dragleave', function() {
+      maskUploadZone.classList.remove('drag-over');
+    });
+    maskUploadZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      maskUploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) handleXImage2MaskUpload(e.dataTransfer.files[0]);
+    });
+    maskFileInput.addEventListener('change', function(e) {
+      if (e.target.files.length > 0) handleXImage2MaskUpload(e.target.files[0]);
+    });
+  }
+
+  var removeMaskBtn = document.getElementById('ximage2RemoveMask');
+  if (removeMaskBtn) {
+    removeMaskBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      state.ximage2.maskImage = null;
+      render();
+    });
+  }
+
   if (!window._ximage2DelegationAttached) {
     window._ximage2DelegationAttached = true;
 
@@ -8442,6 +8488,28 @@ function handleXImage2Upload(e, refIndex) {
   reader.readAsDataURL(file);
 }
 
+function handleXImage2MaskUpload(file) {
+  if (!file) return;
+  if (file.type !== 'image/png') {
+    alert('Mask image harus berformat PNG');
+    return;
+  }
+  if (file.size > 4 * 1024 * 1024) {
+    alert('Mask image maksimal 4MB');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(event) {
+    state.ximage2.maskImage = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
 async function generateXImage2() {
   if (state.ximage2.mode === 'image-to-image' && state.ximage2.sourceImages.filter(Boolean).length === 0) {
     alert('Upload gambar referensi terlebih dahulu');
@@ -8493,6 +8561,10 @@ async function generateXImage2() {
       if (images.length > 0) {
         requestBody.images = images;
       }
+    }
+
+    if (state.ximage2.maskImage) {
+      requestBody.maskImage = state.ximage2.maskImage.data;
     }
 
     var response = await fetch(API_URL + '/api/ximage2/generate', {

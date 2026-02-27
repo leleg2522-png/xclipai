@@ -7361,6 +7361,13 @@ const XIMAGE2_MODELS = {
     hasWatermark: true, hasSequential: true,
     desc: 'ByteDance Seedream 5.0 Lite - 4K output, perfect text rendering'
   },
+  'gemini-3-pro-image-preview': { 
+    name: 'Nano Banana 2', provider: 'Google', supportsI2I: true,
+    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 4, maxRefs: 5,
+    resolutions: ['1K', '2K', '3K', '4K'], defaultResolution: '2K',
+    hasMask: true,
+    desc: 'Google Gemini 3 Pro Preview - 4K native output, multi-step planning'
+  },
   'flux-kontext-pro': { 
     name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
     sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
@@ -7568,7 +7575,7 @@ app.post('/api/ximage2/generate', async (req, res) => {
     }
     
     const { model, prompt, images, size, resolution, 
-            watermark, sequentialGeneration, safetyTolerance, inputMode, promptUpsampling } = req.body;
+            watermark, sequentialGeneration, safetyTolerance, inputMode, promptUpsampling, maskImage } = req.body;
     const n = req.body.numberOfImages || req.body.n || 1;
     
     if (!prompt) {
@@ -7628,6 +7635,15 @@ app.post('/api/ximage2/generate', async (req, res) => {
     }
     if (modelConfig.hasPromptUpsampling && promptUpsampling !== undefined) {
       requestBody.prompt_upsampling = promptUpsampling;
+    }
+    if (modelConfig.hasMask && maskImage) {
+      let maskUrl = maskImage;
+      if (maskImage.startsWith('data:')) {
+        const maskUploaded = await saveBase64ToFile(maskImage, 'image', baseUrl);
+        maskUrl = maskUploaded.publicUrl;
+        console.log(`[XIMAGE2] Mask image uploaded: ${maskUrl}`);
+      }
+      requestBody.mask_url = maskUrl;
     }
     
     console.log('[XIMAGE2] Request body:', JSON.stringify({ ...requestBody, image_urls: requestBody.image_urls ? ['[IMAGES]'] : undefined }));
