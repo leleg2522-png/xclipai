@@ -6451,11 +6451,11 @@ function renderVidgen2Page() {
   const isVeo = state.vidgen2.selectedModel === 'veo3.1-fast';
   const models = [
     { id: 'sora-2-stable', name: 'Sora 2 Stable', desc: 'Video 10-15 detik, 720p, style presets', badge: 'STABLE', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 4K, start/end frame', badge: 'FAST', icon: '⚡' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
   ];
   
   const durationOptions = isSora2 ? [10, 15] : [8];
-  const resolutionOptions = isVeo ? ['720p', '1080p', '4k'] : ['720p'];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
   
   const styleOptions = [
     { value: 'none', label: 'None' },
