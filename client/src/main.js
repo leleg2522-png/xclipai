@@ -3864,7 +3864,7 @@ function renderXImagePage() {
   html += '<textarea id="ximagePrompt" class="prompt-input" placeholder="' + (state.ximage.mode === 'image-to-image' ? 'Deskripsikan perubahan yang diinginkan...' : 'Deskripsikan gambar yang ingin dibuat...') + '" rows="4">' + state.ximage.prompt + '</textarea>';
   html += '</div>';
   
-  // Size (Aspect Ratio) - like Poyo Playground
+  // Size (Aspect Ratio)
   html += '<div class="section-card">';
   html += '<h3 class="section-title">Size</h3>';
   html += '<div class="aspect-buttons">';
@@ -6479,7 +6479,7 @@ function renderVidgen2Page() {
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen2</span> AI Video
         </h1>
-        <p class="hero-subtitle">Poyo AI Video Generation</p>
+        <p class="hero-subtitle">AI Video Generation</p>
       </div>
 
       <div class="xmaker-layout">
