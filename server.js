@@ -4136,7 +4136,6 @@ app.get('/api/download-video', async (req, res) => {
   }
 });
 
-// Delete video from history (mark as deleted)
 app.delete('/api/videogen/history/:taskId', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
@@ -4144,15 +4143,10 @@ app.delete('/api/videogen/history/:taskId', async (req, res) => {
   
   try {
     const { taskId } = req.params;
-    
-    // Mark as deleted instead of actually deleting (soft delete)
     await pool.query(
-      `UPDATE video_generation_tasks 
-       SET status = 'deleted' 
-       WHERE task_id = $1 AND user_id = $2`,
+      'DELETE FROM video_generation_tasks WHERE task_id = $1 AND user_id = $2',
       [taskId, req.session.userId]
     );
-    
     res.json({ success: true });
   } catch (error) {
     console.error('Delete video history error:', error);
@@ -4207,7 +4201,6 @@ app.get('/api/motion/history', async (req, res) => {
   }
 });
 
-// Delete motion from history
 app.delete('/api/motion/history/:taskId', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
@@ -4216,10 +4209,8 @@ app.delete('/api/motion/history/:taskId', async (req, res) => {
   try {
     const { taskId } = req.params;
     await pool.query(
-      `UPDATE video_generation_tasks 
-       SET status = 'deleted' 
-       WHERE task_id = $1 AND user_id = $2 AND model LIKE 'motion-%'`,
-      [taskId, req.session.userId]
+      'DELETE FROM video_generation_tasks WHERE task_id = $1 AND user_id = $2 AND model LIKE $3',
+      [taskId, req.session.userId, 'motion-%']
     );
     res.json({ success: true });
   } catch (error) {
@@ -7324,6 +7315,32 @@ app.get('/api/ximage/history', async (req, res) => {
   } catch (error) {
     console.error('[XIMAGE] Get history error:', error);
     res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
+app.delete('/api/ximage/history/:id', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  try {
+    await pool.query('DELETE FROM ximage_history WHERE id = $1 AND user_id = $2', [req.params.id, req.session.userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[XIMAGE] Delete history error:', error);
+    res.status(500).json({ error: 'Gagal hapus gambar' });
+  }
+});
+
+app.delete('/api/ximage/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  try {
+    await pool.query('DELETE FROM ximage_history WHERE user_id = $1', [req.session.userId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[XIMAGE] Delete all history error:', error);
+    res.status(500).json({ error: 'Gagal hapus semua gambar' });
   }
 });
 

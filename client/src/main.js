@@ -4537,9 +4537,12 @@ function renderVoiceoverPage() {
                     <div style="font-size:12px;font-weight:600;margin-bottom:4px;">${h.voice_name} • ${h.model_id.replace('eleven_','').replace('_',' ')}</div>
                     <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${h.text_input}">${h.text_input || ''}</div>
                     <audio controls style="width:100%;height:32px;" src="${h.audio_url}"></audio>
-                    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
                       <span style="font-size:11px;color:var(--text-muted);">${new Date(h.created_at).toLocaleDateString('id-ID')}</span>
-                      <a href="${h.audio_url}" download style="font-size:11px;color:var(--primary);">Download</a>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <a href="${h.audio_url}" download style="font-size:11px;color:var(--primary);">Download</a>
+                        <button class="voiceover-delete-btn" data-vo-id="${h.id}" style="font-size:11px;color:#ef4444;background:none;border:none;cursor:pointer;padding:0;">Hapus</button>
+                      </div>
                     </div>
                   </div>
                 `).join('')}
@@ -7971,8 +7974,15 @@ function attachXImageEventListeners() {
     btn.addEventListener('click', function(e) {
       e.preventDefault();
       var index = parseInt(btn.dataset.index);
+      var image = state.ximage.generatedImages[index];
       state.ximage.generatedImages.splice(index, 1);
       render();
+      if (image && image.id) {
+        fetch(API_URL + '/api/ximage/history/' + image.id, {
+          method: 'DELETE',
+          credentials: 'include'
+        }).catch(function(err) { console.error('Failed to delete ximage history:', err); });
+      }
     });
   });
 }
@@ -8181,6 +8191,7 @@ async function loadXImageHistory() {
     if (data.images) {
       state.ximage.generatedImages = data.images.map(function(img) {
         return {
+          id: img.id,
           url: img.imageUrl,
           model: img.model,
           prompt: img.prompt,
@@ -8454,8 +8465,16 @@ function attachXImage2EventListeners() {
     btn.addEventListener('click', function(e) {
       e.preventDefault();
       var index = parseInt(btn.dataset.index);
+      var image = state.ximage2.generatedImages[index];
       state.ximage2.generatedImages.splice(index, 1);
       render();
+      if (image && image.id && state.ximage2.customApiKey) {
+        fetch(API_URL + '/api/ximage2/history/' + image.id, {
+          method: 'DELETE',
+          headers: { 'X-Xclip-Key': state.ximage2.customApiKey },
+          credentials: 'include'
+        }).catch(function(err) { console.error('Failed to delete ximage2 history:', err); });
+      }
     });
   });
 
@@ -8704,6 +8723,7 @@ async function loadXImage2History() {
     if (data.images) {
       state.ximage2.generatedImages = data.images.map(function(img) {
         return {
+          id: img.id,
           url: img.imageUrl,
           model: img.model,
           prompt: img.prompt,
@@ -10571,6 +10591,25 @@ function attachVoiceoverEventListeners() {
       const idx = parseInt(e.currentTarget.dataset.segIdx);
       state.voiceover.dialogueSegments = state.voiceover.dialogueSegments.filter((_, i) => i !== idx);
       render(true);
+    });
+  });
+
+  document.querySelectorAll('.voiceover-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const voId = btn.dataset.voId;
+      if (!voId) return;
+      const apiKey = state.voiceover.customApiKey || state.voiceoverRoomManager.xclipApiKey;
+      state.voiceover.history = state.voiceover.history.filter(h => String(h.id) !== String(voId));
+      render(true);
+      if (apiKey) {
+        try {
+          await fetch(`${API_URL}/api/voiceover/history/${voId}`, {
+            method: 'DELETE',
+            headers: { 'X-Xclip-Key': apiKey },
+            credentials: 'include'
+          });
+        } catch (err) { console.error('Failed to delete voiceover history:', err); }
+      }
     });
   });
 
