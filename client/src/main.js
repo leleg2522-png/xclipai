@@ -45,7 +45,9 @@ function savePendingTasks() {
           taskId: t.taskId,
           model: t.model || '',
           status: t.status || 'pending',
-          apiKey: t.apiKey || ''
+          apiKey: t.apiKey || '',
+          startTime: t.startTime || Date.now(),
+          savedAt: Date.now()
         }));
       }
     });
@@ -72,10 +74,13 @@ function recoverPendingTasks() {
     
     const tryRecover = (feature, tasks, pollFn) => {
       if (!tasks || tasks.length === 0) return;
+      const now = Date.now();
       tasks.forEach(t => {
         if (_activePolls.has(t.taskId)) return;
+        const savedAt = t.savedAt || now;
+        if (now - savedAt > 30 * 60 * 1000) return;
         if (!state[feature].tasks.some(x => x.taskId === t.taskId)) {
-          state[feature].tasks.push({ taskId: t.taskId, model: t.model, status: 'processing', apiKey: t.apiKey || '' });
+          state[feature].tasks.push({ taskId: t.taskId, model: t.model, status: 'processing', apiKey: t.apiKey || '', startTime: t.startTime || savedAt });
         }
         _activePolls.add(t.taskId);
         recovered = true;
@@ -1487,7 +1492,8 @@ async function loadVideoGenHistory() {
             model: task.model,
             status: 'processing',
             progress: 0,
-            createdAt: new Date(task.createdAt).getTime()
+            createdAt: new Date(task.createdAt).getTime(),
+            startTime: new Date(task.createdAt).getTime() || Date.now()
           };
           state.videogen.tasks.push(newTask);
           // Resume polling for this task
@@ -1580,7 +1586,8 @@ async function loadVidgen3History() {
             taskId: task.task_id,
             model: task.model,
             status: 'processing',
-            progress: 0
+            progress: 0,
+            startTime: new Date(task.created_at).getTime() || Date.now()
           });
           pollVidgen3Task(task.task_id, task.model);
         }
@@ -3891,7 +3898,7 @@ function renderXImageTasks() {
   var html = '<div class="tasks-section"><h3>Sedang Diproses</h3><div class="tasks-list">';
   
   state.ximage.tasks.forEach(function(task) {
-    var elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    var elapsed = task.startTime ? Math.floor((Date.now() - task.startTime) / 1000) : 0;
     var minutes = Math.floor(elapsed / 60);
     var seconds = elapsed % 60;
     
@@ -4153,7 +4160,7 @@ function renderXImage2Tasks() {
   var html = '<div class="tasks-section"><h3>Sedang Diproses</h3><div class="tasks-list">';
 
   state.ximage2.tasks.forEach(function(task) {
-    var elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    var elapsed = task.startTime ? Math.floor((Date.now() - task.startTime) / 1000) : 0;
     var minutes = Math.floor(elapsed / 60);
     var seconds = elapsed % 60;
 
@@ -6769,7 +6776,7 @@ function renderVidgen4Tasks() {
   html += '<div class="tasks-list">';
   
   state.vidgen4.tasks.forEach(task => {
-    const elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+    const elapsed = task.startTime ? Math.floor((Date.now() - task.startTime) / 1000) : 0;
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
     html += '<div class="task-item">';
@@ -7177,6 +7184,8 @@ async function pollVidgen4Task(taskId) {
   const poll = async () => {
     if (attempts >= maxAttempts) {
       state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+      _activePolls.delete(taskId);
+      savePendingTasks();
       state.vidgen4.error = 'Timeout - video generation terlalu lama';
       showToast('Timeout - video generation terlalu lama', 'error');
       render();
@@ -7188,10 +7197,20 @@ async function pollVidgen4Task(taskId) {
         headers: { 'X-Xclip-Key': state.vidgen4.customApiKey }
       });
       
+      if (!response.ok && (response.status === 404 || response.status === 401)) {
+        state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        render();
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.status === 'completed' && data.videoUrl) {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
         state.vidgen4.generatedVideos.unshift({
           id: taskId,
           url: data.videoUrl,
@@ -7205,6 +7224,8 @@ async function pollVidgen4Task(taskId) {
       
       if (data.status === 'failed') {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
         state.vidgen4.error = data.error || 'Video generation failed';
         showToast(data.error || 'Video generation failed', 'error');
         render();
@@ -7227,6 +7248,11 @@ async function pollVidgen4Task(taskId) {
     } catch (error) {
       console.error('[VIDGEN4] Poll error:', error);
       attempts++;
+      if (attempts >= 3 && !state.vidgen4.tasks.find(t => t.taskId === taskId)) {
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        return;
+      }
       setTimeout(poll, 5000);
     }
   };
@@ -7602,9 +7628,10 @@ function pollVidgen3Task(taskId, model) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        if (response.status === 404) {
-          task.status = 'failed';
-          task.error = 'Task tidak ditemukan';
+        if (response.status === 404 || response.status === 401) {
+          state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
+          _activePolls.delete(taskId);
+          savePendingTasks();
           render();
           return;
         }
@@ -7628,6 +7655,8 @@ function pollVidgen3Task(taskId, model) {
           });
         }
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
         showToast('Video berhasil di-generate!', 'success');
         render();
         return;
@@ -7636,6 +7665,8 @@ function pollVidgen3Task(taskId, model) {
       if (data.status === 'failed') {
         task.error = data.error || 'Generation gagal';
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
         showToast('Gagal generate video', 'error');
         render();
         return;
@@ -7651,8 +7682,10 @@ function pollVidgen3Task(taskId, model) {
       if (attempts < maxAttempts) {
         setTimeout(poll, 5000);
       } else {
-        task.status = 'failed';
-        task.error = 'Timeout';
+        state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        showToast('Timeout - video generation terlalu lama', 'error');
         render();
       }
     } catch (error) {
