@@ -53,6 +53,19 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - SSE events: vidgen3_completed, vidgen3_failed
   - Video history persistence in database
   - Webhook integration for real-time task completion
+- **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
+  - 2 AI models:
+    - Sora 2 Stable (720p, 10/15 seconds, text-to-video + image-to-video, style presets)
+    - Veo 3.1 Fast (max 4K, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
+  - Sora 2 Stable playground: aspect_ratio (16:9/9:16), duration (10/15s), style (none/anime/comic/news/selfie/nostalgic/thanksgiving), storyboard, watermark
+  - Veo 3.1 Fast playground: aspect_ratio (16:9/9:16), duration (8s fixed), resolution (720p/1080p/4k), generation_type (frame/reference), enable_gif
+  - Database tables: vidgen2_rooms, vidgen2_tasks
+  - Room assignment via vidgen2_room_id in subscriptions
+  - Poyo AI API: POST /api/generate/submit to create, GET /api/generate/status/{task_id} to poll
+  - Request format: { model, input: { prompt, duration, aspect_ratio, image_urls, resolution, generation_type, enable_gif, style, storyboard } }
+  - Response format: { code: 200, data: { task_id, status } }, poll: { code: 200, data: { status, progress, files: [{ file_url }] } }
+  - Video history persistence in database
+  - 4-minute cooldown timer between generations
 - **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 VIP (720p, 10/15 seconds, text-to-video + image-to-video, premium quality)
@@ -97,7 +110,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
   - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
   - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
-- **Server-Side Background Polling**: All generation tasks (vidgen3, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, and Freepik APIs.
+- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen3, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, and Freepik APIs.
 
 ## External Dependencies
 - **Database**: PostgreSQL
@@ -105,6 +118,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - ElevenLabs API (for speech-to-text transcription)
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
+    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)

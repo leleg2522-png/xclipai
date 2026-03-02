@@ -216,6 +216,15 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, ximage_room_id
     `, [cutoffTime]);
     
+    // Clean inactive users from Vidgen2 rooms
+    const inactiveVidgen2 = await pool.query(`
+      UPDATE subscriptions 
+      SET vidgen2_room_id = NULL 
+      WHERE vidgen2_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, vidgen2_room_id
+    `, [cutoffTime]);
+    
     // Clean inactive users from Vidgen4 rooms
     const inactiveVidgen4 = await pool.query(`
       UPDATE subscriptions 
@@ -240,6 +249,16 @@ async function cleanupInactiveUsers() {
       UPDATE vidgen3_rooms r SET active_users = (
         SELECT COUNT(*) FROM subscriptions s 
         WHERE s.vidgen3_room_id = r.id
+        AND s.status = 'active' 
+        AND s.expired_at > NOW()
+      )
+    `).catch(() => {});
+    
+    // Update active_users in vidgen2_rooms table
+    await pool.query(`
+      UPDATE vidgen2_rooms r SET active_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.vidgen2_room_id = r.id
         AND s.status = 'active' 
         AND s.expired_at > NOW()
       )
@@ -284,9 +303,9 @@ async function cleanupInactiveUsers() {
       )
     `).catch(() => {});
     
-    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen3.rowCount + inactiveXimage.rowCount + inactiveVidgen4.rowCount;
+    const totalCleaned = inactiveVideoGen.rowCount + inactiveVidgen2.rowCount + inactiveVidgen3.rowCount + inactiveXimage.rowCount + inactiveVidgen4.rowCount;
     if (totalCleaned > 0) {
-      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen3=${inactiveVidgen3.rowCount}, Vidgen4=${inactiveVidgen4.rowCount}, XImage=${inactiveXimage.rowCount}`);
+      console.log(`Cleaned up inactive users: VideoGen=${inactiveVideoGen.rowCount}, Vidgen2=${inactiveVidgen2.rowCount}, Vidgen3=${inactiveVidgen3.rowCount}, Vidgen4=${inactiveVidgen4.rowCount}, XImage=${inactiveXimage.rowCount}`);
     }
   } catch (error) {
     console.error('Cleanup inactive users error:', error);
@@ -2324,6 +2343,13 @@ const RATE_LIMIT_CONFIG = {
     jitterMaxMs: 5000,
     label: 'Motion'
   },
+  vidgen2: {
+    cooldownMs: 240 * 1000,
+    dailyQuotaPerKey: 50,
+    jitterMinMs: 1000,
+    jitterMaxMs: 3000,
+    label: 'Vidgen2'
+  },
   vidgen4: {
     cooldownMs: 240 * 1000,
     dailyQuotaPerKey: 50,
@@ -2782,6 +2808,7 @@ setInterval(async () => {
 async function resumePendingTaskPolling() {
   try {
     const tables = [
+      { table: 'vidgen2_tasks', apiType: 'poyo', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'ximage_history', apiType: 'kie-ximage', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
@@ -2801,6 +2828,15 @@ async function resumePendingTaskPolling() {
 
           if (keyCol && row[keyCol]) {
             apiKey = process.env[row[keyCol]];
+          }
+          if (!apiKey && (apiType === 'poyo')) {
+            outer_poyo: for (let r = 1; r <= 3; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
+                if (pk) { apiKey = pk; break outer_poyo; }
+              }
+            }
+            if (!apiKey) apiKey = process.env.POYO_API_KEY;
           }
           if (!apiKey && (apiType === 'apimart')) {
             apiKey = process.env.APIMART_API_KEY;
@@ -5875,6 +5911,564 @@ const VIDGEN3_MODEL_CONFIGS = {
   }
 };
 
+// ============ VIDGEN2 (Poyo AI) ============
+
+async function getVidgen2RoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) {
+    return { error: 'Xclip API key tidak valid' };
+  }
+  
+  const subResult = await pool.query(`
+    SELECT s.vidgen2_room_id 
+    FROM subscriptions s 
+    WHERE s.user_id = $1 AND s.status = 'active' 
+    AND (s.expired_at IS NULL OR s.expired_at > NOW())
+    ORDER BY s.created_at DESC LIMIT 1
+  `, [keyInfo.user_id]);
+  
+  const vidgen2RoomId = subResult.rows[0]?.vidgen2_room_id || 1;
+  
+  const roomKeyPrefix = `VIDGEN2_ROOM${vidgen2RoomId}_KEY_`;
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
+  
+  if (availableKeys.length === 0) {
+    if (process.env.POYO_API_KEY) {
+      return { 
+        apiKey: process.env.POYO_API_KEY, 
+        keyName: 'POYO_API_KEY',
+        roomId: vidgen2RoomId,
+        userId: keyInfo.user_id,
+        keyInfoId: keyInfo.id
+      };
+    }
+    return { error: 'Tidak ada API key Vidgen2 yang tersedia. Hubungi admin.' };
+  }
+  
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { 
+    apiKey: process.env[randomKeyName], 
+    keyName: randomKeyName,
+    roomId: vidgen2RoomId,
+    userId: keyInfo.user_id,
+    keyInfoId: keyInfo.id
+  };
+}
+
+app.get('/api/vidgen2/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, active_users, status 
+      FROM vidgen2_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN2] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal load rooms' });
+  }
+});
+
+app.post('/api/vidgen2/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId } = req.body;
+    const targetRoom = roomId || 1;
+    
+    const roomResult = await pool.query(
+      'SELECT * FROM vidgen2_rooms WHERE id = $1',
+      [targetRoom]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN' || room.active_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room penuh atau tutup' });
+    }
+    
+    await pool.query(`
+      UPDATE subscriptions SET vidgen2_room_id = $1
+      WHERE user_id = $2 AND status = 'active'
+    `, [targetRoom, req.session.userId]);
+    
+    await pool.query(
+      'UPDATE vidgen2_rooms SET active_users = active_users + 1 WHERE id = $1',
+      [targetRoom]
+    );
+    
+    res.json({ success: true, roomId: targetRoom, roomName: room.name });
+  } catch (error) {
+    console.error('[VIDGEN2] Join room error:', error);
+    res.status(500).json({ error: 'Gagal join room' });
+  }
+});
+
+app.post('/api/vidgen2/generate', async (req, res) => {
+  try {
+    console.log('[VIDGEN2] Generate request received');
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      console.log('[VIDGEN2] Room key error:', roomKeyResult.error);
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    console.log('[VIDGEN2] Got room API key:', roomKeyResult.keyName);
+    
+    const vidgen2Cooldown = getUserCooldownRemaining(roomKeyResult.userId, 'vidgen2');
+    if (vidgen2Cooldown > 0) {
+      const cooldownSec = Math.ceil(vidgen2Cooldown / 1000);
+      return res.status(429).json({
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate video berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: vidgen2Cooldown
+      });
+    }
+    
+    const { model, prompt, image, startFrame, endFrame, referenceImage,
+            generationType, aspectRatio, duration, resolution, enableGif,
+            watermark, style, storyboard } = req.body;
+    
+    if (!prompt && !image && !startFrame && !referenceImage) {
+      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    }
+    
+    const modelConfig = {
+      'sora-2-stable': { 
+        apiModel: 'sora-2-stable', 
+        supportedDurations: [10, 15],
+        defaultDuration: 10,
+        supportedResolutions: ['720p'],
+        defaultResolution: '720p',
+        type: 'sora',
+        desc: 'Sora 2 Stable'
+      },
+      'veo3.1-fast': { 
+        apiModel: 'veo3.1-fast', 
+        supportedDurations: [8],
+        defaultDuration: 8,
+        supportedResolutions: ['720p', '1080p', '4k'],
+        defaultResolution: '720p',
+        type: 'veo',
+        desc: 'Veo 3.1 Fast max 4K'
+      }
+    };
+    
+    const config = modelConfig[model];
+    if (!config) {
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2-stable atau veo3.1-fast' });
+    }
+    
+    const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
+    const videoResolution = config.supportedResolutions.includes(resolution) ? resolution : config.defaultResolution;
+    const videoAspectRatio = aspectRatio || '16:9';
+    
+    console.log(`[VIDGEN2] Generating with Poyo AI model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
+    
+    const inputBody = {
+      prompt: prompt || 'Generate a cinematic video with smooth motion',
+      duration: videoDuration,
+      aspect_ratio: videoAspectRatio
+    };
+    
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+
+    if (config.type === 'sora') {
+      if (style && style !== 'none') inputBody.style = style;
+      if (storyboard !== undefined) inputBody.storyboard = storyboard;
+      inputBody.resolution = videoResolution;
+      
+      if (image) {
+        let imageUrl = image;
+        if (image.startsWith('data:')) {
+          const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
+          imageUrl = imageFile.publicUrl;
+          console.log(`[VIDGEN2] Sora image uploaded: ${imageUrl}`);
+        }
+        inputBody.image_urls = [imageUrl];
+      }
+    } else if (config.type === 'veo') {
+      inputBody.resolution = videoResolution;
+      if (enableGif !== undefined) inputBody.enable_gif = enableGif;
+      
+      if (generationType === 'frame') {
+        const frameUrls = [];
+        if (startFrame) {
+          let startUrl = startFrame;
+          if (startFrame.startsWith('data:')) {
+            const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
+            startUrl = sf.publicUrl;
+            console.log(`[VIDGEN2] Start frame uploaded: ${startUrl}`);
+          }
+          frameUrls.push(startUrl);
+        }
+        if (endFrame) {
+          let endUrl = endFrame;
+          if (endFrame.startsWith('data:')) {
+            const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
+            endUrl = ef.publicUrl;
+            console.log(`[VIDGEN2] End frame uploaded: ${endUrl}`);
+          }
+          frameUrls.push(endUrl);
+        }
+        if (frameUrls.length > 0) {
+          inputBody.image_urls = frameUrls;
+          inputBody.generation_type = 'frame';
+        }
+      } else if (generationType === 'reference') {
+        const refImg = referenceImage || image;
+        if (refImg) {
+          let refUrl = refImg;
+          if (refImg.startsWith('data:')) {
+            const rf = await saveBase64ToFile(refImg, 'image', baseUrl);
+            refUrl = rf.publicUrl;
+            console.log(`[VIDGEN2] Reference image uploaded: ${refUrl}`);
+          }
+          inputBody.image_urls = [refUrl];
+          inputBody.generation_type = 'reference';
+        }
+      }
+    }
+    
+    const requestBody = {
+      model: config.apiModel,
+      input: inputBody
+    };
+    
+    console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, input: { ...requestBody.input, image_urls: requestBody.input.image_urls ? ['[IMAGE]'] : undefined } }));
+    
+    const response = await axios.post(
+      'https://api.poyo.ai/api/generate/submit',
+      requestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${roomKeyResult.apiKey}`
+        },
+        timeout: 600000
+      }
+    );
+    
+    console.log(`[VIDGEN2] Poyo AI response:`, JSON.stringify(response.data));
+    
+    const taskId = response.data?.data?.task_id || 
+                   response.data?.task_id || 
+                   response.data?.id;
+    
+    if (!taskId) {
+      console.error('[VIDGEN2] No task ID in response:', response.data);
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari Poyo AI' });
+    }
+    
+    await pool.query(`
+      INSERT INTO vidgen2_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt, roomKeyResult.keyName,
+        JSON.stringify({ duration: videoDuration, aspectRatio: videoAspectRatio, resolution: videoResolution, style: style || null })]);
+    
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [roomKeyResult.keyInfoId]
+    );
+    
+    setUserCooldown(roomKeyResult.userId, 'vidgen2');
+    
+    console.log(`[VIDGEN2] Task created: ${taskId}`);
+    
+    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+      dbTable: 'vidgen2_tasks',
+      urlColumn: 'video_url',
+      model: model
+    });
+    
+    res.json({
+      success: true,
+      taskId: taskId,
+      model: model,
+      cooldown: Math.ceil(RATE_LIMIT_CONFIG.vidgen2.cooldownMs / 1000),
+      message: 'Video generation dimulai'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN2] Generate error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.error?.message || error.response?.data?.message || 'Gagal generate video' 
+    });
+  }
+});
+
+app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const { taskId } = req.params;
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const localTask = await pool.query(
+      'SELECT * FROM vidgen2_tasks WHERE task_id = $1 AND xclip_api_key_id = $2',
+      [taskId, keyInfo.id]
+    );
+    
+    if (localTask.rows.length === 0) {
+      return res.status(404).json({ error: 'Task tidak ditemukan' });
+    }
+    
+    const task = localTask.rows[0];
+    
+    if (task.status === 'completed') {
+      return res.json({
+        status: 'completed',
+        videoUrl: task.video_url,
+        model: task.model
+      });
+    }
+    
+    if (task.status === 'failed') {
+      return res.json({
+        status: 'failed',
+        error: task.error_message || 'Video generation failed'
+      });
+    }
+    
+    const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
+    if (!roomKeyResult.error) {
+      try {
+        console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
+        
+        const statusResponse = await axios.get(
+          `https://api.poyo.ai/api/generate/status/${taskId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${roomKeyResult.apiKey}`
+            },
+            timeout: 30000
+          }
+        );
+        
+        console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
+        
+        const rawData = statusResponse.data;
+        const data = rawData.data || rawData;
+        const status = data.status || data.state;
+        
+        if (status === 'completed' || status === 'finished' || status === 'success') {
+          let videoUrl = null;
+          if (data.files && data.files.length > 0) {
+            const f = data.files[0];
+            videoUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.video_url);
+          } else if (data.video_url) {
+            videoUrl = data.video_url;
+          } else if (data.output?.video_url) {
+            videoUrl = data.output.video_url;
+          } else if (data.url) {
+            videoUrl = data.url;
+          }
+          
+          if (videoUrl) {
+            console.log(`[VIDGEN2] Video URL found: ${videoUrl}`);
+            
+            await pool.query(
+              'UPDATE vidgen2_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+              ['completed', videoUrl, taskId]
+            );
+            
+            return res.json({
+              status: 'completed',
+              videoUrl: videoUrl,
+              model: task.model
+            });
+          }
+        }
+        
+        if (status === 'failed' || status === 'error') {
+          const errorMsg = data.error?.message || data.error_message || data.message || 'Generation failed';
+          console.log(`[VIDGEN2] Task failed: ${errorMsg}`);
+          
+          await pool.query(
+            'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+            ['failed', errorMsg, taskId]
+          );
+          
+          return res.json({
+            status: 'failed',
+            error: errorMsg
+          });
+        }
+        
+        const progress = data.progress || 0;
+        return res.json({
+          status: 'processing',
+          progress: progress,
+          message: status === 'processing' ? 'Video sedang diproses...' : 'Menunggu antrian...'
+        });
+        
+      } catch (pollError) {
+        console.error('[VIDGEN2] Poll error:', pollError.response?.data || pollError.message);
+      }
+    }
+    
+    res.json({
+      status: 'pending',
+      message: 'Menunggu status dari Poyo AI...'
+    });
+    
+  } catch (error) {
+    console.error('[VIDGEN2] Task status error:', error.message);
+    res.status(500).json({ error: 'Gagal cek status task' });
+  }
+});
+
+app.get('/api/vidgen2/history', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const result = await pool.query(
+      `SELECT task_id, model, prompt, status, video_url, created_at, completed_at 
+       FROM vidgen2_tasks 
+       WHERE user_id = $1 AND status = 'completed' AND video_url IS NOT NULL
+       ORDER BY completed_at DESC LIMIT 20`,
+      [keyInfo.user_id]
+    );
+    
+    res.json({ videos: result.rows });
+  } catch (error) {
+    console.error('[VIDGEN2] History error:', error.message);
+    res.status(500).json({ error: 'Gagal load history' });
+  }
+});
+
+app.get('/api/vidgen2/proxy-video', async (req, res) => {
+  try {
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    
+    const response = await axios.get(videoUrl, {
+      responseType: 'stream',
+      timeout: 600000
+    });
+    
+    const contentType = response.headers['content-type'] || 'video/mp4';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('[VIDGEN2] Video proxy error:', error.message);
+    res.status(500).json({ error: 'Gagal memuat video' });
+  }
+});
+
+app.get('/api/vidgen2/download', async (req, res) => {
+  try {
+    const videoUrl = req.query.url;
+    if (!videoUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    
+    const response = await axios.get(videoUrl, {
+      responseType: 'stream',
+      timeout: 600000
+    });
+    
+    res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+    res.setHeader('Content-Disposition', 'attachment; filename="vidgen2_video.mp4"');
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
+    }
+    
+    response.data.pipe(res);
+  } catch (error) {
+    console.error('[VIDGEN2] Download proxy error:', error.message);
+    res.status(500).json({ error: 'Gagal download video' });
+  }
+});
+
+app.delete('/api/vidgen2/history/:taskId', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const { taskId } = req.params;
+    const result = await pool.query(
+      'DELETE FROM vidgen2_tasks WHERE task_id = $1 AND user_id = $2',
+      [taskId, keyInfo.user_id]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Video tidak ditemukan' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[VIDGEN2] Delete error:', error.message);
+    res.status(500).json({ error: 'Gagal hapus video' });
+  }
+});
+
+app.delete('/api/vidgen2/history', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    await pool.query(
+      'DELETE FROM vidgen2_tasks WHERE user_id = $1',
+      [keyInfo.user_id]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[VIDGEN2] Clear history error:', error.message);
+    res.status(500).json({ error: 'Gagal hapus semua history' });
+  }
+});
+
 // ============ VIDGEN4 (Apimart.ai) ============
 
 async function getVidgen4RoomApiKey(xclipApiKey) {
@@ -8658,6 +9252,7 @@ async function initDatabase() {
         error_message TEXT,
         key_index INTEGER,
         used_key_name VARCHAR(100),
+        metadata JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         completed_at TIMESTAMP
       )

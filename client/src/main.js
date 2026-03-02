@@ -38,7 +38,7 @@ async function refreshSubscriptionSilent() {
 function savePendingTasks() {
   try {
     const pending = {};
-    const features = ['vidgen3', 'vidgen4', 'ximage', 'ximage2', 'videogen', 'motion'];
+    const features = ['vidgen2', 'vidgen3', 'vidgen4', 'ximage', 'ximage2', 'videogen', 'motion'];
     features.forEach(f => {
       if (state[f] && state[f].tasks && state[f].tasks.length > 0) {
         pending[f] = state[f].tasks.filter(t => t.status !== 'completed' && t.status !== 'failed').map(t => ({
@@ -88,6 +88,7 @@ function recoverPendingTasks() {
       });
     };
     
+    tryRecover('vidgen2', pending.vidgen2, (t) => pollVidgen2Task(t.taskId));
     tryRecover('vidgen3', pending.vidgen3, (t) => pollVidgen3Task(t.taskId, t.model));
     tryRecover('vidgen4', pending.vidgen4, (t) => pollVidgen4Task(t.taskId));
     tryRecover('ximage', pending.ximage, (t) => pollXImageTask(t.taskId));
@@ -203,6 +204,39 @@ const state = {
     cooldownRemaining: 0
   },
   vidgen3RoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
+  vidgen2: {
+    sourceImage: null,
+    startFrame: null,
+    endFrame: null,
+    generationType: 'reference',
+    prompt: '',
+    selectedModel: 'sora-2-stable',
+    aspectRatio: '16:9',
+    duration: 10,
+    resolution: '720p',
+    watermark: false,
+    style: 'none',
+    storyboard: false,
+    enableGif: false,
+    isGenerating: false,
+    isPolling: false,
+    tasks: [],
+    generatedVideos: [],
+    error: null,
+    customApiKey: '',
+    selectedRoom: null,
+    cooldownEndTime: parseInt(localStorage.getItem('vidgen2_cooldown') || '0'),
+    cooldownRemaining: 0,
+    _historyLoaded: false
+  },
+  vidgen2RoomManager: {
     rooms: [],
     subscription: null,
     hasSubscription: false,
@@ -395,6 +429,8 @@ const PERSIST_KEYS = {
   ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality', 'modelVariant', 'renderingSpeed', 'imageStyle', 'acceleration'],
   chat: ['selectedModel'],
   vidgen3RoomManager: ['xclipApiKey'],
+  vidgen2: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
+  vidgen2RoomManager: ['xclipApiKey'],
   vidgen4: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'thumbnail', 'isPrivate', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
   vidgen4RoomManager: ['xclipApiKey'],
   ximageRoomManager: ['xclipApiKey'],
@@ -1598,6 +1634,65 @@ async function loadVidgen3History() {
   }
 }
 
+async function loadVidgen2Rooms() {
+  state.vidgen2RoomManager.isLoading = true;
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen2/rooms`, { credentials: 'include' });
+    const data = await res.json();
+    state.vidgen2RoomManager.rooms = data.rooms || [];
+  } catch (e) {
+    state.vidgen2RoomManager.rooms = [];
+  }
+  state.vidgen2RoomManager.isLoading = false;
+}
+
+async function joinVidgen2Room(roomId) {
+  state.vidgen2RoomManager.isLoading = true;
+  render();
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen2/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ roomId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.vidgen2.selectedRoom = roomId;
+      state.vidgen2RoomManager.showRoomModal = false;
+      showToast(`Bergabung ke ${data.roomName}`, 'success');
+      await loadVidgen2Rooms();
+    } else {
+      showToast(data.error || 'Gagal join room', 'error');
+    }
+  } catch (e) {
+    showToast('Gagal join room', 'error');
+  }
+  state.vidgen2RoomManager.isLoading = false;
+  render();
+}
+
+async function loadVidgen2History() {
+  try {
+    if (!state.vidgen2.customApiKey) return;
+    const res = await fetch(`${API_URL}/api/vidgen2/history`, {
+      headers: { 'X-Xclip-Key': state.vidgen2.customApiKey }
+    });
+    const data = await res.json();
+    if (data.videos) {
+      state.vidgen2.generatedVideos = data.videos.map(v => ({
+        id: v.task_id,
+        url: v.video_url,
+        model: v.model,
+        prompt: v.prompt,
+        createdAt: new Date(v.completed_at || v.created_at)
+      }));
+    }
+  } catch (e) {
+    console.error('Load vidgen2 history error:', e);
+  }
+}
+
 async function loadVidgen4Rooms() {
   state.vidgen4RoomManager.isLoading = true;
   try {
@@ -2594,6 +2689,14 @@ function renderNavMenu() {
       </svg>
       Voice Over
     </button>
+    <button class="nav-btn ${state.currentPage === 'vidgen2' ? 'active' : ''}" data-page="vidgen2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+        <line x1="19" y1="8" x2="19" y2="16" stroke-width="2"/>
+        <line x1="22" y1="6" x2="22" y2="18" stroke-width="2"/>
+      </svg>
+      Vidgen2
+    </button>
     <button class="nav-btn ${state.currentPage === 'vidgen3' ? 'active' : ''}" data-page="vidgen3">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="5 3 19 12 5 21 5 3"/>
@@ -2702,6 +2805,7 @@ function renderMainContent() {
     ${state.currentPage === 'admin' ? renderAdminPage() : renderFeatureLock()}
     ${state.currentPage === 'video' ? renderVideoPage() : 
       state.currentPage === 'videogen' ? renderVideoGenPage() : 
+      state.currentPage === 'vidgen2' ? renderVidgen2Page() :
       state.currentPage === 'vidgen3' ? renderVidgen3Page() :
       state.currentPage === 'vidgen4' ? renderVidgen4Page() :
       state.currentPage === 'ximage' ? renderXImagePage() :
@@ -6080,6 +6184,8 @@ function attachEventListeners() {
     attachChatEventListeners();
   } else if (state.currentPage === 'videogen') {
     attachVideoGenEventListeners();
+  } else if (state.currentPage === 'vidgen2') {
+    attachVidgen2EventListeners();
   } else if (state.currentPage === 'vidgen4') {
     attachVidgen4EventListeners();
   } else if (state.currentPage === 'vidgen3') {
@@ -6339,6 +6445,904 @@ function attachVideoGenEventListeners() {
   }
 }
 
+
+function renderVidgen2Page() {
+  const isSora2 = state.vidgen2.selectedModel === 'sora-2-stable';
+  const isVeo = state.vidgen2.selectedModel === 'veo3.1-fast';
+  const models = [
+    { id: 'sora-2-stable', name: 'Sora 2 Stable', desc: 'Video 10-15 detik, 720p, style presets', badge: 'STABLE', icon: '🎬' },
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 4K, start/end frame', badge: 'FAST', icon: '⚡' }
+  ];
+  
+  const durationOptions = isSora2 ? [10, 15] : [8];
+  const resolutionOptions = isVeo ? ['720p', '1080p', '4k'] : ['720p'];
+  
+  const styleOptions = [
+    { value: 'none', label: 'None' },
+    { value: 'anime', label: 'Anime' },
+    { value: 'comic', label: 'Comic' },
+    { value: 'news', label: 'News' },
+    { value: 'selfie', label: 'Selfie' },
+    { value: 'nostalgic', label: 'Nostalgic' },
+    { value: 'thanksgiving', label: 'Thanksgiving' }
+  ];
+  
+  return `
+    <div class="container">
+      <div class="hero">
+        <div class="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Vidgen2 - AI Video
+        </div>
+        <h1 class="hero-title">
+          <span class="gradient-text">Vidgen2</span> AI Video
+        </h1>
+        <p class="hero-subtitle">Poyo AI Video Generation</p>
+      </div>
+
+      <div class="xmaker-layout">
+        <div class="xmaker-settings">
+          ${isSora2 ? `
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Reference Image</h2>
+            </div>
+            <div class="card-body">
+              <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
+                ${state.vidgen2.sourceImage ? `
+                  <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
+                  <button class="remove-reference" id="removeVidgen2Image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Klik untuk upload gambar (opsional)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                  </div>
+                `}
+              </div>
+              <input type="file" id="vidgen2ImageInput" accept="image/*" style="display: none">
+            </div>
+          </div>
+          ` : `
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Image to Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Generation Type</label>
+                <div class="aspect-ratio-selector">
+                  <button class="aspect-btn ${state.vidgen2.generationType === 'frame' ? 'active' : ''}" data-vidgen2-gentype="frame">
+                    <span>🎞️ Start/End Frame</span>
+                  </button>
+                  <button class="aspect-btn ${state.vidgen2.generationType === 'reference' ? 'active' : ''}" data-vidgen2-gentype="reference">
+                    <span>🖼️ Reference</span>
+                  </button>
+                </div>
+                <p class="setting-hint">${state.vidgen2.generationType === 'frame' ? 'Upload start frame dan end frame untuk mengontrol awal & akhir video' : 'Upload gambar referensi untuk gaya video'}</p>
+              </div>
+
+              ${state.vidgen2.generationType === 'frame' ? `
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:0;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">Start Frame</label>
+                  <div class="reference-upload ${state.vidgen2.startFrame ? 'has-image' : ''}" id="vidgen2StartFrameZone" style="min-height:100px;">
+                    ${state.vidgen2.startFrame ? `
+                      <img src="${state.vidgen2.startFrame.data}" alt="Start" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen2StartFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 8 16 12"/>
+                          <line x1="12" y1="16" x2="12" y2="8"/>
+                        </svg>
+                        <span style="font-size:11px;">Start Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen2StartFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">End Frame</label>
+                  <div class="reference-upload ${state.vidgen2.endFrame ? 'has-image' : ''}" id="vidgen2EndFrameZone" style="min-height:100px;">
+                    ${state.vidgen2.endFrame ? `
+                      <img src="${state.vidgen2.endFrame.data}" alt="End" class="reference-preview">
+                      <button class="remove-reference" id="removeVidgen2EndFrame">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    ` : `
+                      <div class="reference-placeholder" style="padding:12px;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <polyline points="8 12 12 16 16 12"/>
+                          <line x1="12" y1="8" x2="12" y2="16"/>
+                        </svg>
+                        <span style="font-size:11px;">End Frame</span>
+                      </div>
+                    `}
+                  </div>
+                  <input type="file" id="vidgen2EndFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
+                </div>
+              </div>
+              ` : `
+              <div style="margin-top:8px;">
+                <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
+                  ${state.vidgen2.sourceImage ? `
+                    <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
+                    <button class="remove-reference" id="removeVidgen2Image">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  ` : `
+                    <div class="reference-placeholder">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>Klik untuk upload referensi (opsional)</span>
+                      <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                    </div>
+                  `}
+                </div>
+                <input type="file" id="vidgen2ImageInput" accept="image/*" style="display: none">
+              </div>
+              `}
+            </div>
+          </div>
+          `}
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pilih Model</h2>
+            </div>
+            <div class="card-body">
+              <div class="model-selector-grid">
+                ${models.map(model => `
+                  <div class="model-card ${state.vidgen2.selectedModel === model.id ? 'active' : ''}" data-vidgen2-model="${model.id}">
+                    <div class="model-card-icon">${model.icon}</div>
+                    <div class="model-card-info">
+                      <div class="model-card-name">${model.name}</div>
+                      <div class="model-card-desc">${model.desc}</div>
+                    </div>
+                    ${model.badge ? `<span class="model-card-badge ${model.badge.toLowerCase()}">${model.badge}</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Pengaturan Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="setting-group">
+                <label class="setting-label">Aspect Ratio</label>
+                <div class="aspect-ratio-selector">
+                  ${['16:9', '9:16'].map(ratio => `
+                    <button class="aspect-btn ${state.vidgen2.aspectRatio === ratio ? 'active' : ''}" data-vidgen2-ratio="${ratio}">
+                      <div class="aspect-preview aspect-${ratio.replace(':', '-')}"></div>
+                      <span>${ratio}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Duration</label>
+                <div class="aspect-ratio-selector">
+                  ${durationOptions.map(d => `
+                    <button class="aspect-btn ${state.vidgen2.duration === d ? 'active' : ''}" data-vidgen2-duration="${d}">
+                      <span>${d}s</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              ${resolutionOptions.length > 1 ? `
+              <div class="setting-group">
+                <label class="setting-label">Resolution</label>
+                <div class="aspect-ratio-selector">
+                  ${resolutionOptions.map(r => `
+                    <button class="aspect-btn ${state.vidgen2.resolution === r ? 'active' : ''}" data-vidgen2-resolution="${r}">
+                      <span>${r}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+              ` : ''}
+
+              ${isSora2 ? `
+              <div class="setting-group">
+                <label class="setting-label">Video Style</label>
+                <select class="form-select" id="vidgen2StyleSelect">
+                  ${styleOptions.map(s => `
+                    <option value="${s.value}" ${state.vidgen2.style === s.value ? 'selected' : ''}>${s.label}</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">Sora 2 Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Watermark</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen2Watermark" ${state.vidgen2.watermark ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen2.watermark ? 'active' : ''}" data-vidgen2-toggle="watermark" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.watermark ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.watermark ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Storyboard</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen2Storyboard" ${state.vidgen2.storyboard ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen2.storyboard ? 'active' : ''}" data-vidgen2-toggle="storyboard" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.storyboard ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.storyboard ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              ` : ''}
+
+              ${isVeo ? `
+              <div class="setting-group">
+                <label class="setting-label">Veo 3.1 Options</label>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
+                    <span style="font-size:13px;opacity:0.85;">Enable GIF</span>
+                    <div class="toggle-switch-wrapper">
+                      <input type="checkbox" id="vidgen2EnableGif" ${state.vidgen2.enableGif ? 'checked' : ''} style="display:none;">
+                      <div class="toggle-track ${state.vidgen2.enableGif ? 'active' : ''}" data-vidgen2-toggle="enableGif" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.enableGif ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
+                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.enableGif ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                ${state.vidgen2.enableGif ? `<p class="setting-hint" style="color:#f59e0b;margin-top:4px;">⚠️ GIF tidak bisa digunakan dengan resolusi 1080p/4K</p>` : ''}
+              </div>
+              ` : ''}
+
+              <div class="setting-group">
+                <label class="setting-label">Prompt</label>
+                <textarea 
+                  class="form-textarea" 
+                  id="vidgen2Prompt" 
+                  placeholder="Deskripsikan video yang ingin dibuat..."
+                  rows="3"
+                >${state.vidgen2.prompt}</textarea>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  Room
+                </label>
+                <select class="form-select" id="vidgen2RoomSelect">
+                  <option value="">-- Pilih Room --</option>
+                  ${state.vidgen2RoomManager.rooms.map(room => `
+                    <option value="${room.id}" ${state.vidgen2.selectedRoom == room.id ? 'selected' : ''}>
+                      ${room.name} (${room.active_users}/${room.max_users} users)
+                    </option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <div class="setting-group">
+                <label class="setting-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Xclip API Key
+                </label>
+                <input 
+                  type="password" 
+                  class="form-input" 
+                  id="vidgen2ApiKey" 
+                  placeholder="Masukkan Xclip API key..."
+                  value="${state.vidgen2.customApiKey}"
+                >
+                <p class="setting-hint">Buat Xclip API key di panel "Xclip Keys"</p>
+              </div>
+
+              ${(() => {
+                const now = Date.now();
+                const isOnCooldown = state.vidgen2.cooldownEndTime > now;
+                const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000) : 0;
+                const cooldownMins = Math.floor(cooldownSecs / 60);
+                const cooldownRemSecs = cooldownSecs % 60;
+                const hasImage = state.vidgen2.sourceImage || state.vidgen2.startFrame || state.vidgen2.endFrame;
+                const needsPrompt = !state.vidgen2.prompt.trim() && !hasImage;
+                const isDisabled = state.vidgen2.isGenerating || needsPrompt || state.vidgen2.tasks.length >= 3 || isOnCooldown;
+                
+                return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${isDisabled ? 'disabled' : ''}>
+                ${state.vidgen2.isGenerating ? `
+                  <div class="spinner"></div>
+                  <span>Generating...</span>
+                ` : isOnCooldown ? `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span>Cooldown ${cooldownMins}:${cooldownRemSecs.toString().padStart(2, '0')}</span>
+                ` : `
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span>Generate Video${state.vidgen2.tasks.length > 0 ? ' (' + state.vidgen2.tasks.length + '/3)' : ''}</span>
+                `}
+              </button>`;
+              })()}
+              ${!state.vidgen2.prompt.trim() && !state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
+              ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="xmaker-preview">
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Hasil Video</h2>
+            </div>
+            <div class="card-body">
+              ${renderVidgen2Tasks()}
+              ${renderVidgen2Videos()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderVidgen2Tasks() {
+  if (state.vidgen2.tasks.length === 0) return '';
+  
+  let html = '<div class="processing-tasks">';
+  html += '<div class="tasks-header"><span class="pulse-dot"></span> Sedang Diproses (' + state.vidgen2.tasks.length + '/3)</div>';
+  html += '<div class="tasks-list">';
+  
+  state.vidgen2.tasks.forEach(task => {
+    const elapsed = task.startTime ? Math.floor((Date.now() - task.startTime) / 1000) : 0;
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    html += '<div class="task-item">';
+    html += '<div class="task-info">';
+    html += '<span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + mins + ':' + secs.toString().padStart(2, '0') + '</span>';
+    html += '</div>';
+    html += '<div class="task-progress"><div class="task-progress-bar" style="width:' + (task.progress || 0) + '%"></div></div>';
+    html += '</div>';
+  });
+  
+  html += '</div></div>';
+  return html;
+}
+
+function getVidgen2ProxyUrl(originalUrl) {
+  if (!originalUrl) return '';
+  return API_URL + '/api/vidgen2/proxy-video?url=' + encodeURIComponent(originalUrl);
+}
+
+function renderVidgen2Videos() {
+  if (state.vidgen2.generatedVideos.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div><p>Belum ada video yang dihasilkan</p></div>';
+  }
+  
+  let html = '<div class="video-grid">';
+  state.vidgen2.generatedVideos.forEach(video => {
+    var proxyUrl = getVidgen2ProxyUrl(video.url);
+    html += '<div class="video-result-card" style="position:relative;">';
+    html += '<video controls playsinline preload="metadata" class="result-video" crossorigin="anonymous">';
+    html += '<source src="' + proxyUrl + '" type="video/mp4">';
+    html += '</video>';
+    html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<span class="video-model-tag">' + video.model + '</span>';
+    if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+    html += '<a href="/api/vidgen2/download?url=' + encodeURIComponent(video.url) + '" download="vidgen2_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen2Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    html += '</a>';
+    html += '<button class="btn-icon deleteVidgen2Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    html += '</button>';
+    html += '</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+let vidgen2CooldownInterval = null;
+
+function startVidgen2CooldownTimer() {
+  if (vidgen2CooldownInterval) clearInterval(vidgen2CooldownInterval);
+  vidgen2CooldownInterval = setInterval(() => {
+    const now = Date.now();
+    if (state.vidgen2.cooldownEndTime <= now) {
+      clearInterval(vidgen2CooldownInterval);
+      vidgen2CooldownInterval = null;
+      state.vidgen2.cooldownEndTime = 0;
+      localStorage.removeItem('vidgen2_cooldown');
+      if (state.currentPage === 'vidgen2') render();
+    } else if (state.currentPage === 'vidgen2') {
+      render();
+    }
+  }, 1000);
+}
+
+function attachVidgen2EventListeners() {
+  if (state.vidgen2RoomManager.rooms.length === 0 && !state.vidgen2RoomManager.isLoading) {
+    loadVidgen2Rooms().then(() => render());
+  }
+  
+  if (!state.vidgen2._historyLoaded && state.vidgen2.customApiKey) {
+    state.vidgen2._historyLoaded = true;
+    loadVidgen2History().then(() => render());
+  }
+  
+  if (state.vidgen2.cooldownEndTime > Date.now() && !vidgen2CooldownInterval) {
+    startVidgen2CooldownTimer();
+  }
+  
+  const uploadZone = document.getElementById('vidgen2UploadZone');
+  const imageInput = document.getElementById('vidgen2ImageInput');
+  const removeImageBtn = document.getElementById('removeVidgen2Image');
+  const generateBtn = document.getElementById('generateVidgen2Btn');
+  const promptInput = document.getElementById('vidgen2Prompt');
+  const apiKeyInput = document.getElementById('vidgen2ApiKey');
+  
+  if (uploadZone && imageInput) {
+    uploadZone.addEventListener('click', () => imageInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleVidgen2ImageUpload({ target: { files: e.dataTransfer.files } });
+      }
+    });
+    imageInput.addEventListener('change', handleVidgen2ImageUpload);
+  }
+  
+  if (removeImageBtn) {
+    removeImageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen2.sourceImage = null;
+      render();
+    });
+  }
+
+  const startFrameZone = document.getElementById('vidgen2StartFrameZone');
+  const startFrameInput = document.getElementById('vidgen2StartFrameInput');
+  const removeStartFrame = document.getElementById('removeVidgen2StartFrame');
+  if (startFrameZone && startFrameInput) {
+    startFrameZone.addEventListener('click', () => startFrameInput.click());
+    startFrameInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        state.vidgen2.startFrame = { file, data: ev.target.result, name: file.name };
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  if (removeStartFrame) {
+    removeStartFrame.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen2.startFrame = null;
+      render();
+    });
+  }
+
+  const endFrameZone = document.getElementById('vidgen2EndFrameZone');
+  const endFrameInput = document.getElementById('vidgen2EndFrameInput');
+  const removeEndFrame = document.getElementById('removeVidgen2EndFrame');
+  if (endFrameZone && endFrameInput) {
+    endFrameZone.addEventListener('click', () => endFrameInput.click());
+    endFrameInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        state.vidgen2.endFrame = { file, data: ev.target.result, name: file.name };
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  if (removeEndFrame) {
+    removeEndFrame.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen2.endFrame = null;
+      render();
+    });
+  }
+  
+  if (generateBtn) {
+    generateBtn.addEventListener('click', generateVidgen2Video);
+  }
+  
+  if (promptInput) {
+    promptInput.addEventListener('input', (e) => {
+      state.vidgen2.prompt = e.target.value;
+      saveUserInputs('vidgen2');
+    });
+  }
+  
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', (e) => {
+      state.vidgen2.customApiKey = e.target.value;
+      saveUserInputs('vidgen2');
+      state.vidgen2._historyLoaded = false;
+    });
+  }
+
+  const vidgen2StyleSelect = document.getElementById('vidgen2StyleSelect');
+  if (vidgen2StyleSelect) {
+    vidgen2StyleSelect.addEventListener('change', (e) => {
+      state.vidgen2.style = e.target.value;
+    });
+  }
+
+  document.querySelectorAll('[data-vidgen2-toggle]').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const field = toggle.getAttribute('data-vidgen2-toggle');
+      state.vidgen2[field] = !state.vidgen2[field];
+      render();
+    });
+  });
+
+  
+  if (!window._vidgen2DelegationAttached) {
+    window._vidgen2DelegationAttached = true;
+    
+    document.addEventListener('click', function(e) {
+      const modelCard = e.target.closest('[data-vidgen2-model]');
+      if (modelCard && state.currentPage === 'vidgen2') {
+        const newModel = modelCard.dataset.vidgen2Model;
+        state.vidgen2.selectedModel = newModel;
+        const validDurations = newModel === 'sora-2-stable' ? [10, 15] : [8];
+        if (!validDurations.includes(state.vidgen2.duration)) {
+          state.vidgen2.duration = validDurations[0];
+        }
+        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p', '4k'] : ['720p'];
+        if (!validResolutions.includes(state.vidgen2.resolution)) {
+          state.vidgen2.resolution = validResolutions[0];
+        }
+        saveUserInputs('vidgen2');
+        render();
+        return;
+      }
+      
+      const ratioBtn = e.target.closest('[data-vidgen2-ratio]');
+      if (ratioBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.aspectRatio = ratioBtn.dataset.vidgen2Ratio;
+        saveUserInputs('vidgen2');
+        render();
+        return;
+      }
+      
+      const durationBtn = e.target.closest('[data-vidgen2-duration]');
+      if (durationBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.duration = parseInt(durationBtn.dataset.vidgen2Duration);
+        saveUserInputs('vidgen2');
+        render();
+        return;
+      }
+
+      const resolutionBtn = e.target.closest('[data-vidgen2-resolution]');
+      if (resolutionBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.resolution = resolutionBtn.dataset.vidgen2Resolution;
+        saveUserInputs('vidgen2');
+        render();
+        return;
+      }
+
+      const genTypeBtn = e.target.closest('[data-vidgen2-gentype]');
+      if (genTypeBtn && state.currentPage === 'vidgen2') {
+        state.vidgen2.generationType = genTypeBtn.dataset.vidgen2Gentype;
+        render();
+        return;
+      }
+
+      const deleteBtn = e.target.closest('.deleteVidgen2Video');
+      if (deleteBtn && state.currentPage === 'vidgen2') {
+        const taskId = deleteBtn.dataset.taskId;
+        if (confirm('Hapus video ini secara permanen?')) {
+          deleteVidgen2Video(taskId);
+        }
+        return;
+      }
+      
+    });
+  }
+  
+  const roomSelect = document.getElementById('vidgen2RoomSelect');
+  if (roomSelect) {
+    roomSelect.addEventListener('change', async (e) => {
+      const roomId = e.target.value;
+      if (roomId) {
+        state.vidgen2.selectedRoom = parseInt(roomId);
+        await joinVidgen2Room(parseInt(roomId));
+      } else {
+        state.vidgen2.selectedRoom = null;
+      }
+    });
+  }
+}
+
+async function deleteVidgen2Video(taskId) {
+  try {
+    const res = await fetch(`${API_URL}/api/vidgen2/history/${taskId}`, {
+      method: 'DELETE',
+      headers: { 'X-Xclip-Key': state.vidgen2.customApiKey }
+    });
+    const data = await res.json();
+    if (data.success) {
+      state.vidgen2.generatedVideos = state.vidgen2.generatedVideos.filter(v => v.id !== taskId);
+      render();
+    } else {
+      alert(data.error || 'Gagal hapus video');
+    }
+  } catch (e) {
+    alert('Gagal hapus video');
+  }
+}
+
+function handleVidgen2ImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Hanya file gambar yang diperbolehkan');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.vidgen2.sourceImage = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateVidgen2Video() {
+  const hasAnyImage = state.vidgen2.sourceImage || state.vidgen2.startFrame || state.vidgen2.endFrame;
+  if (!state.vidgen2.prompt.trim() && !hasAnyImage) {
+    alert('Masukkan prompt atau upload gambar');
+    return;
+  }
+  
+  if (!state.vidgen2.customApiKey) {
+    alert('Masukkan Xclip API Key');
+    return;
+  }
+  
+  if (state.vidgen2.tasks.length >= 3) {
+    alert('Maks 3 video bersamaan. Tunggu salah satu selesai.');
+    return;
+  }
+  
+  const now = Date.now();
+  if (state.vidgen2.cooldownEndTime > now) {
+    const remaining = Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    alert(`Cooldown aktif. Tunggu ${mins}:${secs.toString().padStart(2, '0')} lagi.`);
+    return;
+  }
+  
+  state.vidgen2.isGenerating = true;
+  state.vidgen2.error = null;
+  render();
+  
+  try {
+    const response = await fetch(`${API_URL}/api/vidgen2/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Xclip-Key': state.vidgen2.customApiKey
+      },
+      body: JSON.stringify({
+        model: state.vidgen2.selectedModel,
+        prompt: state.vidgen2.prompt,
+        image: state.vidgen2.selectedModel === 'sora-2-stable' && state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
+        startFrame: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'frame' && state.vidgen2.startFrame ? state.vidgen2.startFrame.data : null,
+        endFrame: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'frame' && state.vidgen2.endFrame ? state.vidgen2.endFrame.data : null,
+        referenceImage: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'reference' && state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
+        generationType: state.vidgen2.selectedModel === 'veo3.1-fast' ? state.vidgen2.generationType : undefined,
+        aspectRatio: state.vidgen2.aspectRatio,
+        duration: state.vidgen2.duration,
+        resolution: state.vidgen2.resolution,
+        enableGif: state.vidgen2.enableGif,
+        watermark: state.vidgen2.watermark,
+        style: state.vidgen2.style,
+        storyboard: state.vidgen2.storyboard,
+        roomId: state.vidgen2.selectedRoom
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Gagal generate video');
+    }
+    
+    state.vidgen2.tasks.push({
+      taskId: data.taskId,
+      model: state.vidgen2.selectedModel,
+      startTime: Date.now()
+    });
+    
+    const cooldownEnd = Date.now() + (3 * 60 * 1000);
+    state.vidgen2.cooldownEndTime = cooldownEnd;
+    localStorage.setItem('vidgen2_cooldown', cooldownEnd.toString());
+    startVidgen2CooldownTimer();
+    
+    savePendingTasks();
+    pollVidgen2Task(data.taskId);
+    
+  } catch (error) {
+    console.error('Vidgen2 error:', error);
+    state.vidgen2.error = error.message;
+    alert(error.message);
+  } finally {
+    state.vidgen2.isGenerating = false;
+    render();
+  }
+}
+
+async function pollVidgen2Task(taskId) {
+  const maxAttempts = 720;
+  let attempts = 0;
+  
+  const poll = async () => {
+    if (attempts >= maxAttempts) {
+      state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+      _activePolls.delete(taskId);
+      savePendingTasks();
+      state.vidgen2.error = 'Timeout - video generation terlalu lama';
+      showToast('Timeout - video generation terlalu lama', 'error');
+      render();
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/vidgen2/tasks/${taskId}`, {
+        headers: { 'X-Xclip-Key': state.vidgen2.customApiKey }
+      });
+      
+      if (!response.ok && (response.status === 404 || response.status === 401)) {
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        render();
+        return;
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 'completed' && data.videoUrl) {
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        state.vidgen2.generatedVideos.unshift({
+          id: taskId,
+          url: data.videoUrl,
+          model: data.model,
+          createdAt: new Date()
+        });
+        showToast('Video berhasil digenerate!', 'success');
+        render();
+        return;
+      }
+      
+      if (data.status === 'failed') {
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== taskId);
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        state.vidgen2.error = data.error || 'Video generation failed';
+        showToast(data.error || 'Video generation failed', 'error');
+        render();
+        return;
+      }
+      
+      const task = state.vidgen2.tasks.find(t => t.taskId === taskId);
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 2);
+        const progressEl = document.querySelector(`[data-task-id="${taskId}"] .task-progress-fill`);
+        const progressText = document.querySelector(`[data-task-id="${taskId}"] .task-progress-text`);
+        if (progressEl) progressEl.style.width = `${task.progress}%`;
+        if (progressText) progressText.textContent = `${task.progress}%`;
+      }
+      
+      attempts++;
+      console.log(`[VIDGEN2] Poll attempt ${attempts}/${maxAttempts}, status: ${data.status}`);
+      setTimeout(poll, 5000);
+      
+    } catch (error) {
+      console.error('[VIDGEN2] Poll error:', error);
+      attempts++;
+      if (attempts >= 3 && !state.vidgen2.tasks.find(t => t.taskId === taskId)) {
+        _activePolls.delete(taskId);
+        savePendingTasks();
+        return;
+      }
+      setTimeout(poll, 5000);
+    }
+  };
+  
+  poll();
+}
 
 function renderVidgen4Page() {
   const isSora2 = state.vidgen4.selectedModel === 'sora-2-vip';
@@ -10188,6 +11192,41 @@ function handleSSEEvent(data) {
       savePendingTasks();
       showToast('Gagal generate motion: ' + (data.error || 'Generation failed'), 'error');
       render(true);
+      break;
+
+    case 'vidgen2_completed':
+      console.log('[SSE] Vidgen2 completed:', data.taskId, data.videoUrl);
+      const vidgen2Exists = state.vidgen2.generatedVideos.some(v => v.taskId === data.taskId || v.id === data.taskId);
+      if (!vidgen2Exists && data.videoUrl) {
+        state.vidgen2.generatedVideos.unshift({
+          id: data.taskId,
+          url: data.videoUrl,
+          model: data.model || 'unknown',
+          taskId: data.taskId,
+          createdAt: new Date().toISOString()
+        });
+      }
+      const completedVidgen2Task = state.vidgen2.tasks.find(t => t.taskId === data.taskId);
+      if (completedVidgen2Task) {
+        completedVidgen2Task.status = 'completed';
+        completedVidgen2Task.videoUrl = data.videoUrl;
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== data.taskId);
+      }
+      savePendingTasks();
+      showToast('Vidgen2 video berhasil di-generate!', 'success');
+      render(true);
+      break;
+
+    case 'vidgen2_failed':
+      const failedVidgen2Task = state.vidgen2.tasks.find(t => t.taskId === data.taskId);
+      if (failedVidgen2Task) {
+        failedVidgen2Task.status = 'failed';
+        failedVidgen2Task.error = data.error;
+        state.vidgen2.tasks = state.vidgen2.tasks.filter(t => t.taskId !== data.taskId);
+        savePendingTasks();
+        showToast('Gagal generate video: ' + data.error, 'error');
+        render(true);
+      }
       break;
 
     case 'vidgen3_completed':
