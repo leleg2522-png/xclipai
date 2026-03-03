@@ -9024,11 +9024,6 @@ app.post('/api/admin/voiceover/subscribe', requireAdmin, async (req, res) => {
 
 // ============ END VOICE OVER API ============
 
-// Catch-all route - must be last
-app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'index.html'));
-});
-
 // ============ X IMAGE3 (POYO AI) API ============
 
 const XIMAGE3_MODELS = {
@@ -9507,6 +9502,11 @@ app.delete('/api/ximage3/history/:id', async (req, res) => {
 });
 
 // ============ END X IMAGE3 API ============
+
+// Catch-all route - must be last after all API routes
+app.get('/{*splat}', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'index.html'));
+});
 
 async function initDatabase() {
   try {
