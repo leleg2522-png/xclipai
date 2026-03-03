@@ -1530,7 +1530,36 @@ async function loadXImage3Rooms() {
     state.ximage3RoomManager.rooms = [];
   } finally {
     state.ximage3RoomManager.isLoading = false;
-    render();
+    if (state.ximage3RoomManager.showRoomModal) {
+      var modalContent = document.querySelector('#ximage3RoomModalOverlay .rooms-list');
+      if (modalContent) {
+        var roomsHtml = '';
+        if (state.ximage3RoomManager.rooms.length === 0) {
+          roomsHtml = '<div class="empty-state"><p>Tidak ada room tersedia</p></div>';
+        } else {
+          state.ximage3RoomManager.rooms.forEach(function(room) {
+            roomsHtml += '<div class="room-item ' + (room.status !== 'OPEN' ? 'maintenance' : '') + '" data-ximage3-room-id="' + room.id + '">';
+            roomsHtml += '<div class="room-info"><h4>' + room.name + '</h4>';
+            roomsHtml += '<p>' + room.current_users + '/' + room.max_users + ' users</p></div>';
+            roomsHtml += '<div class="room-actions">';
+            if (room.status === 'OPEN' && room.current_users < room.max_users) {
+              roomsHtml += '<button class="btn btn-sm btn-primary join-ximage3-room-btn" data-room-id="' + room.id + '">Join</button>';
+            } else if (room.status !== 'OPEN') {
+              roomsHtml += '<span class="badge badge-warning">Maintenance</span>';
+            } else {
+              roomsHtml += '<span class="badge badge-danger">Penuh</span>';
+            }
+            roomsHtml += '</div></div>';
+          });
+        }
+        modalContent.innerHTML = roomsHtml;
+        document.querySelectorAll('.join-ximage3-room-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            joinXImage3Room(parseInt(btn.dataset.roomId));
+          });
+        });
+      }
+    }
   }
 }
 
@@ -10139,6 +10168,7 @@ function attachXImage3EventListeners() {
   console.log('[XIMAGE3] attachXImage3EventListeners called');
 
   if (state.ximage3.generatedImages.length === 0 && !state.ximage3._historyLoaded) {
+    state.ximage3._historyLoaded = true;
     loadXImage3History().then(function() { render(); });
   }
 
