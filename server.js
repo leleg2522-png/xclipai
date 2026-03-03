@@ -2782,6 +2782,20 @@ setInterval(async () => {
           `UPDATE ${table} SET status = 'completed', ${urlCol} = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`,
           [result.url, taskId]
         );
+        if (task.userId) {
+          const isImage = table === 'ximage_history' || table === 'ximage2_history';
+          const isMotion = (task.model || '').startsWith('motion-');
+          let sseType = 'video_completed';
+          if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_completed' : 'ximage_completed';
+          else if (isMotion) sseType = 'motion_completed';
+          else if (table === 'vidgen2_tasks') sseType = 'vidgen2_completed';
+          else if (table === 'vidgen3_tasks') sseType = 'vidgen3_completed';
+          else if (table === 'vidgen4_tasks') sseType = 'vidgen4_completed';
+          const sseData = { type: sseType, taskId: taskId, model: task.model };
+          sseData[isImage ? 'imageUrl' : 'videoUrl'] = result.url;
+          sendSSEToUser(task.userId, sseData);
+          console.log(`[BG-POLL] SSE sent to user ${task.userId}: ${sseType}`);
+        }
         serverBgPolls.delete(taskId);
       } else if (result.status === 'failed') {
         console.log(`[BG-POLL] Task ${taskId} failed: ${result.error}`);
@@ -2789,6 +2803,17 @@ setInterval(async () => {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         } else {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`, [result.error, taskId]);
+        }
+        if (task.userId) {
+          const isImage = table === 'ximage_history' || table === 'ximage2_history';
+          const isMotion = (task.model || '').startsWith('motion-');
+          let sseType = 'video_failed';
+          if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed';
+          else if (isMotion) sseType = 'motion_failed';
+          else if (table === 'vidgen2_tasks') sseType = 'vidgen2_failed';
+          else if (table === 'vidgen3_tasks') sseType = 'vidgen3_failed';
+          else if (table === 'vidgen4_tasks') sseType = 'vidgen4_failed';
+          sendSSEToUser(task.userId, { type: sseType, taskId: taskId, error: result.error });
         }
         serverBgPolls.delete(taskId);
       } else if (result.status === 'forbidden') {
@@ -3315,7 +3340,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
       startServerBgPoll(taskId, 'freepik-video', freepikApiKey, {
         dbTable: 'video_generation_tasks',
         urlColumn: 'video_url',
-        model: model
+        model: model,
+        userId: keyInfo.user_id
       });
     }
     
@@ -3780,7 +3806,8 @@ app.post('/api/motion/generate', async (req, res) => {
       startServerBgPoll(taskId, 'freepik-motion', freepikApiKey, {
         dbTable: 'video_generation_tasks',
         urlColumn: 'video_url',
-        model: 'motion-' + model
+        model: 'motion-' + model,
+        userId: keyInfo.user_id
       });
     }
     
@@ -6190,7 +6217,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
       dbTable: 'vidgen2_tasks',
       urlColumn: 'video_url',
-      model: model
+      model: model,
+      userId: roomKeyResult.userId
     });
     
     res.json({
@@ -6763,7 +6791,8 @@ app.post('/api/vidgen4/generate', async (req, res) => {
     startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
       dbTable: 'vidgen4_tasks',
       urlColumn: 'video_url',
-      model: model
+      model: model,
+      userId: roomKeyResult.userId
     });
     
     res.json({
@@ -7792,7 +7821,8 @@ app.post('/api/ximage/generate', async (req, res) => {
     startServerBgPoll(taskId, bgPollType, kieApiKey, {
       dbTable: 'ximage_history',
       urlColumn: 'image_url',
-      model
+      model,
+      userId: roomKeyResult.userId
     });
     
     res.json({ taskId, model, message: 'Image generation started' });
@@ -8330,7 +8360,8 @@ app.post('/api/ximage2/generate', async (req, res) => {
     startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
       dbTable: 'ximage2_history',
       urlColumn: 'image_url',
-      model: model
+      model: model,
+      userId: roomKeyResult.userId
     });
     
     res.json({
