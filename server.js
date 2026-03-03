@@ -283,6 +283,15 @@ async function cleanupInactiveUsers() {
       RETURNING user_id, ximage2_room_id
     `, [cutoffTime]).catch(() => {});
     
+    // Clean inactive users from X Image3 rooms
+    await pool.query(`
+      UPDATE subscriptions 
+      SET ximage3_room_id = NULL 
+      WHERE ximage3_room_id IS NOT NULL 
+      AND (last_active IS NULL OR last_active < $1)
+      RETURNING user_id, ximage3_room_id
+    `, [cutoffTime]).catch(() => {});
+    
     // Update current_users in ximage_rooms table
     await pool.query(`
       UPDATE ximage_rooms r SET current_users = (
@@ -298,6 +307,16 @@ async function cleanupInactiveUsers() {
       UPDATE ximage2_rooms r SET current_users = (
         SELECT COUNT(*) FROM subscriptions s 
         WHERE s.ximage2_room_id = r.id
+        AND s.status = 'active' 
+        AND (s.expired_at IS NULL OR s.expired_at > NOW())
+      )
+    `).catch(() => {});
+    
+    // Update current_users in ximage3_rooms table
+    await pool.query(`
+      UPDATE ximage3_rooms r SET current_users = (
+        SELECT COUNT(*) FROM subscriptions s 
+        WHERE s.ximage3_room_id = r.id
         AND s.status = 'active' 
         AND (s.expired_at IS NULL OR s.expired_at > NOW())
       )
@@ -2364,6 +2383,7 @@ const RATE_LIMIT_CONFIG = {
     jitterMaxMs: 3000,
     label: 'X Image2'
   },
+  ximage3: { cooldownMs: 60 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image3' },
   voiceover: {
     cooldownMs: 120 * 1000,
     label: 'Voice Over'
@@ -2744,7 +2764,7 @@ setInterval(async () => {
       try {
         const table = task.dbTable || 'vidgen4_tasks';
         const urlCol = task.urlColumn || 'video_url';
-        if (table === 'ximage_history' || table === 'ximage2_history') {
+        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history') {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
         } else {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = 'Timeout', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
@@ -2783,10 +2803,11 @@ setInterval(async () => {
           [result.url, taskId]
         );
         if (task.userId) {
-          const isImage = table === 'ximage_history' || table === 'ximage2_history';
+          const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
           const isMotion = (task.model || '').startsWith('motion-');
           let sseType = 'video_completed';
-          if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_completed' : 'ximage_completed';
+          if (table === 'ximage3_history') sseType = 'ximage3_completed';
+          else if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_completed' : 'ximage_completed';
           else if (isMotion) sseType = 'motion_completed';
           else if (table === 'vidgen2_tasks') sseType = 'vidgen2_completed';
           else if (table === 'vidgen3_tasks') sseType = 'vidgen3_completed';
@@ -2799,16 +2820,17 @@ setInterval(async () => {
         serverBgPolls.delete(taskId);
       } else if (result.status === 'failed') {
         console.log(`[BG-POLL] Task ${taskId} failed: ${result.error}`);
-        if (table === 'ximage_history' || table === 'ximage2_history') {
+        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history') {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         } else {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`, [result.error, taskId]);
         }
         if (task.userId) {
-          const isImage = table === 'ximage_history' || table === 'ximage2_history';
+          const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
           const isMotion = (task.model || '').startsWith('motion-');
           let sseType = 'video_failed';
-          if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed';
+          if (table === 'ximage3_history') sseType = 'ximage3_failed';
+          else if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed';
           else if (isMotion) sseType = 'motion_failed';
           else if (table === 'vidgen2_tasks') sseType = 'vidgen2_failed';
           else if (table === 'vidgen3_tasks') sseType = 'vidgen3_failed';
@@ -2837,6 +2859,7 @@ async function resumePendingTaskPolling() {
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'ximage_history', apiType: 'kie-ximage', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage3_history', apiType: 'poyo', urlCol: 'image_url', keyCol: null },
       { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
     ];
     
@@ -9006,6 +9029,481 @@ app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'client', 'index.html'));
 });
 
+// ============ X IMAGE3 (POYO AI) API ============
+
+const XIMAGE3_MODELS = {
+  'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 1, desc: 'OpenAI GPT-4o image generation' },
+  'nano-banana-2-new': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1k', '2k', '4k'], defaultResolution: '2k', desc: 'Google Gemini 3.1 Flash - native 4K' },
+  'nano-banana-pro': { name: 'Nano Banana Pro', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1k', '2k', '4k'], defaultResolution: '2k', desc: 'Google Gemini 3 Pro - highest quality' },
+  'seedream-5.0-lite': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 14, resolutions: ['1k', '2k', '4k'], defaultResolution: '2k', desc: 'ByteDance Seedream 5.0 - 4K, perfect text' },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 14, desc: 'ByteDance Seedream 4.5' },
+  'flux-kontext-pro': { name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'FLUX Kontext Pro' }
+};
+
+async function getXImage3RoomApiKey(xclipApiKey) {
+  const keyInfo = await validateXclipApiKey(xclipApiKey);
+  if (!keyInfo) return { error: 'Xclip API key tidak valid' };
+  const subResult = await pool.query('SELECT s.ximage3_room_id FROM subscriptions s WHERE s.user_id = $1 AND s.ximage3_room_id IS NOT NULL ORDER BY s.created_at DESC LIMIT 1', [keyInfo.user_id]);
+  const roomId = subResult.rows[0]?.ximage3_room_id || 1;
+  const roomKeyPrefix = 'XIMAGE3_ROOM' + roomId + '_KEY_';
+  const availableKeys = [1,2,3].map(i => roomKeyPrefix + i).filter(k => process.env[k]);
+  if (availableKeys.length === 0) {
+    if (process.env.POYO_API_KEY) return { apiKey: process.env.POYO_API_KEY, keyName: 'POYO_API_KEY', roomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
+    return { error: 'Tidak ada API key X Image3 yang tersedia. Hubungi admin.' };
+  }
+  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+  return { apiKey: process.env[randomKeyName], keyName: randomKeyName, roomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
+}
+
+app.get('/api/ximage3/subscription-status', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  try {
+    const result = await pool.query(`
+      SELECT s.ximage3_room_id, r.name as room_name
+      FROM subscriptions s
+      LEFT JOIN ximage3_rooms r ON r.id = s.ximage3_room_id
+      WHERE s.user_id = $1 AND s.ximage3_room_id IS NOT NULL
+      ORDER BY s.created_at DESC LIMIT 1
+    `, [req.session.userId]);
+    if (result.rows.length > 0 && result.rows[0].ximage3_room_id) {
+      res.json({
+        hasSubscription: true,
+        subscription: {
+          roomId: result.rows[0].ximage3_room_id,
+          roomName: result.rows[0].room_name
+        }
+      });
+    } else {
+      res.json({ hasSubscription: false, subscription: null });
+    }
+  } catch (error) {
+    console.error('[XIMAGE3] Subscription status error:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan status subscription' });
+  }
+});
+
+app.get('/api/ximage3/models', (req, res) => {
+  const models = Object.entries(XIMAGE3_MODELS).map(([id, info]) => ({
+    id, ...info
+  }));
+  res.json({ models });
+});
+
+app.get('/api/ximage3/rooms', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, max_users, current_users, status 
+      FROM ximage3_rooms 
+      ORDER BY id
+    `);
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('[XIMAGE3] Get rooms error:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan daftar room' });
+  }
+});
+
+app.post('/api/ximage3/join-room', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  
+  try {
+    const { roomId, xclipApiKey } = req.body;
+    
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(400).json({ error: 'Xclip API key tidak valid' });
+    }
+    
+    const roomResult = await pool.query(
+      'SELECT * FROM ximage3_rooms WHERE id = $1', 
+      [roomId]
+    );
+    
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Room tidak ditemukan' });
+    }
+    
+    const room = roomResult.rows[0];
+    if (room.status !== 'OPEN') {
+      return res.status(400).json({ error: 'Room sedang tidak tersedia' });
+    }
+    
+    if (room.current_users >= room.max_users) {
+      return res.status(400).json({ error: 'Room sudah penuh' });
+    }
+    
+    const oldRoomResult = await pool.query(
+      'SELECT ximage3_room_id FROM subscriptions WHERE user_id = $1 AND ximage3_room_id IS NOT NULL ORDER BY created_at DESC LIMIT 1',
+      [keyInfo.user_id]
+    );
+    const oldRoomId = oldRoomResult.rows[0]?.ximage3_room_id;
+
+    const updateResult = await pool.query(`
+      UPDATE subscriptions SET ximage3_room_id = $1 
+      WHERE user_id = $2 AND status = 'active'
+    `, [roomId, keyInfo.user_id]);
+    
+    if (updateResult.rowCount === 0) {
+      const existingSub = await pool.query(
+        'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY id DESC LIMIT 1',
+        [keyInfo.user_id]
+      );
+      if (existingSub.rows.length > 0) {
+        await pool.query(
+          'UPDATE subscriptions SET ximage3_room_id = $1 WHERE id = $2',
+          [roomId, existingSub.rows[0].id]
+        );
+      }
+    }
+    
+    if (oldRoomId && oldRoomId !== roomId) {
+      await pool.query(
+        'UPDATE ximage3_rooms SET current_users = GREATEST(0, current_users - 1) WHERE id = $1',
+        [oldRoomId]
+      );
+    }
+    
+    if (!oldRoomId || oldRoomId !== roomId) {
+      await pool.query(
+        'UPDATE ximage3_rooms SET current_users = current_users + 1 WHERE id = $1',
+        [roomId]
+      );
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Berhasil bergabung ke ${room.name}`,
+      roomId 
+    });
+  } catch (error) {
+    console.error('[XIMAGE3] Join room error:', error);
+    res.status(500).json({ error: 'Gagal bergabung ke room' });
+  }
+});
+
+app.post('/api/ximage3/generate', async (req, res) => {
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getXImage3RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    const ximage3Cooldown = getUserCooldownRemaining(roomKeyResult.userId, 'ximage3');
+    if (ximage3Cooldown > 0) {
+      const cooldownSec = Math.ceil(ximage3Cooldown / 1000);
+      return res.status(429).json({
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate gambar berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: ximage3Cooldown
+      });
+    }
+    
+    const { model, prompt, images, size, resolution } = req.body;
+    const n = req.body.numberOfImages || req.body.n || 1;
+    
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt diperlukan' });
+    }
+    
+    const modelConfig = XIMAGE3_MODELS[model];
+    if (!modelConfig) {
+      return res.status(400).json({ error: 'Model tidak valid' });
+    }
+    
+    const isI2I = images && images.length > 0;
+    if (isI2I && !modelConfig.supportsI2I) {
+      return res.status(400).json({ error: `Model ${modelConfig.name} tidak mendukung image-to-image` });
+    }
+    
+    console.log(`[XIMAGE3] Generating with model: ${model}, size: ${size || 'default'}, n: ${n || 1}, i2i: ${isI2I}`);
+    
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+    
+    let imageUrls = [];
+    if (isI2I) {
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        if (img && img.startsWith('data:')) {
+          const uploaded = await saveBase64ToFile(img, 'image', baseUrl);
+          imageUrls.push(uploaded.publicUrl);
+          console.log(`[XIMAGE3] Image ${i + 1} uploaded: ${uploaded.publicUrl}`);
+        } else if (img) {
+          imageUrls.push(img);
+        }
+      }
+    }
+    
+    const inputObj = { prompt };
+    if (size) inputObj.size = size;
+    inputObj.n = Math.min(parseInt(n) || 1, modelConfig.maxN || 1);
+    if (imageUrls.length > 0) inputObj.image_urls = imageUrls.slice(0, modelConfig.maxRefs);
+    if (modelConfig.resolutions && resolution) {
+      inputObj.resolution = resolution;
+    }
+    
+    const webhookUrl = `${baseUrl}/api/ximage3/webhook`;
+    
+    const requestBody = {
+      model: model,
+      callback_url: webhookUrl,
+      input: inputObj
+    };
+    
+    console.log('[XIMAGE3] Request body:', JSON.stringify({ ...requestBody, input: { ...requestBody.input, image_urls: requestBody.input.image_urls ? ['[IMAGES]'] : undefined } }));
+    
+    const response = await axios.post(
+      'https://api.poyo.ai/api/generate/submit',
+      requestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${roomKeyResult.apiKey}`
+        },
+        timeout: 600000
+      }
+    );
+    
+    console.log('[XIMAGE3] Poyo API response:', JSON.stringify(response.data));
+    
+    const respData = response.data;
+    
+    const taskId = respData.data?.task_id || 
+                   respData.task_id || 
+                   respData.data?.id ||
+                   respData.id;
+    
+    if (!taskId) {
+      console.error('[XIMAGE3] No task ID in response:', respData);
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari Poyo AI' });
+    }
+    
+    await pool.query(`
+      INSERT INTO ximage3_history (user_id, task_id, model, prompt, mode, size, reference_image, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
+    `, [roomKeyResult.userId, taskId, model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
+    
+    await pool.query(
+      'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [roomKeyResult.keyInfoId]
+    );
+    
+    setUserCooldown(roomKeyResult.userId, 'ximage3');
+    
+    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+      dbTable: 'ximage3_history',
+      urlColumn: 'image_url',
+      model: model,
+      userId: roomKeyResult.userId
+    });
+    
+    res.json({
+      success: true,
+      taskId: taskId,
+      model: model,
+      cooldown: Math.ceil(RATE_LIMIT_CONFIG.ximage3.cooldownMs / 1000),
+      message: 'Image generation dimulai'
+    });
+    
+  } catch (error) {
+    const errData = error.response?.data;
+    const rawMsg = errData?.error?.message || errData?.message || errData?.error || error.message;
+    console.error('[XIMAGE3] Generate error:', JSON.stringify(errData || error.message));
+    console.error('[XIMAGE3] Status:', error.response?.status, 'Model:', req.body?.model);
+    
+    let userMsg = typeof rawMsg === 'string' ? rawMsg : 'Gagal generate image';
+    if (userMsg.includes('timeout') || userMsg.includes('ETIMEDOUT')) {
+      userMsg = 'Request timeout. Server Poyo AI terlalu lama merespon, coba lagi.';
+    }
+    
+    res.status(error.response?.status || 500).json({ error: userMsg });
+  }
+});
+
+app.get('/api/ximage3/status/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const xclipApiKey = req.headers['x-xclip-key'];
+    
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    
+    const roomKeyResult = await getXImage3RoomApiKey(xclipApiKey);
+    if (roomKeyResult.error) {
+      return res.status(400).json({ error: roomKeyResult.error });
+    }
+    
+    const localTask = await pool.query(
+      'SELECT * FROM ximage3_history WHERE task_id = $1 AND user_id = $2',
+      [taskId, roomKeyResult.userId]
+    );
+    
+    if (localTask.rows.length > 0 && localTask.rows[0].status === 'completed') {
+      return res.json({
+        status: 'completed',
+        imageUrl: localTask.rows[0].image_url
+      });
+    }
+    
+    if (localTask.rows.length > 0 && localTask.rows[0].status === 'failed') {
+      return res.json({
+        status: 'failed',
+        error: 'Image generation failed'
+      });
+    }
+    
+    let statusResponse;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        statusResponse = await axios.get(
+          `https://api.poyo.ai/api/generate/status/${taskId}`,
+          {
+            headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` },
+            timeout: 30000
+          }
+        );
+        break;
+      } catch (retryErr) {
+        const msg = (retryErr.message || '').toLowerCase();
+        const isNetErr = !retryErr.response && (msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('etimedout'));
+        if (isNetErr && attempt < 2) {
+          console.log(`[XIMAGE3] Status poll network error, retry ${attempt + 1}/3`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        throw retryErr;
+      }
+    }
+    
+    console.log('[XIMAGE3] Status response:', JSON.stringify(statusResponse.data));
+    
+    const raw = statusResponse.data;
+    const data = raw.data || raw;
+    const status = data.status || data.state || data.to_status || raw.status;
+    
+    if (status === 'finished' || status === 'completed' || status === 'success') {
+      let imageUrl = null;
+      if (data.files && data.files.length > 0) {
+        const f = data.files[0];
+        imageUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
+      } else if (data.images && data.images.length > 0) {
+        imageUrl = data.images[0].url || data.images[0];
+      } else if (raw.files && raw.files.length > 0) {
+        const f = raw.files[0];
+        imageUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
+      } else if (raw.images && raw.images.length > 0) {
+        imageUrl = raw.images[0].url || raw.images[0];
+      } else if (data.output?.images?.[0]?.url) {
+        imageUrl = data.output.images[0].url;
+      } else if (data.output?.image_url) {
+        imageUrl = data.output.image_url;
+      } else if (data.media_url) {
+        imageUrl = data.media_url;
+      } else if (data.url) {
+        imageUrl = data.url;
+      }
+      
+      if (!imageUrl) {
+        console.error('[XIMAGE3] Completed but no image URL:', raw);
+        return res.status(500).json({ status: 'failed', error: 'No image URL in response' });
+      }
+      
+      await pool.query(`
+        UPDATE ximage3_history 
+        SET status = 'completed', image_url = $1, completed_at = NOW()
+        WHERE task_id = $2
+      `, [imageUrl, taskId]);
+      
+      return res.json({ status: 'completed', imageUrl });
+    }
+    
+    if (status === 'failed' || status === 'error') {
+      const errorMsg = data.error?.message || data.error_message || data.message || 'Generation failed';
+      
+      await pool.query(`
+        UPDATE ximage3_history 
+        SET status = 'failed', completed_at = NOW()
+        WHERE task_id = $1
+      `, [taskId]);
+      
+      return res.json({ status: 'failed', error: errorMsg });
+    }
+    
+    const progress = data.progress || data.percent || 0;
+    res.json({
+      status: 'processing',
+      progress,
+      message: 'Image sedang diproses...'
+    });
+    
+  } catch (error) {
+    console.error('[XIMAGE3] Status check error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Gagal check status' });
+  }
+});
+
+app.get('/api/ximage3/history', async (req, res) => {
+  if (!req.session.userId) {
+    return res.json({ images: [] });
+  }
+  
+  try {
+    const result = await pool.query(`
+      SELECT * FROM ximage3_history 
+      WHERE user_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.session.userId]);
+    
+    res.json({ 
+      images: result.rows.map(row => ({
+        id: row.id,
+        taskId: row.task_id,
+        model: row.model,
+        prompt: row.prompt,
+        mode: row.mode,
+        size: row.size,
+        imageUrl: row.image_url,
+        createdAt: row.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('[XIMAGE3] Get history error:', error);
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+});
+
+app.delete('/api/ximage3/history/:id', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+  try {
+    const xclipApiKey = req.headers['x-xclip-key'];
+    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    await pool.query('DELETE FROM ximage3_history WHERE id = $1 AND user_id = $2', [req.params.id, keyInfo.user_id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[XIMAGE3] Delete history error:', error);
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+// ============ END X IMAGE3 API ============
+
 async function initDatabase() {
   try {
     console.log('[DB] Starting database initialization...');
@@ -9509,6 +10007,56 @@ async function initDatabase() {
           ('X Image2 Room 3', 10, 'OPEN', 'XIMAGE2_ROOM3_KEY_1', 'XIMAGE2_ROOM3_KEY_2', 'XIMAGE2_ROOM3_KEY_3')
       `);
       console.log('X Image2 rooms seeded');
+    }
+    
+    // Create ximage3_rooms table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ximage3_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        max_users INTEGER DEFAULT 10,
+        current_users INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'OPEN',
+        key_name_1 VARCHAR(100),
+        key_name_2 VARCHAR(100),
+        key_name_3 VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Create ximage3_history table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ximage3_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        task_id VARCHAR(255),
+        model VARCHAR(100),
+        prompt TEXT,
+        mode VARCHAR(50),
+        size VARCHAR(50),
+        image_url TEXT,
+        reference_image TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    
+    // Add ximage3_room_id to subscriptions
+    await pool.query(`
+      ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS ximage3_room_id INTEGER
+    `).catch(() => {});
+    
+    // Seed ximage3 rooms if empty
+    const existingXimage3Rooms = await pool.query('SELECT COUNT(*) FROM ximage3_rooms');
+    if (parseInt(existingXimage3Rooms.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO ximage3_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
+          ('X Image3 Room 1', 10, 'OPEN', 'XIMAGE3_ROOM1_KEY_1', 'XIMAGE3_ROOM1_KEY_2', 'XIMAGE3_ROOM1_KEY_3'),
+          ('X Image3 Room 2', 10, 'OPEN', 'XIMAGE3_ROOM2_KEY_1', 'XIMAGE3_ROOM2_KEY_2', 'XIMAGE3_ROOM2_KEY_3'),
+          ('X Image3 Room 3', 10, 'OPEN', 'XIMAGE3_ROOM3_KEY_1', 'XIMAGE3_ROOM3_KEY_2', 'XIMAGE3_ROOM3_KEY_3')
+      `);
+      console.log('X Image3 rooms seeded');
     }
     
     // Create voiceover_rooms table

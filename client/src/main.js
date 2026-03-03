@@ -38,7 +38,7 @@ async function refreshSubscriptionSilent() {
 function savePendingTasks() {
   try {
     const pending = {};
-    const features = ['vidgen2', 'vidgen3', 'vidgen4', 'ximage', 'ximage2', 'videogen', 'motion'];
+    const features = ['vidgen2', 'vidgen3', 'vidgen4', 'ximage', 'ximage2', 'ximage3', 'videogen', 'motion'];
     features.forEach(f => {
       if (state[f] && state[f].tasks && state[f].tasks.length > 0) {
         pending[f] = state[f].tasks.filter(t => t.status !== 'completed' && t.status !== 'failed').map(t => ({
@@ -93,6 +93,7 @@ function recoverPendingTasks() {
     tryRecover('vidgen4', pending.vidgen4, (t) => pollVidgen4Task(t.taskId));
     tryRecover('ximage', pending.ximage, (t) => pollXImageTask(t.taskId));
     tryRecover('ximage2', pending.ximage2, (t) => pollXImage2Task(t.taskId));
+    tryRecover('ximage3', pending.ximage3, (t) => pollXImage3Task(t.taskId));
     tryRecover('videogen', pending.videogen, (t) => pollVideoStatus(t.taskId, t.model));
     tryRecover('motion', pending.motion, (t) => pollMotionStatus(t.taskId, t.model, t.apiKey || undefined));
     
@@ -327,6 +328,30 @@ const state = {
     showRoomModal: false,
     xclipApiKey: ''
   },
+  ximage3RoomManager: {
+    rooms: [],
+    subscription: null,
+    hasSubscription: false,
+    isLoading: false,
+    showRoomModal: false,
+    xclipApiKey: ''
+  },
+  ximage3: {
+    sourceImages: [],
+    prompt: '',
+    selectedModel: 'gpt-4o-image',
+    size: '1:1',
+    mode: 'text-to-image',
+    isGenerating: false,
+    tasks: [],
+    generatedImages: [],
+    error: null,
+    customApiKey: '',
+    _historyLoaded: false,
+    resolution: '2k',
+    numberOfImages: 1,
+    cooldownEnd: 0
+  },
   ximage2: {
     sourceImages: [],
     prompt: '',
@@ -436,6 +461,8 @@ const PERSIST_KEYS = {
   ximageRoomManager: ['xclipApiKey'],
   ximage2: ['prompt', 'selectedModel', 'size', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'watermark', 'sequentialGeneration', 'safetyTolerance', 'inputMode', 'promptUpsampling'],
   ximage2RoomManager: ['xclipApiKey'],
+  ximage3: ['prompt', 'selectedModel', 'size', 'mode', 'customApiKey', 'resolution', 'numberOfImages'],
+  ximage3RoomManager: ['xclipApiKey'],
   motionRoomManager: ['xclipApiKey'],
   voiceover: ['selectedModel', 'stability', 'similarityBoost', 'style', 'useSpeakerBoost', 'customApiKey'],
   voiceoverRoomManager: ['xclipApiKey']
@@ -1486,6 +1513,76 @@ async function joinXImage2Room(roomId) {
     showToast('Gagal bergabung ke room', 'error');
   } finally {
     state.ximage2RoomManager.isLoading = false;
+    render();
+  }
+}
+
+// ==================== XIMAGE3 ROOM MANAGER FUNCTIONS ====================
+
+async function loadXImage3Rooms() {
+  try {
+    state.ximage3RoomManager.isLoading = true;
+    const response = await fetch(`${API_URL}/api/ximage3/rooms`, { credentials: 'include' });
+    const data = await response.json();
+    state.ximage3RoomManager.rooms = data.rooms || [];
+  } catch (error) {
+    console.error('Load ximage3 rooms error:', error);
+    state.ximage3RoomManager.rooms = [];
+  } finally {
+    state.ximage3RoomManager.isLoading = false;
+    render();
+  }
+}
+
+async function loadXImage3SubscriptionStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/ximage3/subscription-status`, { credentials: 'include' });
+    if (!response.ok) {
+      state.ximage3RoomManager.hasSubscription = false;
+      state.ximage3RoomManager.subscription = null;
+      return;
+    }
+    const data = await response.json();
+    state.ximage3RoomManager.hasSubscription = data.hasSubscription || false;
+    state.ximage3RoomManager.subscription = data.subscription || null;
+  } catch (error) {
+    console.error('Load ximage3 subscription error:', error);
+    state.ximage3RoomManager.hasSubscription = false;
+    state.ximage3RoomManager.subscription = null;
+  }
+}
+
+async function joinXImage3Room(roomId) {
+  const apiKey = state.ximage3RoomManager.xclipApiKey;
+  if (!apiKey) {
+    showToast('Masukkan Xclip API key terlebih dahulu', 'error');
+    return;
+  }
+  try {
+    state.ximage3RoomManager.isLoading = true;
+    render();
+    const response = await fetch(`${API_URL}/api/ximage3/join-room`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ xclipApiKey: apiKey, roomId: roomId })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showToast(data.message || 'Berhasil bergabung ke X Image3 room!', 'success');
+      state.ximage3RoomManager.showRoomModal = false;
+      state.ximage3.customApiKey = apiKey;
+      saveUserInputs('ximage3');
+      await loadXImage3SubscriptionStatus();
+      await loadXImage3Rooms();
+    } else {
+      showToast(data.error || 'Gagal bergabung ke room', 'error');
+    }
+  } catch (error) {
+    console.error('Join ximage3 room error:', error);
+    showToast('Gagal bergabung ke room', 'error');
+  } finally {
+    state.ximage3RoomManager.isLoading = false;
     render();
   }
 }
@@ -2672,6 +2769,17 @@ function renderNavMenu() {
       </svg>
       X Image2
     </button>
+    <button class="nav-btn ${state.currentPage === 'ximage3' ? 'active' : ''}" data-page="ximage3">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+        <path d="M15 3l8 8" stroke-width="3"/>
+        <circle cx="19" cy="19" r="3" fill="currentColor"/>
+        <circle cx="15" cy="19" r="2" fill="currentColor" opacity="0.5"/>
+      </svg>
+      X Image3
+    </button>
     <button class="nav-btn ${state.currentPage === 'motion' ? 'active' : ''}" data-page="motion">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -2810,6 +2918,7 @@ function renderMainContent() {
       state.currentPage === 'vidgen4' ? renderVidgen4Page() :
       state.currentPage === 'ximage' ? renderXImagePage() :
       state.currentPage === 'ximage2' ? renderXImage2Page() :
+      state.currentPage === 'ximage3' ? renderXImage3Page() :
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'voiceover' ? renderVoiceoverPage() :
       state.currentPage === 'admin' ? '' :
@@ -2824,6 +2933,7 @@ function renderModals() {
     ${renderMotionRoomModal()}
     ${renderXImageRoomModal()}
     ${renderXImage2RoomModal()}
+    ${renderXImage3RoomModal()}
     ${renderVoiceoverRoomModal()}
     ${renderXclipKeysModal()}
     ${renderPricingModal()}
@@ -3036,6 +3146,58 @@ function renderXImage2RoomModal() {
                   ` : `
                     <span class="status-badge maintenance">MAINTENANCE</span>
                   `}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderXImage3RoomModal() {
+  if (!state.ximage3RoomManager.showRoomModal) return '';
+  return `
+    <div class="modal-overlay" id="ximage3RoomModalOverlay">
+      <div class="modal room-modal">
+        <div class="modal-header">
+          <h2>Pilih X Image3 Room</h2>
+          <button class="modal-close" id="closeXimage3RoomModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="api-key-input-section" style="margin-bottom: 20px;">
+            <label class="setting-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:6px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Xclip API Key
+            </label>
+            <input type="password" id="ximage3RoomApiKeyInput" class="form-input" placeholder="Masukkan Xclip API key Anda..." value="${state.ximage3RoomManager.xclipApiKey}">
+            <p class="setting-hint" style="margin-top:4px;font-size:11px;">Buat Xclip API key di panel "Xclip Keys" untuk akses X Image3 Room</p>
+          </div>
+          <div class="rooms-list">
+            ${state.ximage3RoomManager.isLoading ? `
+              <div class="loading-rooms"><div class="spinner"></div><p>Memuat rooms...</p></div>
+            ` : state.ximage3RoomManager.rooms.length === 0 ? `
+              <div class="empty-rooms"><p>Tidak ada X Image3 room tersedia</p></div>
+            ` : state.ximage3RoomManager.rooms.map(room => `
+              <div class="room-item ${room.status !== 'OPEN' ? 'maintenance' : ''}" data-ximage3-room-id="${room.id}">
+                <div class="room-info">
+                  <div class="room-name">${room.name}</div>
+                  <div class="room-stats">
+                    <span class="room-users">${room.current_users || 0}/${room.max_users} users</span>
+                    <span class="room-slots">${(room.max_users - (room.current_users || 0))} slot tersedia</span>
+                  </div>
+                </div>
+                <div class="room-status">
+                  ${room.status === 'OPEN' ? `
+                    ${(room.max_users - (room.current_users || 0)) > 0 ? `
+                      <span class="status-badge open">OPEN</span>
+                      <button class="btn btn-sm btn-primary join-ximage3-room-btn" data-room-id="${room.id}">Join</button>
+                    ` : `<span class="status-badge full">FULL</span>`}
+                  ` : `<span class="status-badge maintenance">MAINTENANCE</span>`}
                 </div>
               </div>
             `).join('')}
@@ -4304,6 +4466,199 @@ function renderXImage2Gallery() {
     html += '</div></div>';
     return html;
   } else if (state.ximage2.tasks.length === 0) {
+    return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div><h3>Belum Ada Gambar</h3><p>Masukkan prompt dan klik Generate untuk membuat gambar AI</p></div>';
+  }
+  return '';
+}
+
+function renderXImage3Page() {
+  var ximage3Models = [
+    { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 1, group: 'openai' },
+    { id: 'nano-banana-2-new', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], hasResolution: true, resolutions: ['1k', '2k', '4k'], maxRefs: 14, group: 'google' },
+    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], hasResolution: true, resolutions: ['1k', '2k', '4k'], maxRefs: 14, group: 'google' },
+    { id: 'seedream-5.0-lite', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], hasResolution: true, resolutions: ['1k', '2k', '4k'], maxRefs: 14, group: 'bytedance' },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 14, group: 'bytedance' },
+    { id: 'flux-kontext-pro', name: 'Flux Kontext Pro', icon: 'flux', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 4, group: 'flux' }
+  ];
+
+  var currentModelConfig = ximage3Models.find(function(m) { return m.id === state.ximage3.selectedModel; }) || ximage3Models[0];
+  var sizeOptions = currentModelConfig.sizes || ['1:1'];
+  var maxRefs = currentModelConfig.maxRefs || 1;
+
+  var html = '<div class="container">';
+  html += '<div class="hero ximage-hero">';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator V3</div>';
+  html += '<h1 class="gradient-title">X Image3</h1>';
+  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan Poyo AI model generasi terbaru</p>';
+  html += '</div>';
+
+  html += '<div class="ximage-content">';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Mode</h3>';
+  html += '<div class="mode-selector">';
+  html += '<button class="mode-btn ' + (state.ximage3.mode === 'text-to-image' ? 'active' : '') + '" data-ximage3-mode="text-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Text to Image</button>';
+  html += '<button class="mode-btn ' + (state.ximage3.mode === 'image-to-image' ? 'active' : '') + '" data-ximage3-mode="image-to-image">';
+  html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Image to Image</button>';
+  html += '</div></div>';
+
+  if (state.ximage3.mode === 'image-to-image') {
+    var numUploadZones = Math.min(maxRefs, 4);
+    for (var zi = 0; zi < numUploadZones; zi++) {
+      var hasImg = state.ximage3.sourceImages[zi];
+      html += '<div class="section-card">';
+      html += '<h3 class="section-title">Reference Image ' + (numUploadZones > 1 ? (zi + 1) : '') + (zi > 0 ? ' <span style="font-size:12px;color:#888;font-weight:normal">(opsional)</span>' : '') + '</h3>';
+      html += '<div class="reference-upload ' + (hasImg ? 'has-image' : '') + '" id="ximage3UploadZone' + zi + '">';
+      if (hasImg) {
+        html += '<img src="' + hasImg.data + '" alt="Reference" class="preview-image"/>';
+        html += '<button class="remove-image-btn ximage3-remove-ref" data-ref-index="' + zi + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+      } else {
+        html += '<div class="upload-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p>Klik atau drop gambar referensi' + (numUploadZones > 1 ? ' ke-' + (zi + 1) : '') + '</p></div>';
+      }
+      html += '<input type="file" id="ximage3FileInput' + zi + '" accept="image/*" style="display:none"/>';
+      html += '</div></div>';
+    }
+  }
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Pilih Model AI</h3>';
+  html += '<div class="ximage-models-grid">';
+  ximage3Models.forEach(function(model) {
+    var isDisabled = state.ximage3.mode === 'image-to-image' && !model.supportsI2I;
+    var iconSvg = getModelIcon(model.icon);
+    html += '<div class="ximage-model-card ' + (state.ximage3.selectedModel === model.id ? 'active' : '') + ' ' + (isDisabled ? 'disabled' : '') + '" data-ximage3-model="' + model.id + '"' + (isDisabled ? ' title="Tidak support Image-to-Image"' : '') + '>';
+    html += '<div class="ximage-model-icon">' + iconSvg + '</div>';
+    html += '<div class="ximage-model-name">' + model.name + '</div>';
+    if (model.badge) html += '<span class="ximage-model-badge badge-' + model.badge.toLowerCase() + '">' + model.badge + '</span>';
+    if (isDisabled) html += '<div class="ximage-model-disabled-text">Text Only</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Prompt</h3>';
+  html += '<textarea id="ximage3Prompt" class="prompt-input" placeholder="' + (state.ximage3.mode === 'image-to-image' ? 'Deskripsikan perubahan yang diinginkan...' : 'Deskripsikan gambar yang ingin dibuat...') + '" rows="4">' + state.ximage3.prompt + '</textarea>';
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Size</h3>';
+  html += '<div class="aspect-buttons">';
+  sizeOptions.forEach(function(size) {
+    html += '<button class="aspect-btn ' + (state.ximage3.size === size ? 'active' : '') + '" data-ximage3-size="' + size + '">' + size + '</button>';
+  });
+  html += '</div></div>';
+
+  if (currentModelConfig.hasResolution) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Resolution</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.resolutions.forEach(function(res) {
+      html += '<button class="aspect-btn ' + (state.ximage3.resolution === res ? 'active' : '') + '" data-ximage3-resolution="' + res + '">' + res + '</button>';
+    });
+    html += '</div></div>';
+  }
+
+  if (currentModelConfig.hasN) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Number of Images</h3>';
+    html += '<div class="number-input-wrapper">';
+    html += '<button class="num-btn" data-ximage3-num-action="decrease" ' + (state.ximage3.numberOfImages <= 1 ? 'disabled' : '') + '>-</button>';
+    html += '<span class="num-value">' + state.ximage3.numberOfImages + '</span>';
+    html += '<button class="num-btn" data-ximage3-num-action="increase" ' + (state.ximage3.numberOfImages >= (currentModelConfig.maxN || 4) ? 'disabled' : '') + '>+</button>';
+    html += '</div></div>';
+  }
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">X Image3 Room</h3>';
+  if (state.ximage3RoomManager.subscription && state.ximage3RoomManager.subscription.roomName) {
+    html += '<div class="room-status-card active">';
+    html += '<div class="room-status-info">';
+    html += '<span class="room-status-label">Room Aktif:</span>';
+    html += '<span class="room-status-name">' + state.ximage3RoomManager.subscription.roomName + '</span>';
+    html += '</div>';
+    html += '<button class="btn btn-sm btn-outline" id="changeXimage3Room">Ganti Room</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="room-status-card">';
+    html += '<p class="room-status-text">Belum bergabung ke room. Pilih room untuk menggunakan X Image3.</p>';
+    html += '<button class="btn btn-primary" id="openXimage3RoomModal">Pilih Room</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Xclip API Key</h3>';
+  html += '<input type="password" id="ximage3ApiKey" class="api-key-input" placeholder="Masukkan Xclip API Key" value="' + state.ximage3.customApiKey + '"/>';
+  html += '</div>';
+
+  var now = Date.now();
+  var cooldownRemaining = Math.max(0, Math.ceil((state.ximage3.cooldownEnd - now) / 1000));
+  var btnDisabled = state.ximage3.isGenerating || (state.ximage3.mode === 'image-to-image' && state.ximage3.sourceImages.filter(Boolean).length === 0) || state.ximage3.tasks.length >= 3 || cooldownRemaining > 0;
+  html += '<button class="btn btn-primary btn-lg btn-full" id="ximage3GenerateBtn" ' + (btnDisabled ? 'disabled' : '') + '>';
+  if (state.ximage3.isGenerating) {
+    html += '<span class="loading-spinner"></span><span>Generating...</span>';
+  } else if (cooldownRemaining > 0) {
+    html += '<span>Cooldown ' + cooldownRemaining + 's</span>';
+  } else {
+    html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+    html += '<span>Generate Image' + (state.ximage3.tasks.length > 0 ? ' (' + state.ximage3.tasks.length + '/3)' : '') + '</span>';
+  }
+  html += '</button>';
+
+  if (state.ximage3.error) {
+    html += '<div class="error-message">' + state.ximage3.error + '</div>';
+  }
+
+  html += '<div class="ximage-results">';
+  html += renderXImage3Tasks();
+  html += renderXImage3Gallery();
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImage3Tasks() {
+  if (state.ximage3.tasks.length === 0) return '';
+  var html = '<div class="tasks-section"><h3>Sedang Diproses</h3><div class="tasks-list">';
+  state.ximage3.tasks.forEach(function(task) {
+    var elapsed = task.startTime ? Math.floor((Date.now() - task.startTime) / 1000) : 0;
+    var minutes = Math.floor(elapsed / 60);
+    var seconds = elapsed % 60;
+    html += '<div class="task-card">';
+    html += '<div class="task-info"><span class="task-model">' + task.model + '</span>';
+    html += '<span class="task-time">' + minutes + ':' + seconds.toString().padStart(2, '0') + '</span></div>';
+    html += '<div class="task-progress"><div class="progress-bar"><div class="progress-fill" style="width: ' + (task.progress || 30) + '%"></div></div>';
+    html += '<span class="task-status">' + (task.status || 'Processing...') + '</span></div></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function renderXImage3Gallery() {
+  if (state.ximage3.generatedImages.length > 0) {
+    var html = '<div class="gallery-section">';
+    html += '<div class="gallery-header">Gambar yang Dihasilkan (' + state.ximage3.generatedImages.length + ')</div>';
+    html += '<div class="images-grid">';
+    state.ximage3.generatedImages.forEach(function(image, index) {
+      html += '<div class="image-card">';
+      html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
+      html += '<div class="image-card-footer">';
+      html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
+      html += '<div style="display:flex;gap:4px;flex-shrink:0;">';
+      html += '<button class="btn btn-sm btn-secondary ximage3-download-btn" data-url="' + encodeURIComponent(image.url) + '" data-filename="ximage3-' + index + '.png">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+      html += ' Download</button>';
+      html += '<button class="btn btn-sm btn-danger ximage3-delete-btn" data-index="' + index + '">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+      html += '</button>';
+      html += '</div>';
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+    return html;
+  } else if (state.ximage3.tasks.length === 0) {
     return '<div class="empty-preview"><div class="empty-preview-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div><h3>Belum Ada Gambar</h3><p>Masukkan prompt dan klik Generate untuk membuat gambar AI</p></div>';
   }
   return '';
@@ -6194,6 +6549,8 @@ function attachEventListeners() {
     attachXImageEventListeners();
   } else if (state.currentPage === 'ximage2') {
     attachXImage2EventListeners();
+  } else if (state.currentPage === 'ximage3') {
+    attachXImage3EventListeners();
   } else if (state.currentPage === 'motion') {
     attachMotionEventListeners();
   } else if (state.currentPage === 'voiceover') {
@@ -9774,6 +10131,365 @@ async function loadXImage2History() {
   }
 }
 
+function attachXImage3EventListeners() {
+  console.log('[XIMAGE3] attachXImage3EventListeners called');
+
+  if (state.ximage3.generatedImages.length === 0 && !state.ximage3._historyLoaded) {
+    loadXImage3History().then(function() { render(); });
+  }
+
+  if (!state.ximage3RoomManager._statusLoaded) {
+    state.ximage3RoomManager._statusLoaded = true;
+    loadXImage3SubscriptionStatus().then(function() { render(); });
+  }
+
+  var maxRefSlots = 4;
+  for (var zi = 0; zi < maxRefSlots; zi++) {
+    (function(idx) {
+      var uploadZone = document.getElementById('ximage3UploadZone' + idx);
+      var imageInput = document.getElementById('ximage3FileInput' + idx);
+      if (uploadZone && imageInput) {
+        uploadZone.addEventListener('click', function() { imageInput.click(); });
+        uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+        uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('drag-over'); });
+        uploadZone.addEventListener('drop', function(e) {
+          e.preventDefault(); uploadZone.classList.remove('drag-over');
+          if (e.dataTransfer.files.length > 0) handleXImage3Upload({ target: { files: e.dataTransfer.files } }, idx);
+        });
+        imageInput.addEventListener('change', function(e) { handleXImage3Upload(e, idx); });
+      }
+    })(zi);
+  }
+
+  document.querySelectorAll('.ximage3-remove-ref').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var idx = parseInt(btn.dataset.refIndex);
+      state.ximage3.sourceImages.splice(idx, 1);
+      render();
+    });
+  });
+
+  var generateBtn = document.getElementById('ximage3GenerateBtn');
+  var promptInput = document.getElementById('ximage3Prompt');
+  var apiKeyInput = document.getElementById('ximage3ApiKey');
+
+  if (generateBtn) generateBtn.addEventListener('click', generateXImage3);
+  if (promptInput) {
+    promptInput.addEventListener('input', function(e) {
+      state.ximage3.prompt = e.target.value;
+      saveUserInputs('ximage3');
+    });
+  }
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener('input', function(e) {
+      state.ximage3.customApiKey = e.target.value;
+      saveUserInputs('ximage3');
+    });
+  }
+
+  if (!window._ximage3DelegationAttached) {
+    window._ximage3DelegationAttached = true;
+    document.addEventListener('click', function(e) {
+      var modeBtn = e.target.closest('[data-ximage3-mode]');
+      if (modeBtn && state.currentPage === 'ximage3') {
+        state.ximage3.mode = modeBtn.dataset.ximage3Mode;
+        state.ximage3.sourceImages = [];
+        saveUserInputs('ximage3');
+        render();
+        return;
+      }
+      var modelCard = e.target.closest('[data-ximage3-model]');
+      if (modelCard && state.currentPage === 'ximage3' && !modelCard.classList.contains('disabled')) {
+        state.ximage3.selectedModel = modelCard.dataset.ximage3Model;
+        saveUserInputs('ximage3');
+        render();
+        return;
+      }
+      var sizeBtn = e.target.closest('[data-ximage3-size]');
+      if (sizeBtn && state.currentPage === 'ximage3') {
+        state.ximage3.size = sizeBtn.dataset.ximage3Size;
+        saveUserInputs('ximage3');
+        render();
+        return;
+      }
+      var resBtn = e.target.closest('[data-ximage3-resolution]');
+      if (resBtn && state.currentPage === 'ximage3') {
+        state.ximage3.resolution = resBtn.dataset.ximage3Resolution;
+        saveUserInputs('ximage3');
+        render();
+        return;
+      }
+      var numBtn = e.target.closest('[data-ximage3-num-action]');
+      if (numBtn && state.currentPage === 'ximage3') {
+        var action = numBtn.dataset.ximage3NumAction;
+        if (action === 'increase' && state.ximage3.numberOfImages < 4) state.ximage3.numberOfImages++;
+        else if (action === 'decrease' && state.ximage3.numberOfImages > 1) state.ximage3.numberOfImages--;
+        saveUserInputs('ximage3');
+        render();
+        return;
+      }
+    });
+  }
+
+  var openXimage3RoomModal = document.getElementById('openXimage3RoomModal');
+  var changeXimage3Room = document.getElementById('changeXimage3Room');
+  if (openXimage3RoomModal) {
+    openXimage3RoomModal.onclick = async function(e) {
+      e.preventDefault();
+      state.ximage3RoomManager.showRoomModal = true;
+      render();
+      await loadXImage3Rooms();
+    };
+  }
+  if (changeXimage3Room) {
+    changeXimage3Room.onclick = async function(e) {
+      e.preventDefault();
+      state.ximage3RoomManager.showRoomModal = true;
+      render();
+      await loadXImage3Rooms();
+    };
+  }
+
+  var closeXimage3RoomModal = document.getElementById('closeXimage3RoomModal');
+  var ximage3RoomModalOverlay = document.getElementById('ximage3RoomModalOverlay');
+  if (closeXimage3RoomModal) {
+    closeXimage3RoomModal.addEventListener('click', function() {
+      state.ximage3RoomManager.showRoomModal = false;
+      render();
+    });
+  }
+  if (ximage3RoomModalOverlay) {
+    ximage3RoomModalOverlay.addEventListener('click', function(e) {
+      if (e.target === ximage3RoomModalOverlay) {
+        state.ximage3RoomManager.showRoomModal = false;
+        render();
+      }
+    });
+  }
+
+  var ximage3RoomApiKeyInput = document.getElementById('ximage3RoomApiKeyInput');
+  if (ximage3RoomApiKeyInput) {
+    ximage3RoomApiKeyInput.addEventListener('input', function(e) {
+      state.ximage3RoomManager.xclipApiKey = e.target.value;
+      saveUserInputs('ximage3RoomManager');
+    });
+  }
+
+  document.querySelectorAll('.join-ximage3-room-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var roomId = parseInt(btn.dataset.roomId);
+      joinXImage3Room(roomId);
+    });
+  });
+
+  document.querySelectorAll('.ximage3-download-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var url = decodeURIComponent(btn.dataset.url);
+      var filename = btn.dataset.filename;
+      await downloadImage(url, filename);
+    });
+  });
+
+  document.querySelectorAll('.ximage3-delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      var index = parseInt(btn.dataset.index);
+      var image = state.ximage3.generatedImages[index];
+      state.ximage3.generatedImages.splice(index, 1);
+      render();
+      if (image && image.id && state.ximage3.customApiKey) {
+        fetch(API_URL + '/api/ximage3/history/' + image.id, {
+          method: 'DELETE',
+          headers: { 'X-Xclip-Key': state.ximage3.customApiKey },
+          credentials: 'include'
+        }).catch(function(err) { console.error('Failed to delete ximage3 history:', err); });
+      }
+    });
+  });
+
+  if (state.ximage3.cooldownEnd > Date.now()) {
+    startXImage3CooldownTimer();
+  }
+}
+
+function handleXImage3Upload(e, refIndex) {
+  var file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { alert('Pilih file gambar'); return; }
+  var reader = new FileReader();
+  reader.onload = function(event) {
+    while (state.ximage3.sourceImages.length <= refIndex) state.ximage3.sourceImages.push(null);
+    state.ximage3.sourceImages[refIndex] = { file: file, data: event.target.result, name: file.name };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function generateXImage3() {
+  if (state.ximage3.mode === 'image-to-image' && state.ximage3.sourceImages.filter(Boolean).length === 0) {
+    alert('Upload gambar referensi terlebih dahulu');
+    return;
+  }
+  if (!state.ximage3.prompt) { alert('Masukkan prompt'); return; }
+  if (!state.ximage3.customApiKey) { alert('Masukkan Xclip API Key'); return; }
+  if (state.ximage3.tasks.length >= 3) { alert('Maks 3 gambar bersamaan. Tunggu salah satu selesai.'); return; }
+  var now = Date.now();
+  if (state.ximage3.cooldownEnd > now) {
+    alert('Cooldown aktif. Tunggu ' + Math.ceil((state.ximage3.cooldownEnd - now) / 1000) + ' detik.');
+    return;
+  }
+
+  state.ximage3.isGenerating = true;
+  state.ximage3.error = null;
+  render();
+
+  try {
+    var requestBody = {
+      model: state.ximage3.selectedModel,
+      prompt: state.ximage3.prompt,
+      size: state.ximage3.size,
+      mode: state.ximage3.mode,
+      resolution: state.ximage3.resolution,
+      numberOfImages: state.ximage3.numberOfImages
+    };
+
+    if (state.ximage3.mode === 'image-to-image') {
+      var images = state.ximage3.sourceImages.filter(Boolean).map(function(img) { return img.data; });
+      if (images.length > 0) requestBody.images = images;
+    }
+
+    var response = await fetch(API_URL + '/api/ximage3/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-xclip-key': state.ximage3.customApiKey },
+      credentials: 'include',
+      body: JSON.stringify(requestBody)
+    });
+
+    var data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Gagal generate image');
+
+    if (data.imageUrl) {
+      state.ximage3.generatedImages.unshift({
+        url: data.imageUrl,
+        model: state.ximage3.selectedModel,
+        prompt: state.ximage3.prompt,
+        createdAt: new Date().toISOString()
+      });
+      state.ximage3.cooldownEnd = Date.now() + (data.cooldown || 10) * 1000;
+      startXImage3CooldownTimer();
+    } else if (data.taskId) {
+      state.ximage3.tasks.push({
+        taskId: data.taskId,
+        model: state.ximage3.selectedModel,
+        startTime: Date.now()
+      });
+      savePendingTasks();
+      pollXImage3Task(data.taskId);
+      state.ximage3.cooldownEnd = Date.now() + (data.cooldown || 10) * 1000;
+      startXImage3CooldownTimer();
+    }
+
+  } catch (error) {
+    console.error('X Image3 error:', error);
+    state.ximage3.error = error.message;
+    alert(error.message);
+  } finally {
+    state.ximage3.isGenerating = false;
+    render();
+  }
+}
+
+function startXImage3CooldownTimer() {
+  if (window._ximage3CooldownInterval) clearInterval(window._ximage3CooldownInterval);
+  window._ximage3CooldownInterval = setInterval(function() {
+    if (Date.now() >= state.ximage3.cooldownEnd) {
+      clearInterval(window._ximage3CooldownInterval);
+      window._ximage3CooldownInterval = null;
+      render();
+    } else {
+      var btn = document.getElementById('ximage3GenerateBtn');
+      if (btn) {
+        var remaining = Math.ceil((state.ximage3.cooldownEnd - Date.now()) / 1000);
+        btn.disabled = true;
+        btn.innerHTML = '<span>Cooldown ' + remaining + 's</span>';
+      }
+    }
+  }, 1000);
+}
+
+async function pollXImage3Task(taskId) {
+  var maxAttempts = 120;
+  var attempts = 0;
+  var poll = async function() {
+    if (attempts >= maxAttempts) {
+      state.ximage3.tasks = state.ximage3.tasks.filter(function(t) { return t.taskId !== taskId; });
+      state.ximage3.error = 'Timeout: Image generation terlalu lama';
+      render();
+      return;
+    }
+    attempts++;
+    try {
+      var response = await fetch(API_URL + '/api/ximage3/status/' + taskId, {
+        headers: { 'x-xclip-key': state.ximage3.customApiKey },
+        credentials: 'include'
+      });
+      var data = await response.json();
+      if (data.status === 'completed' && data.imageUrl) {
+        state.ximage3.tasks = state.ximage3.tasks.filter(function(t) { return t.taskId !== taskId; });
+        var alreadyExists = state.ximage3.generatedImages.some(function(img) { return img.taskId === taskId; });
+        if (!alreadyExists) {
+          state.ximage3.generatedImages.unshift({
+            url: data.imageUrl,
+            model: state.ximage3.selectedModel,
+            prompt: state.ximage3.prompt,
+            taskId: taskId,
+            createdAt: new Date().toISOString()
+          });
+        }
+        savePendingTasks();
+        render();
+        return;
+      }
+      if (data.status === 'failed') {
+        state.ximage3.tasks = state.ximage3.tasks.filter(function(t) { return t.taskId !== taskId; });
+        state.ximage3.error = data.error || 'Image generation failed';
+        savePendingTasks();
+        render();
+        return;
+      }
+      var task = state.ximage3.tasks.find(function(t) { return t.taskId === taskId; });
+      if (task) {
+        task.progress = data.progress || Math.min(90, attempts * 3);
+        task.status = data.message || 'Processing...';
+      }
+      console.log('[XIMAGE3] Poll attempt ' + attempts + '/' + maxAttempts + ', status: ' + data.status);
+      setTimeout(poll, 3000);
+    } catch (error) {
+      console.error('[XIMAGE3] Poll error:', error);
+      attempts++;
+      setTimeout(poll, 3000);
+    }
+  };
+  poll();
+}
+
+async function loadXImage3History() {
+  try {
+    var response = await fetch(API_URL + '/api/ximage3/history', { credentials: 'include' });
+    var data = await response.json();
+    if (data.images) {
+      state.ximage3.generatedImages = data.images.map(function(img) {
+        return { id: img.id, url: img.imageUrl, model: img.model, prompt: img.prompt, createdAt: img.createdAt };
+      });
+    }
+    state.ximage3._historyLoaded = true;
+  } catch (error) {
+    console.error('Failed to load X Image3 history:', error);
+  }
+}
+
 function attachMotionEventListeners() {
   if (!state.motion._historyLoaded) {
     state.motion._historyLoaded = true;
@@ -11263,6 +11979,33 @@ function handleSSEEvent(data) {
       }
       break;
       
+    case 'ximage3_completed':
+      console.log('[SSE] XImage3 completed:', data.taskId, data.imageUrl);
+      if (data.imageUrl) {
+        var xi3Exists = state.ximage3.generatedImages.some(function(v) { return v.taskId === data.taskId; });
+        if (!xi3Exists) {
+          state.ximage3.generatedImages.unshift({
+            url: data.imageUrl,
+            model: data.model || 'unknown',
+            taskId: data.taskId,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      state.ximage3.tasks = state.ximage3.tasks.filter(function(t) { return t.taskId !== data.taskId; });
+      savePendingTasks();
+      showToast('X Image3 berhasil di-generate!', 'success');
+      render(true);
+      break;
+
+    case 'ximage3_failed':
+      state.ximage3.tasks = state.ximage3.tasks.filter(function(t) { return t.taskId !== data.taskId; });
+      state.ximage3.error = data.error || 'Image generation failed';
+      savePendingTasks();
+      showToast('Gagal generate X Image3: ' + (data.error || 'Generation failed'), 'error');
+      render(true);
+      break;
+
     case 'video_progress':
       const progressTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
       if (progressTask && data.progress) {

@@ -101,6 +101,23 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Supports both synchronous (direct URL) and asynchronous (task polling) responses
   - 2-minute cooldown timer between generations
   - Image history persistence in database
+- **X Image3 (Poyo AI Image Generator)**: AI-powered image generation using Poyo AI API with 6 models. Uses room-based API key system (XIMAGE3_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
+  - 6 AI models:
+    - GPT-4o Image (OpenAI, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 1 ref)
+    - Nano Banana 2 (Google Gemini 3.1 Flash, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/4k, 14 refs)
+    - Nano Banana Pro (Google Gemini 3 Pro, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/4k, 14 refs)
+    - Seedream 5.0 Lite (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/4k, n: 1-4, 14 refs)
+    - Seedream 4.5 (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 14 refs)
+    - Flux Kontext Pro (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4, 4 refs)
+  - Text-to-image and image-to-image modes
+  - Database tables: ximage3_rooms, ximage3_history
+  - Room assignment via ximage3_room_id in subscriptions
+  - Poyo AI API: POST https://api.poyo.ai/api/generate/submit, GET /api/generate/status/{task_id}
+  - Request format: { model, callback_url, input: { prompt, size, resolution, n, image_urls } }
+  - 1-minute cooldown timer between generations
+  - Image history persistence in database
+  - SSE events: ximage3_completed, ximage3_failed
+  - Server-side background polling with apiType 'poyo'
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Motion rooms have their own set of Freepik API keys (MOTION_ROOM1_KEY_1/2/3, etc.).
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
@@ -110,7 +127,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
   - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
   - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
-- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen3, vidgen4, ximage, ximage2, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, and Freepik APIs.
+- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen3, vidgen4, ximage, ximage2, ximage3, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, Poyo AI, and Freepik APIs.
 
 ## External Dependencies
 - **Database**: PostgreSQL
@@ -118,7 +135,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - ElevenLabs API (for speech-to-text transcription)
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
-    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
+    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models, and X Image3 image generation with GPT-4o Image, Nano Banana 2/Pro, Seedream 5.0 Lite/4.5, Flux Kontext Pro models)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
