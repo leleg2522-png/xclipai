@@ -9501,7 +9501,52 @@ app.delete('/api/ximage3/history/:id', async (req, res) => {
   }
 });
 
+app.get('/api/ximage3/download', async (req, res) => {
+  try {
+    const imageUrl = req.query.url;
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: { 'User-Agent': 'Xclip/1.0' }
+    });
+    const contentType = response.headers['content-type'] || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="ximage3-${Date.now()}.png"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    console.error('[XIMAGE3] Download error:', error.message);
+    res.status(500).json({ error: 'Gagal download image' });
+  }
+});
+
 // ============ END X IMAGE3 API ============
+
+// Unified image download proxy for X Image (kie.ai)
+app.get('/api/ximage/download', async (req, res) => {
+  try {
+    const imageUrl = req.query.url;
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: { 'User-Agent': 'Xclip/1.0' }
+    });
+    const contentType = response.headers['content-type'] || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="ximage-${Date.now()}.png"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    console.error('[XIMAGE] Download error:', error.message);
+    res.status(500).json({ error: 'Gagal download image' });
+  }
+});
 
 // Catch-all route - must be last after all API routes
 app.get('/{*splat}', (req, res) => {

@@ -4699,14 +4699,20 @@ function renderXImage3Gallery() {
 
 async function downloadImage(url, filename) {
   try {
-    // Try fetch + blob approach for cross-origin images
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
+    var proxyPath = '/api/ximage/download';
+    if (filename && filename.indexOf('ximage2') === 0) {
+      proxyPath = '/api/ximage2/download';
+    } else if (filename && filename.indexOf('ximage3') === 0) {
+      proxyPath = '/api/ximage3/download';
+    }
+    var proxyUrl = API_URL + proxyPath + '?url=' + encodeURIComponent(url);
+    var response = await fetch(proxyUrl, { credentials: 'include' });
+    if (!response.ok) throw new Error('Download failed: ' + response.status);
+    var blob = await response.blob();
+    var blobUrl = window.URL.createObjectURL(blob);
+    var a = document.createElement('a');
     a.href = blobUrl;
-    a.download = filename;
+    a.download = filename || 'image-' + Date.now() + '.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -4714,7 +4720,6 @@ async function downloadImage(url, filename) {
     showToast('Gambar berhasil diunduh', 'success');
   } catch (err) {
     console.error('Download error:', err);
-    // Fallback: open in new tab
     window.open(url, '_blank');
     showToast('Membuka gambar di tab baru', 'info');
   }
