@@ -8025,13 +8025,6 @@ const XIMAGE2_MODELS = {
     hasWatermark: true, hasSequential: true,
     desc: 'ByteDance Seedream 5.0 Lite - 4K output, perfect text rendering'
   },
-  'gemini-3-pro-image-preview': { 
-    name: 'Nano Banana 2', provider: 'Google', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 4, maxRefs: 5,
-    resolutions: ['1K', '2K', '3K', '4K'], defaultResolution: '2K',
-    hasMask: true,
-    desc: 'Google Gemini 3 Pro Preview - 4K native output, multi-step planning'
-  },
   'flux-kontext-pro': { 
     name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
     sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
