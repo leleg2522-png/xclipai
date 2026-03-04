@@ -2502,26 +2502,41 @@ async function pollPoyoTask(taskId, apiKey) {
       const f = data.files[0];
       url = typeof f === 'string' ? f : (f.url || f.file_url || f.video_url || f.image_url);
     } else if (data.images && data.images.length > 0) {
-      url = data.images[0].url || data.images[0];
+      url = typeof data.images[0] === 'string' ? data.images[0] : (data.images[0].url || data.images[0].image_url);
     } else if (raw.files && raw.files.length > 0) {
       const f = raw.files[0];
       url = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
     } else if (raw.images && raw.images.length > 0) {
-      url = raw.images[0].url || raw.images[0];
+      url = typeof raw.images[0] === 'string' ? raw.images[0] : (raw.images[0].url || raw.images[0].image_url);
     } else if (data.output?.video_url) {
       url = data.output.video_url;
     } else if (data.video_url) {
       url = data.video_url;
     } else if (data.result?.video_url) {
       url = data.result.video_url;
-    } else if (data.output?.images?.[0]?.url) {
-      url = data.output.images[0].url;
+    } else if (data.output?.images?.[0]) {
+      const oi = data.output.images[0];
+      url = typeof oi === 'string' ? oi : (oi.url || oi.image_url);
     } else if (data.output?.image_url) {
       url = data.output.image_url;
+    } else if (data.output?.url) {
+      url = data.output.url;
+    } else if (data.result?.images?.[0]) {
+      const ri = data.result.images[0];
+      url = typeof ri === 'string' ? ri : (ri.url || ri.image_url);
+    } else if (data.result?.image_url) {
+      url = data.result.image_url;
+    } else if (data.result?.url) {
+      url = data.result.url;
+    } else if (data.image_url) {
+      url = data.image_url;
     } else if (data.media_url) {
       url = data.media_url;
     } else if (data.url) {
       url = data.url;
+    }
+    if (!url) {
+      console.error(`[BG-POLL] Poyo task ${taskId} completed but no URL found. Raw keys:`, Object.keys(raw), 'data keys:', Object.keys(data), 'Full:', JSON.stringify(raw).substring(0, 500));
     }
     return { status: 'completed', url };
   }
@@ -2796,7 +2811,16 @@ setInterval(async () => {
       const table = task.dbTable || 'vidgen4_tasks';
       const urlCol = task.urlColumn || 'video_url';
       
-      if (result.status === 'completed' && result.url) {
+      if (result.status === 'completed' && !result.url) {
+        console.error(`[BG-POLL] Task ${taskId} completed but no URL - marking as failed`);
+        await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
+        if (task.userId) {
+          const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
+          let sseType = table === 'ximage3_history' ? 'ximage3_failed' : isImage ? (table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed') : 'video_failed';
+          sendSSEToUser(task.userId, { type: sseType, taskId, error: 'No result URL from API' });
+        }
+        serverBgPolls.delete(taskId);
+      } else if (result.status === 'completed' && result.url) {
         console.log(`[BG-POLL] Task ${taskId} completed! URL: ${result.url.substring(0, 80)}...`);
         await pool.query(
           `UPDATE ${table} SET status = 'completed', ${urlCol} = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`,
@@ -9412,16 +9436,28 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
         const f = data.files[0];
         imageUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
       } else if (data.images && data.images.length > 0) {
-        imageUrl = data.images[0].url || data.images[0];
+        imageUrl = typeof data.images[0] === 'string' ? data.images[0] : (data.images[0].url || data.images[0].image_url);
       } else if (raw.files && raw.files.length > 0) {
         const f = raw.files[0];
         imageUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.image_url);
       } else if (raw.images && raw.images.length > 0) {
-        imageUrl = raw.images[0].url || raw.images[0];
-      } else if (data.output?.images?.[0]?.url) {
-        imageUrl = data.output.images[0].url;
+        imageUrl = typeof raw.images[0] === 'string' ? raw.images[0] : (raw.images[0].url || raw.images[0].image_url);
+      } else if (data.output?.images?.[0]) {
+        const oi = data.output.images[0];
+        imageUrl = typeof oi === 'string' ? oi : (oi.url || oi.image_url);
       } else if (data.output?.image_url) {
         imageUrl = data.output.image_url;
+      } else if (data.output?.url) {
+        imageUrl = data.output.url;
+      } else if (data.result?.images?.[0]) {
+        const ri = data.result.images[0];
+        imageUrl = typeof ri === 'string' ? ri : (ri.url || ri.image_url);
+      } else if (data.result?.image_url) {
+        imageUrl = data.result.image_url;
+      } else if (data.result?.url) {
+        imageUrl = data.result.url;
+      } else if (data.image_url) {
+        imageUrl = data.image_url;
       } else if (data.media_url) {
         imageUrl = data.media_url;
       } else if (data.url) {
@@ -9429,7 +9465,7 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
       }
       
       if (!imageUrl) {
-        console.error('[XIMAGE3] Completed but no image URL:', raw);
+        console.error('[XIMAGE3] Completed but no image URL. Keys:', Object.keys(raw), 'data keys:', Object.keys(data), 'Full:', JSON.stringify(raw).substring(0, 500));
         return res.status(500).json({ status: 'failed', error: 'No image URL in response' });
       }
       
