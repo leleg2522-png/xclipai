@@ -7745,6 +7745,7 @@ app.post('/api/ximage/generate', async (req, res) => {
     
     let taskId;
     let bgPollType;
+    let lastResponse;
     
     const NAMED_SIZE_MAP = {
       '1:1': 'square', 'Square': 'square', 'Square HD': 'square_hd',
@@ -7764,13 +7765,13 @@ app.post('/api/ximage/generate', async (req, res) => {
         body.filesUrl = imageUrls;
       }
       console.log('[XIMAGE] 4o-image request:', JSON.stringify({ ...body, filesUrl: body.filesUrl ? ['[IMAGES]'] : undefined }));
-      const response = await axios.post(
+      lastResponse = await axios.post(
         'https://api.kie.ai/api/v1/gpt4o-image/generate',
         body,
         { headers: reqHeaders, timeout: 60000 }
       );
-      console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
+      console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(lastResponse.data));
+      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
       bgPollType = 'kie-4o-image';
     } else if (modelConfig.apiType === 'kie-flux-kontext') {
       const kontextModel = modelVariant === 'max' ? 'flux-kontext-max' : 'flux-kontext-pro';
@@ -7784,13 +7785,13 @@ app.post('/api/ximage/generate', async (req, res) => {
         body.inputImage = imageUrls[0];
       }
       console.log('[XIMAGE] Flux Kontext request:', JSON.stringify({ ...body, inputImage: body.inputImage ? '[IMAGE]' : undefined }));
-      const response = await axios.post(
+      lastResponse = await axios.post(
         'https://api.kie.ai/api/v1/flux/kontext/generate',
         body,
         { headers: reqHeaders, timeout: 60000 }
       );
-      console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
+      console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(lastResponse.data));
+      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
       bgPollType = 'kie-flux-kontext';
     } else {
       let kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
@@ -7846,18 +7847,18 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
       const body = { model: kieModelId, input: inputBody };
       console.log('[XIMAGE] Market API request:', JSON.stringify(body).replace(/"(image_urls|input_urls|image_url)":\s*("[^"]*"|\[[^\]]*\])/g, '"$1":"[IMAGE]"'));
-      const response = await axios.post(
+      lastResponse = await axios.post(
         'https://api.kie.ai/api/v1/jobs/createTask',
         body,
         { headers: reqHeaders, timeout: 60000 }
       );
-      console.log('[XIMAGE] kie.ai market response:', JSON.stringify(response.data));
-      taskId = response.data?.data?.taskId || response.data?.data?.task_id || response.data?.taskId || response.data?.task_id || response.data?.id;
+      console.log('[XIMAGE] kie.ai market response:', JSON.stringify(lastResponse.data));
+      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
       bgPollType = 'kie-market';
     }
     
     if (!taskId) {
-      const respBody = typeof response?.data === 'object' ? response.data : {};
+      const respBody = typeof lastResponse?.data === 'object' ? lastResponse.data : {};
       console.error('[XIMAGE] No taskId found in response:', JSON.stringify(respBody));
       const apiCode = respBody.code || respBody.status;
       const apiError = respBody.msg || respBody.message || respBody.error?.message || respBody.error || '';
