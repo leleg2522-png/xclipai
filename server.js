@@ -9029,10 +9029,10 @@ app.post('/api/admin/voiceover/subscribe', requireAdmin, async (req, res) => {
 const XIMAGE3_MODELS = {
   'gpt-4o-image': { name: 'GPT-4o Image', provider: 'OpenAI', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 1, desc: 'OpenAI GPT-4o image generation' },
   'gpt-image-1.5': { name: 'GPT Image 1.5', provider: 'OpenAI', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 1, desc: 'OpenAI GPT Image 1.5 - 4x faster, precision editing' },
-  'nano-banana-2-new': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1k', '2k', '4k'], defaultResolution: '2k', desc: 'Google Gemini 3.1 Flash - native 2K/4K' },
-  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1k', '2k', '4k'], defaultResolution: '1k', desc: 'Google Gemini 3 Pro - advanced text & character consistency' },
+  'nano-banana-2-new': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1K', '2K', '4K'], defaultResolution: '2K', desc: 'Google Gemini 3.1 Flash - native 2K/4K' },
+  'nano-banana-2': { name: 'Nano Banana Pro', provider: 'Google', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 14, resolutions: ['1K', '2K', '4K'], defaultResolution: '1K', desc: 'Google Gemini 3 Pro - advanced text & character consistency' },
   'grok-imagine-image': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: true, sizes: ['1:1', '2:3', '3:2'], maxN: 1, maxRefs: 1, desc: 'xAI Aurora - creative modes (Fun/Normal/Spicy)' },
-  'seedream-5.0-lite': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 14, resolutions: ['1k', '2k', '3k'], defaultResolution: '2k', desc: 'ByteDance Seedream 5.0 - web search, reasoning, 3K' },
+  'seedream-5.0-lite': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 14, resolutions: ['1K', '2K', '3K'], defaultResolution: '2K', desc: 'ByteDance Seedream 5.0 - web search, reasoning, 3K' },
   'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, maxRefs: 14, desc: 'ByteDance Seedream 4.5 - ultra 4K cinematic' },
   'flux-kontext-pro': { name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'FLUX Kontext Pro - character consistency' },
   'flux-2-pro': { name: 'Flux 2 Pro', provider: 'Black Forest Labs', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 8, resolutions: ['1K', '2K'], defaultResolution: '1K', desc: 'FLUX 2 Pro - 32B param, photoreal, typography' },
@@ -9249,7 +9249,11 @@ app.post('/api/ximage3/generate', async (req, res) => {
     inputObj.n = Math.min(parseInt(n) || 1, modelConfig.maxN || 1);
     if (imageUrls.length > 0) inputObj.image_urls = imageUrls.slice(0, modelConfig.maxRefs);
     if (modelConfig.resolutions && resolution) {
-      inputObj.resolution = resolution;
+      const normalizedRes = resolution.toUpperCase();
+      if (!modelConfig.resolutions.includes(normalizedRes)) {
+        return res.status(400).json({ error: `Invalid resolution, must be one of ${modelConfig.resolutions.map(r => "'" + r + "'").join(', ')} (uppercase K)` });
+      }
+      inputObj.resolution = normalizedRes;
     }
     
     const webhookUrl = `${baseUrl}/api/ximage3/webhook`;
