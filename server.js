@@ -9551,6 +9551,27 @@ app.delete('/api/ximage3/history/:id', async (req, res) => {
   }
 });
 
+app.get('/api/ximage3/proxy-image', async (req, res) => {
+  try {
+    const imageUrl = req.query.url;
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'URL diperlukan' });
+    }
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: { 'User-Agent': 'Xclip/1.0' }
+    });
+    const contentType = response.headers['content-type'] || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    console.error('[XIMAGE3] Proxy image error:', error.message);
+    res.status(500).json({ error: 'Gagal load image' });
+  }
+});
+
 app.get('/api/ximage3/download', async (req, res) => {
   try {
     const imageUrl = req.query.url;

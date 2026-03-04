@@ -4698,8 +4698,9 @@ function renderXImage3Gallery() {
     html += '<div class="gallery-header">Gambar yang Dihasilkan (' + state.ximage3.generatedImages.length + ')</div>';
     html += '<div class="images-grid">';
     state.ximage3.generatedImages.forEach(function(image, index) {
+      var displayUrl = API_URL + '/api/ximage3/proxy-image?url=' + encodeURIComponent(image.url);
       html += '<div class="image-card">';
-      html += '<div class="image-wrapper"><img src="' + image.url + '" alt="Generated" loading="lazy"/></div>';
+      html += '<div class="image-wrapper"><img src="' + displayUrl + '" alt="Generated" loading="lazy"/></div>';
       html += '<div class="image-card-footer">';
       html += '<span class="image-model-tag">' + (image.model || 'AI').toUpperCase() + '</span>';
       html += '<div style="display:flex;gap:4px;flex-shrink:0;">';
