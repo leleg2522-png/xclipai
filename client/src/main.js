@@ -310,7 +310,9 @@ const state = {
     modelVariant: '',
     renderingSpeed: 'BALANCED',
     imageStyle: 'AUTO',
-    acceleration: 'none'
+    acceleration: 'none',
+    googleSearch: false,
+    outputFormat: 'png'
   },
   ximageRoomManager: {
     rooms: [],
@@ -451,7 +453,7 @@ const PERSIST_KEYS = {
   vidgen3: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'fps', 'generateAudio', 'cameraFixed', 'turboMode', 'ratio', 'customApiKey'],
   videogen: ['prompt', 'selectedModel', 'duration', 'aspectRatio', 'customApiKey'],
   motion: ['prompt', 'selectedModel', 'characterOrientation'],
-  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality', 'modelVariant', 'renderingSpeed', 'imageStyle', 'acceleration'],
+  ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality', 'modelVariant', 'renderingSpeed', 'imageStyle', 'acceleration', 'googleSearch', 'outputFormat'],
   chat: ['selectedModel'],
   vidgen3RoomManager: ['xclipApiKey'],
   vidgen2: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'watermark', 'style', 'storyboard', 'enableGif', 'generationType', 'customApiKey'],
@@ -3971,6 +3973,7 @@ function renderXImagePage() {
     { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
     { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
     { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, maxRefs: 2, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
+    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K', '4K'], hasGoogleSearch: true, hasOutputFormat: true, outputFormats: ['png', 'jpg'], maxRefs: 14, sizes: ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'] },
     { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
     { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxRefs: 2, sizes: ['1:1', '3:2', '2:3'] },
     { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], maxRefs: 1, sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
@@ -4121,6 +4124,27 @@ function renderXImagePage() {
     html += '<div class="aspect-buttons">';
     currentModelConfig.accelerations.forEach(function(a) {
       html += '<button class="aspect-btn ' + (state.ximage.acceleration === a ? 'active' : '') + '" data-ximage-accel="' + a + '">' + a.charAt(0).toUpperCase() + a.slice(1) + '</button>';
+    });
+    html += '</div></div>';
+  }
+  
+  if (currentModelConfig.hasGoogleSearch) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Google Search</h3>';
+    html += '<p class="setting-hint" style="margin-bottom:8px;font-size:11px;">Gunakan web search grounding untuk generate gambar berdasarkan informasi real-time</p>';
+    html += '<label class="toggle-switch" style="display:flex;align-items:center;gap:10px;cursor:pointer;">';
+    html += '<input type="checkbox" id="ximageGoogleSearch" ' + (state.ximage.googleSearch ? 'checked' : '') + ' style="width:18px;height:18px;cursor:pointer;">';
+    html += '<span>' + (state.ximage.googleSearch ? 'Aktif' : 'Nonaktif') + '</span>';
+    html += '</label>';
+    html += '</div>';
+  }
+  
+  if (currentModelConfig.hasOutputFormat) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Output Format</h3>';
+    html += '<div class="aspect-buttons">';
+    currentModelConfig.outputFormats.forEach(function(f) {
+      html += '<button class="aspect-btn ' + (state.ximage.outputFormat === f ? 'active' : '') + '" data-ximage-format="' + f + '">' + f.toUpperCase() + '</button>';
     });
     html += '</div></div>';
   }
@@ -9192,6 +9216,15 @@ function attachXImageEventListeners() {
     generateBtn.addEventListener('click', generateXImage);
   }
   
+  var googleSearchCheckbox = document.getElementById('ximageGoogleSearch');
+  if (googleSearchCheckbox) {
+    googleSearchCheckbox.addEventListener('change', function(e) {
+      state.ximage.googleSearch = e.target.checked;
+      saveUserInputs('ximage');
+      render();
+    });
+  }
+  
   if (promptInput) {
     promptInput.addEventListener('input', function(e) {
       state.ximage.prompt = e.target.value;
@@ -9250,7 +9283,7 @@ function attachXImageEventListeners() {
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
         var newModelId = modelCard.dataset.ximageModel;
-        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana'];
+        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2'];
         if (!modelsWithMultiRef.includes(newModelId)) {
           state.ximage.sourceImage2 = null;
         }
@@ -9313,6 +9346,14 @@ function attachXImageEventListeners() {
       var accelBtn = e.target.closest('[data-ximage-accel]');
       if (accelBtn && state.currentPage === 'ximage') {
         state.ximage.acceleration = accelBtn.dataset.ximageAccel;
+        saveUserInputs('ximage');
+        render();
+        return;
+      }
+      
+      var formatBtn = e.target.closest('[data-ximage-format]');
+      if (formatBtn && state.currentPage === 'ximage') {
+        state.ximage.outputFormat = formatBtn.dataset.ximageFormat;
         saveUserInputs('ximage');
         render();
         return;
@@ -9504,12 +9545,14 @@ async function generateXImage() {
       modelVariant: state.ximage.modelVariant,
       renderingSpeed: state.ximage.renderingSpeed,
       imageStyle: state.ximage.imageStyle,
-      acceleration: state.ximage.acceleration
+      acceleration: state.ximage.acceleration,
+      googleSearch: state.ximage.googleSearch,
+      outputFormat: state.ximage.outputFormat
     };
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'seedream-4.5', 'seedream-api'];
+      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'seedream-4.5', 'seedream-api'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }

@@ -7484,6 +7484,7 @@ const XIMAGE_MODELS = {
   'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
   'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
   'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'kie-market', apiModel: 'google/nano-banana', i2iModel: 'google/nano-banana-edit', useImageSize: true },
+  'nano-banana-2': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'google/nanobanana2', i2iModel: 'google/nanobanana2', i2iImageField: 'image_input', i2iImageArray: true, supportsGoogleSearch: true, supportsOutputFormat: true },
   'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution', i2iImageField: 'image_urls', i2iImageArray: true },
   'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1' },
   'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'kie-flux-kontext' },
@@ -7667,7 +7668,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
-    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality, modelVariant, renderingSpeed, imageStyle, acceleration } = req.body;
+    const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality, modelVariant, renderingSpeed, imageStyle, acceleration, googleSearch, outputFormat } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
@@ -7799,6 +7800,12 @@ app.post('/api/ximage/generate', async (req, res) => {
       }
       if (acceleration && modelConfig.supportsAcceleration) {
         inputBody.acceleration = acceleration;
+      }
+      if (modelConfig.supportsGoogleSearch && googleSearch) {
+        inputBody.google_search = true;
+      }
+      if (modelConfig.supportsOutputFormat && outputFormat) {
+        inputBody.output_format = outputFormat;
       }
       if (isI2I && imageUrls.length > 0) {
         if (modelConfig.i2iImageField) {
