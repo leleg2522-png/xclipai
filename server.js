@@ -9274,18 +9274,28 @@ app.post('/api/ximage3/generate', async (req, res) => {
       }
     );
     
-    console.log('[XIMAGE3] Poyo API response:', JSON.stringify(response.data));
+    console.log('[XIMAGE3] Poyo API response status:', response.status);
+    console.log('[XIMAGE3] Poyo API response data:', JSON.stringify(response.data));
     
     const respData = response.data;
+    
+    if (respData.code && respData.code !== 200 && respData.error) {
+      const errMsg = respData.error?.message || respData.error || 'Poyo API error';
+      console.error('[XIMAGE3] Poyo API returned error in 200 response:', errMsg);
+      return res.status(400).json({ error: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg) });
+    }
     
     const taskId = respData.data?.task_id || 
                    respData.task_id || 
                    respData.data?.id ||
-                   respData.id;
+                   respData.id ||
+                   respData.data?.request_id ||
+                   respData.request_id;
     
     if (!taskId) {
-      console.error('[XIMAGE3] No task ID in response:', respData);
-      return res.status(500).json({ error: 'Tidak mendapat task ID dari Poyo AI' });
+      console.error('[XIMAGE3] No task ID in response. Full response keys:', Object.keys(respData), 'data keys:', respData.data ? Object.keys(respData.data) : 'N/A');
+      console.error('[XIMAGE3] Full response:', JSON.stringify(respData));
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari Poyo AI. Response: ' + JSON.stringify(respData).substring(0, 200) });
     }
     
     await pool.query(`
