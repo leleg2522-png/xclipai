@@ -7884,13 +7884,22 @@ app.post('/api/ximage/generate', async (req, res) => {
     
   } catch (error) {
     const errData = error.response?.data;
-    console.error('[XIMAGE] Generate error:', JSON.stringify(errData) || error.message);
     const statusCode = error.response?.status;
-    let errMsg = errData?.msg || errData?.message || errData?.error?.message || errData?.error || error.message;
+    console.error('[XIMAGE] Generate error:', statusCode, typeof errData === 'string' ? errData.substring(0, 200) : JSON.stringify(errData));
+    let errMsg;
+    if (typeof errData === 'string' && errData.includes('<html')) {
+      errMsg = `kie.ai returned HTTP ${statusCode || 'error'}. Coba lagi nanti.`;
+    } else if (errData && typeof errData === 'object') {
+      errMsg = errData.msg || errData.message || errData.error?.message || errData.error || error.message;
+    } else {
+      errMsg = error.message;
+    }
     if (statusCode === 401 || statusCode === 403) {
       errMsg = 'API key kie.ai tidak valid atau expired. Hubungi admin untuk update key.';
+    } else if (statusCode === 404) {
+      errMsg = 'Model atau endpoint kie.ai tidak ditemukan (404). Kemungkinan model belum tersedia.';
     }
-    res.status(500).json({ error: errMsg });
+    res.status(error.response?.status || 500).json({ error: errMsg });
   }
 });
 
