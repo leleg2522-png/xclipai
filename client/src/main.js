@@ -5633,14 +5633,14 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                         <div class="task-result">
                           <video src="${task.videoUrl}" controls class="result-video"></video>
                           <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
-                            <a href="${task.videoUrl}" download="motion-${Date.now()}.mp4" class="btn btn-primary btn-sm" style="flex:1">
+                            <button onclick="downloadVideo('${task.videoUrl}', 'motion-${Date.now()}.mp4')" class="btn btn-primary btn-sm" style="flex:1">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>
                                 <line x1="12" y1="15" x2="12" y2="3"/>
                               </svg>
                               Download
-                            </a>
+                            </button>
                             <button class="btn btn-sm btn-danger" onclick="deleteMotionTask('${task.taskId}')">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/>
@@ -5665,14 +5665,14 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                     <div class="video-item">
                       <video src="${video.url}" controls class="result-video"></video>
                       <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
-                        <a href="${video.url}" download="motion-${video.taskId}.mp4" class="btn btn-primary btn-sm" style="flex:1">
+                        <button onclick="downloadVideo('${video.url}', 'motion-${video.taskId}.mp4')" class="btn btn-primary btn-sm" style="flex:1">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="7 10 12 15 17 10"/>
                             <line x1="12" y1="15" x2="12" y2="3"/>
                           </svg>
                           Download
-                        </a>
+                        </button>
                         <button class="btn btn-sm btn-danger" onclick="deleteMotionHistory(${idx})">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"/>
