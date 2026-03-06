@@ -9100,7 +9100,17 @@ async function getXImage3RoomApiKey(xclipApiKey) {
 }
 
 app.get('/api/ximage3/subscription-status', async (req, res) => {
-  if (!req.session.userId) {
+  let userId = req.session.userId;
+  
+  if (!userId) {
+    const xclipApiKey = req.headers['x-xclip-key'] || req.query.apiKey;
+    if (xclipApiKey) {
+      const keyInfo = await validateXclipApiKey(xclipApiKey);
+      if (keyInfo) userId = keyInfo.user_id;
+    }
+  }
+  
+  if (!userId) {
     return res.status(401).json({ error: 'Login diperlukan' });
   }
   try {
@@ -9110,7 +9120,7 @@ app.get('/api/ximage3/subscription-status', async (req, res) => {
       LEFT JOIN ximage3_rooms r ON r.id = s.ximage3_room_id
       WHERE s.user_id = $1 AND s.ximage3_room_id IS NOT NULL
       ORDER BY s.created_at DESC LIMIT 1
-    `, [req.session.userId]);
+    `, [userId]);
     if (result.rows.length > 0 && result.rows[0].ximage3_room_id) {
       res.json({
         hasSubscription: true,
@@ -9180,27 +9190,36 @@ app.post('/api/ximage3/join-room', async (req, res) => {
       return res.status(400).json({ error: 'Room sudah penuh' });
     }
     
+    const userId = keyInfo.user_id;
+    
     const oldRoomResult = await pool.query(
       'SELECT ximage3_room_id FROM subscriptions WHERE user_id = $1 AND ximage3_room_id IS NOT NULL ORDER BY created_at DESC LIMIT 1',
-      [keyInfo.user_id]
+      [userId]
     );
     const oldRoomId = oldRoomResult.rows[0]?.ximage3_room_id;
 
     const updateResult = await pool.query(`
       UPDATE subscriptions SET ximage3_room_id = $1 
       WHERE user_id = $2 AND status = 'active'
-    `, [roomId, keyInfo.user_id]);
+    `, [roomId, userId]);
     
     if (updateResult.rowCount === 0) {
       const existingSub = await pool.query(
         'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY id DESC LIMIT 1',
-        [keyInfo.user_id]
+        [userId]
       );
       if (existingSub.rows.length > 0) {
         await pool.query(
           'UPDATE subscriptions SET ximage3_room_id = $1 WHERE id = $2',
           [roomId, existingSub.rows[0].id]
         );
+      } else {
+        await pool.query(
+          `INSERT INTO subscriptions (user_id, status, ximage3_room_id, created_at, expired_at) 
+           VALUES ($1, 'active', $2, NOW(), NOW() + INTERVAL '365 days')`,
+          [userId, roomId]
+        );
+        console.log(`[XIMAGE3] Created new subscription for user ${userId} with room ${roomId}`);
       }
     }
     
@@ -9218,10 +9237,13 @@ app.post('/api/ximage3/join-room', async (req, res) => {
       );
     }
     
+    console.log(`[XIMAGE3] User ${userId} joined room ${roomId} (${room.name}), old room: ${oldRoomId || 'none'}`);
+    
     res.json({ 
       success: true, 
       message: `Berhasil bergabung ke ${room.name}`,
-      roomId 
+      roomId,
+      roomName: room.name
     });
   } catch (error) {
     console.error('[XIMAGE3] Join room error:', error);

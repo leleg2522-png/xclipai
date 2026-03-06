@@ -1567,7 +1567,10 @@ async function loadXImage3Rooms() {
 
 async function loadXImage3SubscriptionStatus() {
   try {
-    const response = await fetch(`${API_URL}/api/ximage3/subscription-status`, { credentials: 'include' });
+    var headers = {};
+    var apiKey = state.ximage3.customApiKey || state.ximage3RoomManager.xclipApiKey;
+    if (apiKey) headers['x-xclip-key'] = apiKey;
+    const response = await fetch(`${API_URL}/api/ximage3/subscription-status`, { credentials: 'include', headers: headers });
     if (!response.ok) {
       state.ximage3RoomManager.hasSubscription = false;
       state.ximage3RoomManager.subscription = null;
@@ -1603,7 +1606,12 @@ async function joinXImage3Room(roomId) {
       showToast(data.message || 'Berhasil bergabung ke X Image3 room!', 'success');
       state.ximage3RoomManager.showRoomModal = false;
       state.ximage3.customApiKey = apiKey;
+      state.ximage3RoomManager.xclipApiKey = apiKey;
       saveUserInputs('ximage3');
+      if (data.roomId && data.roomName) {
+        state.ximage3RoomManager.hasSubscription = true;
+        state.ximage3RoomManager.subscription = { roomId: data.roomId, roomName: data.roomName };
+      }
       await loadXImage3SubscriptionStatus();
       await loadXImage3Rooms();
     } else {
