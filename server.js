@@ -8885,8 +8885,8 @@ app.post('/api/voiceover/generate', async (req, res) => {
     if (roomKeyData.error && !roomKeyData.keyInfo) return res.status(401).json({ error: roomKeyData.error });
     if (roomKeyData.error) return res.status(403).json({ error: roomKeyData.error });
 
-    const kieKey = roomKeyData.apiKey;
     const keyInfo = roomKeyData.keyInfo;
+    const allKeys = roomKeyData.allKeys || [{ name: roomKeyData.keyName, key: roomKeyData.apiKey }];
 
     const cooldownRemaining = getUserCooldownRemaining(keyInfo.user_id, 'voiceover');
     if (cooldownRemaining > 0) {
@@ -8898,7 +8898,7 @@ app.post('/api/voiceover/generate', async (req, res) => {
       });
     }
 
-    console.log(`[VOICEOVER] Generating via kie.ai | user: ${keyInfo.user_id} | voice: ${voiceId || 'dialogue'} | model: ${kieModel} | chars: ${text ? text.length : 'n/a'}`);
+    console.log(`[VOICEOVER] Generating via kie.ai | user: ${keyInfo.user_id} | voice: ${voiceId || 'dialogue'} | model: ${kieModel} | chars: ${text ? text.length : 'n/a'} | keys: ${allKeys.length}`);
 
     const kieInput = isDialogue
       ? { dialogue, stability: stability ?? 0.5 }
@@ -8912,33 +8912,65 @@ app.post('/api/voiceover/generate', async (req, res) => {
           speed: 1
         };
 
-    const createRes = await axios.post(
-      'https://api.kie.ai/api/v1/jobs/createTask',
-      { model: kieModel, input: kieInput },
-      {
-        headers: {
-          'Authorization': `Bearer ${kieKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
+    let taskId = null;
+    let lastAuthError = null;
+    let usedKeyName = null;
+    
+    for (const keyEntry of allKeys) {
+      try {
+        console.log(`[VOICEOVER] Trying key: ${keyEntry.name}`);
+        const createRes = await axios.post(
+          'https://api.kie.ai/api/v1/jobs/createTask',
+          { model: kieModel, input: kieInput },
+          {
+            headers: {
+              'Authorization': `Bearer ${keyEntry.key}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
+
+        const respData = createRes.data;
+        console.log(`[VOICEOVER] kie.ai response (${keyEntry.name}):`, JSON.stringify(respData).substring(0, 300));
+        
+        if (respData.code && respData.code !== 200) {
+          const isAuthErr = respData.code === 401 || respData.code === 403 || (respData.msg && /unauthorized|auth|forbidden/i.test(respData.msg));
+          if (isAuthErr) {
+            console.warn(`[VOICEOVER] Key ${keyEntry.name} auth failed: ${respData.msg}`);
+            lastAuthError = respData.msg;
+            continue;
+          }
+          return res.status(400).json({ error: `kie.ai: ${respData.msg}` });
+        }
+        
+        taskId = respData?.data?.taskId || respData?.data?.task_id || respData?.taskId || respData?.task_id || respData?.data?.id || respData?.id;
+        if (taskId) {
+          usedKeyName = keyEntry.name;
+          break;
+        }
+        console.error(`[VOICEOVER] No taskId from ${keyEntry.name}. Keys:`, respData.data ? Object.keys(respData.data) : 'N/A');
+      } catch (keyErr) {
+        const status = keyErr.response?.status;
+        if (status === 401 || status === 403) {
+          console.warn(`[VOICEOVER] Key ${keyEntry.name} HTTP ${status} auth error`);
+          lastAuthError = keyErr.response?.data?.msg || keyErr.response?.data?.message || `HTTP ${status}`;
+          continue;
+        }
+        throw keyErr;
       }
-    );
-
-    const respData = createRes.data;
-    console.log('[VOICEOVER] kie.ai response:', JSON.stringify(respData));
-    
-    if (respData.code && respData.code !== 200 && respData.msg) {
-      return res.status(400).json({ error: `kie.ai: ${respData.msg}` });
     }
     
-    const taskId = respData?.data?.taskId || respData?.data?.task_id || respData?.taskId || respData?.task_id || respData?.data?.id || respData?.id;
     if (!taskId) {
-      console.error('[VOICEOVER] No taskId. Response keys:', Object.keys(respData), 'data keys:', respData.data ? Object.keys(respData.data) : 'N/A');
-      return res.status(500).json({ error: 'Tidak mendapat taskId dari kie.ai. Response: ' + JSON.stringify(respData).substring(0, 200) });
+      if (lastAuthError) {
+        return res.status(401).json({ error: `Semua API key voiceover expired/invalid. Error terakhir: ${lastAuthError}` });
+      }
+      return res.status(500).json({ error: 'Tidak mendapat taskId dari kie.ai setelah mencoba semua key' });
     }
 
-    console.log(`[VOICEOVER] Task submitted: ${taskId}`);
+    console.log(`[VOICEOVER] Task submitted: ${taskId} (key: ${usedKeyName})`);
 
+    const workingKey = allKeys.find(k => k.name === usedKeyName)?.key || allKeys[0]?.key;
     let audioKieUrl = null;
     for (let attempt = 0; attempt < 60; attempt++) {
       await new Promise(r => setTimeout(r, 3000));
@@ -8946,7 +8978,7 @@ app.post('/api/voiceover/generate', async (req, res) => {
         `https://api.kie.ai/api/v1/jobs/recordInfo`,
         {
           params: { taskId },
-          headers: { 'Authorization': `Bearer ${kieKey}` },
+          headers: { 'Authorization': `Bearer ${workingKey}` },
           timeout: 15000
         }
       );
