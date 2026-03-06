@@ -8924,8 +8924,18 @@ app.post('/api/voiceover/generate', async (req, res) => {
       }
     );
 
-    const taskId = createRes.data?.data?.taskId;
-    if (!taskId) throw new Error('Tidak mendapat taskId dari kie.ai');
+    const respData = createRes.data;
+    console.log('[VOICEOVER] kie.ai response:', JSON.stringify(respData));
+    
+    if (respData.code && respData.code !== 200 && respData.msg) {
+      return res.status(400).json({ error: `kie.ai: ${respData.msg}` });
+    }
+    
+    const taskId = respData?.data?.taskId || respData?.data?.task_id || respData?.taskId || respData?.task_id || respData?.data?.id || respData?.id;
+    if (!taskId) {
+      console.error('[VOICEOVER] No taskId. Response keys:', Object.keys(respData), 'data keys:', respData.data ? Object.keys(respData.data) : 'N/A');
+      return res.status(500).json({ error: 'Tidak mendapat taskId dari kie.ai. Response: ' + JSON.stringify(respData).substring(0, 200) });
+    }
 
     console.log(`[VOICEOVER] Task submitted: ${taskId}`);
 
