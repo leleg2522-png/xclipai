@@ -3974,6 +3974,7 @@ function renderXImagePage() {
     { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
     { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, maxRefs: 2, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
     { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K', '4K'], hasGoogleSearch: true, hasOutputFormat: true, outputFormats: ['png', 'jpg'], maxRefs: 14, sizes: ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'] },
+    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'PRO', hasResolution: true, resolutions: ['1K', '2K', '4K'], hasGoogleSearch: true, hasOutputFormat: true, outputFormats: ['png', 'jpg'], maxRefs: 14, sizes: ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'] },
     { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
     { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxRefs: 2, sizes: ['1:1', '3:2', '2:3'] },
     { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], maxRefs: 1, sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
@@ -9284,7 +9285,7 @@ function attachXImageEventListeners() {
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
         var newModelId = modelCard.dataset.ximageModel;
-        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2'];
+        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'nano-banana-pro'];
         if (!modelsWithMultiRef.includes(newModelId)) {
           state.ximage.sourceImage2 = null;
         }
@@ -9553,7 +9554,7 @@ async function generateXImage() {
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'seedream-4.5', 'seedream-api'];
+      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'nano-banana-pro', 'seedream-4.5', 'seedream-api'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }

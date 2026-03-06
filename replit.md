@@ -16,12 +16,13 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
 - **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
-  - 13 AI models via kie.ai APIs:
+  - 14 AI models via kie.ai APIs:
     - seedream-4.5: Seedream 4.5 (ByteDance) via Market API, supports I2I, quality (basic/high)
     - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
     - flux-2-pro: FLUX.2 Pro (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
     - google-nano-banana: Nano Banana (Google) via Market API, supports I2I
     - nano-banana-2: Nano Banana 2 (Google Gemini 3.1 Flash) via Market API, supports I2I (image_input array, up to 14 refs), resolution (1K/2K/4K), google_search toggle, output_format (png/jpg), extreme aspect ratios (1:8, 8:1, 1:4, 4:1)
+    - nano-banana-pro: Nano Banana Pro (Google Gemini 3 Pro) via Market API, supports I2I (image_input array, up to 14 refs), resolution (1K/2K/4K), google_search toggle, output_format (png/jpg), extreme aspect ratios
     - seedream-api: Seedream API/V4 (ByteDance) via Market API, supports I2I, named sizes, 1K/2K/4K resolution
     - gpt-image-1.5: 4o Image (OpenAI) via 4o-image API, supports I2I, N variants
     - flux-1-kontext: Flux.1 Kontext (Black Forest Labs) via Flux Kontext API, supports I2I, variant (pro/max)
