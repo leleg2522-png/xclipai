@@ -3581,8 +3581,8 @@ function renderVidgen3Page() {
                     <span class="upload-hint">JPG, PNG (max 10MB)</span>
                   </div>
                 `}
+                <input type="file" id="vidgen3ImageInput" accept="image/*" style="display:none">
               </div>
-              <input type="file" id="vidgen3ImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
             </div>
           </div>
 
@@ -5187,8 +5187,8 @@ function renderVideoGenPage() {
                     <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                   </div>
                 `}
+                <input type="file" id="videoGenImageInput" accept="image/*" style="display:none">
               </div>
-              <input type="file" id="videoGenImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
             </div>
           </div>
           
@@ -5534,7 +5534,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                     <span class="upload-hint">JPG, PNG, WEBP (max 10MB)</span>
                   </div>
                 `}
-                <input type="file" id="motionImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                <input type="file" id="motionImageInput" accept="image/*" style="display:none">
               </div>
             </div>
           </div>
@@ -6781,15 +6781,10 @@ function attachVideoGenEventListeners() {
   const clearResult = document.getElementById('clearVideoResult');
   const retryBtn = document.getElementById('retryVideoGen');
   
-  if (uploadZone) {
-    var vgFileInput = document.getElementById('videoGenImageInput');
+  if (uploadZone && fileInput) {
     uploadZone.addEventListener('click', function(e) {
       if (!e.target.closest('.remove-reference')) {
-        var fi = document.getElementById('videoGenImageInput');
-        if (fi) {
-          fi.value = '';
-          setTimeout(function() { fi.click(); }, 0);
-        }
+        fileInput.click();
       }
     });
     uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('drag-over'); });
@@ -6798,7 +6793,7 @@ function attachVideoGenEventListeners() {
       e.preventDefault(); uploadZone.classList.remove('drag-over');
       if (e.dataTransfer.files.length > 0) handleVideoGenImageUpload({ target: { files: e.dataTransfer.files } });
     });
-    if (vgFileInput) vgFileInput.addEventListener('change', handleVideoGenImageUpload);
+    fileInput.addEventListener('change', handleVideoGenImageUpload);
   }
   
   if (removeBtn) {
@@ -6941,7 +6936,7 @@ function renderVidgen2Page() {
                   </div>
                 `}
               </div>
-              <input type="file" id="vidgen2ImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                <input type="file" id="vidgen2ImageInput" accept="image/*" style="display:none">
             </div>
           </div>
           ` : `
@@ -7044,7 +7039,7 @@ function renderVidgen2Page() {
                     </div>
                   `}
                 </div>
-                <input type="file" id="vidgen2ImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                  <input type="file" id="vidgen2ImageInput" accept="image/*" style="display:none">
               </div>
               `}
             </div>
@@ -7379,7 +7374,7 @@ function attachVidgen2EventListeners() {
   const apiKeyInput = document.getElementById('vidgen2ApiKey');
   
   if (uploadZone && imageInput) {
-    uploadZone.addEventListener('click', function() { setTimeout(function() { imageInput.click(); }, 0); });
+    uploadZone.addEventListener('click', function() { imageInput.click(); });
     uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
     uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
     uploadZone.addEventListener('drop', (e) => {
@@ -7839,7 +7834,7 @@ function renderVidgen4Page() {
                   </div>
                 `}
               </div>
-              <input type="file" id="vidgen4ImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                <input type="file" id="vidgen4ImageInput" accept="image/*" style="display:none">
             </div>
           </div>
           ` : `
@@ -7942,7 +7937,7 @@ function renderVidgen4Page() {
                     </div>
                   `}
                 </div>
-                <input type="file" id="vidgen4ImageInput" accept="image/*" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                  <input type="file" id="vidgen4ImageInput" accept="image/*" style="display:none">
               </div>
               `}
             </div>
@@ -8297,7 +8292,7 @@ function attachVidgen4EventListeners() {
   const apiKeyInput = document.getElementById('vidgen4ApiKey');
   
   if (uploadZone && imageInput) {
-    uploadZone.addEventListener('click', function() { setTimeout(function() { imageInput.click(); }, 0); });
+    uploadZone.addEventListener('click', function() { imageInput.click(); });
     uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
     uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
     uploadZone.addEventListener('drop', (e) => {
@@ -8730,7 +8725,7 @@ function attachVidgen3EventListeners() {
   const audioUrlInput = document.getElementById('vidgen3AudioUrl');
 
   if (uploadZone && imageInput) {
-    uploadZone.addEventListener('click', function() { setTimeout(function() { imageInput.click(); }, 0); });
+    uploadZone.addEventListener('click', function() { imageInput.click(); });
 
     uploadZone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -9156,7 +9151,7 @@ function attachXImageEventListeners() {
   var apiKeyInput = document.getElementById('ximageApiKey');
   
   if (uploadZone && imageInput) {
-    uploadZone.addEventListener('click', function() { setTimeout(function() { imageInput.click(); }, 0); });
+    uploadZone.addEventListener('click', function() { imageInput.click(); });
     
     uploadZone.addEventListener('dragover', function(e) {
       e.preventDefault();
@@ -10594,7 +10589,7 @@ function attachMotionEventListeners() {
   if (imageUploadZone && imageInput) {
     imageUploadZone.addEventListener('click', (e) => {
       if (!e.target.closest('.remove-upload')) {
-        setTimeout(function() { imageInput.click(); }, 0);
+        imageInput.click();
       }
     });
     
@@ -10604,7 +10599,7 @@ function attachMotionEventListeners() {
   if (videoUploadZone && videoInput) {
     videoUploadZone.addEventListener('click', (e) => {
       if (!e.target.closest('.remove-upload')) {
-        setTimeout(function() { videoInput.click(); }, 0);
+        videoInput.click();
       }
     });
     
