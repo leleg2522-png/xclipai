@@ -5184,10 +5184,10 @@ function renderVideoGenPage() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar</span>
-                    <span class="upload-hint">JPG, PNG (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 20MB)</span>
                   </div>
                 `}
-                <input type="file" id="videoGenImageInput" accept="image/*" style="display: none">
+                <input type="file" id="videoGenImageInput" accept="image/*,.heic,.heif,.webp,.avif" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
               </div>
             </div>
           </div>
@@ -6786,6 +6786,12 @@ function attachVideoGenEventListeners() {
       if (!e.target.closest('.remove-reference')) {
         fileInput.click();
       }
+    });
+    uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', function() { uploadZone.classList.remove('drag-over'); });
+    uploadZone.addEventListener('drop', function(e) {
+      e.preventDefault(); uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) handleVideoGenImageUpload({ target: { files: e.dataTransfer.files } });
     });
     
     fileInput.addEventListener('change', handleVideoGenImageUpload);
@@ -11130,31 +11136,39 @@ function deleteMotionTask(taskId) {
 }
 
 function handleVideoGenImageUpload(e) {
-  const file = e.target.files[0];
+  var files = e.target.files || (e.dataTransfer && e.dataTransfer.files);
+  var file = files && files[0];
   if (!file) return;
   
-  if (!file.type.startsWith('image/')) {
-    showToast('Silakan upload file gambar', 'error');
+  var isImage = (file.type && file.type.startsWith('image/')) || /\.(jpe?g|png|gif|webp|bmp|heic|heif|avif|tiff?)$/i.test(file.name);
+  if (!isImage) {
+    showToast('Silakan upload file gambar (JPG, PNG, WebP, dll)', 'error');
+    var fi = document.getElementById('videoGenImageInput');
+    if (fi) fi.value = '';
     return;
   }
   
-  if (file.size > 10 * 1024 * 1024) {
-    showToast('Ukuran gambar maksimal 10MB', 'error');
+  if (file.size > 20 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 20MB', 'error');
+    var fi2 = document.getElementById('videoGenImageInput');
+    if (fi2) fi2.value = '';
     return;
   }
   
-  const reader = new FileReader();
-  reader.onload = (event) => {
+  var reader = new FileReader();
+  reader.onload = function(event) {
     state.videogen.sourceImage = {
       name: file.name,
-      type: file.type,
+      type: file.type || 'image/jpeg',
       data: event.target.result
     };
     render();
     showToast('Gambar berhasil diupload!', 'success');
   };
+  reader.onerror = function() {
+    showToast('Gagal membaca file gambar. Coba gambar lain.', 'error');
+  };
   reader.readAsDataURL(file);
-  e.target.value = '';
 }
 
 async function generateVideo() {
