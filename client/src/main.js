@@ -5184,7 +5184,7 @@ function renderVideoGenPage() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar</span>
-                    <span class="upload-hint">JPG, PNG, WebP (max 20MB)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                   </div>
                 `}
               </div>
@@ -11152,8 +11152,8 @@ function handleVideoGenImageUpload(e) {
     return;
   }
   
-  if (file.size > 20 * 1024 * 1024) {
-    showToast('Ukuran gambar maksimal 20MB', 'error');
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
     var fi2 = document.getElementById('videoGenImageInput');
     if (fi2) fi2.value = '';
     return;
