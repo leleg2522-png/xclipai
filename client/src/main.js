@@ -3578,7 +3578,7 @@ function renderVidgen3Page() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar</span>
-                    <span class="upload-hint">JPG, PNG (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG (max 50MB)</span>
                   </div>
                 `}
                 <input type="file" id="vidgen3ImageInput" accept="image/*" style="display:none">
@@ -5531,7 +5531,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Upload gambar karakter</span>
-                    <span class="upload-hint">JPG, PNG, WEBP (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG, WEBP (max 50MB)</span>
                   </div>
                 `}
                 <input type="file" id="motionImageInput" accept="image/*" style="display:none">
@@ -6932,7 +6932,7 @@ function renderVidgen2Page() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar (opsional)</span>
-                    <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                   </div>
                 `}
               </div>
@@ -7035,7 +7035,7 @@ function renderVidgen2Page() {
                         <polyline points="21 15 16 10 5 21"/>
                       </svg>
                       <span>Klik untuk upload referensi (opsional)</span>
-                      <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                      <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                     </div>
                   `}
                 </div>
@@ -7581,6 +7581,10 @@ function handleVidgen2ImageUpload(e) {
     alert('Hanya file gambar yang diperbolehkan');
     return;
   }
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (event) => {
     state.vidgen2.sourceImage = {
@@ -7830,7 +7834,7 @@ function renderVidgen4Page() {
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
                     <span>Klik untuk upload gambar (opsional)</span>
-                    <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                   </div>
                 `}
               </div>
@@ -7933,7 +7937,7 @@ function renderVidgen4Page() {
                         <polyline points="21 15 16 10 5 21"/>
                       </svg>
                       <span>Klik untuk upload referensi (opsional, max 3)</span>
-                      <span class="upload-hint">JPG, PNG, WebP (max 10MB)</span>
+                      <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
                     </div>
                   `}
                 </div>
@@ -8499,6 +8503,10 @@ function handleVidgen4ImageUpload(e) {
     alert('Hanya file gambar yang diperbolehkan');
     return;
   }
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (event) => {
     state.vidgen4.sourceImage = {
@@ -8931,6 +8939,11 @@ function handleVidgen3ImageUpload(e) {
 
   if (!file.type.startsWith('image/')) {
     alert('Hanya file gambar yang diperbolehkan');
+    return;
+  }
+
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
     return;
   }
 
@@ -9468,6 +9481,11 @@ function handleXImageUpload(e) {
     return;
   }
   
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
+    return;
+  }
+  
   var reader = new FileReader();
   reader.onload = function(event) {
     state.ximage.sourceImage = {
@@ -9966,6 +9984,11 @@ function handleXImage2Upload(e, refIndex) {
     return;
   }
 
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
+    return;
+  }
+
   var reader = new FileReader();
   reader.onload = function(event) {
     while (state.ximage2.sourceImages.length <= refIndex) {
@@ -10399,6 +10422,7 @@ function handleXImage3Upload(e, refIndex) {
   var file = e.target.files[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) { alert('Pilih file gambar'); return; }
+  if (file.size > 50 * 1024 * 1024) { showToast('Ukuran gambar maksimal 50MB', 'error'); return; }
   var reader = new FileReader();
   reader.onload = function(event) {
     while (state.ximage3.sourceImages.length <= refIndex) state.ximage3.sourceImages.push(null);
@@ -10722,8 +10746,8 @@ function handleMotionImageUpload(e) {
     return;
   }
   
-  if (file.size > 10 * 1024 * 1024) {
-    showToast('Ukuran gambar maksimal 10MB', 'error');
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Ukuran gambar maksimal 50MB', 'error');
     return;
   }
   
