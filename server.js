@@ -2669,54 +2669,63 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
   let forbiddenCount = 0;
 
   for (const endpoint of pollEndpoints) {
-    try {
-      const pollConfig = {
-        headers: { 'x-freepik-api-key': apiKey },
-        timeout: 15000
-      };
-      const rotatingProxy = getWebshareRotatingProxy();
-      if (rotatingProxy) {
-        const proxyUrl = `http://${rotatingProxy.username}:${rotatingProxy.password}@${rotatingProxy.proxy_address}:${rotatingProxy.port}`;
-        pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-        pollConfig.proxy = false;
-      }
-      const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, pollConfig);
-      
-      if (pollResponse.data && typeof pollResponse.data === 'object') {
-        const taskData = pollResponse.data.data || pollResponse.data;
-        const status = taskData.status || '';
+    for (let retry = 0; retry < 2; retry++) {
+      try {
+        const pollConfig = {
+          headers: { 'x-freepik-api-key': apiKey },
+          timeout: 15000
+        };
+        const rotatingProxy = retry === 0 ? getWebshareRotatingProxy() : null;
+        if (rotatingProxy) {
+          const proxyUrl = `http://${rotatingProxy.username}:${rotatingProxy.password}@${rotatingProxy.proxy_address}:${rotatingProxy.port}`;
+          pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+          pollConfig.proxy = false;
+        }
+        if (retry > 0) console.log(`[MOTION] Poll ${taskId} retry ${retry} direct (no proxy)`);
+        const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, pollConfig);
         
-        console.log(`[MOTION] Poll ${taskId} | Endpoint: ${endpoint} | Status: ${status} | Generated: ${JSON.stringify(taskData.generated || [])}`);
-        
-        if (status === 'COMPLETED' || status === 'completed') {
-          const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
-            || taskData.video?.url
-            || taskData.result?.url
-            || taskData.url;
-          if (videoUrl) return { status: 'completed', url: videoUrl };
-          return { status: 'processing' };
+        if (pollResponse.data && typeof pollResponse.data === 'object') {
+          const taskData = pollResponse.data.data || pollResponse.data;
+          const status = taskData.status || '';
+          
+          console.log(`[MOTION] Poll ${taskId} | Endpoint: ${endpoint} | Status: ${status} | Generated: ${JSON.stringify(taskData.generated || [])}`);
+          
+          if (status === 'COMPLETED' || status === 'completed') {
+            const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
+              || taskData.video?.url
+              || taskData.result?.url
+              || taskData.url;
+            if (videoUrl) return { status: 'completed', url: videoUrl };
+            return { status: 'processing' };
+          }
+          if (status === 'FAILED' || status === 'failed') {
+            const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || 'Generation failed';
+            console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg} | Full data: ${JSON.stringify(taskData)}`);
+            return { status: 'failed', error: errMsg };
+          }
+          if (status === 'IN_PROGRESS' || status === 'CREATED' || status === 'processing' || status === 'pending') {
+            return { status: 'processing' };
+          }
+          if (status) {
+            return { status: 'processing' };
+          }
         }
-        if (status === 'FAILED' || status === 'failed') {
-          const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || 'Generation failed';
-          console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg} | Full data: ${JSON.stringify(taskData)}`);
-          return { status: 'failed', error: errMsg };
+        break;
+      } catch (e) {
+        const httpStatus = e.response?.status;
+        if (httpStatus === 403) {
+          forbiddenCount++;
+          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 403 Forbidden (wrong API key or task not owned by this key)`);
+          break;
         }
-        if (status === 'IN_PROGRESS' || status === 'CREATED' || status === 'processing' || status === 'pending') {
-          return { status: 'processing' };
+        const isNetErr = !httpStatus && (e.message || '').match(/socket|tls|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ssl/i);
+        if (isNetErr && retry === 0) {
+          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} proxy network error: ${e.message}, retrying direct...`);
+          continue;
         }
-        if (status) {
-          return { status: 'processing' };
-        }
-      }
-    } catch (e) {
-      const httpStatus = e.response?.status;
-      if (httpStatus === 403) {
-        forbiddenCount++;
-        console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 403 Forbidden (wrong API key or task not owned by this key)`);
-      } else {
         console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} error: ${e.message}`);
+        break;
       }
-      continue;
     }
   }
 
@@ -3977,35 +3986,47 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     let successEndpoint = null;
     
     for (const endpoint of pollEndpoints) {
-      try {
-        console.log(`[MOTION] Trying poll endpoint: ${endpoint}`);
-        const statusPollConfig = {
-          headers: { 'x-freepik-api-key': freepikApiKey },
-          timeout: 15000
-        };
-        const rotProxy = getWebshareRotatingProxy();
-        if (rotProxy) {
-          const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
-          statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false });
-          statusPollConfig.proxy = false;
-        }
-        const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, statusPollConfig);
-        
-        if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
-          response = pollResponse;
-          successEndpoint = endpoint;
-          console.log(`[MOTION] Poll success with: ${endpoint}`);
-          
-          const status = pollResponse.data?.data?.status || pollResponse.data?.status;
-          if (status && status !== 'CREATED') {
-            console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
-            break;
+      for (let pRetry = 0; pRetry < 2; pRetry++) {
+        try {
+          console.log(`[MOTION] Trying poll endpoint: ${endpoint}${pRetry > 0 ? ' (direct retry)' : ''}`);
+          const statusPollConfig = {
+            headers: { 'x-freepik-api-key': freepikApiKey },
+            timeout: 15000
+          };
+          const rotProxy = pRetry === 0 ? getWebshareRotatingProxy() : null;
+          if (rotProxy) {
+            const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
+            statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false });
+            statusPollConfig.proxy = false;
           }
-        } else if (typeof pollResponse.data === 'string') {
-          console.log(`[MOTION] Endpoint ${endpoint} returned HTML/text, skipping`);
+          const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, statusPollConfig);
+          
+          if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
+            response = pollResponse;
+            successEndpoint = endpoint;
+            console.log(`[MOTION] Poll success with: ${endpoint}`);
+            
+            const status = pollResponse.data?.data?.status || pollResponse.data?.status;
+            if (status && status !== 'CREATED') {
+              console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
+            }
+          } else if (typeof pollResponse.data === 'string') {
+            console.log(`[MOTION] Endpoint ${endpoint} returned HTML/text, skipping`);
+          }
+          break;
+        } catch (err) {
+          const isNetErr = !err.response?.status && (err.message || '').match(/socket|tls|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ssl/i);
+          if (isNetErr && pRetry === 0) {
+            console.log(`[MOTION] Poll endpoint ${endpoint} proxy network error: ${err.message}, retrying direct...`);
+            continue;
+          }
+          console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
+          break;
         }
-      } catch (err) {
-        console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
+      }
+      if (response && successEndpoint) {
+        const foundStatus = response.data?.data?.status || response.data?.status;
+        if (foundStatus && foundStatus !== 'CREATED') break;
       }
     }
     
