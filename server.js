@@ -5750,14 +5750,23 @@ app.get('/api/motion/room-usage', async (req, res) => {
       GROUP BY room_id
     `);
     
-    const usage = { 1: 0, 2: 0, 3: 0 };
+    const roomsResult = await pool.query('SELECT id, max_users FROM motion_rooms ORDER BY id');
+    const usage = {};
+    const maxUsers = {};
+    roomsResult.rows.forEach(r => {
+      usage[r.id] = 0;
+      maxUsers[r.id] = r.max_users;
+    });
+    if (Object.keys(usage).length === 0) {
+      for (let i = 1; i <= 5; i++) { usage[i] = 0; maxUsers[i] = 100; }
+    }
     result.rows.forEach(row => {
       if (row.room_id && usage.hasOwnProperty(row.room_id)) {
         usage[row.room_id] = parseInt(row.active_users) || 0;
       }
     });
     
-    res.json({ usage });
+    res.json({ usage, maxUsers });
   } catch (error) {
     console.error('Get motion room usage error:', error);
     res.json({ usage: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } });
@@ -10043,9 +10052,9 @@ async function initDatabase() {
     if (parseInt(existingMotionRooms.rows[0].count) === 0) {
       await pool.query(`
         INSERT INTO motion_rooms (name, max_users, status, key_name_1, key_name_2, key_name_3) VALUES
-          ('Motion Room 1', 10, 'OPEN', 'MOTION_ROOM1_KEY_1', 'MOTION_ROOM1_KEY_2', 'MOTION_ROOM1_KEY_3'),
-          ('Motion Room 2', 10, 'OPEN', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM2_KEY_2', 'MOTION_ROOM2_KEY_3'),
-          ('Motion Room 3', 10, 'OPEN', 'MOTION_ROOM3_KEY_1', 'MOTION_ROOM3_KEY_2', 'MOTION_ROOM3_KEY_3')
+          ('Motion Room 1', 100, 'OPEN', 'MOTION_ROOM1_KEY_1', 'MOTION_ROOM1_KEY_2', 'MOTION_ROOM1_KEY_3'),
+          ('Motion Room 2', 100, 'OPEN', 'MOTION_ROOM2_KEY_1', 'MOTION_ROOM2_KEY_2', 'MOTION_ROOM2_KEY_3'),
+          ('Motion Room 3', 100, 'OPEN', 'MOTION_ROOM3_KEY_1', 'MOTION_ROOM3_KEY_2', 'MOTION_ROOM3_KEY_3')
       `);
       console.log('Motion rooms seeded');
     }

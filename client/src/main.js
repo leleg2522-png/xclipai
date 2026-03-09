@@ -163,7 +163,8 @@ const state = {
     error: null,
     customApiKey: '',
     selectedRoom: 1,
-    roomUsage: { 1: 0, 2: 0, 3: 0 },
+    roomUsage: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    roomMaxUsers: { 1: 100, 2: 100, 3: 100, 4: 100, 5: 100 },
     _handledTaskIds: new Set()
   },
   roomManager: {
@@ -1283,6 +1284,7 @@ async function loadMotionRoomUsage() {
     const data = await response.json();
     if (data.usage) {
       state.motion.roomUsage = data.usage;
+      if (data.maxUsers) state.motion.roomMaxUsers = data.maxUsers;
       render();
     }
   } catch (error) {
@@ -5396,11 +5398,12 @@ function renderMotionPage() {
         
         <div class="room-manager-content" style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
           <div class="room-selection" style="flex: 1; min-width: 280px;">
-            <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room (Maks 3 user/room)</label>
+            <label class="setting-label" style="margin-bottom: 8px; display: block;">Pilih Room</label>
             <div class="room-buttons" style="display: flex; gap: 6px; flex-wrap: wrap;">
               ${[1, 2, 3, 4, 5].map(roomId => {
                 const usage = state.motion.roomUsage[roomId] || 0;
-                const isFull = usage >= 3;
+                const maxU = state.motion.roomMaxUsers[roomId] || 100;
+                const isFull = usage >= maxU;
                 const isSelected = state.motion.selectedRoom === roomId;
                 return `<button 
                   class="btn ${isSelected ? 'btn-primary' : isFull ? 'btn-disabled' : 'btn-outline'}" 
@@ -5408,7 +5411,7 @@ function renderMotionPage() {
                   style="min-width: 70px; position: relative;" 
                   ${isFull && !isSelected ? 'disabled' : ''}>
                   Room ${roomId}
-                  <span style="display: block; font-size: 10px; opacity: 0.8;">${usage}/3</span>
+                  <span style="display: block; font-size: 10px; opacity: 0.8;">${usage}/${maxU}</span>
                 </button>`;
               }).join('')}
             </div>
