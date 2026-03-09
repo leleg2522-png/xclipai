@@ -4116,6 +4116,19 @@ app.get('/api/videogen/history', async (req, res) => {
   }
 });
 
+const videoRefreshCache = new Map();
+const videoRefreshFailed = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of videoRefreshCache) {
+    if (now - v.at > 10 * 60 * 1000) videoRefreshCache.delete(k);
+  }
+  for (const [k, v] of videoRefreshFailed) {
+    if (now - v > 30 * 60 * 1000) videoRefreshFailed.delete(k);
+  }
+}, 60000);
+
 app.get('/api/videogen/proxy-video', async (req, res) => {
   try {
     const { taskId } = req.query;
@@ -4144,8 +4157,19 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     const task = taskResult.rows[0];
     let videoUrl = task.video_url;
 
+    const cached = videoRefreshCache.get(taskId);
+    if (cached) videoUrl = cached.url;
+
     async function tryStream(url) {
-      const resp = await axios.get(url, { responseType: 'stream', timeout: 30000 });
+      const resp = await axios.get(url, {
+        responseType: 'stream',
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.freepik.com/',
+          'Accept': 'video/mp4,video/*,*/*'
+        }
+      });
       const ct = resp.headers['content-type'] || 'video/mp4';
       res.setHeader('Content-Type', ct);
       res.setHeader('Accept-Ranges', 'bytes');
@@ -4165,8 +4189,19 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
         if (!res.headersSent) return res.status(500).json({ error: 'Gagal memuat video' });
         return;
       }
-      console.log(`[VIDEOGEN] Video URL expired for task ${taskId}, re-fetching from Freepik...`);
     }
+
+    if (videoRefreshFailed.has(taskId)) {
+      return res.status(410).json({ error: 'Video sudah tidak tersedia' });
+    }
+
+    if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
+      console.log(`[VIDEOGEN] Task ${taskId} already refreshed recently but still 403, marking failed`);
+      videoRefreshFailed.set(taskId, Date.now());
+      return res.status(410).json({ error: 'Video sudah tidak tersedia' });
+    }
+
+    console.log(`[VIDEOGEN] Video URL expired for task ${taskId}, re-fetching from Freepik...`);
 
     let apiKey = null;
     if (task.used_key_name && process.env[task.used_key_name]) {
@@ -4189,7 +4224,8 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     if (!apiKey) apiKey = process.env.FREEPIK_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: 'Tidak ada API key untuk refresh URL' });
+      videoRefreshFailed.set(taskId, Date.now());
+      return res.status(410).json({ error: 'Video sudah tidak tersedia' });
     }
 
     const model = task.model || '';
@@ -4239,20 +4275,30 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     let freshUrl = null;
     for (const ep of pollEndpoints) {
       try {
-        const pollResp = await makeFreepikRequest('GET', `https://api.freepik.com${ep}`, apiKey, null, true, taskId);
+        const pollResp = await axios.get(`https://api.freepik.com${ep}`, {
+          headers: { 'x-freepik-api-key': apiKey },
+          timeout: 15000
+        });
         const d = pollResp.data?.data || pollResp.data;
         freshUrl = (d.generated && d.generated.length > 0 ? d.generated[0] : null)
           || d.video?.url || d.result?.url || d.url;
         if (freshUrl) break;
       } catch (e) {
+        if (e.response?.status === 429) {
+          console.log(`[VIDEOGEN] Rate limited during refresh for ${taskId}, skipping`);
+          videoRefreshFailed.set(taskId, Date.now());
+          return res.status(429).json({ error: 'Rate limited, coba lagi nanti' });
+        }
         continue;
       }
     }
 
     if (!freshUrl) {
+      videoRefreshFailed.set(taskId, Date.now());
       return res.status(410).json({ error: 'Video sudah tidak tersedia di Freepik' });
     }
 
+    videoRefreshCache.set(taskId, { url: freshUrl, at: Date.now() });
     await pool.query('UPDATE video_generation_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
     await pool.query('UPDATE vidgen3_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
     console.log(`[VIDEOGEN] Refreshed video URL for task ${taskId}`);
@@ -4261,7 +4307,8 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
       await tryStream(freshUrl);
     } catch (e) {
       console.error('[VIDEOGEN] Fresh URL also failed:', e.message);
-      if (!res.headersSent) res.status(500).json({ error: 'Gagal memuat video' });
+      videoRefreshFailed.set(taskId, Date.now());
+      if (!res.headersSent) res.status(410).json({ error: 'Video sudah tidak tersedia' });
     }
   } catch (error) {
     console.error('[VIDEOGEN] Proxy video error:', error.message);
