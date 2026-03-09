@@ -955,7 +955,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
     }
     if (!usedProxy) {
-      const proxy = preferredProvider === 'webshare' ? getNextProxyPreferWebshare() : getNextProxy();
+      const proxy = (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') ? getNextProxyPreferWebshare() : getNextProxy();
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(proxyConfig, proxy);
@@ -3755,7 +3755,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare proxy, fallback IPRoyal/direct)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare ISP Rotating proxy, fallback direct)`);
     
     const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
@@ -3780,7 +3780,7 @@ app.post('/api/motion/generate', async (req, res) => {
           requestBody,
           true,
           null,
-          'webshare'
+          'webshare-rotating'
         );
         
         successResponse = response;
