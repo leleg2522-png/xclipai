@@ -802,6 +802,38 @@ function getNextProxy() {
   return proxy;
 }
 
+function getNextProxyPreferWebshare() {
+  initIpRoyalProxy();
+  initProxyingIoProxies();
+  
+  const hasWebshare = isWebshareAvailable();
+  const hasIpRoyal = isIpRoyalAvailable();
+  const hasProxyingIo = PROXYING_IO_PROXIES.length > 0;
+  
+  if (!hasWebshare && !hasIpRoyal && !hasProxyingIo) return null;
+  
+  if (hasWebshare) {
+    for (let i = 0; i < WEBSHARE_PROXIES.length; i++) {
+      const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+      webshareIndex++;
+      if (canUseProxy(wp)) return wp;
+    }
+    const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+    webshareIndex++;
+    return wp;
+  }
+  
+  if (hasIpRoyal) return getNextIpRoyalProxy();
+  
+  if (hasProxyingIo) {
+    const proxy = PROXYING_IO_PROXIES[proxyIndex % PROXYING_IO_PROXIES.length];
+    proxyIndex++;
+    return proxy;
+  }
+  
+  return null;
+}
+
 async function assignProxyForTask(taskId) {
   if (!isProxyConfigured()) return null;
   const proxy = getNextProxy();
@@ -873,7 +905,7 @@ function isFreepikBlocked(response) {
   return response.status === 403;
 }
 
-async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null) {
+async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null, preferredProvider = null) {
   function buildConfig() {
     const cfg = {
       method,
@@ -940,7 +972,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
     }
     if (!usedProxy) {
-      const proxy = getNextProxy();
+      const proxy = preferredProvider === 'webshare' ? getNextProxyPreferWebshare() : getNextProxy();
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(proxyConfig, proxy);
@@ -2661,7 +2693,8 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         apiKey,
         null,
         true,
-        taskId
+        taskId,
+        'webshare'
       );
       
       if (pollResponse.data && typeof pollResponse.data === 'object') {
@@ -3768,7 +3801,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (via IPRoyal ISP proxy)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare proxy, fallback IPRoyal/direct)`);
     
     const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
@@ -3792,7 +3825,8 @@ app.post('/api/motion/generate', async (req, res) => {
           currentKey.key,
           requestBody,
           true,
-          null
+          null,
+          'webshare'
         );
         
         successResponse = response;
@@ -3998,7 +4032,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           freepikApiKey,
           null,
           true,
-          taskId
+          taskId,
+          'webshare'
         );
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
