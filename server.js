@@ -2670,10 +2670,17 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
 
   for (const endpoint of pollEndpoints) {
     try {
-      const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, {
+      const pollConfig = {
         headers: { 'x-freepik-api-key': apiKey },
         timeout: 15000
-      });
+      };
+      const rotatingProxy = getWebshareRotatingProxy();
+      if (rotatingProxy) {
+        const proxyUrl = `http://${rotatingProxy.username}:${rotatingProxy.password}@${rotatingProxy.proxy_address}:${rotatingProxy.port}`;
+        pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+        pollConfig.proxy = false;
+      }
+      const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, pollConfig);
       
       if (pollResponse.data && typeof pollResponse.data === 'object') {
         const taskData = pollResponse.data.data || pollResponse.data;
@@ -3972,10 +3979,17 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     for (const endpoint of pollEndpoints) {
       try {
         console.log(`[MOTION] Trying poll endpoint: ${endpoint}`);
-        const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, {
+        const statusPollConfig = {
           headers: { 'x-freepik-api-key': freepikApiKey },
           timeout: 15000
-        });
+        };
+        const rotProxy = getWebshareRotatingProxy();
+        if (rotProxy) {
+          const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
+          statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false });
+          statusPollConfig.proxy = false;
+        }
+        const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, statusPollConfig);
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
           response = pollResponse;
