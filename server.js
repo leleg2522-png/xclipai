@@ -12,6 +12,7 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 const https = require('https');
 require('dotenv').config();
 
@@ -647,6 +648,15 @@ function getWebshareRotatingProxy() {
     provider: 'webshare-rotating',
     country: 'rotating'
   };
+}
+
+function getWebshareRotatingSocksAgent() {
+  const username = process.env.WEBSHARE_ROTATING_USER;
+  const password = process.env.WEBSHARE_ROTATING_PASS;
+  if (!username || !password) return null;
+  const host = process.env.WEBSHARE_ROTATING_SOCKS_HOST || 'p.webshare.io';
+  const port = process.env.WEBSHARE_ROTATING_SOCKS_PORT || '1080';
+  return new SocksProxyAgent(`socks5://${username}:${password}@${host}:${port}`);
 }
 
 function isWebshareRotatingAvailable() {
@@ -2673,13 +2683,14 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
       try {
         const pollConfig = {
           headers: { 'x-freepik-api-key': apiKey },
-          timeout: 15000
+          timeout: 20000
         };
-        const rotatingProxy = retry === 0 ? getWebshareRotatingProxy() : null;
-        if (rotatingProxy) {
-          const proxyUrl = `http://${rotatingProxy.username}:${rotatingProxy.password}@${rotatingProxy.proxy_address}:${rotatingProxy.port}`;
-          pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
-          pollConfig.proxy = false;
+        if (retry === 0) {
+          const socksAgent = getWebshareRotatingSocksAgent();
+          if (socksAgent) {
+            pollConfig.httpsAgent = socksAgent;
+            pollConfig.proxy = false;
+          }
         }
         if (retry > 0) console.log(`[MOTION] Poll ${taskId} retry ${retry} direct (no proxy)`);
         const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, pollConfig);
@@ -3991,13 +4002,14 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           console.log(`[MOTION] Trying poll endpoint: ${endpoint}${pRetry > 0 ? ' (direct retry)' : ''}`);
           const statusPollConfig = {
             headers: { 'x-freepik-api-key': freepikApiKey },
-            timeout: 15000
+            timeout: 20000
           };
-          const rotProxy = pRetry === 0 ? getWebshareRotatingProxy() : null;
-          if (rotProxy) {
-            const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
-            statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false });
-            statusPollConfig.proxy = false;
+          if (pRetry === 0) {
+            const socksAgent = getWebshareRotatingSocksAgent();
+            if (socksAgent) {
+              statusPollConfig.httpsAgent = socksAgent;
+              statusPollConfig.proxy = false;
+            }
           }
           const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, statusPollConfig);
           
