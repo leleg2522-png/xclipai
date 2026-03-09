@@ -3668,7 +3668,9 @@ app.post('/api/motion/generate', async (req, res) => {
     let freepikApiKey = null;
     let usedKeyName = null;
     
-    // Check room capacity (max 3 users per room in last 30 minutes)
+    const roomInfoResult = await pool.query('SELECT max_users FROM motion_rooms WHERE id = $1', [selectedRoomId]);
+    const roomMaxUsers = roomInfoResult.rows[0]?.max_users || 100;
+    
     const usageResult = await pool.query(`
       SELECT COUNT(DISTINCT xclip_api_key_id) as active_users
       FROM video_generation_tasks 
@@ -3679,7 +3681,6 @@ app.post('/api/motion/generate', async (req, res) => {
     
     const currentUsers = parseInt(usageResult.rows[0]?.active_users) || 0;
     
-    // Check if this user already used this room (allow them to continue)
     const userInRoomResult = await pool.query(`
       SELECT 1 FROM video_generation_tasks 
       WHERE model LIKE 'motion-%' 
@@ -3691,9 +3692,9 @@ app.post('/api/motion/generate', async (req, res) => {
     
     const isUserAlreadyInRoom = userInRoomResult.rows.length > 0;
     
-    if (currentUsers >= 3 && !isUserAlreadyInRoom) {
+    if (currentUsers >= roomMaxUsers && !isUserAlreadyInRoom) {
       return res.status(400).json({ 
-        error: `Room ${selectedRoomId} sudah penuh (3/3 user). Coba room lain.`,
+        error: `Room ${selectedRoomId} sudah penuh (${currentUsers}/${roomMaxUsers} user). Coba room lain.`,
         roomFull: true 
       });
     }
