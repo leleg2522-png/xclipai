@@ -15,7 +15,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
-- **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-100}) or XIMAGE_API_KEY fallback. Features include:
+- **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
   - 14 AI models via kie.ai APIs:
     - seedream-4.5: Seedream 4.5 (ByteDance) via Market API, supports I2I, quality (basic/high)
     - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
@@ -41,7 +41,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Freepik Video Playground)**: Advanced video generation using Freepik API with premium models. Uses its own separate room-based API key system (VIDGEN3_ROOM{N}_KEY_{1-100}). Features include:
+- **Vidgen3 (Freepik Video Playground)**: Advanced video generation using Freepik API with premium models. Uses its own separate room-based API key system (VIDGEN3_ROOM{N}_KEY_{1-3}). Features include:
   - 7 AI models with per-model playground settings:
     - MiniMax Live (I2V, animation, camera movements)
     - Seedance 1.5 Pro 1080p/720p (T2V + I2V, audio generation, 4-12s duration)
@@ -55,7 +55,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - SSE events: vidgen3_completed, vidgen3_failed
   - Video history persistence in database
   - Webhook integration for real-time task completion
-- **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-100}) or POYO_API_KEY fallback. Features include:
+- **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 Stable (720p, 10/15 seconds, text-to-video + image-to-video, style presets)
     - Veo 3.1 Fast (max 4K, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
@@ -68,7 +68,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Response format: { code: 200, data: { task_id, status } }, poll: { code: 200, data: { status, progress, files: [{ file_url }] } }
   - Video history persistence in database
   - 4-minute cooldown timer between generations
-- **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-100}) or APIMART_API_KEY fallback. Features include:
+- **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 VIP (720p, 10/15 seconds, text-to-video + image-to-video, premium quality)
     - Veo 3.1 Fast (max 1080p, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
@@ -83,7 +83,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll: `{ code: 200, data: { status, result: { videos } } }`
   - Video history persistence in database
   - 5-minute cooldown timer between generations
-- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 11 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-100}) or APIMART_API_KEY fallback. Features include:
+- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 11 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 11 AI models:
     - GPT-4o Image (OpenAI, sizes: 1024x1024/1536x1024/1024x1536/auto, n: 1-4)
     - Nano Banana (Google Gemini 2.5 Flash, sizes: 1:1/16:9/9:16/4:3/3:4)
@@ -103,7 +103,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Supports both synchronous (direct URL) and asynchronous (task polling) responses
   - 2-minute cooldown timer between generations
   - Image history persistence in database
-- **X Image3 (Poyo AI Image Generator)**: AI-powered image generation using Poyo AI API with 10 models. Uses room-based API key system (XIMAGE3_ROOM{N}_KEY_{1-100}) or POYO_API_KEY fallback. Features include:
+- **X Image3 (Poyo AI Image Generator)**: AI-powered image generation using Poyo AI API with 10 models. Uses room-based API key system (XIMAGE3_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
   - 10 AI models:
     - GPT-4o Image (OpenAI, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 1 ref)
     - GPT Image 1.5 (OpenAI, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 1 ref, 4x faster)
@@ -124,7 +124,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Image history persistence in database
   - SSE events: ximage3_completed, ximage3_failed
   - Server-side background polling with apiType 'poyo'
-- **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Motion rooms support up to 100 Freepik API keys per room (MOTION_ROOM{N}_KEY_{1-100}). Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
+- **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
 - **Subscription System**: A tiered subscription model with feature locking, countdown timers, and manual QRIS payment verification.

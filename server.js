@@ -24,6 +24,35 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection (non-fatal):', reason);
 });
 
+function getMotionRoomKeys(roomId) {
+  const keys = [];
+  const bulkVar = process.env[`MOTION_ROOM${roomId}_KEYS`];
+  if (bulkVar) {
+    bulkVar.split(',').forEach((k, i) => {
+      const trimmed = k.trim();
+      if (trimmed) keys.push({ key: trimmed, name: `MOTION_ROOM${roomId}_KEYS[${i}]`, roomId });
+    });
+  }
+  for (let i = 1; i <= 100; i++) {
+    const envName = `MOTION_ROOM${roomId}_KEY_${i}`;
+    if (process.env[envName]) {
+      const val = process.env[envName];
+      if (!keys.some(k => k.key === val)) {
+        keys.push({ key: val, name: envName, roomId });
+      }
+    }
+  }
+  return keys;
+}
+
+function getAllMotionRoomKeys(maxRooms = 5) {
+  const keys = [];
+  for (let r = 1; r <= maxRooms; r++) {
+    keys.push(...getMotionRoomKeys(r));
+  }
+  return keys;
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -2843,7 +2872,7 @@ async function resumePendingTaskPolling() {
           }
           if (!apiKey && (apiType === 'poyo')) {
             outer_poyo: for (let r = 1; r <= 3; r++) {
-              for (let k = 1; k <= 100; k++) {
+              for (let k = 1; k <= 3; k++) {
                 const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
                 if (pk) { apiKey = pk; break outer_poyo; }
               }
@@ -2855,22 +2884,16 @@ async function resumePendingTaskPolling() {
           }
           if (!apiKey && (apiType === 'kie-ximage')) {
             outer2: for (let r = 1; r <= 5; r++) {
-              for (let k = 1; k <= 100; k++) {
+              for (let k = 1; k <= 3; k++) {
                 const xk = process.env[`XIMAGE_ROOM${r}_KEY_${k}`];
                 if (xk) { apiKey = xk; break outer2; }
               }
             }
             if (!apiKey) apiKey = process.env.XIMAGE_API_KEY;
           }
-          // For motion tasks: try all MOTION_ROOM keys before falling back to FREEPIK_API_KEY
           if (!apiKey && isMotionTask) {
-            const totalRooms = 5;
-            outer: for (let r = 1; r <= totalRooms; r++) {
-              for (let k = 1; k <= 100; k++) {
-                const motionKey = process.env[`MOTION_ROOM${r}_KEY_${k}`];
-                if (motionKey) { apiKey = motionKey; break outer; }
-              }
-            }
+            const mKeys = getAllMotionRoomKeys(5);
+            if (mKeys.length > 0) apiKey = mKeys[0].key;
           }
           if (!apiKey && (apiType === 'freepik-auto' || apiType === 'freepik-motion' || apiType === 'freepik-video')) {
             apiKey = process.env.FREEPIK_API_KEY;
@@ -3029,15 +3052,15 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     // PRIORITY 3: For admins without subscription, use any available room key
     if (!freepikApiKey && keyInfo.is_admin) {
-      adminScan: for (let r = 1; r <= 5; r++) {
-        for (let ki = 1; ki <= 100; ki++) {
-          const kn = `ROOM${r}_FREEPIK_KEY_${ki}`;
-          if (process.env[kn]) {
-            freepikApiKey = process.env[kn];
-            keySource = 'admin';
-            console.log(`Admin using fallback key: ${kn}`);
-            break adminScan;
-          }
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      for (const keyName of roomKeys) {
+        if (process.env[keyName]) {
+          freepikApiKey = process.env[keyName];
+          keySource = 'admin';
+          console.log(`Admin using fallback key: ${keyName}`);
+          break;
         }
       }
     }
@@ -3229,14 +3252,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
         if (key) allKeys.push({ key, index: idx, name });
       });
     } else if (keySource === 'admin') {
-      let idx = 0;
-      for (let r = 1; r <= 5; r++) {
-        for (let ki = 1; ki <= 100; ki++) {
-          const name = `ROOM${r}_FREEPIK_KEY_${ki}`;
-          const key = process.env[name];
-          if (key) allKeys.push({ key, index: idx++, name });
-        }
-      }
+      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
+      roomKeys.forEach((name, idx) => {
+        const key = process.env[name];
+        if (key) allKeys.push({ key, index: idx, name });
+      });
     } else {
       allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
@@ -3632,27 +3654,10 @@ app.post('/api/motion/generate', async (req, res) => {
       });
     }
     
-    // Build list of all available Motion keys: current room first, then other rooms
-    const allMotionKeys = [];
-    
-    // Current room's keys first
-    const roomKeyPrefix = `MOTION_ROOM${selectedRoomId}_KEY_`;
-    for (let i = 1; i <= 100; i++) {
-      const keyName = `${roomKeyPrefix}${i}`;
-      if (process.env[keyName]) {
-        allMotionKeys.push({ key: process.env[keyName], name: keyName, roomId: selectedRoomId });
-      }
-    }
-    
-    const totalRooms = 5;
-    for (let r = 1; r <= totalRooms; r++) {
+    const allMotionKeys = getMotionRoomKeys(selectedRoomId);
+    for (let r = 1; r <= 5; r++) {
       if (r === selectedRoomId) continue;
-      for (let i = 1; i <= 100; i++) {
-        const keyName = `MOTION_ROOM${r}_KEY_${i}`;
-        if (process.env[keyName]) {
-          allMotionKeys.push({ key: process.env[keyName], name: keyName, roomId: r });
-        }
-      }
+      allMotionKeys.push(...getMotionRoomKeys(r));
     }
     
     console.log(`[MOTION] Available keys: ${allMotionKeys.length} (room ${selectedRoomId} first, then fallback rooms)`);
@@ -3876,13 +3881,10 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     if (!freepikApiKey && savedTask.room_id && savedTask.model?.startsWith('motion-')) {
-      for (let ki = 1; ki <= 100; ki++) {
-        const keyName = `MOTION_ROOM${savedTask.room_id}_KEY_${ki}`;
-        if (process.env[keyName]) {
-          freepikApiKey = process.env[keyName];
-          console.log(`[MOTION] Using motion room key: ${keyName}`);
-          break;
-        }
+      const motionKeys = getMotionRoomKeys(savedTask.room_id);
+      if (motionKeys.length > 0) {
+        freepikApiKey = motionKeys[0].key;
+        console.log(`[MOTION] Using motion room key: ${motionKeys[0].name}`);
       }
     }
     
@@ -3892,17 +3894,12 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     if (!freepikApiKey && keyInfo.is_admin) {
-      outerAdmin: for (let r = 1; r <= 5; r++) {
-        for (let ki = 1; ki <= 100; ki++) {
-          const mk = process.env[`MOTION_ROOM${r}_KEY_${ki}`];
-          if (mk) { freepikApiKey = mk; break outerAdmin; }
-        }
-      }
+      const mKeys = getAllMotionRoomKeys(5);
+      if (mKeys.length > 0) freepikApiKey = mKeys[0].key;
       if (!freepikApiKey) {
-        freepikScan: for (let r = 1; r <= 5; r++) {
-          for (let ki = 1; ki <= 100; ki++) {
-            if (process.env[`ROOM${r}_FREEPIK_KEY_${ki}`]) { freepikApiKey = process.env[`ROOM${r}_FREEPIK_KEY_${ki}`]; break freepikScan; }
-          }
+        const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_1'];
+        for (const kn of roomKeys) {
+          if (process.env[kn]) { freepikApiKey = process.env[kn]; break; }
         }
       }
     }
@@ -4197,17 +4194,17 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
       apiKey = process.env[task.used_key_name];
     }
     if (!apiKey && task.room_id) {
-      const prefixes = [];
       if ((task.model || '').startsWith('motion-')) {
-        prefixes.push(`MOTION_ROOM${task.room_id}_KEY_`);
+        const mk = getMotionRoomKeys(task.room_id);
+        if (mk.length > 0) apiKey = mk[0].key;
       } else {
-        prefixes.push(`VIDGEN3_ROOM${task.room_id}_KEY_`, `ROOM${task.room_id}_FREEPIK_KEY_`);
-      }
-      for (const prefix of prefixes) {
-        for (let i = 1; i <= 100; i++) {
-          if (process.env[`${prefix}${i}`]) { apiKey = process.env[`${prefix}${i}`]; break; }
+        const prefixes = [`VIDGEN3_ROOM${task.room_id}_KEY_`, `ROOM${task.room_id}_FREEPIK_KEY_`];
+        for (const prefix of prefixes) {
+          for (let i = 1; i <= 3; i++) {
+            if (process.env[`${prefix}${i}`]) { apiKey = process.env[`${prefix}${i}`]; break; }
+          }
+          if (apiKey) break;
         }
-        if (apiKey) break;
       }
     }
     if (!apiKey) apiKey = process.env.FREEPIK_API_KEY;
@@ -5963,23 +5960,21 @@ async function getMotionRoomApiKey(xclipApiKey) {
   }
   
   const room = subResult.rows[0];
-  const keyNames = [];
-  for (let ki = 1; ki <= 100; ki++) {
-    const kn = `MOTION_ROOM${room.motion_room_id}_KEY_${ki}`;
-    if (process.env[kn]) keyNames.push(kn);
-  }
+  const keys = getMotionRoomKeys(room.motion_room_id);
   [room.key_name_1, room.key_name_2, room.key_name_3].forEach(k => {
-    if (k && process.env[k] && !keyNames.includes(k)) keyNames.push(k);
+    if (k && process.env[k] && !keys.some(x => x.key === process.env[k])) {
+      keys.push({ key: process.env[k], name: k, roomId: room.motion_room_id });
+    }
   });
   
-  if (keyNames.length === 0) {
+  if (keys.length === 0) {
     return { error: 'Motion room tidak memiliki API key yang valid' };
   }
   
-  const randomKey = keyNames[Math.floor(Math.random() * keyNames.length)];
+  const picked = keys[Math.floor(Math.random() * keys.length)];
   return { 
-    apiKey: process.env[randomKey], 
-    keyName: randomKey,
+    apiKey: picked.key, 
+    keyName: picked.name,
     roomId: room.motion_room_id
   };
 }
@@ -6146,8 +6141,7 @@ async function getVidgen2RoomApiKey(xclipApiKey) {
   const vidgen2RoomId = subResult.rows[0]?.vidgen2_room_id || 1;
   
   const roomKeyPrefix = `VIDGEN2_ROOM${vidgen2RoomId}_KEY_`;
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) { const kn = `${roomKeyPrefix}${ki}`; if (process.env[kn]) availableKeys.push(kn); }
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
     if (process.env.POYO_API_KEY) {
@@ -6706,8 +6700,7 @@ async function getVidgen4RoomApiKey(xclipApiKey) {
   const vidgen4RoomId = subResult.rows[0]?.vidgen4_room_id || 1;
   
   const roomKeyPrefix = `VIDGEN4_ROOM${vidgen4RoomId}_KEY_`;
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) { const kn = `${roomKeyPrefix}${ki}`; if (process.env[kn]) availableKeys.push(kn); }
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
     if (process.env.APIMART_API_KEY) {
@@ -7306,8 +7299,7 @@ async function getVidgen3RoomApiKey(xclipApiKey) {
   `, [keyInfo.user_id]);
   const vidgen3RoomId = subResult.rows[0]?.vidgen3_room_id || 1;
   const roomKeyPrefix = `VIDGEN3_ROOM${vidgen3RoomId}_KEY_`;
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) { const kn = `${roomKeyPrefix}${ki}`; if (process.env[kn]) availableKeys.push(kn); }
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   if (availableKeys.length === 0) {
     if (process.env.FREEPIK_API_KEY) return { apiKey: process.env.FREEPIK_API_KEY, keyName: 'FREEPIK_API_KEY', roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
     return { error: 'Tidak ada API key Vidgen3 yang tersedia. Hubungi admin.' };
@@ -7702,10 +7694,8 @@ async function getXImageRoomApiKey(xclipApiKey) {
   
   const ximageRoomId = subResult.rows[0]?.ximage_room_id || 1;
   
-  // Get room keys from environment
   const roomKeyPrefix = `XIMAGE_ROOM${ximageRoomId}_KEY_`;
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) { const kn = `${roomKeyPrefix}${ki}`; if (process.env[kn]) availableKeys.push(kn); }
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
     if (process.env.XIMAGE_API_KEY) {
@@ -7720,7 +7710,6 @@ async function getXImageRoomApiKey(xclipApiKey) {
     return { error: 'Tidak ada API key X Image yang tersedia. Hubungi admin.' };
   }
   
-  // Random key rotation
   const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
   return { 
     apiKey: process.env[randomKeyName], 
@@ -8274,8 +8263,7 @@ async function getXImage2RoomApiKey(xclipApiKey) {
   const ximage2RoomId = subResult.rows[0]?.ximage2_room_id || 1;
   
   const roomKeyPrefix = `XIMAGE2_ROOM${ximage2RoomId}_KEY_`;
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) { const kn = `${roomKeyPrefix}${ki}`; if (process.env[kn]) availableKeys.push(kn); }
+  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
     if (process.env.APIMART_API_KEY) {
@@ -9288,11 +9276,7 @@ async function getXImage3RoomApiKey(xclipApiKey) {
   const subResult = await pool.query('SELECT s.ximage3_room_id FROM subscriptions s WHERE s.user_id = $1 AND s.ximage3_room_id IS NOT NULL ORDER BY s.created_at DESC LIMIT 1', [keyInfo.user_id]);
   const roomId = subResult.rows[0]?.ximage3_room_id || 1;
   const roomKeyPrefix = 'XIMAGE3_ROOM' + roomId + '_KEY_';
-  const availableKeys = [];
-  for (let ki = 1; ki <= 100; ki++) {
-    const kn = roomKeyPrefix + ki;
-    if (process.env[kn]) availableKeys.push(kn);
-  }
+  const availableKeys = [1, 2, 3].map(i => roomKeyPrefix + i).filter(k => process.env[k]);
   if (availableKeys.length === 0) {
     if (process.env.POYO_API_KEY) return { apiKey: process.env.POYO_API_KEY, keyName: 'POYO_API_KEY', roomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
     return { error: 'Tidak ada API key X Image3 yang tersedia. Hubungi admin.' };
