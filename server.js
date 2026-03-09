@@ -2655,9 +2655,13 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
 
   for (const endpoint of pollEndpoints) {
     try {
-      const pollResponse = await axios.get(
+      const pollResponse = await makeFreepikRequest(
+        'GET',
         `https://api.freepik.com${endpoint}`,
-        { headers: { 'x-freepik-api-key': apiKey }, timeout: 30000 }
+        apiKey,
+        null,
+        true,
+        taskId
       );
       
       if (pollResponse.data && typeof pollResponse.data === 'object') {
@@ -2667,13 +2671,11 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         console.log(`[MOTION] Poll ${taskId} | Endpoint: ${endpoint} | Status: ${status} | Generated: ${JSON.stringify(taskData.generated || [])}`);
         
         if (status === 'COMPLETED' || status === 'completed') {
-          // Check all possible URL locations (generated[] is primary for motion tasks)
           const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
             || taskData.video?.url
             || taskData.result?.url
             || taskData.url;
           if (videoUrl) return { status: 'completed', url: videoUrl };
-          // Completed but no URL yet — keep polling
           return { status: 'processing' };
         }
         if (status === 'FAILED' || status === 'failed') {
@@ -3766,7 +3768,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (direct connection)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via IPRoyal ISP proxy)`);
     
     const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
@@ -3789,7 +3791,7 @@ app.post('/api/motion/generate', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           currentKey.key,
           requestBody,
-          false,
+          true,
           null
         );
         
@@ -3995,8 +3997,8 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           `https://api.freepik.com${endpoint}`,
           freepikApiKey,
           null,
-          false,
-          null
+          true,
+          taskId
         );
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
