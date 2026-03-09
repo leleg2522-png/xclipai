@@ -2683,12 +2683,13 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
       try {
         const pollConfig = {
           headers: { 'x-freepik-api-key': apiKey },
-          timeout: 20000
+          timeout: 25000
         };
         if (retry === 0) {
-          const socksAgent = getWebshareRotatingSocksAgent();
-          if (socksAgent) {
-            pollConfig.httpsAgent = socksAgent;
+          const rotProxy = getWebshareRotatingProxy();
+          if (rotProxy) {
+            const proxyUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
+            pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false, timeout: 20000 });
             pollConfig.proxy = false;
           }
         }
@@ -4005,9 +4006,10 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
             timeout: 20000
           };
           if (pRetry === 0) {
-            const socksAgent = getWebshareRotatingSocksAgent();
-            if (socksAgent) {
-              statusPollConfig.httpsAgent = socksAgent;
+            const rotProxy = getWebshareRotatingProxy();
+            if (rotProxy) {
+              const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
+              statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false, timeout: 20000 });
               statusPollConfig.proxy = false;
             }
           }
