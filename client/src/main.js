@@ -3931,7 +3931,7 @@ function renderVidgen3Videos() {
     
     state.vidgen3.generatedVideos.forEach(function(video, index) {
       html += '<div class="video-card">';
-      html += '<div class="video-wrapper"><video src="' + video.url + '" controls playsinline></video></div>';
+      html += '<div class="video-wrapper"><video src="' + (video.taskId ? API_URL + '/api/videogen/proxy-video?taskId=' + encodeURIComponent(video.taskId) : video.url) + '" controls playsinline></video></div>';
       html += '<div class="video-card-footer">';
       html += '<span class="video-model-tag">' + (video.model || 'AI').toUpperCase() + '</span>';
       html += '<div class="video-actions">';
@@ -5324,7 +5324,7 @@ Contoh: Rambut bertiup tertiup angin, mata berkedip perlahan, tersenyum"
                 <div class="generated-videos-list">
                   ${state.videogen.generatedVideos.map((video, idx) => `
                     <div class="video-result">
-                      <video src="${video.url}" controls playsinline class="generated-video" ${idx === 0 ? 'autoplay' : ''} loop></video>
+                      <video src="${video.taskId ? API_URL + '/api/videogen/proxy-video?taskId=' + encodeURIComponent(video.taskId) : video.url}" controls playsinline class="generated-video" ${idx === 0 ? 'autoplay' : ''} loop></video>
                       <div class="video-actions">
                         <button onclick="downloadVideo('${video.url}', 'xclip-video-${idx}.mp4')" class="btn btn-primary btn-sm">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5633,7 +5633,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                         </div>
                       ` : task.status === 'completed' && task.videoUrl ? `
                         <div class="task-result">
-                          <video src="${task.videoUrl}" controls class="result-video"></video>
+                          <video src="${task.taskId ? API_URL + '/api/videogen/proxy-video?taskId=' + encodeURIComponent(task.taskId) : task.videoUrl}" controls class="result-video"></video>
                           <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
                             <button onclick="downloadVideo('${task.videoUrl}', 'motion-${Date.now()}.mp4')" class="btn btn-primary btn-sm" style="flex:1">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5665,7 +5665,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                 <div class="video-gallery">
                   ${state.motion.generatedVideos.map((video, idx) => `
                     <div class="video-item">
-                      <video src="${video.url}" controls class="result-video"></video>
+                      <video src="${video.taskId ? API_URL + '/api/videogen/proxy-video?taskId=' + encodeURIComponent(video.taskId) : video.url}" controls class="result-video"></video>
                       <div class="task-actions" style="display: flex; gap: 8px; margin-top: 8px;">
                         <button onclick="downloadVideo('${video.url}', 'motion-${video.taskId}.mp4')" class="btn btn-primary btn-sm" style="flex:1">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

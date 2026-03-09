@@ -4171,6 +4171,159 @@ app.get('/api/videogen/history', async (req, res) => {
   }
 });
 
+app.get('/api/videogen/proxy-video', async (req, res) => {
+  try {
+    const { taskId } = req.query;
+    if (!taskId) {
+      return res.status(400).json({ error: 'taskId diperlukan' });
+    }
+
+    if (!req.session.userId) {
+      return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    }
+
+    let taskResult = await pool.query(
+      'SELECT task_id, model, video_url, used_key_name, room_id FROM video_generation_tasks WHERE task_id = $1 AND status = $2 AND user_id = $3',
+      [taskId, 'completed', req.session.userId]
+    );
+    if (taskResult.rows.length === 0) {
+      taskResult = await pool.query(
+        'SELECT task_id, model, video_url, used_key_name, room_id FROM vidgen3_tasks WHERE task_id = $1 AND status = $2 AND user_id = $3',
+        [taskId, 'completed', req.session.userId]
+      );
+    }
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Video tidak ditemukan' });
+    }
+
+    const task = taskResult.rows[0];
+    let videoUrl = task.video_url;
+
+    async function tryStream(url) {
+      const resp = await axios.get(url, { responseType: 'stream', timeout: 30000 });
+      const ct = resp.headers['content-type'] || 'video/mp4';
+      res.setHeader('Content-Type', ct);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      if (resp.headers['content-length']) res.setHeader('Content-Length', resp.headers['content-length']);
+      resp.data.pipe(res);
+      return true;
+    }
+
+    try {
+      await tryStream(videoUrl);
+      return;
+    } catch (firstErr) {
+      const status = firstErr.response?.status;
+      if (status !== 403 && status !== 410 && status !== 401) {
+        console.error('[VIDEOGEN] Proxy video error:', firstErr.message);
+        if (!res.headersSent) return res.status(500).json({ error: 'Gagal memuat video' });
+        return;
+      }
+      console.log(`[VIDEOGEN] Video URL expired for task ${taskId}, re-fetching from Freepik...`);
+    }
+
+    let apiKey = null;
+    if (task.used_key_name && process.env[task.used_key_name]) {
+      apiKey = process.env[task.used_key_name];
+    }
+    if (!apiKey && task.room_id) {
+      const prefixes = [];
+      if ((task.model || '').startsWith('motion-')) {
+        prefixes.push(`MOTION_ROOM${task.room_id}_KEY_`);
+      } else {
+        prefixes.push(`VIDGEN3_ROOM${task.room_id}_KEY_`, `ROOM${task.room_id}_FREEPIK_KEY_`);
+      }
+      for (const prefix of prefixes) {
+        for (let i = 1; i <= 3; i++) {
+          if (process.env[`${prefix}${i}`]) { apiKey = process.env[`${prefix}${i}`]; break; }
+        }
+        if (apiKey) break;
+      }
+    }
+    if (!apiKey) apiKey = process.env.FREEPIK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Tidak ada API key untuk refresh URL' });
+    }
+
+    const model = task.model || '';
+    const isMotion = model.startsWith('motion-');
+    const isPro = model.includes('pro');
+
+    const vidgen3Endpoints = {
+      'minimax-live': '/v1/ai/image-to-video/minimax-live',
+      'seedance-1.5-pro-1080p': '/v1/ai/video/seedance-1-5-pro-1080p',
+      'seedance-1.5-pro-720p': '/v1/ai/video/seedance-1-5-pro-720p',
+      'ltx-2-pro-t2v': '/v1/ai/text-to-video/ltx-2-pro',
+      'ltx-2-pro-i2v': '/v1/ai/image-to-video/ltx-2-pro',
+      'ltx-2-fast-t2v': '/v1/ai/text-to-video/ltx-2-fast',
+      'ltx-2-fast-i2v': '/v1/ai/image-to-video/ltx-2-fast',
+      'runway-4.5-t2v': '/v1/ai/text-to-video/runway-4-5',
+      'runway-4.5-i2v': '/v1/ai/image-to-video/runway-4-5',
+      'runway-gen4-turbo': '/v1/ai/image-to-video/runway-gen4-turbo',
+      'omnihuman-1.5': '/v1/ai/video/omni-human-1-5'
+    };
+    const videogenEndpoints = {
+      'kling-v2-5-pro': '/v1/ai/image-to-video/kling-v2-5-pro',
+      'kling-v2-1-master': '/v1/ai/image-to-video/kling-v2-1-master',
+      'kling-v2-1-pro': '/v1/ai/image-to-video/kling-v2-1-pro',
+      'kling-v2-1-std': '/v1/ai/image-to-video/kling-v2-1-std',
+      'kling-v2': '/v1/ai/image-to-video/kling-v2',
+      'kling-v2.6-pro': '/v1/ai/image-to-video/kling-v2-6',
+      'kling-v2.6-std': '/v1/ai/image-to-video/kling-v2-6'
+    };
+
+    let pollEndpoints = [];
+    if (isMotion) {
+      pollEndpoints = [
+        `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
+        isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`
+      ];
+    } else {
+      const allEndpoints = { ...vidgen3Endpoints, ...videogenEndpoints };
+      const matched = allEndpoints[model];
+      if (matched) {
+        pollEndpoints.push(`${matched}/${taskId}`);
+      }
+      pollEndpoints.push(`/v1/ai/image-to-video/kling-v2-6/${taskId}`);
+      pollEndpoints.push(`/v1/ai/video/kling-v2-6/${taskId}`);
+      pollEndpoints = [...new Set(pollEndpoints)];
+    }
+
+    let freshUrl = null;
+    for (const ep of pollEndpoints) {
+      try {
+        const pollResp = await makeFreepikRequest('GET', `https://api.freepik.com${ep}`, apiKey, null, true, taskId);
+        const d = pollResp.data?.data || pollResp.data;
+        freshUrl = (d.generated && d.generated.length > 0 ? d.generated[0] : null)
+          || d.video?.url || d.result?.url || d.url;
+        if (freshUrl) break;
+      } catch (e) {
+        continue;
+      }
+    }
+
+    if (!freshUrl) {
+      return res.status(410).json({ error: 'Video sudah tidak tersedia di Freepik' });
+    }
+
+    await pool.query('UPDATE video_generation_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
+    await pool.query('UPDATE vidgen3_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
+    console.log(`[VIDEOGEN] Refreshed video URL for task ${taskId}`);
+
+    try {
+      await tryStream(freshUrl);
+    } catch (e) {
+      console.error('[VIDEOGEN] Fresh URL also failed:', e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Gagal memuat video' });
+    }
+  } catch (error) {
+    console.error('[VIDEOGEN] Proxy video error:', error.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Gagal memuat video' });
+  }
+});
+
 // Proxy download endpoint for iOS (streams video through server with proper headers)
 app.get('/api/download-video', async (req, res) => {
   const { url, filename } = req.query;
