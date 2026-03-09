@@ -464,6 +464,8 @@ let webshareBlockedUntil = 0;
 let iproyalFailCount = 0;
 let iproyalBlockedUntil = 0;
 let proxyProviderToggle = 0;
+let webshareRotatingFailCount = 0;
+let webshareRotatingBlockedUntil = 0;
 
 // ============ PER-PROXY RATE LIMITER ============
 // Prevents proxy IPs from getting banned by external APIs
@@ -631,14 +633,39 @@ async function initWebshareProxy() {
   }
 }
 
+function getWebshareRotatingProxy() {
+  const host = process.env.WEBSHARE_ROTATING_HOST || 'p.webshare.io';
+  const port = process.env.WEBSHARE_ROTATING_PORT || '80';
+  const username = process.env.WEBSHARE_ROTATING_USER;
+  const password = process.env.WEBSHARE_ROTATING_PASS;
+  if (!username || !password) return null;
+  return {
+    proxy_address: host,
+    port: parseInt(port),
+    username,
+    password,
+    provider: 'webshare-rotating',
+    country: 'rotating'
+  };
+}
+
+function isWebshareRotatingAvailable() {
+  if (!process.env.WEBSHARE_ROTATING_USER || !process.env.WEBSHARE_ROTATING_PASS) return false;
+  if (Date.now() < webshareRotatingBlockedUntil) return false;
+  return true;
+}
+
 async function ensureProxiesInitialized() {
   initIpRoyalProxy();
   await initWebshareProxy();
+  if (isWebshareRotatingAvailable()) {
+    console.log('[PROXY] Webshare ISP Rotating proxy configured');
+  }
 }
 
 function isProxyConfigured() {
   initIpRoyalProxy();
-  return IPROYAL_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0;
+  return IPROYAL_PROXIES.length > 0 || WEBSHARE_PROXIES.length > 0 || isWebshareRotatingAvailable();
 }
 
 function getNextIpRoyalProxy() {
@@ -680,6 +707,15 @@ function markProxyBlocked(proxy) {
     }
     return;
   }
+  if (proxy.provider === 'webshare-rotating') {
+    webshareRotatingFailCount++;
+    if (webshareRotatingFailCount >= 5) {
+      webshareRotatingBlockedUntil = Date.now() + 120000;
+      console.log(`[PROXY] Webshare ISP Rotating blocked ${webshareRotatingFailCount}x, cooldown 2min`);
+      webshareRotatingFailCount = 0;
+    }
+    return;
+  }
   const ip = proxy.proxy_address;
   const entry = blockedProxies.get(ip);
   const count = entry ? entry.count + 1 : 1;
@@ -693,6 +729,7 @@ function isProxyBlocked(proxy) {
   if (!proxy) return false;
   if (proxy.provider === 'iproyal') return !isIpRoyalAvailable();
   if (proxy.provider === 'webshare') return !isWebshareAvailable();
+  if (proxy.provider === 'webshare-rotating') return !isWebshareRotatingAvailable();
   const ip = proxy.proxy_address;
   const entry = blockedProxies.get(ip);
   if (!entry) return false;
@@ -719,14 +756,16 @@ function getNextProxy() {
   
   const hasIpRoyal = isIpRoyalAvailable();
   const hasWebshare = isWebshareAvailable();
+  const hasRotating = isWebshareRotatingAvailable();
   
-  if (!hasIpRoyal && !hasWebshare) return null;
+  if (!hasIpRoyal && !hasWebshare && !hasRotating) return null;
   
   if (hasIpRoyal) {
     proxyProviderToggle++;
     if (proxyProviderToggle % 5 !== 0) {
       return getNextIpRoyalProxy();
     }
+    if (hasRotating) return getWebshareRotatingProxy();
     if (hasWebshare) {
       const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
       webshareIndex++;
@@ -734,6 +773,8 @@ function getNextProxy() {
     }
     return getNextIpRoyalProxy();
   }
+  
+  if (hasRotating) return getWebshareRotatingProxy();
   
   if (hasWebshare) {
     for (let i = 0; i < WEBSHARE_PROXIES.length; i++) {
@@ -753,9 +794,12 @@ function getNextProxyPreferWebshare() {
   initIpRoyalProxy();
   
   const hasWebshare = isWebshareAvailable();
+  const hasRotating = isWebshareRotatingAvailable();
   const hasIpRoyal = isIpRoyalAvailable();
   
-  if (!hasWebshare && !hasIpRoyal) return null;
+  if (!hasWebshare && !hasRotating && !hasIpRoyal) return null;
+  
+  if (hasRotating) return getWebshareRotatingProxy();
   
   if (hasWebshare) {
     for (let i = 0; i < WEBSHARE_PROXIES.length; i++) {
@@ -829,7 +873,7 @@ function promoteProxyToTask(pendingId, taskId) {
 function applyProxyToConfig(config, proxy) {
   if (proxy) {
     const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
-    const providerName = proxy.provider === 'iproyal' ? 'IPRoyal ISP (PRIMARY)' : 'Webshare (80M+ IPs)';
+    const providerName = proxy.provider === 'iproyal' ? 'IPRoyal ISP (PRIMARY)' : proxy.provider === 'webshare-rotating' ? 'Webshare ISP Rotating' : 'Webshare (80M+ IPs)';
     console.log(`[PROXY] Using ${providerName}: ${proxy.proxy_address}:${proxy.port}`);
     config.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
     config.proxy = false;
@@ -1004,7 +1048,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
       if (proxy) {
         // Per-proxy rate limit: wait for available slot
         await waitForProxySlot(proxy);
-        console.log(`[PROXY] Using ${proxy.provider === 'iproyal' ? 'IPRoyal' : 'Webshare'}: ${proxy.proxy_address}:${proxy.port}`);
+        console.log(`[PROXY] Using ${proxy.provider === 'iproyal' ? 'IPRoyal' : proxy.provider === 'webshare-rotating' ? 'Webshare ISP Rotating' : 'Webshare'}: ${proxy.proxy_address}:${proxy.port}`);
         const proxyUrl = `http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`;
         const response = await axios({
           method,
