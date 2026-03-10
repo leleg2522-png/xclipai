@@ -1921,7 +1921,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
     
     // Find the task in database (already verified above, now get full details)
     const taskResult = await pool.query(
-      `SELECT t.*, k.user_id 
+      `SELECT t.*, t.retry_data, t.retry_count, k.user_id 
        FROM video_generation_tasks t 
        JOIN xclip_api_keys k ON k.id = t.xclip_api_key_id
        WHERE t.task_id = $1`,
@@ -1979,16 +1979,65 @@ app.post('/api/webhook/freepik', async (req, res) => {
       console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${detailedReason}`);
       console.log(`Webhook: Full payload: ${fullPayload}`);
       
-      const bgPollTask = serverBgPolls.get(taskId);
-      if (isMotionFail && bgPollTask && bgPollTask.motionRetryData && bgPollTask.motionRetryData.retryCount < bgPollTask.motionRetryData.maxRetries) {
-        console.log(`[WEBHOOK] Motion task ${taskId} failed, attempting auto-retry via webhook...`);
-        serverBgPolls.delete(taskId);
-        const retried = await retryMotionTask(taskId, bgPollTask);
-        if (retried) {
-          console.log(`[WEBHOOK] Motion task ${taskId} auto-retry submitted`);
-          return res.status(200).json({ received: true, retried: true });
+      if (isMotionFail) {
+        if (task.used_key_name) markMotionKeyFree(task.used_key_name);
+        
+        let bgPollTask = serverBgPolls.get(taskId);
+        let retryData = bgPollTask?.motionRetryData;
+        let retryCount = retryData?.retryCount || 0;
+        let maxRetries = retryData?.maxRetries || 3;
+        
+        if (!retryData) {
+          const dbRetryData = task.retry_data;
+          retryCount = task.retry_count || 0;
+          
+          if (dbRetryData && dbRetryData.requestBody) {
+            retryData = {
+              requestBody: dbRetryData.requestBody,
+              endpoint: dbRetryData.endpoint,
+              roomId: dbRetryData.roomId || task.room_id || 1,
+              xclipKeyId: dbRetryData.xclipKeyId || task.xclip_api_key_id,
+              retryCount: retryCount,
+              maxRetries: maxRetries
+            };
+            console.log(`[WEBHOOK] Loaded retry_data from DB for task ${taskId} (retry ${retryCount}/${maxRetries})`);
+          } else {
+            console.log(`[WEBHOOK] No retry_data in DB for task ${taskId}, cannot retry`);
+          }
         }
-        console.log(`[WEBHOOK] Motion task ${taskId} auto-retry failed`);
+        
+        if (retryData && retryCount < maxRetries) {
+          console.log(`[WEBHOOK] Motion task ${taskId} failed (retry ${retryCount}/${maxRetries}), attempting auto-retry...`);
+          if (bgPollTask) serverBgPolls.delete(taskId);
+          
+          const lastUsedKeyValue = task.used_key_name ? (() => {
+            const allKeys = getMotionRoomKeys(task.room_id || 1);
+            const found = allKeys.find(k => k.name === task.used_key_name);
+            return found?.key || null;
+          })() : null;
+          
+          const webhookRetryTask = bgPollTask || {
+            model: task.model,
+            userId: task.user_id,
+            usedKeyName: task.used_key_name,
+            apiKey: lastUsedKeyValue,
+            motionRetryData: retryData
+          };
+          if (!webhookRetryTask.motionRetryData) webhookRetryTask.motionRetryData = retryData;
+          
+          const retried = await retryMotionTask(taskId, webhookRetryTask);
+          if (retried) {
+            console.log(`[WEBHOOK] Motion task ${taskId} auto-retry submitted successfully`);
+            return res.status(200).json({ received: true, retried: true });
+          }
+          console.log(`[WEBHOOK] Motion task ${taskId} auto-retry failed, all keys exhausted`);
+        } else if (!retryData) {
+          console.log(`[WEBHOOK] Motion task ${taskId} failed, no retry data available`);
+          if (bgPollTask) serverBgPolls.delete(taskId);
+        } else {
+          console.log(`[WEBHOOK] Motion task ${taskId} failed, max retries (${maxRetries}) already reached`);
+          if (bgPollTask) serverBgPolls.delete(taskId);
+        }
       }
       
       await pool.query(
@@ -2690,7 +2739,7 @@ async function retryMotionTask(oldTaskId, task) {
         console.log(`[MOTION-RETRY] New task created: ${newTaskId} (replacing ${oldTaskId})`);
         
         const dbResult = await pool.query(
-          `UPDATE video_generation_tasks SET task_id = $1, used_key_name = $2, status = 'pending', error_message = NULL, completed_at = NULL WHERE task_id = $3 AND status IN ('pending', 'processing', 'failed')`,
+          `UPDATE video_generation_tasks SET task_id = $1, used_key_name = $2, status = 'pending', error_message = NULL, completed_at = NULL, retry_count = COALESCE(retry_count, 0) + 1 WHERE task_id = $3 AND status IN ('pending', 'processing', 'failed')`,
           [newTaskId, currentKey.name, oldTaskId]
         );
         
@@ -3130,6 +3179,17 @@ setInterval(async () => {
         if (isMotion && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         
         if (isMotion && task.motionRetryData && task.motionRetryData.retryCount < task.motionRetryData.maxRetries) {
+          const dbCheck = await pool.query(
+            `SELECT status, task_id FROM video_generation_tasks WHERE task_id = $1`,
+            [taskId]
+          ).catch(() => ({ rows: [] }));
+          
+          if (dbCheck.rows.length === 0 || dbCheck.rows[0].task_id !== taskId) {
+            console.log(`[BG-POLL] Task ${taskId} already retried by webhook, skipping bgPoll retry`);
+            serverBgPolls.delete(taskId);
+            continue;
+          }
+          
           console.log(`[BG-POLL] Motion task ${taskId} failed, attempting auto-retry...`);
           serverBgPolls.delete(taskId);
           const retried = await retryMotionTask(taskId, task);
@@ -4147,10 +4207,16 @@ app.post('/api/motion/generate', async (req, res) => {
     }
     
     if (taskId) {
+      const retryDataForDb = JSON.stringify({
+        requestBody,
+        endpoint,
+        roomId: selectedRoomId,
+        xclipKeyId: keyInfo.id
+      });
       await pool.query(
-        `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, used_key_name) 
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [keyInfo.id, keyInfo.user_id, selectedRoomId, taskId, 'motion-' + model, usedKeyName]
+        `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, used_key_name, retry_data, retry_count) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
+        [keyInfo.id, keyInfo.user_id, selectedRoomId, taskId, 'motion-' + model, usedKeyName, retryDataForDb]
       );
       console.log(`[MOTION] Task ${taskId} saved with key_name: ${usedKeyName}, motion_room: ${selectedRoomId}`);
       
@@ -10362,6 +10428,8 @@ async function initDatabase() {
     // Migration: add error_message column to video_generation_tasks if missing
     await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS error_message TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS used_key_name VARCHAR(255)`).catch(() => {});
+    await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS retry_data JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`).catch(() => {});
 
     // Seed rooms if empty
     const existingRooms = await pool.query('SELECT COUNT(*) FROM rooms');
