@@ -119,6 +119,26 @@ function isMotionKeyRateLimited(keyName) {
   return true;
 }
 
+const motionKeyActiveTasks = new Map();
+
+function markMotionKeyBusy(keyName) {
+  const count = motionKeyActiveTasks.get(keyName) || 0;
+  motionKeyActiveTasks.set(keyName, count + 1);
+}
+
+function markMotionKeyFree(keyName) {
+  const count = motionKeyActiveTasks.get(keyName) || 0;
+  if (count <= 1) {
+    motionKeyActiveTasks.delete(keyName);
+  } else {
+    motionKeyActiveTasks.set(keyName, count - 1);
+  }
+}
+
+function getMotionKeyActiveCount(keyName) {
+  return motionKeyActiveTasks.get(keyName) || 0;
+}
+
 function getAvailableMotionKeys(keys) {
   const nonExpired = keys.filter(k => !motionKeyExpired.has(k.name));
   if (nonExpired.length === 0 && keys.length > 0) {
@@ -139,6 +159,12 @@ function getAvailableMotionKeys(keys) {
     }
     motionKeyRateLimited.delete(oldest.name);
     return [oldest, ...nonExpired.filter(k => k.name !== oldest.name)];
+  }
+  available.sort((a, b) => getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name));
+  const idleKeys = available.filter(k => getMotionKeyActiveCount(k.name) === 0);
+  const busyKeys = available.filter(k => getMotionKeyActiveCount(k.name) > 0);
+  if (busyKeys.length > 0) {
+    console.log(`[MOTION-CONCURRENCY] ${idleKeys.length} idle keys, ${busyKeys.length} busy keys: ${busyKeys.map(k => `${k.name}(${getMotionKeyActiveCount(k.name)})`).join(', ')}`);
   }
   return available;
 }
@@ -2638,11 +2664,12 @@ async function retryMotionTask(oldTaskId, task) {
       return false;
     }
     
-    const shuffled = available.sort(() => Math.random() - 0.5);
+    available.sort((a, b) => getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name));
     
-    for (const currentKey of shuffled) {
+    for (const currentKey of available) {
       try {
-        console.log(`[MOTION-RETRY] Trying key ${currentKey.name}...`);
+        console.log(`[MOTION-RETRY] Trying key ${currentKey.name} (active: ${getMotionKeyActiveCount(currentKey.name)})...`);
+        markMotionKeyBusy(currentKey.name);
         const response = await makeFreepikRequest(
           'POST',
           `https://api.freepik.com${retryData.endpoint}`,
@@ -2655,6 +2682,7 @@ async function retryMotionTask(oldTaskId, task) {
         
         const newTaskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
         if (!newTaskId) {
+          markMotionKeyFree(currentKey.name);
           console.log(`[MOTION-RETRY] No task ID in response`);
           continue;
         }
@@ -2667,6 +2695,7 @@ async function retryMotionTask(oldTaskId, task) {
         );
         
         if (dbResult.rowCount === 0) {
+          markMotionKeyFree(currentKey.name);
           console.log(`[MOTION-RETRY] DB update failed (task ${oldTaskId} already handled), skipping`);
           return false;
         }
@@ -2687,6 +2716,7 @@ async function retryMotionTask(oldTaskId, task) {
           urlColumn: 'video_url',
           model: task.model,
           userId: task.userId,
+          usedKeyName: currentKey.name,
           motionRetryData: newRetryData
         });
         
@@ -2694,6 +2724,7 @@ async function retryMotionTask(oldTaskId, task) {
         return true;
         
       } catch (error) {
+        markMotionKeyFree(currentKey.name);
         const status = error.response?.status;
         const errMsg = error.response?.data?.message || error.message || '';
         console.log(`[MOTION-RETRY] Key ${currentKey.name} failed (${status}): ${errMsg}`);
@@ -3019,6 +3050,8 @@ setInterval(async () => {
     
     if (task.attempts > task.maxAttempts || (Date.now() - task.startTime > 3600000)) {
       console.log(`[BG-POLL] Task ${taskId} timed out after ${task.attempts} attempts`);
+      const isMotionTimeout = (task.model || '').startsWith('motion-');
+      if (isMotionTimeout && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
       serverBgPolls.delete(taskId);
       try {
         const table = task.dbTable || 'vidgen4_tasks';
@@ -3057,6 +3090,8 @@ setInterval(async () => {
       
       if (result.status === 'completed' && !result.url) {
         console.error(`[BG-POLL] Task ${taskId} completed but no URL - marking as failed`);
+        const isMotionNoUrl = (task.model || '').startsWith('motion-');
+        if (isMotionNoUrl && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         if (task.userId) {
           const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
@@ -3066,13 +3101,15 @@ setInterval(async () => {
         serverBgPolls.delete(taskId);
       } else if (result.status === 'completed' && result.url) {
         console.log(`[BG-POLL] Task ${taskId} completed! URL: ${result.url.substring(0, 80)}...`);
+        const isMotionCompleted = (task.model || '').startsWith('motion-');
+        if (isMotionCompleted && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         await pool.query(
           `UPDATE ${table} SET status = 'completed', ${urlCol} = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`,
           [result.url, taskId]
         );
         if (task.userId) {
           const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
-          const isMotion = (task.model || '').startsWith('motion-');
+          const isMotion = isMotionCompleted;
           let sseType = 'video_completed';
           if (table === 'ximage3_history') sseType = 'ximage3_completed';
           else if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_completed' : 'ximage_completed';
@@ -3089,6 +3126,8 @@ setInterval(async () => {
       } else if (result.status === 'failed') {
         console.log(`[BG-POLL] Task ${taskId} failed: ${result.error}`);
         const isMotion = (task.model || '').startsWith('motion-');
+        
+        if (isMotion && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         
         if (isMotion && task.motionRetryData && task.motionRetryData.retryCount < task.motionRetryData.maxRetries) {
           console.log(`[BG-POLL] Motion task ${taskId} failed, attempting auto-retry...`);
@@ -3119,8 +3158,8 @@ setInterval(async () => {
         }
         serverBgPolls.delete(taskId);
       } else if (result.status === 'forbidden') {
-        // 403 on all endpoints = wrong API key resumed after restart
-        // Stop BG-POLL spam, rely on webhook to deliver result
+        const isMotionForbidden = (task.model || '').startsWith('motion-');
+        if (isMotionForbidden && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         console.log(`[BG-POLL] Task ${taskId} → 403 API key mismatch, stopping BG-POLL. Relying on webhook.`);
         serverBgPolls.delete(taskId);
       }
@@ -4030,7 +4069,8 @@ app.post('/api/motion/generate', async (req, res) => {
     
     for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
       const currentKey = availableMotionKeys[attempt];
-      console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
+      console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId}), active: ${getMotionKeyActiveCount(currentKey.name)}`);
+      markMotionKeyBusy(currentKey.name);
       
       try {
         const response = await makeFreepikRequest(
@@ -4050,6 +4090,7 @@ app.post('/api/motion/generate', async (req, res) => {
         break;
         
       } catch (error) {
+        markMotionKeyFree(currentKey.name);
         lastError = error;
         const status = error.response?.status;
         const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
@@ -4100,6 +4141,11 @@ app.post('/api/motion/generate', async (req, res) => {
     
     console.log(`[MOTION] Task created: ${taskId}`);
     
+    if (!taskId) {
+      if (usedKeyName) markMotionKeyFree(usedKeyName);
+      return res.status(500).json({ error: 'Freepik tidak mengembalikan task ID' });
+    }
+    
     if (taskId) {
       await pool.query(
         `INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, used_key_name) 
@@ -4113,6 +4159,7 @@ app.post('/api/motion/generate', async (req, res) => {
         urlColumn: 'video_url',
         model: 'motion-' + model,
         userId: keyInfo.user_id,
+        usedKeyName: usedKeyName,
         motionRetryData: {
           requestBody,
           endpoint,
