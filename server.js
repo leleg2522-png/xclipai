@@ -591,6 +591,15 @@ const uploadPaymentProof = multer({
 // Storage for video processing jobs
 const jobs = new Map();
 
+function cleanErrorForUser(errorMessage) {
+  if (!errorMessage) return 'Konten tidak dapat diproses oleh AI. Coba gunakan gambar/video yang berbeda.';
+  const cleaned = errorMessage.split(' | Debug:')[0].split(' | Webhook:')[0].trim();
+  if (!cleaned || cleaned === 'Video generation failed' || cleaned.includes('"status":"FAILED"') || cleaned.includes('"generated":[]')) {
+    return 'Konten tidak dapat diproses oleh AI. Coba gunakan gambar/video yang berbeda.';
+  }
+  return cleaned;
+}
+
 // ============ MULTI-PROVIDER PROXY SUPPORT ============
 const IPROYAL_PROXIES = [];
 let iproyalIndex = 0;
@@ -2033,8 +2042,9 @@ app.post('/api/webhook/freepik', async (req, res) => {
     } else if (isFailed) {
       releaseProxyForTask(taskId);
       const fullPayload = JSON.stringify(req.body);
-      const failReason = data.error_message || data.error || data.message || data.detail || data.reason || data.fail_reason || req.body.error_message || req.body.error || 'Video generation failed';
-      const detailedReason = failReason === 'Video generation failed' ? `Video generation failed | Webhook: ${fullPayload.slice(0, 500)}` : failReason;
+      const failReason = data.error_message || data.error || data.message || data.detail || data.reason || data.fail_reason || req.body.error_message || req.body.error || '';
+      const userFriendlyReason = failReason && failReason !== 'Video generation failed' ? failReason : 'Konten tidak dapat diproses oleh AI. Coba gunakan gambar/video yang berbeda.';
+      const detailedReason = `${userFriendlyReason} | Debug: ${fullPayload.slice(0, 300)}`;
       const isMotionFail = task.model && task.model.startsWith('motion-');
       if (isMotionFail && task.used_key_name) {
         recordMotionKeyResult(task.used_key_name, false);
@@ -2049,7 +2059,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
         let bgPollTask = serverBgPolls.get(taskId);
         let retryData = bgPollTask?.motionRetryData;
         let retryCount = retryData?.retryCount || 0;
-        let maxRetries = retryData?.maxRetries || 5;
+        let maxRetries = retryData?.maxRetries || 2;
         
         if (!retryData) {
           const dbRetryData = task.retry_data;
@@ -2113,7 +2123,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
       sendSSEToUser(task.user_id, {
         type: isMotionFailed ? 'motion_failed' : 'video_failed',
         taskId: taskId,
-        error: failReason
+        error: userFriendlyReason
       });
     } else {
       // Progress update
@@ -3409,7 +3419,7 @@ async function resumePendingTaskPolling() {
                 roomId: dbRetry.roomId || row.room_id || 1,
                 xclipKeyId: dbRetry.xclipKeyId || row.xclip_api_key_id,
                 retryCount: row.retry_count || 0,
-                maxRetries: 5
+                maxRetries: 2
               };
             }
             if (isMotionTask && row[keyCol]) {
@@ -4345,7 +4355,7 @@ app.post('/api/motion/generate', async (req, res) => {
           roomId: selectedRoomId,
           xclipKeyId: keyInfo.id,
           retryCount: 0,
-          maxRetries: 5
+          maxRetries: 2
         }
       });
     }
@@ -4405,7 +4415,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
         }
         if (retried.status === 'failed') {
           const retryCount = retried.retry_count || 0;
-          const maxRetries = retried.retry_data?.maxRetries || 5;
+          const maxRetries = retried.retry_data?.maxRetries || 2;
           const retryDataExists = retried.retry_data && retried.retry_data.requestBody;
           if (retryDataExists && retryCount < maxRetries) {
             return res.json({
@@ -4417,7 +4427,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           }
           return res.json({
             status: 'failed',
-            error: retried.error_message || 'Task gagal diproses oleh Freepik',
+            error: cleanErrorForUser(retried.error_message),
             taskId: retried.task_id
           });
         }
@@ -4448,7 +4458,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     if (savedTask.status === 'failed') {
       const retryCount = savedTask.retry_count || 0;
       const retryDataExists = savedTask.retry_data && savedTask.retry_data.requestBody;
-      const maxRetries = savedTask.retry_data?.maxRetries || 5;
+      const maxRetries = savedTask.retry_data?.maxRetries || 2;
       if (retryDataExists && retryCount < maxRetries) {
         console.log(`[MOTION] Task ${taskId} failed in DB but retry still possible (${retryCount}/${maxRetries}), returning processing`);
         return res.json({
@@ -4459,9 +4469,10 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
         });
       }
       console.log(`[MOTION] Task ${taskId} already failed (via webhook), returning from DB`);
+      const cleanError = cleanErrorForUser(savedTask.error_message);
       return res.json({
         status: 'failed',
-        error: savedTask.error_message || 'Task gagal diproses oleh Freepik',
+        error: cleanError,
         taskId: taskId
       });
     }
@@ -4633,7 +4644,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       
       const retryCount = savedTask.retry_count || 0;
       const retryDataExists = savedTask.retry_data && savedTask.retry_data.requestBody;
-      const maxRetries = savedTask.retry_data?.maxRetries || 5;
+      const maxRetries = savedTask.retry_data?.maxRetries || 2;
       if (retryDataExists && retryCount < maxRetries) {
         console.log(`[MOTION] Task ${taskId} failed on Freepik but retry available (${retryCount}/${maxRetries}), hiding failure from client`);
         return res.json({

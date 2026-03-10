@@ -5655,7 +5655,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                           </div>
                         </div>
                       ` : task.status === 'failed' ? `
-                        <div class="task-error">${task.error || 'Generation failed'}</div>
+                        <div class="task-error">${cleanMotionError(task.error)}</div>
                       ` : ''}
                     </div>
                   `).join('')}
@@ -5705,6 +5705,15 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
       </div>
     </div>
   `;
+}
+
+function cleanMotionError(err) {
+  if (!err) return 'Konten tidak dapat diproses oleh AI. Coba gambar/video berbeda.';
+  const cleaned = err.split(' | Debug:')[0].split(' | Webhook:')[0].trim();
+  if (!cleaned || cleaned === 'Video generation failed' || cleaned.includes('"status":"FAILED"') || cleaned.includes('"generated":[]') || cleaned.includes('request_id')) {
+    return 'Konten tidak dapat diproses oleh AI. Coba gambar/video berbeda.';
+  }
+  return cleaned;
 }
 
 function formatTime(timestamp) {
@@ -11161,10 +11170,10 @@ function pollMotionStatus(initialTaskId, model, apiKey) {
       
       if (data.status === 'failed') {
         task.status = 'failed';
-        task.error = data.error || 'Motion generation gagal';
+        task.error = cleanMotionError(data.error);
         stopPolling();
         savePendingTasks();
-        showToast('Motion generation gagal: ' + (data.error || ''), 'error');
+        showToast(cleanMotionError(data.error), 'error');
         render(true);
         setTimeout(() => {
           state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
@@ -12124,7 +12133,7 @@ function handleSSEEvent(data) {
       }
       state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed' && t.taskId !== data.taskId);
       savePendingTasks();
-      showToast('Gagal generate motion: ' + (data.error || 'Generation failed'), 'error');
+      showToast('Gagal generate motion: ' + cleanMotionError(data.error), 'error');
       render(true);
       setTimeout(() => {
         state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
