@@ -73,6 +73,29 @@ const motionKeyExpired = new Set();
 const motionKeyFailures = new Map();
 const MOTION_KEY_MAX_CONSECUTIVE_FAILURES = 10;
 
+const motionKeyStats = new Map();
+
+function recordMotionKeyStat(keyName, success) {
+  if (!keyName) return;
+  let stats = motionKeyStats.get(keyName);
+  if (!stats) {
+    stats = { success: 0, fail: 0, total: 0 };
+    motionKeyStats.set(keyName, stats);
+  }
+  stats.total++;
+  if (success) {
+    stats.success++;
+  } else {
+    stats.fail++;
+  }
+}
+
+function getMotionKeySuccessRate(keyName) {
+  const stats = motionKeyStats.get(keyName);
+  if (!stats || stats.total < 2) return 0.5;
+  return stats.success / stats.total;
+}
+
 function markMotionKeyRateLimited(keyName) {
   motionKeyRateLimited.set(keyName, Date.now());
   console.log(`[MOTION-RATE] Key ${keyName} kena rate limit (429), ditandai dan skip ke key berikutnya`);
