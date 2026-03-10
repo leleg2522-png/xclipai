@@ -2671,9 +2671,9 @@ async function pollKieFluxKontextTask(taskId, apiKey) {
 async function pollFreepikMotionTask(taskId, apiKey, model) {
   const isPro = (model || '').includes('pro');
   const pollEndpoints = [
-    `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
     isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
-    `/v1/ai/video/kling-v2-6/${taskId}`
+    `/v1/ai/video/kling-v2-6/${taskId}`,
+    `/v1/ai/image-to-video/kling-v2-6/${taskId}`
   ];
   
   let forbiddenCount = 0;
@@ -2725,6 +2725,10 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         break;
       } catch (e) {
         const httpStatus = e.response?.status;
+        if (httpStatus === 404) {
+          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 404, trying next endpoint...`);
+          break;
+        }
         if (httpStatus === 403) {
           forbiddenCount++;
           console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 403 Forbidden (wrong API key or task not owned by this key)`);
@@ -2741,8 +2745,6 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
     }
   }
 
-  // If ALL endpoints returned 403, the API key is wrong for this task
-  // This usually happens after server restart when the wrong key is used
   if (forbiddenCount === pollEndpoints.length) {
     console.log(`[MOTION] Poll ${taskId} - ALL endpoints returned 403. API key mismatch. Will rely on webhook only.`);
     return { status: 'forbidden' };
@@ -3989,9 +3991,9 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const isPro = storedModel.includes('pro');
     
     const pollEndpoints = [
-      `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
       isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
-      `/v1/ai/video/kling-v2-6/${taskId}`
+      `/v1/ai/video/kling-v2-6/${taskId}`,
+      `/v1/ai/image-to-video/kling-v2-6/${taskId}`
     ];
     
     let response = null;
@@ -4338,8 +4340,9 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     let pollEndpoints = [];
     if (isMotion) {
       pollEndpoints = [
-        `/v1/ai/image-to-video/kling-v2-6/${taskId}`,
-        isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`
+        isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
+        `/v1/ai/video/kling-v2-6/${taskId}`,
+        `/v1/ai/image-to-video/kling-v2-6/${taskId}`
       ];
     } else {
       const allEndpoints = { ...vidgen3Endpoints, ...videogenEndpoints };
