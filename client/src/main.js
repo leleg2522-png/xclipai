@@ -10997,7 +10997,8 @@ function updateMotionTaskUI(taskId) {
   }
 }
 
-function pollMotionStatus(taskId, model, apiKey) {
+function pollMotionStatus(initialTaskId, model, apiKey) {
+  let taskId = initialTaskId;
   console.log('[MOTION POLL] Starting polling for task:', taskId, 'with apiKey:', apiKey ? 'present' : 'missing');
   
   const maxAttempts = 1200;
@@ -11017,15 +11018,22 @@ function pollMotionStatus(taskId, model, apiKey) {
   const poll = async () => {
     try {
       let task = state.motion.tasks.find(t => t.taskId === taskId);
+      if (!task && taskId !== initialTaskId) {
+        task = state.motion.tasks.find(t => t.taskId === initialTaskId);
+        if (task) {
+          task.taskId = taskId;
+          savePendingTasks();
+        }
+      }
       if (!task) {
         console.log('[MOTION POLL] Task not found in state, checking if already handled');
-        const alreadyGenerated = state.motion.generatedVideos.some(v => v.taskId === taskId);
+        const alreadyGenerated = state.motion.generatedVideos.some(v => v.taskId === taskId || v.taskId === initialTaskId);
         if (alreadyGenerated) {
           console.log('[MOTION POLL] Task already completed via SSE, stopping poll');
           stopPolling();
           return;
         }
-        if (state.motion._handledTaskIds && state.motion._handledTaskIds.has(taskId)) {
+        if (state.motion._handledTaskIds && (state.motion._handledTaskIds.has(taskId) || state.motion._handledTaskIds.has(initialTaskId))) {
           console.log('[MOTION POLL] Task already handled (failed/removed via SSE), stopping poll');
           stopPolling();
           return;
@@ -11118,9 +11126,16 @@ function pollMotionStatus(taskId, model, apiKey) {
       
       const data = await response.json();
       
+      if (data.taskId && data.taskId !== taskId) {
+        console.log(`[MOTION POLL] Server returned new taskId: ${data.taskId} (was ${taskId})`);
+        task.taskId = data.taskId;
+        taskId = data.taskId;
+        savePendingTasks();
+      }
+      
       task.status = data.status;
       task.progress = data.progress || 0;
-      task.statusText = data.status === 'processing' ? 'Generating motion video...' : data.status;
+      task.statusText = data.message || (data.status === 'processing' ? 'Generating motion video...' : data.status);
       
       if (data.status === 'completed' && data.videoUrl) {
         task.status = 'completed';

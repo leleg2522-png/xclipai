@@ -2803,7 +2803,7 @@ async function retryMotionTask(oldTaskId, task) {
         console.log(`[MOTION-RETRY] New task created: ${newTaskId} (replacing ${oldTaskId})`);
         
         const dbResult = await pool.query(
-          `UPDATE video_generation_tasks SET task_id = $1, used_key_name = $2, status = 'pending', error_message = NULL, completed_at = NULL, retry_count = COALESCE(retry_count, 0) + 1 WHERE task_id = $3 AND status IN ('pending', 'processing', 'failed')`,
+          `UPDATE video_generation_tasks SET task_id = $1, used_key_name = $2, status = 'pending', error_message = NULL, completed_at = NULL, retry_count = COALESCE(retry_count, 0) + 1, original_task_id = COALESCE(original_task_id, $3) WHERE task_id = $3 AND status IN ('pending', 'processing', 'failed')`,
           [newTaskId, currentKey.name, oldTaskId]
         );
         
@@ -4360,6 +4360,47 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     );
     
     if (taskResult.rows.length === 0) {
+      const retryLookup = await pool.query(
+        'SELECT * FROM video_generation_tasks WHERE original_task_id = $1 AND xclip_api_key_id = $2',
+        [taskId, keyInfo.id]
+      );
+      if (retryLookup.rows.length > 0) {
+        const retried = retryLookup.rows[0];
+        console.log(`[MOTION] Client polled old task ${taskId}, found retried task ${retried.task_id}`);
+        if (retried.status === 'completed' && retried.video_url) {
+          return res.json({
+            status: 'completed',
+            progress: 100,
+            videoUrl: retried.video_url,
+            taskId: retried.task_id,
+            model: retried.model
+          });
+        }
+        if (retried.status === 'failed') {
+          const retryCount = retried.retry_count || 0;
+          const maxRetries = retried.retry_data?.maxRetries || 5;
+          const retryDataExists = retried.retry_data && retried.retry_data.requestBody;
+          if (retryDataExists && retryCount < maxRetries) {
+            return res.json({
+              status: 'processing',
+              progress: 10,
+              taskId: retried.task_id,
+              message: `Auto-retry sedang berjalan (${retryCount + 1}/${maxRetries})...`
+            });
+          }
+          return res.json({
+            status: 'failed',
+            error: retried.error_message || 'Task gagal diproses oleh Freepik',
+            taskId: retried.task_id
+          });
+        }
+        return res.json({
+          status: 'processing',
+          progress: 30,
+          taskId: retried.task_id,
+          message: `Auto-retry ke-${retried.retry_count || 1} sedang berjalan...`
+        });
+      }
       return res.status(404).json({ error: 'Task tidak ditemukan atau bukan milik API key ini' });
     }
     
@@ -10536,6 +10577,7 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS used_key_name VARCHAR(255)`).catch(() => {});
     await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS retry_data JSONB`).catch(() => {});
     await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE video_generation_tasks ADD COLUMN IF NOT EXISTS original_task_id VARCHAR(255)`).catch(() => {});
 
     // Seed rooms if empty
     const existingRooms = await pool.query('SELECT COUNT(*) FROM rooms');
