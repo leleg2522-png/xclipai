@@ -54,6 +54,30 @@ function getAllMotionRoomKeys(maxRooms = 5) {
   return keys;
 }
 
+const MOTION_KEY_ROTATION_INTERVAL_MS = 3 * 60 * 1000;
+let motionKeyRotationIndex = 0;
+let motionKeyLastRotationTime = Date.now();
+
+function getRotatedMotionKeys(roomKeys) {
+  if (!roomKeys || roomKeys.length === 0) return roomKeys;
+  
+  const now = Date.now();
+  const elapsed = now - motionKeyLastRotationTime;
+  if (elapsed >= MOTION_KEY_ROTATION_INTERVAL_MS) {
+    const rotations = Math.floor(elapsed / MOTION_KEY_ROTATION_INTERVAL_MS);
+    motionKeyRotationIndex = (motionKeyRotationIndex + rotations) % roomKeys.length;
+    motionKeyLastRotationTime = now;
+    console.log(`[MOTION-ROTATE] Rotated to key index ${motionKeyRotationIndex} (${roomKeys[motionKeyRotationIndex]?.name})`);
+  }
+  
+  const rotated = [];
+  for (let i = 0; i < roomKeys.length; i++) {
+    const idx = (motionKeyRotationIndex + i) % roomKeys.length;
+    rotated.push(roomKeys[idx]);
+  }
+  return rotated;
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -3792,14 +3816,16 @@ app.post('/api/motion/generate', async (req, res) => {
       return res.status(429).json({ error: 'Semua API key Motion sudah mencapai batas harian. Coba lagi besok.' });
     }
     
+    const rotatedMotionKeys = getRotatedMotionKeys(availableMotionKeys);
+    
     await applyRandomJitter('motion');
     
     let successResponse = null;
     let lastError = null;
     usedKeyName = null;
     
-    for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
-      const currentKey = availableMotionKeys[attempt];
+    for (let attempt = 0; attempt < rotatedMotionKeys.length; attempt++) {
+      const currentKey = rotatedMotionKeys[attempt];
       console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
       
       try {
