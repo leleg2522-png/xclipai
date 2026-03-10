@@ -5556,10 +5556,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
               <div class="upload-zone small-upload" id="motionVideoUploadZone">
                 ${state.motion.referenceVideo ? `
                   <div class="uploaded-preview video-preview-thumb">
-                    ${state.motion.referenceVideo.thumbnail 
-                      ? `<img src="${state.motion.referenceVideo.thumbnail}" alt="Video preview" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
-                      : `<video src="${state.motion.referenceVideo.preview}" muted autoplay loop playsinline preload="metadata"></video>`
-                    }
+                    <video src="${state.motion.referenceVideo.preview}" muted autoplay loop playsinline preload="auto" poster="${state.motion.referenceVideo.thumbnail || ''}"></video>
                     <div class="video-overlay-info">
                       <span class="video-duration">${state.motion.referenceVideo.name}</span>
                     </div>
@@ -10634,6 +10631,13 @@ function attachMotionEventListeners() {
     });
     
     videoInput.addEventListener('change', handleMotionVideoUpload);
+    
+    const previewVideo = videoUploadZone.querySelector('video');
+    if (previewVideo) {
+      previewVideo.load();
+      const playPromise = previewVideo.play();
+      if (playPromise) playPromise.catch(() => {});
+    }
   }
   
   if (removeImageBtn) {
