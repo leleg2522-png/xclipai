@@ -2001,6 +2001,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
       const isMotionTask = task.model && task.model.startsWith('motion-');
       if (isMotionTask && task.used_key_name) {
         recordMotionKeyResult(task.used_key_name, true);
+        recordMotionKeyStat(task.used_key_name, true);
       }
       const sent = sendSSEToUser(task.user_id, {
         type: isMotionTask ? 'motion_completed' : 'video_completed',
@@ -2018,6 +2019,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
       const isMotionFail = task.model && task.model.startsWith('motion-');
       if (isMotionFail && task.used_key_name) {
         recordMotionKeyResult(task.used_key_name, false);
+        recordMotionKeyStat(task.used_key_name, false);
       }
       console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${detailedReason}`);
       console.log(`Webhook: Full payload: ${fullPayload}`);
@@ -2028,7 +2030,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
         let bgPollTask = serverBgPolls.get(taskId);
         let retryData = bgPollTask?.motionRetryData;
         let retryCount = retryData?.retryCount || 0;
-        let maxRetries = retryData?.maxRetries || 3;
+        let maxRetries = retryData?.maxRetries || 5;
         
         if (!retryData) {
           const dbRetryData = task.retry_data;
@@ -2737,6 +2739,20 @@ async function retryMotionTask(oldTaskId, task) {
     const lastUsedKey = task.apiKey;
     console.log(`[MOTION-RETRY] Retry ${retryData.retryCount}/${retryData.maxRetries} for failed task ${oldTaskId} (excluding last key)`);
     
+    const retryBody = { ...retryData.requestBody };
+    let retryEndpoint = retryData.endpoint;
+    
+    if (retryData.retryCount === 2) {
+      retryBody.cfg_scale = 0.3;
+      console.log(`[MOTION-RETRY] Retry #2: using cfg_scale=0.3 for more flexibility`);
+    } else if (retryData.retryCount >= 3) {
+      if (retryEndpoint.includes('-pro')) {
+        retryEndpoint = retryEndpoint.replace('-pro', '-std');
+        console.log(`[MOTION-RETRY] Retry #${retryData.retryCount}: switching to Standard mode`);
+      }
+      retryBody.cfg_scale = 0.2;
+    }
+    
     const allMotionKeys = getMotionRoomKeys(retryData.roomId);
     for (let r = 1; r <= 5; r++) {
       if (r === retryData.roomId) continue;
@@ -2756,17 +2772,22 @@ async function retryMotionTask(oldTaskId, task) {
       return false;
     }
     
-    available.sort((a, b) => getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name));
+    available.sort((a, b) => {
+      const rateA = getMotionKeySuccessRate(a.name);
+      const rateB = getMotionKeySuccessRate(b.name);
+      if (Math.abs(rateA - rateB) > 0.1) return rateB - rateA;
+      return getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name);
+    });
     
     for (const currentKey of available) {
       try {
-        console.log(`[MOTION-RETRY] Trying key ${currentKey.name} (active: ${getMotionKeyActiveCount(currentKey.name)})...`);
+        console.log(`[MOTION-RETRY] Trying key ${currentKey.name} (active: ${getMotionKeyActiveCount(currentKey.name)}, success rate: ${(getMotionKeySuccessRate(currentKey.name) * 100).toFixed(0)}%)...`);
         markMotionKeyBusy(currentKey.name);
         const response = await makeFreepikRequest(
           'POST',
-          `https://api.freepik.com${retryData.endpoint}`,
+          `https://api.freepik.com${retryEndpoint}`,
           currentKey.key,
-          retryData.requestBody,
+          retryBody,
           true,
           null,
           'iproyal'
@@ -3361,7 +3382,7 @@ async function resumePendingTaskPolling() {
                 roomId: dbRetry.roomId || row.room_id || 1,
                 xclipKeyId: dbRetry.xclipKeyId || row.xclip_api_key_id,
                 retryCount: row.retry_count || 0,
-                maxRetries: 3
+                maxRetries: 5
               };
             }
             if (isMotionTask && row[keyCol]) {
@@ -4185,9 +4206,16 @@ app.post('/api/motion/generate', async (req, res) => {
     let lastError = null;
     usedKeyName = null;
     
+    availableMotionKeys.sort((a, b) => {
+      const rateA = getMotionKeySuccessRate(a.name);
+      const rateB = getMotionKeySuccessRate(b.name);
+      if (Math.abs(rateA - rateB) > 0.1) return rateB - rateA;
+      return getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name);
+    });
+
     for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
       const currentKey = availableMotionKeys[attempt];
-      console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId}), active: ${getMotionKeyActiveCount(currentKey.name)}`);
+      console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId}), active: ${getMotionKeyActiveCount(currentKey.name)}, success: ${(getMotionKeySuccessRate(currentKey.name) * 100).toFixed(0)}%`);
       markMotionKeyBusy(currentKey.name);
       
       try {
@@ -4290,7 +4318,7 @@ app.post('/api/motion/generate', async (req, res) => {
           roomId: selectedRoomId,
           xclipKeyId: keyInfo.id,
           retryCount: 0,
-          maxRetries: 3
+          maxRetries: 5
         }
       });
     }
@@ -10982,6 +11010,34 @@ async function initDatabase() {
 
     console.log('[DB] Database initialized successfully');
     
+    try {
+      const keyStatsResult = await pool.query(`
+        SELECT used_key_name, 
+          COUNT(*) FILTER (WHERE status='completed') as ok,
+          COUNT(*) FILTER (WHERE status='failed') as fail
+        FROM video_generation_tasks 
+        WHERE model LIKE 'motion-%' 
+          AND created_at > NOW() - INTERVAL '48 hours'
+          AND status IN ('completed','failed')
+          AND used_key_name IS NOT NULL
+        GROUP BY used_key_name
+      `);
+      for (const row of keyStatsResult.rows) {
+        motionKeyStats.set(row.used_key_name, {
+          success: parseInt(row.ok) || 0,
+          fail: parseInt(row.fail) || 0,
+          total: (parseInt(row.ok) || 0) + (parseInt(row.fail) || 0)
+        });
+      }
+      console.log(`[STARTUP] Loaded key stats for ${keyStatsResult.rows.length} keys from DB`);
+      for (const [name, stats] of motionKeyStats) {
+        const rate = stats.total > 0 ? ((stats.success / stats.total) * 100).toFixed(0) : '?';
+        console.log(`  [KEY-STAT] ${name}: ${stats.success}/${stats.total} (${rate}%)`);
+      }
+    } catch (e) {
+      console.log('[STARTUP] Could not load key stats:', e.message);
+    }
+
     setTimeout(() => {
       resumePendingTaskPolling();
     }, 5000);
