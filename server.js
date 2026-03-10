@@ -25,20 +25,24 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection (non-fatal):', reason);
 });
 
+function sanitizeApiKey(key) {
+  return key.replace(/[^\x20-\x7E]/g, '').trim();
+}
+
 function getMotionRoomKeys(roomId) {
   const keys = [];
   const bulkVar = process.env[`MOTION_ROOM${roomId}_KEYS`];
   if (bulkVar) {
     bulkVar.split(',').forEach((k, i) => {
-      const trimmed = k.trim();
+      const trimmed = sanitizeApiKey(k);
       if (trimmed) keys.push({ key: trimmed, name: `MOTION_ROOM${roomId}_KEYS[${i}]`, roomId });
     });
   }
   for (let i = 1; i <= 100; i++) {
     const envName = `MOTION_ROOM${roomId}_KEY_${i}`;
     if (process.env[envName]) {
-      const val = process.env[envName];
-      if (!keys.some(k => k.key === val)) {
+      const val = sanitizeApiKey(process.env[envName]);
+      if (val && !keys.some(k => k.key === val)) {
         keys.push({ key: val, name: envName, roomId });
       }
     }
@@ -974,12 +978,13 @@ function isFreepikBlocked(response) {
 }
 
 async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null, preferredProvider = null) {
+  const cleanKey = sanitizeApiKey(apiKey);
   function buildConfig() {
     const cfg = {
       method,
       url,
       headers: {
-        'x-freepik-api-key': apiKey,
+        'x-freepik-api-key': cleanKey,
         'Content-Type': 'application/json'
       },
       timeout: 120000
@@ -2895,7 +2900,7 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
     for (let retry = 0; retry < 2; retry++) {
       try {
         const pollConfig = {
-          headers: { 'x-freepik-api-key': apiKey },
+          headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) },
           timeout: 25000
         };
         if (retry === 0) {
@@ -3016,7 +3021,7 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
   try {
     const pollResponse = await axios.get(
       `https://api.freepik.com${endpoint}`,
-      { headers: { 'x-freepik-api-key': apiKey }, timeout: 30000 }
+      { headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) }, timeout: 30000 }
     );
     
     if (pollResponse.data && typeof pollResponse.data === 'object') {
