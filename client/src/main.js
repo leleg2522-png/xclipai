@@ -5556,7 +5556,7 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
               <div class="upload-zone small-upload" id="motionVideoUploadZone">
                 ${state.motion.referenceVideo ? `
                   <div class="uploaded-preview video-preview-thumb">
-                    <video src="${state.motion.referenceVideo.preview}" muted></video>
+                    <video src="${state.motion.referenceVideo.preview}" muted autoplay loop playsinline preload="metadata"></video>
                     <div class="video-overlay-info">
                       <span class="video-duration">${state.motion.referenceVideo.name}</span>
                     </div>
