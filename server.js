@@ -2964,7 +2964,7 @@ async function pollKieFluxKontextTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
-async function pollFreepikMotionTask(taskId, apiKey, model) {
+async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   const isPro = (model || '').includes('pro');
   const primaryEndpoint = isPro 
     ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
@@ -3010,7 +3010,8 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
     const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
     
     if (isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
-      const keyName = apiKey ? `key_${apiKey.slice(-6)}` : 'unknown';
+      const keyName = usedKeyName || (apiKey ? `key_${apiKey.slice(-6)}` : 'unknown');
+      console.log(`[MOTION-EXPIRED] Key ${keyName} free trial habis (detected during poll), blacklisting`);
       markMotionKeyExpired(keyName);
       return { status: 'failed', error: 'API key free trial habis' };
     }
@@ -3127,7 +3128,7 @@ setInterval(async () => {
       } else if (task.apiType === 'kie-flux-kontext') {
         result = await pollKieFluxKontextTask(taskId, task.apiKey);
       } else if (task.apiType === 'freepik-motion') {
-        result = await pollFreepikMotionTask(taskId, task.apiKey, task.model);
+        result = await pollFreepikMotionTask(taskId, task.apiKey, task.model, task.usedKeyName);
       } else if (task.apiType === 'freepik-video') {
         result = await pollFreepikVideoTask(taskId, task.apiKey, task.model);
       }
@@ -3246,7 +3247,7 @@ async function resumePendingTaskPolling() {
     for (const { table, apiType, urlCol, keyCol } of tables) {
       try {
         const result = await pool.query(
-          `SELECT task_id, model ${keyCol ? ', ' + keyCol : ''} FROM ${table} WHERE status IN ('pending', 'processing') AND created_at > NOW() - INTERVAL '1 hour'`
+          `SELECT task_id, model, user_id ${keyCol ? ', ' + keyCol : ''} ${table === 'video_generation_tasks' ? ', retry_data, retry_count, room_id, xclip_api_key_id' : ''} FROM ${table} WHERE status IN ('pending', 'processing') AND created_at > NOW() - INTERVAL '1 hour'`
         );
         
         for (const row of result.rows) {
@@ -3305,11 +3306,28 @@ async function resumePendingTaskPolling() {
               const mc = XIMAGE_MODELS[row.model];
               resolvedType = mc ? mc.apiType : 'kie-4o-image';
             }
-            startServerBgPoll(row.task_id, resolvedType, apiKey, {
+            const bgPollOpts = {
               dbTable: table,
               urlColumn: urlCol,
-              model: row.model
-            });
+              model: row.model,
+              userId: row.user_id || null,
+              usedKeyName: keyCol ? row[keyCol] : null
+            };
+            if (isMotionTask && row.retry_data) {
+              const dbRetry = row.retry_data;
+              bgPollOpts.motionRetryData = {
+                requestBody: dbRetry.requestBody,
+                endpoint: dbRetry.endpoint,
+                roomId: dbRetry.roomId || row.room_id || 1,
+                xclipKeyId: dbRetry.xclipKeyId || row.xclip_api_key_id,
+                retryCount: row.retry_count || 0,
+                maxRetries: 3
+              };
+            }
+            if (isMotionTask && row[keyCol]) {
+              markMotionKeyBusy(row[keyCol]);
+            }
+            startServerBgPoll(row.task_id, resolvedType, apiKey, bgPollOpts);
             resumed++;
           }
         }
