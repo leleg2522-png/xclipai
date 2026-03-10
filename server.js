@@ -71,7 +71,7 @@ function getAllMotionRoomKeys(maxRooms = 5) {
 const motionKeyRateLimited = new Map();
 const motionKeyExpired = new Set();
 const motionKeyFailures = new Map();
-const MOTION_KEY_MAX_CONSECUTIVE_FAILURES = 5;
+const MOTION_KEY_MAX_CONSECUTIVE_FAILURES = 10;
 
 function markMotionKeyRateLimited(keyName) {
   motionKeyRateLimited.set(keyName, Date.now());
@@ -2482,10 +2482,10 @@ const RATE_LIMIT_CONFIG = {
     label: 'Video Gen'
   },
   motion: {
-    cooldownMs: 240 * 1000,
-    dailyQuotaPerKey: 30,
-    jitterMinMs: 2000,
-    jitterMaxMs: 5000,
+    cooldownMs: 30 * 1000,
+    dailyQuotaPerKey: 50,
+    jitterMinMs: 500,
+    jitterMaxMs: 1500,
     label: 'Motion'
   },
   vidgen2: {
