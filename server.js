@@ -1144,7 +1144,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
           method,
           url: freepikUrl,
           headers: {
-            'x-freepik-api-key': apiKey,
+            'x-freepik-api-key': sanitizeApiKey(apiKey),
             'Content-Type': 'application/json'
           },
           data: body,
@@ -1171,7 +1171,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
           url: freepikUrl,
           method: method,
           headers: {
-            'x-freepik-api-key': apiKey,
+            'x-freepik-api-key': sanitizeApiKey(apiKey),
             'Content-Type': 'application/json'
           },
           data: body
@@ -1186,7 +1186,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
       method,
       url: freepikUrl,
       headers: {
-        'x-freepik-api-key': apiKey,
+        'x-freepik-api-key': sanitizeApiKey(apiKey),
         'Content-Type': 'application/json'
       },
       data: body,
@@ -3186,35 +3186,47 @@ async function resumePendingTaskPolling() {
           const isMotionTask = (row.model || '').startsWith('motion-');
 
           if (keyCol && row[keyCol]) {
-            apiKey = process.env[row[keyCol]];
-          }
-          if (!apiKey && (apiType === 'poyo')) {
-            outer_poyo: for (let r = 1; r <= 3; r++) {
-              for (let k = 1; k <= 3; k++) {
-                const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
-                if (pk) { apiKey = pk; break outer_poyo; }
+            const keyName = row[keyCol];
+            const bulkMatch = keyName.match(/^(.+)\[(\d+)\]$/);
+            if (bulkMatch) {
+              const envVal = process.env[bulkMatch[1]];
+              if (envVal) {
+                const idx = parseInt(bulkMatch[2]);
+                const parts = envVal.split(',');
+                if (parts[idx]) apiKey = sanitizeApiKey(parts[idx]);
               }
+            } else {
+              const envVal = process.env[keyName];
+              if (envVal) apiKey = sanitizeApiKey(envVal);
             }
-            if (!apiKey) apiKey = process.env.POYO_API_KEY;
-          }
-          if (!apiKey && (apiType === 'apimart')) {
-            apiKey = process.env.APIMART_API_KEY;
-          }
-          if (!apiKey && (apiType === 'kie-ximage')) {
-            outer2: for (let r = 1; r <= 5; r++) {
-              for (let k = 1; k <= 3; k++) {
-                const xk = process.env[`XIMAGE_ROOM${r}_KEY_${k}`];
-                if (xk) { apiKey = xk; break outer2; }
-              }
-            }
-            if (!apiKey) apiKey = process.env.XIMAGE_API_KEY;
           }
           if (!apiKey && isMotionTask) {
             const mKeys = getAllMotionRoomKeys(5);
             if (mKeys.length > 0) apiKey = mKeys[0].key;
           }
+          if (!apiKey && (apiType === 'poyo')) {
+            outer_poyo: for (let r = 1; r <= 3; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
+                if (pk) { apiKey = sanitizeApiKey(pk); break outer_poyo; }
+              }
+            }
+            if (!apiKey && process.env.POYO_API_KEY) apiKey = sanitizeApiKey(process.env.POYO_API_KEY);
+          }
+          if (!apiKey && (apiType === 'apimart')) {
+            if (process.env.APIMART_API_KEY) apiKey = sanitizeApiKey(process.env.APIMART_API_KEY);
+          }
+          if (!apiKey && (apiType === 'kie-ximage')) {
+            outer2: for (let r = 1; r <= 5; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const xk = process.env[`XIMAGE_ROOM${r}_KEY_${k}`];
+                if (xk) { apiKey = sanitizeApiKey(xk); break outer2; }
+              }
+            }
+            if (!apiKey && process.env.XIMAGE_API_KEY) apiKey = sanitizeApiKey(process.env.XIMAGE_API_KEY);
+          }
           if (!apiKey && (apiType === 'freepik-auto' || apiType === 'freepik-motion' || apiType === 'freepik-video')) {
-            apiKey = process.env.FREEPIK_API_KEY;
+            if (process.env.FREEPIK_API_KEY) apiKey = sanitizeApiKey(process.env.FREEPIK_API_KEY);
           }
           if (apiKey) {
             let resolvedType = apiType;
@@ -4269,7 +4281,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
         try {
           console.log(`[MOTION] Trying poll endpoint: ${endpoint}${pRetry > 0 ? ' (direct retry)' : ''}`);
           const statusPollConfig = {
-            headers: { 'x-freepik-api-key': freepikApiKey },
+            headers: { 'x-freepik-api-key': sanitizeApiKey(freepikApiKey) },
             timeout: 20000
           };
           if (pRetry === 0) {
@@ -4624,7 +4636,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     for (const ep of pollEndpoints) {
       try {
         const pollResp = await axios.get(`https://api.freepik.com${ep}`, {
-          headers: { 'x-freepik-api-key': apiKey },
+          headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) },
           timeout: 15000
         });
         const d = pollResp.data?.data || pollResp.data;
@@ -5141,7 +5153,7 @@ app.post('/api/generate-video', async (req, res) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-freepik-api-key': apiKey
+          'x-freepik-api-key': sanitizeApiKey(apiKey)
         },
         timeout: 60000
       }
@@ -5196,7 +5208,7 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     
     const response = await axios.get(statusUrl, {
       headers: {
-        'x-freepik-api-key': apiKey
+        'x-freepik-api-key': sanitizeApiKey(apiKey)
       }
     });
     
