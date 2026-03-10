@@ -2985,10 +2985,7 @@ async function pollKieFluxKontextTask(taskId, apiKey) {
 }
 
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
-  const isPro = (model || '').includes('pro');
-  const primaryEndpoint = isPro 
-    ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
-    : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
+  const primaryEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
 
   try {
     const pollConfig = {
@@ -4388,8 +4385,6 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const isPro = storedModel.includes('pro');
     
     const pollEndpoints = [
-      isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
-      `/v1/ai/video/kling-v2-6/${taskId}`,
       `/v1/ai/image-to-video/kling-v2-6/${taskId}`
     ];
     
@@ -4737,8 +4732,6 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     let pollEndpoints = [];
     if (isMotion) {
       pollEndpoints = [
-        isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
-        `/v1/ai/video/kling-v2-6/${taskId}`,
         `/v1/ai/image-to-video/kling-v2-6/${taskId}`
       ];
     } else {
@@ -4748,7 +4741,6 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
         pollEndpoints.push(`${matched}/${taskId}`);
       }
       pollEndpoints.push(`/v1/ai/image-to-video/kling-v2-6/${taskId}`);
-      pollEndpoints.push(`/v1/ai/video/kling-v2-6/${taskId}`);
       pollEndpoints = [...new Set(pollEndpoints)];
     }
 
