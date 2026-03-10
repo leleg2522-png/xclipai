@@ -10615,9 +10615,8 @@ function attachMotionEventListeners() {
   
   if (imageUploadZone && imageInput) {
     imageUploadZone.addEventListener('click', (e) => {
-      if (!e.target.closest('.remove-upload')) {
-        imageInput.click();
-      }
+      if (e.target.closest('.remove-upload')) return;
+      setTimeout(() => imageInput.click(), 0);
     });
     
     imageInput.addEventListener('change', handleMotionImageUpload);
@@ -10626,9 +10625,7 @@ function attachMotionEventListeners() {
   if (videoUploadZone && videoInput) {
     videoUploadZone.addEventListener('click', (e) => {
       if (e.target.closest('.remove-upload')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      videoInput.click();
+      setTimeout(() => videoInput.click(), 0);
     });
     
     videoUploadZone.addEventListener('dragover', (e) => {
