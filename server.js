@@ -29,6 +29,16 @@ function sanitizeApiKey(key) {
   return key.replace(/[^\x20-\x7E]/g, '').trim();
 }
 
+const FREEPIK_HEADERS_BASE = {
+  'Content-Type': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*'
+};
+
+function freepikHeaders(apiKey) {
+  return { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': sanitizeApiKey(apiKey) };
+}
+
 function getMotionRoomKeys(roomId) {
   const keys = [];
   const bulkVar = process.env[`MOTION_ROOM${roomId}_KEYS`];
@@ -983,10 +993,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     const cfg = {
       method,
       url,
-      headers: {
-        'x-freepik-api-key': cleanKey,
-        'Content-Type': 'application/json'
-      },
+      headers: freepikHeaders(cleanKey),
       timeout: 120000
     };
     if (body) cfg.data = body;
@@ -1143,10 +1150,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
         const response = await axios({
           method,
           url: freepikUrl,
-          headers: {
-            'x-freepik-api-key': sanitizeApiKey(apiKey),
-            'Content-Type': 'application/json'
-          },
+          headers: freepikHeaders(apiKey),
           data: body,
           timeout: 120000,
           httpsAgent: new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false }),
@@ -1170,10 +1174,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
         data: {
           url: freepikUrl,
           method: method,
-          headers: {
-            'x-freepik-api-key': sanitizeApiKey(apiKey),
-            'Content-Type': 'application/json'
-          },
+          headers: freepikHeaders(apiKey),
           data: body
         },
         timeout: 120000
@@ -1185,10 +1186,7 @@ async function requestViaProxy(roomId, endpoint, method, body, apiKey, taskId = 
     const response = await axios({
       method,
       url: freepikUrl,
-      headers: {
-        'x-freepik-api-key': sanitizeApiKey(apiKey),
-        'Content-Type': 'application/json'
-      },
+      headers: freepikHeaders(apiKey),
       data: body,
       timeout: 120000
     });
@@ -2900,7 +2898,7 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
     for (let retry = 0; retry < 2; retry++) {
       try {
         const pollConfig = {
-          headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) },
+          headers: freepikHeaders(apiKey),
           timeout: 25000
         };
         if (retry === 0) {
@@ -3021,7 +3019,7 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
   try {
     const pollResponse = await axios.get(
       `https://api.freepik.com${endpoint}`,
-      { headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) }, timeout: 30000 }
+      { headers: freepikHeaders(apiKey), timeout: 30000 }
     );
     
     if (pollResponse.data && typeof pollResponse.data === 'object') {
@@ -4281,7 +4279,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
         try {
           console.log(`[MOTION] Trying poll endpoint: ${endpoint}${pRetry > 0 ? ' (direct retry)' : ''}`);
           const statusPollConfig = {
-            headers: { 'x-freepik-api-key': sanitizeApiKey(freepikApiKey) },
+            headers: freepikHeaders(freepikApiKey),
             timeout: 20000
           };
           if (pRetry === 0) {
@@ -4636,7 +4634,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     for (const ep of pollEndpoints) {
       try {
         const pollResp = await axios.get(`https://api.freepik.com${ep}`, {
-          headers: { 'x-freepik-api-key': sanitizeApiKey(apiKey) },
+          headers: freepikHeaders(apiKey),
           timeout: 15000
         });
         const d = pollResp.data?.data || pollResp.data;
@@ -5153,7 +5151,7 @@ app.post('/api/generate-video', async (req, res) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-freepik-api-key': sanitizeApiKey(apiKey)
+          ...freepikHeaders(apiKey)
         },
         timeout: 60000
       }
@@ -5207,9 +5205,7 @@ app.post('/api/video-status/:model/:taskId', async (req, res) => {
     console.log(`Checking status: ${statusUrl}`);
     
     const response = await axios.get(statusUrl, {
-      headers: {
-        'x-freepik-api-key': sanitizeApiKey(apiKey)
-      }
+      headers: freepikHeaders(apiKey)
     });
     
     console.log('Status response:', JSON.stringify(response.data, null, 2));
