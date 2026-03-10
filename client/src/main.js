@@ -12060,9 +12060,10 @@ function handleSSEEvent(data) {
       break;
     
     case 'motion_completed':
-      console.log('[SSE] Motion completed event received:', data.taskId, data.videoUrl);
+      console.log('[SSE] Motion completed event received:', data.taskId, data.videoUrl, 'originalTaskId:', data.originalTaskId);
       state.motion._handledTaskIds.add(data.taskId);
-      const motionExists = state.motion.generatedVideos.some(v => v.taskId === data.taskId);
+      if (data.originalTaskId) state.motion._handledTaskIds.add(data.originalTaskId);
+      const motionExists = state.motion.generatedVideos.some(v => v.taskId === data.taskId || (data.originalTaskId && v.taskId === data.originalTaskId));
       if (!motionExists && data.videoUrl) {
         state.motion.generatedVideos.unshift({ 
           url: data.videoUrl, 
@@ -12071,17 +12072,18 @@ function handleSSEEvent(data) {
           model: data.model || 'unknown'
         });
       }
-      const sseMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
+      const sseMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId || (data.originalTaskId && t.taskId === data.originalTaskId));
       if (sseMotionTask) {
         sseMotionTask.status = 'completed';
         sseMotionTask.videoUrl = data.videoUrl;
+        sseMotionTask.taskId = data.taskId;
       }
-      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed' && t.taskId !== data.taskId);
+      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
       savePendingTasks();
       showToast('Motion video selesai!', 'success');
       render(true);
       setTimeout(() => {
-        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId && (!data.originalTaskId || t.taskId !== data.originalTaskId));
         render(true);
       }, 10000);
       break;

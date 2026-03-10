@@ -2003,14 +2003,18 @@ app.post('/api/webhook/freepik', async (req, res) => {
         recordMotionKeyResult(task.used_key_name, true);
         recordMotionKeyStat(task.used_key_name, true);
       }
-      const sent = sendSSEToUser(task.user_id, {
+      const ssePayload = {
         type: isMotionTask ? 'motion_completed' : 'video_completed',
         taskId: taskId,
         videoUrl: videoUrl,
         model: task.model
-      });
+      };
+      if (isMotionTask && task.original_task_id) {
+        ssePayload.originalTaskId = task.original_task_id;
+      }
+      const sent = sendSSEToUser(task.user_id, ssePayload);
       
-      console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}, SSE sent: ${sent}`);
+      console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}${task.original_task_id ? ' (original: ' + task.original_task_id + ')' : ''}, SSE sent: ${sent}`);
     } else if (isFailed) {
       releaseProxyForTask(taskId);
       const fullPayload = JSON.stringify(req.body);
@@ -3230,8 +3234,16 @@ setInterval(async () => {
           else if (table === 'vidgen4_tasks') sseType = 'vidgen4_completed';
           const sseData = { type: sseType, taskId: taskId, model: task.model };
           sseData[isImage ? 'imageUrl' : 'videoUrl'] = result.url;
+          if (isMotion) {
+            try {
+              const origResult = await pool.query('SELECT original_task_id FROM video_generation_tasks WHERE task_id = $1', [taskId]);
+              if (origResult.rows[0]?.original_task_id) {
+                sseData.originalTaskId = origResult.rows[0].original_task_id;
+              }
+            } catch(e) {}
+          }
           sendSSEToUser(task.userId, sseData);
-          console.log(`[BG-POLL] SSE sent to user ${task.userId}: ${sseType}`);
+          console.log(`[BG-POLL] SSE sent to user ${task.userId}: ${sseType}${sseData.originalTaskId ? ' (original: ' + sseData.originalTaskId + ')' : ''}`);
         }
         serverBgPolls.delete(taskId);
       } else if (result.status === 'failed') {
