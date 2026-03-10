@@ -4378,6 +4378,18 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
       });
     }
     if (savedTask.status === 'failed') {
+      const retryCount = savedTask.retry_count || 0;
+      const retryDataExists = savedTask.retry_data && savedTask.retry_data.requestBody;
+      const maxRetries = savedTask.retry_data?.maxRetries || 5;
+      if (retryDataExists && retryCount < maxRetries) {
+        console.log(`[MOTION] Task ${taskId} failed in DB but retry still possible (${retryCount}/${maxRetries}), returning processing`);
+        return res.json({
+          status: 'processing',
+          progress: 10,
+          taskId: taskId,
+          message: `Auto-retry sedang berjalan (${retryCount + 1}/${maxRetries})...`
+        });
+      }
       console.log(`[MOTION] Task ${taskId} already failed (via webhook), returning from DB`);
       return res.json({
         status: 'failed',
@@ -4550,6 +4562,19 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     const normalizedStatus = (data.status || 'processing').toLowerCase();
     if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
       releaseProxyForTask(taskId);
+      
+      const retryCount = savedTask.retry_count || 0;
+      const retryDataExists = savedTask.retry_data && savedTask.retry_data.requestBody;
+      const maxRetries = savedTask.retry_data?.maxRetries || 5;
+      if (retryDataExists && retryCount < maxRetries) {
+        console.log(`[MOTION] Task ${taskId} failed on Freepik but retry available (${retryCount}/${maxRetries}), hiding failure from client`);
+        return res.json({
+          status: 'processing',
+          progress: 10,
+          taskId: taskId,
+          message: `Auto-retry sedang berjalan (${retryCount + 1}/${maxRetries})...`
+        });
+      }
     }
     res.json({
       status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
