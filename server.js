@@ -1107,7 +1107,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
 
-  const maxProxyAttempts = 3;
+  const maxProxyAttempts = 4;
+  let iproyalRateLimited = false;
   for (let proxyAttempt = 0; proxyAttempt < maxProxyAttempts; proxyAttempt++) {
     let usedProxy = null;
     const proxyConfig = buildConfig();
@@ -1121,7 +1122,16 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
     }
     if (!usedProxy) {
-      const proxy = (preferredProvider === 'iproyal') ? getNextProxyPreferIProyal() : (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') ? getNextProxyPreferWebshare() : getNextProxy();
+      let proxy;
+      if (iproyalRateLimited) {
+        proxy = getNextProxyPreferWebshare();
+      } else if (preferredProvider === 'iproyal') {
+        proxy = getNextProxyPreferIProyal();
+      } else if (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') {
+        proxy = getNextProxyPreferWebshare();
+      } else {
+        proxy = getNextProxy();
+      }
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(proxyConfig, proxy);
@@ -1130,7 +1140,6 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
     if (!usedProxy) break;
 
-    // Wait for proxy slot (per-proxy rate limiting to avoid IP bans)
     await waitForProxySlot(usedProxy);
 
     console.log(`[PROXY] Attempt ${proxyAttempt + 1}/${maxProxyAttempts} via ${usedProxy.provider}: ${usedProxy.proxy_address}:${usedProxy.port}`);
@@ -1145,10 +1154,16 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       const rateLimited = isRateLimited(proxyErr);
 
       if (blocked || socketErr || rateLimited) {
-        console.log(`[PROXY] ${rateLimited ? '429 rate limited' : socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.proxy_address}. Trying next proxy...`);
+        if (rateLimited && usedProxy.provider === 'iproyal') {
+          iproyalRateLimited = true;
+          iproyalBlockedUntil = Date.now() + 60000;
+          console.log(`[PROXY] IPRoyal 429 rate limited on ${usedProxy.proxy_address}, switching to Webshare rotating for remaining attempts (cooldown 1min)`);
+        } else {
+          console.log(`[PROXY] ${rateLimited ? '429 rate limited' : socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.provider}:${usedProxy.proxy_address}. Trying next proxy...`);
+        }
         if (blocked || socketErr) markProxyBlocked(usedProxy);
         if (taskId) releaseProxyForTask(taskId);
-        if (rateLimited) await sleep(3000);
+        if (rateLimited) await sleep(2000);
         continue;
       }
       throw proxyErr;
