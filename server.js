@@ -942,6 +942,26 @@ function getNextProxyPreferWebshare() {
   return null;
 }
 
+function getNextProxyPreferIProyal() {
+  initIpRoyalProxy();
+  
+  const hasIpRoyal = isIpRoyalAvailable();
+  const hasWebshare = isWebshareAvailable();
+  const hasRotating = isWebshareRotatingAvailable();
+  
+  if (!hasIpRoyal && !hasWebshare && !hasRotating) return null;
+  
+  if (hasIpRoyal) return getNextIpRoyalProxy();
+  if (hasRotating) return getWebshareRotatingProxy();
+  if (hasWebshare) {
+    const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+    webshareIndex++;
+    return wp;
+  }
+  
+  return null;
+}
+
 async function assignProxyForTask(taskId) {
   if (!isProxyConfigured()) return null;
   const proxy = getNextProxy();
@@ -1078,7 +1098,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
     }
     if (!usedProxy) {
-      const proxy = (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') ? getNextProxyPreferWebshare() : getNextProxy();
+      const proxy = (preferredProvider === 'iproyal') ? getNextProxyPreferIProyal() : (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') ? getNextProxyPreferWebshare() : getNextProxy();
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(proxyConfig, proxy);
@@ -2726,7 +2746,7 @@ async function retryMotionTask(oldTaskId, task) {
           retryData.requestBody,
           true,
           null,
-          'webshare-rotating'
+          'iproyal'
         );
         
         const newTaskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
@@ -4127,7 +4147,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare ISP Rotating proxy, fallback direct)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via IPRoyal ISP proxy, fallback direct)`);
     
     const quotaFilteredKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (quotaFilteredKeys.length === 0 && allMotionKeys.length > 0) {
@@ -4158,7 +4178,7 @@ app.post('/api/motion/generate', async (req, res) => {
           requestBody,
           true,
           null,
-          'webshare-rotating'
+          'iproyal'
         );
         
         successResponse = response;
