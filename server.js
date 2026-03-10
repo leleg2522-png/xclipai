@@ -1940,15 +1940,18 @@ app.post('/api/webhook/freepik', async (req, res) => {
       console.log(`Webhook: ${isMotionTask ? 'Motion' : 'Video'} completed! Task ${taskId}, SSE sent: ${sent}`);
     } else if (isFailed) {
       releaseProxyForTask(taskId);
-      const failReason = data.error_message || data.error || data.message || data.detail || req.body.error_message || req.body.error || 'Video generation failed';
+      const fullPayload = JSON.stringify(req.body);
+      const failReason = data.error_message || data.error || data.message || data.detail || data.reason || data.fail_reason || req.body.error_message || req.body.error || 'Video generation failed';
+      const detailedReason = failReason === 'Video generation failed' ? `Video generation failed | Webhook: ${fullPayload.slice(0, 500)}` : failReason;
       const isMotionFail = task.model && task.model.startsWith('motion-');
       if (isMotionFail && task.used_key_name) {
         recordMotionKeyResult(task.used_key_name, false);
       }
-      console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${failReason} | Full payload: ${JSON.stringify(req.body)}`);
+      console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${detailedReason}`);
+      console.log(`Webhook: Full payload: ${fullPayload}`);
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
-        ['failed', failReason, taskId]
+        ['failed', detailedReason, taskId]
       );
       
       const isMotionFailed = task.model && task.model.startsWith('motion-');
@@ -2793,8 +2796,16 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
             return { status: 'processing' };
           }
           if (status === 'FAILED' || status === 'failed') {
-            const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || 'Generation failed';
-            console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg} | Full data: ${JSON.stringify(taskData)}`);
+            const fullData = JSON.stringify(taskData);
+            const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || taskData.reason || taskData.fail_reason || 'Generation failed';
+            console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg}`);
+            console.log(`[MOTION] Poll ${taskId} FAILED FULL RESPONSE: ${fullData}`);
+            try {
+              await pool.query(
+                'UPDATE video_generation_tasks SET error_message = $1 WHERE task_id = $2 AND error_message IS NULL',
+                [errMsg === 'Generation failed' ? `Generation failed | Raw: ${fullData.slice(0, 500)}` : errMsg, taskId]
+              );
+            } catch (dbErr) {}
             return { status: 'failed', error: errMsg };
           }
           if (status === 'IN_PROGRESS' || status === 'CREATED' || status === 'processing' || status === 'pending') {
