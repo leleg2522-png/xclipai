@@ -1949,6 +1949,19 @@ app.post('/api/webhook/freepik', async (req, res) => {
       }
       console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${detailedReason}`);
       console.log(`Webhook: Full payload: ${fullPayload}`);
+      
+      const bgPollTask = serverBgPolls.get(taskId);
+      if (isMotionFail && bgPollTask && bgPollTask.motionRetryData && bgPollTask.motionRetryData.retryCount < bgPollTask.motionRetryData.maxRetries) {
+        console.log(`[WEBHOOK] Motion task ${taskId} failed, attempting auto-retry via webhook...`);
+        serverBgPolls.delete(taskId);
+        const retried = await retryMotionTask(taskId, bgPollTask);
+        if (retried) {
+          console.log(`[WEBHOOK] Motion task ${taskId} auto-retry submitted`);
+          return res.status(200).json({ received: true, retried: true });
+        }
+        console.log(`[WEBHOOK] Motion task ${taskId} auto-retry failed`);
+      }
+      
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['failed', detailedReason, taskId]
@@ -2583,6 +2596,121 @@ setInterval(() => {
 // ============ SERVER-SIDE BACKGROUND POLLING ============
 const serverBgPolls = new Map();
 
+const motionRetryLocks = new Set();
+
+async function retryMotionTask(oldTaskId, task) {
+  if (motionRetryLocks.has(oldTaskId)) {
+    console.log(`[MOTION-RETRY] Already retrying ${oldTaskId}, skipping duplicate`);
+    return false;
+  }
+  motionRetryLocks.add(oldTaskId);
+  
+  try {
+    const retryData = task.motionRetryData;
+    if (!retryData || retryData.retryCount >= retryData.maxRetries) {
+      console.log(`[MOTION-RETRY] No more retries for ${oldTaskId} (${retryData?.retryCount || 0}/${retryData?.maxRetries || 3})`);
+      return false;
+    }
+    
+    retryData.retryCount++;
+    const lastUsedKey = task.apiKey;
+    console.log(`[MOTION-RETRY] Retry ${retryData.retryCount}/${retryData.maxRetries} for failed task ${oldTaskId} (excluding last key)`);
+    
+    const allMotionKeys = getMotionRoomKeys(retryData.roomId);
+    for (let r = 1; r <= 5; r++) {
+      if (r === retryData.roomId) continue;
+      allMotionKeys.push(...getMotionRoomKeys(r));
+    }
+    
+    const quotaFiltered = filterKeysByDailyQuota(allMotionKeys, 'motion');
+    let available = getAvailableMotionKeys(quotaFiltered);
+    
+    const differentKeys = available.filter(k => k.key !== lastUsedKey);
+    if (differentKeys.length > 0) {
+      available = differentKeys;
+    }
+    
+    if (available.length === 0) {
+      console.log(`[MOTION-RETRY] No available keys for retry`);
+      return false;
+    }
+    
+    const shuffled = available.sort(() => Math.random() - 0.5);
+    
+    for (const currentKey of shuffled) {
+      try {
+        console.log(`[MOTION-RETRY] Trying key ${currentKey.name}...`);
+        const response = await makeFreepikRequest(
+          'POST',
+          `https://api.freepik.com${retryData.endpoint}`,
+          currentKey.key,
+          retryData.requestBody,
+          true,
+          null,
+          'webshare-rotating'
+        );
+        
+        const newTaskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
+        if (!newTaskId) {
+          console.log(`[MOTION-RETRY] No task ID in response`);
+          continue;
+        }
+        
+        console.log(`[MOTION-RETRY] New task created: ${newTaskId} (replacing ${oldTaskId})`);
+        
+        const dbResult = await pool.query(
+          `UPDATE video_generation_tasks SET task_id = $1, used_key_name = $2, status = 'pending', error_message = NULL, completed_at = NULL WHERE task_id = $3 AND status IN ('pending', 'processing', 'failed')`,
+          [newTaskId, currentKey.name, oldTaskId]
+        );
+        
+        if (dbResult.rowCount === 0) {
+          console.log(`[MOTION-RETRY] DB update failed (task ${oldTaskId} already handled), skipping`);
+          return false;
+        }
+        
+        if (task.userId) {
+          sendSSEToUser(task.userId, { 
+            type: 'motion_retry', 
+            oldTaskId, 
+            newTaskId, 
+            retryCount: retryData.retryCount,
+            maxRetries: retryData.maxRetries
+          });
+        }
+        
+        const newRetryData = { ...retryData };
+        startServerBgPoll(newTaskId, 'freepik-motion', currentKey.key, {
+          dbTable: 'video_generation_tasks',
+          urlColumn: 'video_url',
+          model: task.model,
+          userId: task.userId,
+          motionRetryData: newRetryData
+        });
+        
+        incrementDailyKeyUsage(currentKey.name, 'motion');
+        return true;
+        
+      } catch (error) {
+        const status = error.response?.status;
+        const errMsg = error.response?.data?.message || error.message || '';
+        console.log(`[MOTION-RETRY] Key ${currentKey.name} failed (${status}): ${errMsg}`);
+        
+        if (isFreepikTrialExpired(errMsg)) {
+          markMotionKeyExpired(currentKey.name);
+        } else if (status === 429) {
+          markMotionKeyRateLimited(currentKey.name);
+        }
+        continue;
+      }
+    }
+    
+    console.log(`[MOTION-RETRY] All keys failed for retry of ${oldTaskId}`);
+    return false;
+  } finally {
+    motionRetryLocks.delete(oldTaskId);
+  }
+}
+
 function startServerBgPoll(taskId, apiType, apiKey, extraData = {}) {
   if (serverBgPolls.has(taskId)) return;
   serverBgPolls.set(taskId, {
@@ -2986,6 +3114,19 @@ setInterval(async () => {
         serverBgPolls.delete(taskId);
       } else if (result.status === 'failed') {
         console.log(`[BG-POLL] Task ${taskId} failed: ${result.error}`);
+        const isMotion = (task.model || '').startsWith('motion-');
+        
+        if (isMotion && task.motionRetryData && task.motionRetryData.retryCount < task.motionRetryData.maxRetries) {
+          console.log(`[BG-POLL] Motion task ${taskId} failed, attempting auto-retry...`);
+          serverBgPolls.delete(taskId);
+          const retried = await retryMotionTask(taskId, task);
+          if (retried) {
+            console.log(`[BG-POLL] Motion task ${taskId} auto-retry submitted`);
+            continue;
+          }
+          console.log(`[BG-POLL] Motion task ${taskId} auto-retry failed, marking as failed`);
+        }
+        
         if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history') {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         } else {
@@ -2993,7 +3134,6 @@ setInterval(async () => {
         }
         if (task.userId) {
           const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
-          const isMotion = (task.model || '').startsWith('motion-');
           let sseType = 'video_failed';
           if (table === 'ximage3_history') sseType = 'ximage3_failed';
           else if (isImage) sseType = table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed';
@@ -3986,7 +4126,15 @@ app.post('/api/motion/generate', async (req, res) => {
         dbTable: 'video_generation_tasks',
         urlColumn: 'video_url',
         model: 'motion-' + model,
-        userId: keyInfo.user_id
+        userId: keyInfo.user_id,
+        motionRetryData: {
+          requestBody,
+          endpoint,
+          roomId: selectedRoomId,
+          xclipKeyId: keyInfo.id,
+          retryCount: 0,
+          maxRetries: 3
+        }
       });
     }
     

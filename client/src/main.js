@@ -12075,6 +12075,20 @@ function handleSSEEvent(data) {
       }
       break;
     
+    case 'motion_retry':
+      console.log('[SSE] Motion retry:', data.oldTaskId, '->', data.newTaskId, `(${data.retryCount}/${data.maxRetries})`);
+      const retryTask = state.motion.tasks.find(t => t.taskId === data.oldTaskId);
+      if (retryTask) {
+        retryTask.taskId = data.newTaskId;
+        retryTask.status = 'processing';
+        retryTask.error = null;
+        retryTask.retryCount = data.retryCount;
+      }
+      savePendingTasks();
+      showToast(`Motion retry ${data.retryCount}/${data.maxRetries}...`, 'info');
+      render(true);
+      break;
+      
     case 'motion_failed':
       state.motion._handledTaskIds.add(data.taskId);
       const failedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
