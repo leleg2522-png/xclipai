@@ -5556,7 +5556,10 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
               <div class="upload-zone small-upload" id="motionVideoUploadZone">
                 ${state.motion.referenceVideo ? `
                   <div class="uploaded-preview video-preview-thumb">
-                    <video src="${state.motion.referenceVideo.preview}" muted autoplay loop playsinline preload="metadata"></video>
+                    ${state.motion.referenceVideo.thumbnail 
+                      ? `<img src="${state.motion.referenceVideo.thumbnail}" alt="Video preview" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`
+                      : `<video src="${state.motion.referenceVideo.preview}" muted autoplay loop playsinline preload="metadata"></video>`
+                    }
                     <div class="video-overlay-info">
                       <span class="video-duration">${state.motion.referenceVideo.name}</span>
                     </div>
@@ -10783,18 +10786,73 @@ function handleMotionVideoUpload(e) {
     return;
   }
   
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    state.motion.referenceVideo = {
-      name: file.name,
-      type: file.type,
-      data: event.target.result,
-      preview: URL.createObjectURL(file)
-    };
-    render();
-    showToast('Video referensi berhasil diupload!', 'success');
+  const blobUrl = URL.createObjectURL(file);
+  
+  const video = document.createElement('video');
+  video.preload = 'metadata';
+  video.muted = true;
+  video.playsInline = true;
+  video.src = blobUrl;
+  
+  video.onloadeddata = () => {
+    video.currentTime = Math.min(1, video.duration / 2);
   };
-  reader.readAsDataURL(file);
+  
+  video.onseeked = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        state.motion.referenceVideo = {
+          name: file.name,
+          type: file.type,
+          data: event.target.result,
+          preview: blobUrl,
+          thumbnail: thumbnail
+        };
+        render();
+        showToast('Video referensi berhasil diupload!', 'success');
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        state.motion.referenceVideo = {
+          name: file.name,
+          type: file.type,
+          data: event.target.result,
+          preview: blobUrl,
+          thumbnail: null
+        };
+        render();
+        showToast('Video referensi berhasil diupload!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  video.onerror = () => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      state.motion.referenceVideo = {
+        name: file.name,
+        type: file.type,
+        data: event.target.result,
+        preview: blobUrl,
+        thumbnail: null
+      };
+      render();
+      showToast('Video referensi berhasil diupload!', 'success');
+    };
+    reader.readAsDataURL(file);
+  };
+  
   e.target.value = '';
 }
 
