@@ -56,6 +56,8 @@ function getAllMotionRoomKeys(maxRooms = 5) {
 
 const motionKeyRateLimited = new Map();
 const motionKeyExpired = new Set();
+const motionKeyFailures = new Map();
+const MOTION_KEY_MAX_CONSECUTIVE_FAILURES = 5;
 
 function markMotionKeyRateLimited(keyName) {
   motionKeyRateLimited.set(keyName, Date.now());
@@ -65,6 +67,22 @@ function markMotionKeyRateLimited(keyName) {
 function markMotionKeyExpired(keyName) {
   motionKeyExpired.add(keyName);
   console.log(`[MOTION-EXPIRED] Key ${keyName} free trial habis, diblacklist permanen (tidak akan dipakai lagi)`);
+}
+
+function recordMotionKeyResult(keyName, success) {
+  if (!keyName) return;
+  if (success) {
+    motionKeyFailures.delete(keyName);
+    return;
+  }
+  const current = motionKeyFailures.get(keyName) || 0;
+  const newCount = current + 1;
+  motionKeyFailures.set(keyName, newCount);
+  console.log(`[MOTION-FAIL] Key ${keyName} consecutive failures: ${newCount}/${MOTION_KEY_MAX_CONSECUTIVE_FAILURES}`);
+  if (newCount >= MOTION_KEY_MAX_CONSECUTIVE_FAILURES) {
+    motionKeyRateLimited.set(keyName, Date.now());
+    console.log(`[MOTION-FAIL] Key ${keyName} disabled (${newCount} consecutive failures), cooldown 10 menit`);
+  }
 }
 
 function isFreepikTrialExpired(errorMsg) {
@@ -77,7 +95,8 @@ function isMotionKeyRateLimited(keyName) {
   if (motionKeyExpired.has(keyName)) return true;
   const limitedAt = motionKeyRateLimited.get(keyName);
   if (!limitedAt) return false;
-  const cooldown = 5 * 60 * 1000;
+  const failures = motionKeyFailures.get(keyName) || 0;
+  const cooldown = failures >= MOTION_KEY_MAX_CONSECUTIVE_FAILURES ? 10 * 60 * 1000 : 5 * 60 * 1000;
   if (Date.now() - limitedAt > cooldown) {
     motionKeyRateLimited.delete(keyName);
     console.log(`[MOTION-RATE] Key ${keyName} cooldown selesai, tersedia kembali`);
@@ -1908,6 +1927,9 @@ app.post('/api/webhook/freepik', async (req, res) => {
       );
       
       const isMotionTask = task.model && task.model.startsWith('motion-');
+      if (isMotionTask && task.used_key_name) {
+        recordMotionKeyResult(task.used_key_name, true);
+      }
       const sent = sendSSEToUser(task.user_id, {
         type: isMotionTask ? 'motion_completed' : 'video_completed',
         taskId: taskId,
@@ -1919,7 +1941,11 @@ app.post('/api/webhook/freepik', async (req, res) => {
     } else if (isFailed) {
       releaseProxyForTask(taskId);
       const failReason = data.error_message || data.error || data.message || data.detail || req.body.error_message || req.body.error || 'Video generation failed';
-      console.log(`Webhook: Video failed! Task ${taskId} | Reason: ${failReason} | Full payload: ${JSON.stringify(req.body)}`);
+      const isMotionFail = task.model && task.model.startsWith('motion-');
+      if (isMotionFail && task.used_key_name) {
+        recordMotionKeyResult(task.used_key_name, false);
+      }
+      console.log(`Webhook: Video failed! Task ${taskId} | Key: ${task.used_key_name || 'unknown'} | Reason: ${failReason} | Full payload: ${JSON.stringify(req.body)}`);
       await pool.query(
         'UPDATE video_generation_tasks SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP WHERE task_id = $3',
         ['failed', failReason, taskId]

@@ -11077,12 +11077,13 @@ function pollMotionStatus(taskId, model, apiKey) {
         task.status = 'failed';
         task.error = data.error || 'Motion generation gagal';
         stopPolling();
-        showToast('Motion generation gagal', 'error');
+        savePendingTasks();
+        showToast('Motion generation gagal: ' + (data.error || ''), 'error');
         render(true);
         setTimeout(() => {
           state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== taskId);
           render(true);
-        }, 5000);
+        }, 15000);
         return;
       }
       
@@ -12017,13 +12018,16 @@ function handleSSEEvent(data) {
       const failedMotionTask = state.motion.tasks.find(t => t.taskId === data.taskId);
       if (failedMotionTask) {
         failedMotionTask.status = 'failed';
-        failedMotionTask.error = data.error;
+        failedMotionTask.error = data.error || 'Generation failed';
       }
-      state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
-      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed');
+      state.motion.isPolling = state.motion.tasks.some(t => t.status !== 'completed' && t.status !== 'failed' && t.taskId !== data.taskId);
       savePendingTasks();
       showToast('Gagal generate motion: ' + (data.error || 'Generation failed'), 'error');
       render(true);
+      setTimeout(() => {
+        state.motion.tasks = state.motion.tasks.filter(t => t.taskId !== data.taskId);
+        render(true);
+      }, 15000);
       break;
 
     case 'vidgen2_completed':
