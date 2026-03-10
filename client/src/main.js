@@ -10625,8 +10625,28 @@ function attachMotionEventListeners() {
   
   if (videoUploadZone && videoInput) {
     videoUploadZone.addEventListener('click', (e) => {
-      if (!e.target.closest('.remove-upload')) {
-        videoInput.click();
+      if (e.target.closest('.remove-upload')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      videoInput.click();
+    });
+    
+    videoUploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      videoUploadZone.classList.add('drag-over');
+    });
+    videoUploadZone.addEventListener('dragleave', () => {
+      videoUploadZone.classList.remove('drag-over');
+    });
+    videoUploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      videoUploadZone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files[0];
+      if (file && file.type.startsWith('video/')) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        videoInput.files = dt.files;
+        videoInput.dispatchEvent(new Event('change'));
       }
     });
     
@@ -10634,6 +10654,7 @@ function attachMotionEventListeners() {
     
     const previewVideo = videoUploadZone.querySelector('video');
     if (previewVideo) {
+      previewVideo.style.pointerEvents = 'none';
       previewVideo.load();
       const playPromise = previewVideo.play();
       if (playPromise) playPromise.catch(() => {});
@@ -10791,57 +10812,11 @@ function handleMotionVideoUpload(e) {
   }
   
   const blobUrl = URL.createObjectURL(file);
+  let thumbnailDone = false;
   
-  const video = document.createElement('video');
-  video.preload = 'metadata';
-  video.muted = true;
-  video.playsInline = true;
-  video.src = blobUrl;
-  
-  video.onloadeddata = () => {
-    video.currentTime = Math.min(1, video.duration / 2);
-  };
-  
-  video.onseeked = () => {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 320;
-      canvas.height = video.videoHeight || 240;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        state.motion.referenceVideo = {
-          name: file.name,
-          type: file.type,
-          data: event.target.result,
-          preview: blobUrl,
-          thumbnail: thumbnail
-        };
-        render();
-        showToast('Video referensi berhasil diupload!', 'success');
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        state.motion.referenceVideo = {
-          name: file.name,
-          type: file.type,
-          data: event.target.result,
-          preview: blobUrl,
-          thumbnail: null
-        };
-        render();
-        showToast('Video referensi berhasil diupload!', 'success');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  video.onerror = () => {
+  function finishUpload(thumbnail) {
+    if (thumbnailDone) return;
+    thumbnailDone = true;
     const reader = new FileReader();
     reader.onload = (event) => {
       state.motion.referenceVideo = {
@@ -10849,13 +10824,69 @@ function handleMotionVideoUpload(e) {
         type: file.type,
         data: event.target.result,
         preview: blobUrl,
-        thumbnail: null
+        thumbnail: thumbnail
+      };
+      render();
+      showToast('Video referensi berhasil diupload!', 'success');
+    };
+    reader.onerror = () => {
+      state.motion.referenceVideo = {
+        name: file.name,
+        type: file.type,
+        data: null,
+        preview: blobUrl,
+        thumbnail: thumbnail
       };
       render();
       showToast('Video referensi berhasil diupload!', 'success');
     };
     reader.readAsDataURL(file);
-  };
+  }
+  
+  setTimeout(() => finishUpload(null), 5000);
+  
+  try {
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = 'anonymous';
+    video.src = blobUrl;
+    
+    video.onloadeddata = () => {
+      try {
+        video.currentTime = Math.min(1, video.duration / 2);
+      } catch (err) {
+        finishUpload(null);
+      }
+    };
+    
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
+        finishUpload(thumbnail);
+      } catch (err) {
+        finishUpload(null);
+      }
+    };
+    
+    video.onloadedmetadata = () => {
+      setTimeout(() => finishUpload(null), 3000);
+    };
+    
+    video.onerror = () => {
+      finishUpload(null);
+    };
+    
+    video.load();
+  } catch (err) {
+    finishUpload(null);
+  }
   
   e.target.value = '';
 }
