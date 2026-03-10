@@ -5537,8 +5537,8 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                     <span class="upload-hint">JPG, PNG, WEBP (max 50MB)</span>
                   </div>
                 `}
-                <input type="file" id="motionImageInput" accept="image/*" style="display:none">
               </div>
+              <input type="file" id="motionImageInput" accept="image/*" style="display:none;position:absolute;left:-9999px">
             </div>
           </div>
           
@@ -5572,8 +5572,8 @@ Contoh: Orang berjalan perlahan, tangan melambai, kepala menoleh ke kanan, terse
                     <span class="upload-hint">MP4, MOV, WEBM (3-30 detik)</span>
                   </div>
                 `}
-                <input type="file" id="motionVideoInput" accept="video/*" style="display: none">
               </div>
+              <input type="file" id="motionVideoInput" accept="video/*" style="display:none;position:absolute;left:-9999px">
             </div>
           </div>
           
@@ -10614,40 +10614,21 @@ function attachMotionEventListeners() {
   const promptInput = document.getElementById('motionPrompt');
   
   if (imageUploadZone && imageInput) {
-    imageUploadZone.addEventListener('click', (e) => {
+    imageUploadZone.onclick = function(e) {
       if (e.target.closest('.remove-upload')) return;
-      setTimeout(() => imageInput.click(), 0);
-    });
-    
-    imageInput.addEventListener('change', handleMotionImageUpload);
+      imageInput.value = '';
+      imageInput.click();
+    };
+    imageInput.onchange = handleMotionImageUpload;
   }
   
   if (videoUploadZone && videoInput) {
-    videoUploadZone.addEventListener('click', (e) => {
+    videoUploadZone.onclick = function(e) {
       if (e.target.closest('.remove-upload')) return;
-      setTimeout(() => videoInput.click(), 0);
-    });
-    
-    videoUploadZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      videoUploadZone.classList.add('drag-over');
-    });
-    videoUploadZone.addEventListener('dragleave', () => {
-      videoUploadZone.classList.remove('drag-over');
-    });
-    videoUploadZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      videoUploadZone.classList.remove('drag-over');
-      const file = e.dataTransfer?.files[0];
-      if (file && file.type.startsWith('video/')) {
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        videoInput.files = dt.files;
-        videoInput.dispatchEvent(new Event('change'));
-      }
-    });
-    
-    videoInput.addEventListener('change', handleMotionVideoUpload);
+      videoInput.value = '';
+      videoInput.click();
+    };
+    videoInput.onchange = handleMotionVideoUpload;
     
     const previewVideo = videoUploadZone.querySelector('video');
     if (previewVideo) {
