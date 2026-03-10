@@ -55,13 +55,26 @@ function getAllMotionRoomKeys(maxRooms = 5) {
 }
 
 const motionKeyRateLimited = new Map();
+const motionKeyExpired = new Set();
 
 function markMotionKeyRateLimited(keyName) {
   motionKeyRateLimited.set(keyName, Date.now());
   console.log(`[MOTION-RATE] Key ${keyName} kena rate limit (429), ditandai dan skip ke key berikutnya`);
 }
 
+function markMotionKeyExpired(keyName) {
+  motionKeyExpired.add(keyName);
+  console.log(`[MOTION-EXPIRED] Key ${keyName} free trial habis, diblacklist permanen (tidak akan dipakai lagi)`);
+}
+
+function isFreepikTrialExpired(errorMsg) {
+  if (!errorMsg) return false;
+  const msg = errorMsg.toLowerCase();
+  return msg.includes('free trial') || msg.includes('limit of the free') || msg.includes('upgrade to a paid plan');
+}
+
 function isMotionKeyRateLimited(keyName) {
+  if (motionKeyExpired.has(keyName)) return true;
   const limitedAt = motionKeyRateLimited.get(keyName);
   if (!limitedAt) return false;
   const cooldown = 5 * 60 * 1000;
@@ -74,12 +87,17 @@ function isMotionKeyRateLimited(keyName) {
 }
 
 function getAvailableMotionKeys(keys) {
-  const available = keys.filter(k => !isMotionKeyRateLimited(k.name));
-  if (available.length === 0 && keys.length > 0) {
-    console.log(`[MOTION-RATE] Semua key sedang rate limited, mencoba key dengan cooldown terlama...`);
-    let oldest = keys[0];
+  const nonExpired = keys.filter(k => !motionKeyExpired.has(k.name));
+  if (nonExpired.length === 0 && keys.length > 0) {
+    console.log(`[MOTION-EXPIRED] Semua key sudah expired (free trial habis). Tidak ada key yang tersedia.`);
+    return [];
+  }
+  const available = nonExpired.filter(k => !isMotionKeyRateLimited(k.name));
+  if (available.length === 0 && nonExpired.length > 0) {
+    console.log(`[MOTION-RATE] Semua key aktif sedang rate limited, mencoba key dengan cooldown terlama...`);
+    let oldest = nonExpired[0];
     let oldestTime = motionKeyRateLimited.get(oldest.name) || Date.now();
-    for (const k of keys) {
+    for (const k of nonExpired) {
       const t = motionKeyRateLimited.get(k.name) || Date.now();
       if (t < oldestTime) {
         oldest = k;
@@ -87,7 +105,7 @@ function getAvailableMotionKeys(keys) {
       }
     }
     motionKeyRateLimited.delete(oldest.name);
-    return [oldest, ...keys.filter(k => k.name !== oldest.name)];
+    return [oldest, ...nonExpired.filter(k => k.name !== oldest.name)];
   }
   return available;
 }
@@ -2763,6 +2781,12 @@ async function pollFreepikMotionTask(taskId, apiKey, model) {
         break;
       } catch (e) {
         const httpStatus = e.response?.status;
+        const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
+        if (isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
+          const keyName = apiKey ? `key_${apiKey.slice(-6)}` : 'unknown';
+          markMotionKeyExpired(keyName);
+          return { status: 'failed', error: 'API key free trial habis' };
+        }
         if (httpStatus === 404) {
           console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 404, trying next endpoint...`);
           break;
@@ -3869,7 +3893,10 @@ app.post('/api/motion/generate', async (req, res) => {
         const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
         const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
         
-        if (isDailyLimit) {
+        if (isFreepikTrialExpired(errorMsg)) {
+          markMotionKeyExpired(currentKey.name);
+          continue;
+        } else if (isDailyLimit) {
           markMotionKeyRateLimited(currentKey.name);
           console.log(`[MOTION] Key ${currentKey.name} hit rate limit (${status}), trying next key...`);
           continue;
@@ -3878,6 +3905,10 @@ app.post('/api/motion/generate', async (req, res) => {
           continue;
         } else if (status === 403) {
           const fullErr = JSON.stringify(error.response?.data || {});
+          if (isFreepikTrialExpired(fullErr)) {
+            markMotionKeyExpired(currentKey.name);
+            continue;
+          }
           console.warn(`[MOTION] Key ${currentKey.name} got 403 (invalid/no access), trying next key... | Detail: ${fullErr}`);
           continue;
         } else {
