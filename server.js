@@ -54,28 +54,42 @@ function getAllMotionRoomKeys(maxRooms = 5) {
   return keys;
 }
 
-const MOTION_KEY_ROTATION_INTERVAL_MS = 3 * 60 * 1000;
-let motionKeyRotationIndex = 0;
-let motionKeyLastRotationTime = Date.now();
+const motionKeyRateLimited = new Map();
 
-function getRotatedMotionKeys(roomKeys) {
-  if (!roomKeys || roomKeys.length === 0) return roomKeys;
-  
-  const now = Date.now();
-  const elapsed = now - motionKeyLastRotationTime;
-  if (elapsed >= MOTION_KEY_ROTATION_INTERVAL_MS) {
-    const rotations = Math.floor(elapsed / MOTION_KEY_ROTATION_INTERVAL_MS);
-    motionKeyRotationIndex = (motionKeyRotationIndex + rotations) % roomKeys.length;
-    motionKeyLastRotationTime = now;
-    console.log(`[MOTION-ROTATE] Rotated to key index ${motionKeyRotationIndex} (${roomKeys[motionKeyRotationIndex]?.name})`);
+function markMotionKeyRateLimited(keyName) {
+  motionKeyRateLimited.set(keyName, Date.now());
+  console.log(`[MOTION-RATE] Key ${keyName} kena rate limit (429), ditandai dan skip ke key berikutnya`);
+}
+
+function isMotionKeyRateLimited(keyName) {
+  const limitedAt = motionKeyRateLimited.get(keyName);
+  if (!limitedAt) return false;
+  const cooldown = 5 * 60 * 1000;
+  if (Date.now() - limitedAt > cooldown) {
+    motionKeyRateLimited.delete(keyName);
+    console.log(`[MOTION-RATE] Key ${keyName} cooldown selesai, tersedia kembali`);
+    return false;
   }
-  
-  const rotated = [];
-  for (let i = 0; i < roomKeys.length; i++) {
-    const idx = (motionKeyRotationIndex + i) % roomKeys.length;
-    rotated.push(roomKeys[idx]);
+  return true;
+}
+
+function getAvailableMotionKeys(keys) {
+  const available = keys.filter(k => !isMotionKeyRateLimited(k.name));
+  if (available.length === 0 && keys.length > 0) {
+    console.log(`[MOTION-RATE] Semua key sedang rate limited, mencoba key dengan cooldown terlama...`);
+    let oldest = keys[0];
+    let oldestTime = motionKeyRateLimited.get(oldest.name) || Date.now();
+    for (const k of keys) {
+      const t = motionKeyRateLimited.get(k.name) || Date.now();
+      if (t < oldestTime) {
+        oldest = k;
+        oldestTime = t;
+      }
+    }
+    motionKeyRateLimited.delete(oldest.name);
+    return [oldest, ...keys.filter(k => k.name !== oldest.name)];
   }
-  return rotated;
+  return available;
 }
 
 const app = express();
@@ -3811,12 +3825,15 @@ app.post('/api/motion/generate', async (req, res) => {
     
     console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare ISP Rotating proxy, fallback direct)`);
     
-    const availableMotionKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
-    if (availableMotionKeys.length === 0 && allMotionKeys.length > 0) {
+    const quotaFilteredKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
+    if (quotaFilteredKeys.length === 0 && allMotionKeys.length > 0) {
       return res.status(429).json({ error: 'Semua API key Motion sudah mencapai batas harian. Coba lagi besok.' });
     }
     
-    const rotatedMotionKeys = getRotatedMotionKeys(availableMotionKeys);
+    const availableMotionKeys = getAvailableMotionKeys(quotaFilteredKeys);
+    if (availableMotionKeys.length === 0) {
+      return res.status(429).json({ error: 'Semua API key Motion sedang rate limited. Coba lagi dalam beberapa menit.' });
+    }
     
     await applyRandomJitter('motion');
     
@@ -3824,8 +3841,8 @@ app.post('/api/motion/generate', async (req, res) => {
     let lastError = null;
     usedKeyName = null;
     
-    for (let attempt = 0; attempt < rotatedMotionKeys.length; attempt++) {
-      const currentKey = rotatedMotionKeys[attempt];
+    for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
+      const currentKey = availableMotionKeys[attempt];
       console.log(`[MOTION] Attempt ${attempt + 1}/${availableMotionKeys.length} - Key: ${currentKey.name} (room ${currentKey.roomId})`);
       
       try {
@@ -3853,7 +3870,8 @@ app.post('/api/motion/generate', async (req, res) => {
         const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
         
         if (isDailyLimit) {
-          console.log(`[MOTION] Key ${currentKey.name} hit daily limit (${status}), trying next key...`);
+          markMotionKeyRateLimited(currentKey.name);
+          console.log(`[MOTION] Key ${currentKey.name} hit rate limit (${status}), trying next key...`);
           continue;
         } else if (isNetworkError) {
           console.log(`[MOTION] Key ${currentKey.name} network error: ${errorMsg}, trying next key...`);
