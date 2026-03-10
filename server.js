@@ -2886,100 +2886,71 @@ async function pollKieFluxKontextTask(taskId, apiKey) {
 
 async function pollFreepikMotionTask(taskId, apiKey, model) {
   const isPro = (model || '').includes('pro');
-  const pollEndpoints = [
-    isPro ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`,
-    `/v1/ai/video/kling-v2-6/${taskId}`,
-    `/v1/ai/image-to-video/kling-v2-6/${taskId}`
-  ];
-  
-  let forbiddenCount = 0;
+  const primaryEndpoint = isPro 
+    ? `/v1/ai/video/kling-v2-6-motion-control-pro/${taskId}` 
+    : `/v1/ai/video/kling-v2-6-motion-control-std/${taskId}`;
 
-  for (const endpoint of pollEndpoints) {
-    for (let retry = 0; retry < 2; retry++) {
-      try {
-        const pollConfig = {
-          headers: freepikHeaders(apiKey),
-          timeout: 25000
-        };
-        if (retry === 0) {
-          const rotProxy = getWebshareRotatingProxy();
-          if (rotProxy) {
-            const proxyUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
-            pollConfig.httpsAgent = new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false, timeout: 20000 });
-            pollConfig.proxy = false;
-          }
-        }
-        if (retry > 0) console.log(`[MOTION] Poll ${taskId} retry ${retry} direct (no proxy)`);
-        const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, pollConfig);
-        
-        if (pollResponse.data && typeof pollResponse.data === 'object') {
-          const taskData = pollResponse.data.data || pollResponse.data;
-          const status = taskData.status || '';
-          
-          console.log(`[MOTION] Poll ${taskId} | Endpoint: ${endpoint} | Status: ${status} | Generated: ${JSON.stringify(taskData.generated || [])}`);
-          
-          if (status === 'COMPLETED' || status === 'completed') {
-            const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
-              || taskData.video?.url
-              || taskData.result?.url
-              || taskData.url;
-            if (videoUrl) return { status: 'completed', url: videoUrl };
-            return { status: 'processing' };
-          }
-          if (status === 'FAILED' || status === 'failed') {
-            const fullData = JSON.stringify(taskData);
-            const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || taskData.reason || taskData.fail_reason || 'Generation failed';
-            console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg}`);
-            console.log(`[MOTION] Poll ${taskId} FAILED FULL RESPONSE: ${fullData}`);
-            try {
-              await pool.query(
-                'UPDATE video_generation_tasks SET error_message = $1 WHERE task_id = $2 AND error_message IS NULL',
-                [errMsg === 'Generation failed' ? `Generation failed | Raw: ${fullData.slice(0, 500)}` : errMsg, taskId]
-              );
-            } catch (dbErr) {}
-            return { status: 'failed', error: errMsg };
-          }
-          if (status === 'IN_PROGRESS' || status === 'CREATED' || status === 'processing' || status === 'pending') {
-            return { status: 'processing' };
-          }
-          if (status) {
-            return { status: 'processing' };
-          }
-        }
-        break;
-      } catch (e) {
-        const httpStatus = e.response?.status;
-        const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
-        if (isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
-          const keyName = apiKey ? `key_${apiKey.slice(-6)}` : 'unknown';
-          markMotionKeyExpired(keyName);
-          return { status: 'failed', error: 'API key free trial habis' };
-        }
-        if (httpStatus === 404) {
-          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 404, trying next endpoint...`);
-          break;
-        }
-        if (httpStatus === 403) {
-          forbiddenCount++;
-          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} → 403 Forbidden (wrong API key or task not owned by this key)`);
-          break;
-        }
-        const isNetErr = !httpStatus && (e.message || '').match(/socket|tls|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ssl/i);
-        if (isNetErr && retry === 0) {
-          console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} proxy network error: ${e.message}, retrying direct...`);
-          continue;
-        }
-        console.log(`[MOTION] Poll ${taskId} endpoint ${endpoint} error: ${e.message}`);
-        break;
+  try {
+    const pollConfig = {
+      headers: freepikHeaders(apiKey),
+      timeout: 25000
+    };
+    const pollResponse = await axios.get(`https://api.freepik.com${primaryEndpoint}`, pollConfig);
+    
+    if (pollResponse.data && typeof pollResponse.data === 'object') {
+      const taskData = pollResponse.data.data || pollResponse.data;
+      const status = taskData.status || '';
+      
+      console.log(`[MOTION] Poll ${taskId} | Status: ${status}`);
+      
+      if (status === 'COMPLETED' || status === 'completed') {
+        const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
+          || taskData.video?.url
+          || taskData.result?.url
+          || taskData.url;
+        if (videoUrl) return { status: 'completed', url: videoUrl };
+        return { status: 'processing' };
       }
+      if (status === 'FAILED' || status === 'failed') {
+        const fullData = JSON.stringify(taskData);
+        const errMsg = taskData.error_message || taskData.error || taskData.message || taskData.detail || taskData.reason || taskData.fail_reason || 'Generation failed';
+        console.log(`[MOTION] Poll ${taskId} FAILED: ${errMsg}`);
+        try {
+          await pool.query(
+            'UPDATE video_generation_tasks SET error_message = $1 WHERE task_id = $2 AND error_message IS NULL',
+            [errMsg === 'Generation failed' ? `Generation failed | Raw: ${fullData.slice(0, 500)}` : errMsg, taskId]
+          );
+        } catch (dbErr) {}
+        return { status: 'failed', error: errMsg };
+      }
+      return { status: 'processing' };
     }
+  } catch (e) {
+    const httpStatus = e.response?.status;
+    const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
+    
+    if (isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
+      const keyName = apiKey ? `key_${apiKey.slice(-6)}` : 'unknown';
+      markMotionKeyExpired(keyName);
+      return { status: 'failed', error: 'API key free trial habis' };
+    }
+    if (httpStatus === 403) {
+      const respStr = (e.response?.data || '').toString();
+      if (respStr.includes('Access Denied') || respStr.includes('edgesuite')) {
+        return { status: 'processing' };
+      }
+      console.log(`[MOTION] Poll ${taskId} → 403 Forbidden. Relying on webhook.`);
+      return { status: 'forbidden' };
+    }
+    if (httpStatus === 404) {
+      return { status: 'processing' };
+    }
+    if (e.message && e.message.match(/socket|tls|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ssl/i)) {
+      return { status: 'processing' };
+    }
+    console.log(`[MOTION] Poll ${taskId} error (${httpStatus || 'network'}): ${errMsg}`);
   }
-
-  if (forbiddenCount === pollEndpoints.length) {
-    console.log(`[MOTION] Poll ${taskId} - ALL endpoints returned 403. API key mismatch. Will rely on webhook only.`);
-    return { status: 'forbidden' };
-  }
-
+  
   return { status: 'processing' };
 }
 
