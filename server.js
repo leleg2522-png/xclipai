@@ -994,6 +994,21 @@ function getNextProxyPreferIProyal() {
   return null;
 }
 
+function getNextProxyIProyalOrRotating() {
+  initIpRoyalProxy();
+  
+  const hasIpRoyal = isIpRoyalAvailable();
+  const hasRotating = isWebshareRotatingAvailable();
+  
+  if (hasIpRoyal) return getNextIpRoyalProxy();
+  if (hasRotating) {
+    console.log('[PROXY] IPRoyal unavailable, falling back to Webshare Rotating');
+    return getWebshareRotatingProxy();
+  }
+  
+  return null;
+}
+
 async function assignProxyForTask(taskId) {
   if (!isProxyConfigured()) return null;
   const proxy = getNextProxy();
@@ -1030,7 +1045,7 @@ setInterval(() => {
 
 async function getOrAssignProxyForPendingTask() {
   if (!isProxyConfigured()) return { proxy: null, pendingId: null };
-  const proxy = getNextProxy();
+  const proxy = getNextProxyIProyalOrRotating();
   if (!proxy) return { proxy: null, pendingId: null };
   const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   taskProxyMap.set(pendingId, { proxy, assignedAt: Date.now() });
@@ -1133,7 +1148,9 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     if (!usedProxy) {
       let proxy;
       if (iproyalRateLimited) {
-        proxy = getNextProxyPreferWebshare();
+        proxy = preferredProvider === 'iproyal-or-rotating' ? getWebshareRotatingProxy() : getNextProxyPreferWebshare();
+      } else if (preferredProvider === 'iproyal-or-rotating') {
+        proxy = getNextProxyIProyalOrRotating();
       } else if (preferredProvider === 'iproyal') {
         proxy = getNextProxyPreferIProyal();
       } else if (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') {
@@ -3801,7 +3818,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
           currentKey.key,
           requestBody,
           true,
-          pendingId
+          pendingId,
+          'iproyal-or-rotating'
         );
         
         successResponse = { data: response.data };
@@ -4027,7 +4045,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       freepikApiKey,
       null,
       true,
-      taskId
+      taskId,
+      'iproyal-or-rotating'
     );
     const pollLatency = Date.now() - pollStart;
     
@@ -8013,7 +8032,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       roomKeyResult.apiKey,
       requestBody,
       true,
-      pendingId
+      pendingId,
+      'iproyal-or-rotating'
     );
     
     console.log(`[VIDGEN3] Freepik response:`, JSON.stringify(response.data));
@@ -8139,7 +8159,8 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         freepikApiKey,
         null,
         true,
-        taskId
+        taskId,
+        'iproyal-or-rotating'
       );
       
       if (typeof pollResponse.data === 'string') {
