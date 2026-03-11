@@ -1279,43 +1279,41 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       const socketErr = isSocketError(proxyErr);
       const rateLimited = isRateLimited(proxyErr);
 
-      if (blocked || socketErr || rateLimited) {
-        if (rateLimited && usedProxy.provider === 'iproyal') {
-          iproyalRateLimited = true;
-          iproyalBlockedUntil = Date.now() + 60000;
-          console.log(`[PROXY] IPRoyal 429 rate limited on ${usedProxy.proxy_address}, switching to Webshare rotating for remaining attempts (cooldown 1min)`);
-        } else {
-          console.log(`[PROXY] ${rateLimited ? '429 rate limited' : socketErr ? 'Socket error' : 'IP blocked'} on ${usedProxy.provider}:${usedProxy.proxy_address}. Trying next proxy...`);
-        }
-        if (blocked || socketErr) markProxyBlocked(usedProxy);
+      if (rateLimited) {
+        // 429 = API key quota habis, bukan masalah IP — langsung throw supaya key berikutnya dicoba
+        console.log(`[PROXY] 429 rate limited on ${getProviderLabel(usedProxy)} — API key quota, skip proxy retry, try next key`);
         if (taskId) releaseProxyForTask(taskId);
-        if (rateLimited) await sleep(2000);
+        throw proxyErr;
+      }
+
+      if (blocked || socketErr) {
+        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on ${getProviderLabel(usedProxy)}:${usedProxy.proxy_address}. Trying next proxy...`);
+        markProxyBlocked(usedProxy);
+        if (taskId) releaseProxyForTask(taskId);
         continue;
       }
       throw proxyErr;
     }
   }
 
-  console.log(`[FREEPIK] All proxies failed, trying direct connection...`);
+  console.log(`[FREEPIK] All proxies failed (IP issues), trying direct connection...`);
   const directConfig = buildConfig();
-  const retryDelays = [5000, 10000, 15000, 20000];
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const resp = await axios(directConfig);
       if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
       console.log(`[FREEPIK] Direct connection success`);
       return resp;
     } catch (err) {
-      if (isRateLimited(err) && attempt < 3) {
-        const delay = retryDelays[attempt];
-        console.log(`[FREEPIK] Rate limited (429), waiting ${delay/1000}s before retry #${attempt + 1}...`);
-        await sleep(delay);
-        continue;
+      if (isRateLimited(err)) {
+        // 429 = key quota habis, langsung throw supaya key berikutnya dicoba
+        console.log(`[FREEPIK] Direct connection 429 — throw to try next key`);
+        throw err;
       }
-      if (isSocketError(err) && attempt < 3) {
-        console.log(`[FREEPIK] Socket error on direct, retry #${attempt + 1}...`);
-        await sleep(3000);
+      if (isSocketError(err) && attempt < 1) {
+        console.log(`[FREEPIK] Socket error on direct, retry...`);
+        await sleep(2000);
         continue;
       }
       console.log(`[FREEPIK] Direct connection failed: ${err.message}`);
