@@ -2843,7 +2843,7 @@ async function retryMotionTask(oldTaskId, task) {
           retryBody,
           true,
           null,
-          'iproyal'
+          'webshare-rotating'
         );
         
         const newTaskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
@@ -4274,7 +4274,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (via IPRoyal ISP proxy, fallback direct)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare Rotating proxy, fallback direct)`);
     
     const quotaFilteredKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (quotaFilteredKeys.length === 0 && allMotionKeys.length > 0) {
@@ -4312,7 +4312,7 @@ app.post('/api/motion/generate', async (req, res) => {
           requestBody,
           true,
           null,
-          'iproyal'
+          'webshare-rotating'
         );
         
         successResponse = response;
