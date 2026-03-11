@@ -1198,6 +1198,16 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || msg.includes('epipe') || msg.includes('write epipe') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC';
   }
 
+  function isProxyBandwidthError(err) {
+    // Webshare / proxy bandwidth exhausted — treat as proxy error, switch to next proxy
+    const msg = (err.message || '').toLowerCase();
+    const bodyStr = JSON.stringify(err.response?.data || '').toLowerCase();
+    return msg.includes('bandwidth limit') || bodyStr.includes('bandwidth limit') ||
+           msg.includes('bandwidth exceeded') || bodyStr.includes('bandwidth exceeded') ||
+           msg.includes('please upgrade') || bodyStr.includes('please upgrade') ||
+           err.response?.status === 509 || err.response?.status === 407;
+  }
+
   function isRateLimited(err) {
     return err.response && err.response.status === 429;
   }
@@ -1231,7 +1241,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
 
-  const maxProxyAttempts = 4;
+  const maxProxyAttempts = Math.min(6, Math.max(4, VPS_PROXIES.length));
   let iproyalRateLimited = false;
   for (let proxyAttempt = 0; proxyAttempt < maxProxyAttempts; proxyAttempt++) {
     let usedProxy = null;
@@ -1278,12 +1288,21 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       const blocked = isBlocked(proxyErr);
       const socketErr = isSocketError(proxyErr);
       const rateLimited = isRateLimited(proxyErr);
+      const bandwidthErr = isProxyBandwidthError(proxyErr);
 
       if (rateLimited) {
         // 429 = API key quota habis, bukan masalah IP — langsung throw supaya key berikutnya dicoba
         console.log(`[PROXY] 429 rate limited on ${getProviderLabel(usedProxy)} — API key quota, skip proxy retry, try next key`);
         if (taskId) releaseProxyForTask(taskId);
         throw proxyErr;
+      }
+
+      if (bandwidthErr) {
+        // Bandwidth habis di proxy (Webshare) — mark blocked, ganti ke proxy berikutnya (VPS)
+        console.log(`[PROXY] Bandwidth exhausted on ${getProviderLabel(usedProxy)}, switching to next proxy (VPS)...`);
+        markProxyBlocked(usedProxy);
+        if (taskId) releaseProxyForTask(taskId);
+        continue;
       }
 
       if (blocked || socketErr) {
@@ -4195,7 +4214,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       freepikApiKey,
       null,
       true,
-      taskId,
+      null,
       'iproyal-or-rotating'
     );
     const pollLatency = Date.now() - pollStart;
