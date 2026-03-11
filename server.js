@@ -3801,8 +3801,18 @@ app.post('/api/videogen/proxy', async (req, res) => {
     // Get all available keys for retry on 429
     const allKeys = [];
     if (keySource === 'room' && keyInfo.room_id) {
-      const keys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
-      keys.forEach((key, idx) => allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_KEY_${idx + 1}` }));
+      const bulkVar = process.env[`ROOM${keyInfo.room_id}_FREEPIK_KEYS`];
+      if (bulkVar) {
+        bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
+          allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_FREEPIK_KEYS[${idx}]` });
+        });
+      } else {
+        const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+        keyNames.forEach((name, idx) => {
+          const key = process.env[name];
+          if (key) allKeys.push({ key, index: idx, name });
+        });
+      }
     } else if (keySource === 'admin') {
       for (let r = 1; r <= 5; r++) {
         const bulkVar = process.env[`ROOM${r}_FREEPIK_KEYS`];
@@ -3975,9 +3985,23 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     let keySource = 'unknown';
     
     // PRIORITY 1: Use the EXACT key name that was saved when task was created
-    if (savedTask.used_key_name && process.env[savedTask.used_key_name]) {
-      freepikApiKey = process.env[savedTask.used_key_name];
-      keySource = savedTask.used_key_name;
+    if (savedTask.used_key_name) {
+      if (process.env[savedTask.used_key_name]) {
+        freepikApiKey = process.env[savedTask.used_key_name];
+        keySource = savedTask.used_key_name;
+      } else {
+        const bulkMatch = savedTask.used_key_name.match(/^ROOM(\d+)_FREEPIK_KEYS\[(\d+)\]$/);
+        if (bulkMatch) {
+          const bulkVar = process.env[`ROOM${bulkMatch[1]}_FREEPIK_KEYS`];
+          if (bulkVar) {
+            const bulkKeys = bulkVar.split(',').map(k => k.trim()).filter(Boolean);
+            if (bulkKeys[parseInt(bulkMatch[2])]) {
+              freepikApiKey = bulkKeys[parseInt(bulkMatch[2])];
+              keySource = savedTask.used_key_name;
+            }
+          }
+        }
+      }
     }
     
     // PRIORITY 2: Fallback to room keys using saved index (only if keyInfo available)
@@ -4068,6 +4092,11 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     const endpoint = statusEndpoints[model] || statusEndpoints['kling-v2.5-pro'];
     
+    if (!freepikApiKey) {
+      console.error(`[STATUS] No API key found for task ${taskId}, used_key_name: ${savedTask.used_key_name}`);
+      return res.status(503).json({ error: 'API key tidak ditemukan untuk task ini. Pastikan ROOM_FREEPIK_KEYS sudah dikonfigurasi.' });
+    }
+
     const pollStart = Date.now();
     const response = await makeFreepikRequest(
       'GET',
