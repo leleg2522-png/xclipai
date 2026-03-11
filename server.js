@@ -3519,9 +3519,26 @@ async function validateXclipApiKey(apiKey) {
   };
 }
 
+function getFreepikKeysForRoom(roomId, keyInfo = null) {
+  if (roomId) {
+    const bulkVar = process.env[`ROOM${roomId}_FREEPIK_KEYS`];
+    if (bulkVar) {
+      const keys = bulkVar.split(',').map(k => k.trim()).filter(Boolean);
+      if (keys.length > 0) {
+        console.log(`[ROOM${roomId}] Loaded ${keys.length} Freepik keys from ROOM${roomId}_FREEPIK_KEYS`);
+        return keys;
+      }
+    }
+  }
+  if (keyInfo) {
+    const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+    return keyNames.map(name => process.env[name]).filter(k => k);
+  }
+  return [];
+}
+
 function getRotatedApiKey(keyInfo, forceKeyIndex = null) {
-  const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  const keys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
   
   if (keys.length === 0) {
     if (keyInfo.provider_key_name) {
@@ -3784,19 +3801,25 @@ app.post('/api/videogen/proxy', async (req, res) => {
     // Get all available keys for retry on 429
     const allKeys = [];
     if (keySource === 'room' && keyInfo.room_id) {
-      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-      keyNames.forEach((name, idx) => {
-        const key = process.env[name];
-        if (key) allKeys.push({ key, index: idx, name });
-      });
+      const keys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
+      keys.forEach((key, idx) => allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_KEY_${idx + 1}` }));
     } else if (keySource === 'admin') {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
-      roomKeys.forEach((name, idx) => {
-        const key = process.env[name];
-        if (key) allKeys.push({ key, index: idx, name });
-      });
+      for (let r = 1; r <= 5; r++) {
+        const bulkVar = process.env[`ROOM${r}_FREEPIK_KEYS`];
+        if (bulkVar) {
+          bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
+            allKeys.push({ key, index: allKeys.length, name: `ROOM${r}_FREEPIK_KEYS[${idx}]` });
+          });
+        } else {
+          ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+           'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+           'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'].forEach((name, idx) => {
+            const key = process.env[name];
+            if (key) allKeys.push({ key, index: idx, name });
+          });
+          break;
+        }
+      }
     } else {
       allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
@@ -3959,8 +3982,8 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // PRIORITY 2: Fallback to room keys using saved index (only if keyInfo available)
     if (!freepikApiKey && keyInfo && keyInfo.room_id) {
-      const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-      const keys = keyNames.map(name => ({ key: process.env[name], name })).filter(k => k.key);
+      const rawKeys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
+      const keys = rawKeys.map((key, idx) => ({ key, name: `ROOM${keyInfo.room_id}_KEY_${idx + 1}` }));
       
       if (savedTask.key_index !== null && keys[savedTask.key_index]) {
         freepikApiKey = keys[savedTask.key_index].key;
@@ -6267,7 +6290,7 @@ app.post('/api/room/leave', async (req, res) => {
 // Helper: Get API key for user's room with 3-minute rotation (videogen only)
 async function getRoomApiKey(userId) {
   const result = await pool.query(`
-    SELECT r.key_name_1, r.key_name_2, r.key_name_3 
+    SELECT s.room_id, r.key_name_1, r.key_name_2, r.key_name_3, r.provider_key_name
     FROM subscriptions s
     JOIN rooms r ON s.room_id = r.id
     WHERE s.user_id = $1 AND s.status = 'active' AND s.expired_at > NOW() AND s.room_id IS NOT NULL
@@ -6278,12 +6301,10 @@ async function getRoomApiKey(userId) {
   }
   
   const room = result.rows[0];
-  const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
-  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  const keys = getFreepikKeysForRoom(room.room_id, room);
   
   if (keys.length === 0) {
-    const keyName = room.provider_key_name;
-    return process.env[keyName] || process.env.FREEPIK_API_KEY;
+    return process.env[room.provider_key_name] || process.env.FREEPIK_API_KEY;
   }
   
   const rotationMinutes = 3;
@@ -6305,12 +6326,10 @@ async function getRoomApiKeyByRoomId(roomId) {
   }
   
   const room = result.rows[0];
-  const keyNames = [room.key_name_1, room.key_name_2, room.key_name_3].filter(k => k);
-  const keys = keyNames.map(name => process.env[name]).filter(k => k);
+  const keys = getFreepikKeysForRoom(roomId, room);
   
   if (keys.length === 0) {
-    const keyName = room.provider_key_name;
-    return process.env[keyName] || process.env.FREEPIK_API_KEY;
+    return process.env[room.provider_key_name] || process.env.FREEPIK_API_KEY;
   }
   
   const rotationMinutes = 3;
