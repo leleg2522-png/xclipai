@@ -999,11 +999,18 @@ function getNextProxyIProyalOrRotating() {
   
   const hasIpRoyal = isIpRoyalAvailable();
   const hasRotating = isWebshareRotatingAvailable();
+  const hasWebshare = isWebshareAvailable();
   
   if (hasIpRoyal) return getNextIpRoyalProxy();
   if (hasRotating) {
     console.log('[PROXY] IPRoyal unavailable, falling back to Webshare Rotating');
     return getWebshareRotatingProxy();
+  }
+  if (hasWebshare) {
+    console.log('[PROXY] IPRoyal & Webshare Rotating unavailable, falling back to Webshare API');
+    const wp = WEBSHARE_PROXIES[webshareIndex % WEBSHARE_PROXIES.length];
+    webshareIndex++;
+    return wp;
   }
   
   return null;
@@ -1148,7 +1155,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     if (!usedProxy) {
       let proxy;
       if (iproyalRateLimited) {
-        proxy = preferredProvider === 'iproyal-or-rotating' ? getWebshareRotatingProxy() : getNextProxyPreferWebshare();
+        proxy = preferredProvider === 'iproyal-or-rotating' ? getNextProxyIProyalOrRotating() : getNextProxyPreferWebshare();
       } else if (preferredProvider === 'iproyal-or-rotating') {
         proxy = getNextProxyIProyalOrRotating();
       } else if (preferredProvider === 'iproyal') {
