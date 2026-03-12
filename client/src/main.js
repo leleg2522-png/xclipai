@@ -11347,11 +11347,20 @@ async function generateVideo() {
       'X-Xclip-Key': state.videogen.customApiKey
     };
     
-    const response = await fetch(`${API_URL}/api/videogen/proxy`, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody)
-    });
+    const genAbortController = new AbortController();
+    const genTimeout = setTimeout(() => genAbortController.abort(), 120000);
+    
+    let response;
+    try {
+      response = await fetch(`${API_URL}/api/videogen/proxy`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+        signal: genAbortController.signal
+      });
+    } finally {
+      clearTimeout(genTimeout);
+    }
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Server error' }));
@@ -11395,9 +11404,12 @@ async function generateVideo() {
     
   } catch (error) {
     console.error('Generate video error:', error);
-    state.videogen.error = error.message;
+    const errMsg = error.name === 'AbortError'
+      ? 'Server terlalu lama merespons (timeout 2 menit). Coba lagi beberapa saat.'
+      : error.message;
+    state.videogen.error = errMsg;
     state.videogen.isGenerating = false;
-    showToast('Gagal generate video: ' + error.message, 'error');
+    showToast('Gagal generate video: ' + errMsg, 'error');
     render();
   }
 }

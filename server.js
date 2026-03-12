@@ -3956,8 +3956,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let finalKeyIndex = usedKeyIndex;
     
     const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
+    const loopDeadline = Date.now() + 90000; // max 90s total for key rotation
     
     for (let attempt = 0; attempt < availableKeys.length; attempt++) {
+      if (Date.now() > loopDeadline) {
+        console.warn(`[VIDEOGEN] Key rotation time budget exceeded (90s), stopping after ${attempt} attempts`);
+        break;
+      }
       const currentKey = availableKeys[attempt];
       console.log(`[TIMING] Attempt ${attempt + 1}/${availableKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
       
