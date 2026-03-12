@@ -8253,7 +8253,7 @@ function renderVidgen4Videos() {
     if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
     html += '</div>';
     html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
-    html += '<a href="/api/vidgen4/download?url=' + encodeURIComponent(video.url) + '" download="vidgen4_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen4Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
+    html += '<a href="' + API_URL + '/api/vidgen4/download?url=' + encodeURIComponent(video.url) + '" download="vidgen4_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen4Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
     html += '</a>';
     html += '<button class="btn-icon deleteVidgen4Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;">';
@@ -8653,12 +8653,17 @@ async function pollVidgen4Task(taskId) {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
         savePendingTasks();
-        state.vidgen4.generatedVideos.unshift({
-          id: taskId,
-          url: data.videoUrl,
-          model: data.model,
-          createdAt: new Date()
-        });
+        const alreadyExists = state.vidgen4.generatedVideos.some(v => v.id === taskId || v.taskId === taskId);
+        if (!alreadyExists) {
+          state.vidgen4.generatedVideos.unshift({
+            id: taskId,
+            taskId: taskId,
+            url: data.videoUrl,
+            model: data.model,
+            prompt: data.prompt,
+            createdAt: new Date()
+          });
+        }
         showToast('Video berhasil digenerate!', 'success');
         render();
         return;
@@ -12209,7 +12214,36 @@ function handleSSEEvent(data) {
         render(true);
       }
       break;
-      
+
+    case 'vidgen4_completed':
+      console.log('[SSE] Vidgen4 completed:', data.taskId, data.videoUrl);
+      const vidgen4Exists = state.vidgen4.generatedVideos.some(v => v.id === data.taskId || v.taskId === data.taskId);
+      if (!vidgen4Exists && data.videoUrl) {
+        state.vidgen4.generatedVideos.unshift({
+          id: data.taskId,
+          url: data.videoUrl,
+          model: data.model || 'unknown',
+          taskId: data.taskId,
+          createdAt: new Date().toISOString()
+        });
+      }
+      state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== data.taskId);
+      _activePolls.delete(data.taskId);
+      savePendingTasks();
+      showToast('Vidgen4 video berhasil di-generate!', 'success');
+      render(true);
+      break;
+
+    case 'vidgen4_failed':
+      console.log('[SSE] Vidgen4 failed:', data.taskId, data.error);
+      state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== data.taskId);
+      _activePolls.delete(data.taskId);
+      state.vidgen4.error = data.error || 'Video generation failed';
+      savePendingTasks();
+      showToast('Gagal generate Vidgen4: ' + (data.error || 'Generation failed'), 'error');
+      render(true);
+      break;
+
     case 'ximage3_completed':
       console.log('[SSE] XImage3 completed:', data.taskId, data.imageUrl);
       if (data.imageUrl) {

@@ -7858,7 +7858,8 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
       return res.json({
         status: 'completed',
         videoUrl: task.video_url,
-        model: task.model
+        model: task.model,
+        prompt: task.prompt
       });
     }
     
