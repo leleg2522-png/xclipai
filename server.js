@@ -8016,46 +8016,13 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
     
     console.log(`[VIDGEN4-PROXY] Streaming URL: ${videoUrl}`);
     
-    // Only forward Range header if browser actually sent one (empty Range header breaks CDN)
-    const reqHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': '*/*'
-    };
-    if (req.headers['range']) {
-      reqHeaders['Range'] = req.headers['range'];
-    }
-    
-    const response = await axios.get(videoUrl, {
-      responseType: 'stream',
-      timeout: 300000,
-      headers: reqHeaders,
-      maxRedirects: 10
-    });
-    
-    console.log(`[VIDGEN4-PROXY] OK: status=${response.status}, type=${response.headers['content-type']}, len=${response.headers['content-length']}`);
-    
-    const resStatus = response.status === 206 ? 206 : 200;
-    const contentType = response.headers['content-type'] || 'video/mp4';
-    res.status(resStatus);
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'no-store');
-    if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
-    if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
-    
-    response.data.on('error', (streamErr) => {
-      console.error('[VIDGEN4-PROXY] Stream error:', streamErr.message);
-    });
-    
-    response.data.pipe(res);
+    // Redirect browser directly to CDN — fastest, no double-hop through server
+    console.log(`[VIDGEN4-PROXY] Redirecting to CDN: ${videoUrl.substring(0, 80)}`);
+    return res.redirect(302, videoUrl);
   } catch (error) {
-    const errStatus = error.response?.status;
-    console.error(`[VIDGEN4-PROXY] ERROR: status=${errStatus}, msg=${error.message}`);
-    if (errStatus === 403 || errStatus === 404 || errStatus === 410) {
-      return res.status(410).json({ error: 'URL video sudah kadaluarsa. Generate ulang video baru.' });
-    }
+    console.error(`[VIDGEN4-PROXY] ERROR: ${error.message}`);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Gagal memuat video: ' + error.message });
+      res.status(500).json({ error: 'Gagal memuat video' });
     }
   }
 });

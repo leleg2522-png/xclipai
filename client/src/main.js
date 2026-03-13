@@ -8242,7 +8242,7 @@ function renderVidgen4Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen4.generatedVideos.forEach(video => {
-    var proxyUrl = video.url ? getVidgen4ProxyUrl(video.url) : '';
+    var proxyUrl = video.url || '';
     html += '<div class="video-result-card" style="position:relative;" data-vidgen4-id="' + (video.id || '') + '">';
     if (!video.url) {
       html += '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:24px;text-align:center;color:#ef4444;font-size:13px;">URL video tidak tersedia</div>';
