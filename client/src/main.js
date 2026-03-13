@@ -8242,11 +8242,20 @@ function renderVidgen4Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen4.generatedVideos.forEach(video => {
-    var proxyUrl = getVidgen4ProxyUrl(video.url);
-    html += '<div class="video-result-card" style="position:relative;">';
-    html += '<video controls playsinline preload="metadata" class="result-video" crossorigin="anonymous">';
-    html += '<source src="' + proxyUrl + '" type="video/mp4">';
-    html += '</video>';
+    var proxyUrl = video.url ? getVidgen4ProxyUrl(video.url) : '';
+    html += '<div class="video-result-card" style="position:relative;" data-vidgen4-id="' + (video.id || '') + '">';
+    if (!video.url) {
+      html += '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:24px;text-align:center;color:#ef4444;font-size:13px;">URL video tidak tersedia</div>';
+    } else {
+      html += '<video controls playsinline preload="metadata" class="result-video" ';
+      html += 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+      html += '<source src="' + proxyUrl + '">';
+      html += '</video>';
+      html += '<div style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:24px;text-align:center;flex-direction:column;gap:8px;align-items:center;">';
+      html += '<span style="font-size:24px;">⚠️</span>';
+      html += '<p style="color:#ef4444;font-size:13px;margin:0;">Video tidak bisa dimuat.<br>Coba download langsung atau generate ulang.</p>';
+      html += '</div>';
+    }
     html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
     html += '<div style="flex:1;min-width:0;">';
     html += '<span class="video-model-tag">' + video.model + '</span>';
@@ -12235,6 +12244,7 @@ function handleSSEEvent(data) {
           id: data.taskId,
           url: data.videoUrl,
           model: data.model || 'unknown',
+          prompt: data.prompt || '',
           taskId: data.taskId,
           createdAt: new Date().toISOString()
         });

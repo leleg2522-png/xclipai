@@ -3109,6 +3109,11 @@ async function pollApimartTask(taskId, apiKey) {
     let url = data.result?.video?.url ||
               data.result?.videos?.[0]?.url ||
               data.result?.video_url ||
+              data.result?.url ||
+              data.result?.outputs?.[0]?.url ||
+              data.result?.outputs?.[0]?.video_url ||
+              data.result?.output?.url ||
+              data.result?.output?.video_url ||
               data.result?.images?.[0]?.url ||
               data.result?.image_url ||
               data.images?.[0]?.url ||
@@ -3116,6 +3121,7 @@ async function pollApimartTask(taskId, apiKey) {
               data.video_url ||
               data.url ||
               data.output?.url ||
+              data.output?.video_url ||
               data.output?.images?.[0]?.url ||
               data.output?.image_url ||
               data.media_url;
@@ -3124,6 +3130,8 @@ async function pollApimartTask(taskId, apiKey) {
     if (!url && data.result?.images?.[0]) {
       url = typeof data.result.images[0] === 'string' ? data.result.images[0] : null;
     }
+    console.log(`[APIMART] Completed task URL extracted: ${url ? url.substring(0, 80) : 'NULL'}`);
+    console.log(`[APIMART] Raw data keys: ${JSON.stringify(Object.keys(data))}, result keys: ${data.result ? JSON.stringify(Object.keys(data.result)) : 'no result'}`);
     return { status: 'completed', url };
   }
   
@@ -3391,7 +3399,7 @@ setInterval(async () => {
           else if (table === 'vidgen2_tasks') sseType = 'vidgen2_completed';
           else if (table === 'vidgen3_tasks') sseType = 'vidgen3_completed';
           else if (table === 'vidgen4_tasks') sseType = 'vidgen4_completed';
-          const sseData = { type: sseType, taskId: taskId, model: task.model };
+          const sseData = { type: sseType, taskId: taskId, model: task.model, prompt: task.prompt };
           sseData[isImage ? 'imageUrl' : 'videoUrl'] = result.url;
           if (isMotion) {
             try {
@@ -7813,6 +7821,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
       dbTable: 'vidgen4_tasks',
       urlColumn: 'video_url',
       model: model,
+      prompt: prompt,
       userId: roomKeyResult.userId
     });
     
@@ -7900,11 +7909,19 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         if (status === 'completed' || status === 'finished' || status === 'success') {
           let videoUrl = data.result?.video?.url ||
                          data.result?.videos?.[0]?.url ||
-                         data.result?.video_url || 
+                         data.result?.video_url ||
+                         data.result?.url ||
+                         data.result?.outputs?.[0]?.url ||
+                         data.result?.outputs?.[0]?.video_url ||
+                         data.result?.output?.url ||
+                         data.result?.output?.video_url ||
                          data.video_url || 
                          data.url || 
-                         data.output?.url;
+                         data.output?.url ||
+                         data.output?.video_url;
           
+          console.log(`[VIDGEN4] Status URL extracted: ${videoUrl ? videoUrl.substring(0,80) : 'NULL'}`);
+          console.log(`[VIDGEN4] Data keys: ${JSON.stringify(Object.keys(data))}, result: ${JSON.stringify(data.result)?.substring(0,200)}`);
           if (Array.isArray(videoUrl)) videoUrl = videoUrl[0];
           
           if (videoUrl) {
@@ -7993,31 +8010,49 @@ app.get('/api/vidgen4/history', async (req, res) => {
 app.get('/api/vidgen4/proxy-video', async (req, res) => {
   try {
     const videoUrl = req.query.url;
-    if (!videoUrl) {
-      return res.status(400).json({ error: 'URL diperlukan' });
+    if (!videoUrl || videoUrl === 'null' || videoUrl === 'undefined') {
+      return res.status(400).json({ error: 'URL video tidak valid' });
     }
+    
+    console.log(`[VIDGEN4-PROXY] Streaming URL: ${videoUrl}`);
     
     const response = await axios.get(videoUrl, {
       responseType: 'stream',
-      timeout: 60000
+      timeout: 300000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'video/mp4,video/*,*/*',
+        'Range': req.headers['range'] || ''
+      },
+      maxRedirects: 10
     });
     
+    console.log(`[VIDGEN4-PROXY] Response: status=${response.status}, content-type=${response.headers['content-type']}, content-length=${response.headers['content-length']}`);
+    
+    const status = response.status === 206 ? 206 : 200;
     const contentType = response.headers['content-type'] || 'video/mp4';
+    res.status(status);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    if (response.headers['content-length']) {
-      res.setHeader('Content-Length', response.headers['content-length']);
-    }
+    res.setHeader('Cache-Control', 'no-store');
+    if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
+    if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
+    
+    response.data.on('error', (streamErr) => {
+      console.error('[VIDGEN4-PROXY] Stream error:', streamErr.message);
+    });
     
     response.data.pipe(res);
   } catch (error) {
     const status = error.response?.status;
-    console.error('[VIDGEN4] Video proxy error:', status || error.message);
+    const body = error.response?.data ? JSON.stringify(error.response.data).substring(0, 200) : '';
+    console.error(`[VIDGEN4-PROXY] ERROR: status=${status}, msg=${error.message}, body=${body}`);
     if (status === 403 || status === 404 || status === 410) {
       return res.status(410).json({ error: 'URL video sudah kadaluarsa. Generate ulang video baru.' });
     }
-    res.status(500).json({ error: 'Gagal memuat video' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Gagal memuat video: ' + error.message });
+    }
   }
 });
 
