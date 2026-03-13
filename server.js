@@ -7999,7 +7999,7 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
     
     const response = await axios.get(videoUrl, {
       responseType: 'stream',
-      timeout: 600000
+      timeout: 60000
     });
     
     const contentType = response.headers['content-type'] || 'video/mp4';
@@ -8012,7 +8012,11 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
     
     response.data.pipe(res);
   } catch (error) {
-    console.error('[VIDGEN4] Video proxy error:', error.message);
+    const status = error.response?.status;
+    console.error('[VIDGEN4] Video proxy error:', status || error.message);
+    if (status === 403 || status === 404 || status === 410) {
+      return res.status(410).json({ error: 'URL video sudah kadaluarsa. Generate ulang video baru.' });
+    }
     res.status(500).json({ error: 'Gagal memuat video' });
   }
 });
