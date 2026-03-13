@@ -8016,22 +8016,27 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
     
     console.log(`[VIDGEN4-PROXY] Streaming URL: ${videoUrl}`);
     
+    // Only forward Range header if browser actually sent one (empty Range header breaks CDN)
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': '*/*'
+    };
+    if (req.headers['range']) {
+      reqHeaders['Range'] = req.headers['range'];
+    }
+    
     const response = await axios.get(videoUrl, {
       responseType: 'stream',
       timeout: 300000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'video/mp4,video/*,*/*',
-        'Range': req.headers['range'] || ''
-      },
+      headers: reqHeaders,
       maxRedirects: 10
     });
     
-    console.log(`[VIDGEN4-PROXY] Response: status=${response.status}, content-type=${response.headers['content-type']}, content-length=${response.headers['content-length']}`);
+    console.log(`[VIDGEN4-PROXY] OK: status=${response.status}, type=${response.headers['content-type']}, len=${response.headers['content-length']}`);
     
-    const status = response.status === 206 ? 206 : 200;
+    const resStatus = response.status === 206 ? 206 : 200;
     const contentType = response.headers['content-type'] || 'video/mp4';
-    res.status(status);
+    res.status(resStatus);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-store');
@@ -8044,10 +8049,9 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
     
     response.data.pipe(res);
   } catch (error) {
-    const status = error.response?.status;
-    const body = error.response?.data ? JSON.stringify(error.response.data).substring(0, 200) : '';
-    console.error(`[VIDGEN4-PROXY] ERROR: status=${status}, msg=${error.message}, body=${body}`);
-    if (status === 403 || status === 404 || status === 410) {
+    const errStatus = error.response?.status;
+    console.error(`[VIDGEN4-PROXY] ERROR: status=${errStatus}, msg=${error.message}`);
+    if (errStatus === 403 || errStatus === 404 || errStatus === 410) {
       return res.status(410).json({ error: 'URL video sudah kadaluarsa. Generate ulang video baru.' });
     }
     if (!res.headersSent) {
