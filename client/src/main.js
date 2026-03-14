@@ -6880,12 +6880,12 @@ function renderVidgen2Page() {
   const isGrok = state.vidgen2.selectedModel === 'grok-video-3-10s';
   const isVeo = state.vidgen2.selectedModel === 'veo-3.1-fast';
   const models = [
-    { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, Audio+Video, max 1080P', badge: 'AUDIO', icon: '🎵' },
-    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast 4K', desc: 'Video 5-8 detik, max 4K, ultra detail', badge: '4K', icon: '⚡' }
+    { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, 720P, Audio+Video', badge: 'AUDIO', icon: '🎵' },
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast 4K', desc: 'Video 5-8 detik, 4K ultra detail', badge: '4K', icon: '⚡' }
   ];
   
   const durationOptions = isGrok ? [10] : [5, 8];
-  const resolutionOptions = isGrok ? ['720P', '1080P'] : ['720P', '1080P', '4K'];
+  const resolutionOptions = isGrok ? ['720P'] : ['4K'];
   
   return `
     <div class="container">
@@ -7016,13 +7016,13 @@ function renderVidgen2Page() {
 
               ${isGrok ? `
               <div class="setting-group">
-                <p class="setting-hint" style="color:#22c55e;">🎵 Grok 3 menghasilkan video dengan audio. Text-to-Video only.</p>
+                <p class="setting-hint" style="color:#22c55e;">🎵 Grok 3 — Video 720P dengan audio, durasi 10 detik.</p>
               </div>
               ` : ''}
 
               ${isVeo ? `
               <div class="setting-group">
-                <p class="setting-hint" style="color:#3b82f6;">⚡ Veo 3.1 Fast mendukung resolusi hingga 4K dengan kualitas ultra detail.</p>
+                <p class="setting-hint" style="color:#3b82f6;">⚡ Veo 3.1 Fast — Video 4K ultra detail, durasi 5-8 detik.</p>
               </div>
               ` : ''}
 
@@ -7345,7 +7345,7 @@ function attachVidgen2EventListeners() {
         if (!validDurations.includes(state.vidgen2.duration)) {
           state.vidgen2.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo-3.1-fast' ? ['720P', '1080P', '4K'] : ['720P', '1080P'];
+        const validResolutions = newModel === 'veo-3.1-fast' ? ['4K'] : ['720P'];
         if (!validResolutions.includes(state.vidgen2.resolution)) {
           state.vidgen2.resolution = validResolutions[0];
         }

@@ -7147,17 +7147,17 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         apiModel: 'grok-video-3-10s', 
         supportedDurations: [10],
         defaultDuration: 10,
-        supportedResolutions: ['720P', '1080P'],
+        supportedResolutions: ['720P'],
         defaultResolution: '720P',
         type: 'grok',
-        desc: 'Grok 3 (10s) Audio+Video'
+        desc: 'Grok 3 (10s) 720P Audio+Video'
       },
       'veo-3.1-fast': { 
         apiModel: 'veo-3.1-fast', 
         supportedDurations: [5, 8],
         defaultDuration: 8,
-        supportedResolutions: ['720P', '1080P', '4K'],
-        defaultResolution: '1080P',
+        supportedResolutions: ['4K'],
+        defaultResolution: '4K',
         type: 'veo',
         desc: 'Veo 3.1 Fast 4K'
       }
