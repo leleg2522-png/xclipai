@@ -3097,8 +3097,9 @@ async function pollPoyoTask(taskId, apiKey) {
 }
 
 async function pollApimodelsTask(taskId, apiKey) {
-  const statusResponse = await axios.get(
-    `https://apimodels.app/api/v1/video/generations?task_id=${taskId}`,
+  const statusResponse = await axios.post(
+    'https://apimodels.app/api/v1/video/generations',
+    { task_id: taskId },
     { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 30000 }
   );
   const raw = statusResponse.data;
@@ -7328,8 +7329,9 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       try {
         console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
         
-        const statusResponse = await axios.get(
-          `https://apimodels.app/api/v1/video/generations?task_id=${taskId}`,
+        const statusResponse = await axios.post(
+          'https://apimodels.app/api/v1/video/generations',
+          { task_id: taskId },
           {
             headers: {
               'Authorization': `Bearer ${roomKeyResult.apiKey}`,
