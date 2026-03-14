@@ -3097,24 +3097,11 @@ async function pollPoyoTask(taskId, apiKey) {
 }
 
 async function pollApimodelsTask(taskId, apiKey, model) {
-  let statusResponse;
-  try {
-    statusResponse = await axios.get(
-      `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
-      { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
-    );
-  } catch (getErr) {
-    if (getErr.response && (getErr.response.status === 401 || getErr.response.status === 400)) {
-      console.log(`[BG-POLL] GET failed (${getErr.response.status}), trying POST with task_id+model`);
-      statusResponse = await axios.post(
-        'https://apimodels.app/api/v1/video/generations',
-        { task_id: taskId, model: model || 'grok-video-3-10s' },
-        { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 30000 }
-      );
-    } else {
-      throw getErr;
-    }
-  }
+  console.log(`[BG-POLL] Polling apimodels task=${taskId}, key=${apiKey ? apiKey.substring(0,10)+'...' : 'NONE'}`);
+  const statusResponse = await axios.get(
+    `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+    { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
   const raw = statusResponse.data;
   const data = raw.data || raw;
   const status = data.status;
@@ -7278,7 +7265,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     setUserCooldown(roomKeyResult.userId, 'vidgen2');
     
-    console.log(`[VIDGEN2] Task created: ${taskId}`);
+    console.log(`[VIDGEN2] Task created: ${taskId}, key: ${roomKeyResult.apiKey.substring(0,10)}..., model: ${model}`);
     
     startServerBgPoll(taskId, 'apimodels', roomKeyResult.apiKey, {
       dbTable: 'vidgen2_tasks',
@@ -7357,7 +7344,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
     
     if (pollApiKey) {
       try {
-        console.log(`[VIDGEN2] Polling status for task: ${taskId} (using original key: ${pollApiKey.substring(0,8)}...)`);
+        console.log(`[VIDGEN2] Polling status for task: ${taskId} (key: ${pollApiKey.substring(0,10)}...)`);
         
         const statusResponse = await axios.get(
           `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
