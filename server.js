@@ -3096,12 +3096,25 @@ async function pollPoyoTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
-async function pollApimodelsTask(taskId, apiKey) {
-  const statusResponse = await axios.post(
-    'https://apimodels.app/api/v1/video/generations',
-    { task_id: taskId },
-    { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 30000 }
-  );
+async function pollApimodelsTask(taskId, apiKey, model) {
+  let statusResponse;
+  try {
+    statusResponse = await axios.get(
+      `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+    );
+  } catch (getErr) {
+    if (getErr.response && (getErr.response.status === 401 || getErr.response.status === 400)) {
+      console.log(`[BG-POLL] GET failed (${getErr.response.status}), trying POST with task_id+model`);
+      statusResponse = await axios.post(
+        'https://apimodels.app/api/v1/video/generations',
+        { task_id: taskId, model: model || 'grok-video-3-10s' },
+        { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 30000 }
+      );
+    } else {
+      throw getErr;
+    }
+  }
   const raw = statusResponse.data;
   const data = raw.data || raw;
   const status = data.status;
@@ -3384,7 +3397,7 @@ setInterval(async () => {
       if (task.apiType === 'poyo') {
         result = await pollPoyoTask(taskId, task.apiKey);
       } else if (task.apiType === 'apimodels') {
-        result = await pollApimodelsTask(taskId, task.apiKey);
+        result = await pollApimodelsTask(taskId, task.apiKey, task.model);
       } else if (task.apiType === 'apimart') {
         result = await pollApimartTask(taskId, task.apiKey);
       } else if (task.apiType === 'kie-4o-image') {
@@ -7329,17 +7342,30 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       try {
         console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
         
-        const statusResponse = await axios.post(
-          'https://apimodels.app/api/v1/video/generations',
-          { task_id: taskId },
-          {
-            headers: {
-              'Authorization': `Bearer ${roomKeyResult.apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            timeout: 30000
+        let statusResponse;
+        try {
+          statusResponse = await axios.get(
+            `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+            {
+              headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` },
+              timeout: 30000
+            }
+          );
+        } catch (getErr) {
+          if (getErr.response && (getErr.response.status === 401 || getErr.response.status === 400)) {
+            console.log(`[VIDGEN2] GET poll failed (${getErr.response.status}), trying POST`);
+            statusResponse = await axios.post(
+              'https://apimodels.app/api/v1/video/generations',
+              { task_id: taskId, model: task.model || 'grok-video-3-10s' },
+              {
+                headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}`, 'Content-Type': 'application/json' },
+                timeout: 30000
+              }
+            );
+          } else {
+            throw getErr;
           }
-        );
+        }
         
         console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
         
