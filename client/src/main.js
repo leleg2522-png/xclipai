@@ -7165,10 +7165,9 @@ function renderVidgen2Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen2.generatedVideos.forEach(video => {
-    var proxyUrl = getVidgen2ProxyUrl(video.url);
     html += '<div class="video-result-card" style="position:relative;">';
-    html += '<video controls playsinline preload="metadata" class="result-video" crossorigin="anonymous">';
-    html += '<source src="' + proxyUrl + '" type="video/mp4">';
+    html += '<video controls playsinline preload="auto" class="result-video">';
+    html += '<source src="' + video.url + '" type="video/mp4">';
     html += '</video>';
     html += '<div class="video-meta" style="display:flex;justify-content:space-between;align-items:center;">';
     html += '<div style="flex:1;min-width:0;">';
