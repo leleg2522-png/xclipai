@@ -11307,6 +11307,30 @@ function handleVideoGenImageUpload(e) {
   reader.readAsDataURL(file);
 }
 
+const _progressTimers = {};
+function startLocalProgressTimer(taskId) {
+  if (_progressTimers[taskId]) clearInterval(_progressTimers[taskId]);
+  const startMs = Date.now();
+  _progressTimers[taskId] = setInterval(() => {
+    const task = state.videogen.tasks.find(t => t.taskId === taskId);
+    if (!task) {
+      clearInterval(_progressTimers[taskId]);
+      delete _progressTimers[taskId];
+      return;
+    }
+    const elapsedSec = Math.floor((Date.now() - startMs) / 1000);
+    const progress = Math.min(95, Math.floor(elapsedSec * 0.3));
+    task.elapsed = elapsedSec;
+    task.progress = progress;
+    const progressEl = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-fill');
+    const progressText = document.querySelector('[data-task-id="' + taskId + '"] .task-progress-text');
+    const elapsedEl = document.querySelector('[data-task-id="' + taskId + '"] .task-elapsed');
+    if (progressEl) progressEl.style.width = progress + '%';
+    if (progressText) progressText.textContent = progress + '%';
+    if (elapsedEl) elapsedEl.textContent = elapsedSec + 's';
+  }, 1000);
+}
+
 async function generateVideo() {
   if (!state.videogen.sourceImage) {
     showToast('Silakan upload gambar terlebih dahulu', 'error');
@@ -11357,7 +11381,7 @@ async function generateVideo() {
     };
     
     const genAbortController = new AbortController();
-    const genTimeout = setTimeout(() => genAbortController.abort(), 120000);
+    const genTimeout = setTimeout(() => genAbortController.abort(), 45000);
     
     let response;
     try {
@@ -11390,6 +11414,7 @@ async function generateVideo() {
         model: data.model || state.videogen.selectedModel,
         status: 'processing',
         elapsed: 0,
+        progress: 0,
         videoUrl: null,
         createdAt: Date.now()
       };
@@ -11397,6 +11422,7 @@ async function generateVideo() {
       savePendingTasks();
       state.videogen.isGenerating = false;
       render();
+      startLocalProgressTimer(data.taskId);
       pollVideoStatus(data.taskId, newTask.model);
       showToast('Video sedang diproses. Anda bisa generate video lagi (maks 3).', 'success');
     } else if (data.videoUrl) {
@@ -11414,7 +11440,7 @@ async function generateVideo() {
   } catch (error) {
     console.error('Generate video error:', error);
     const errMsg = error.name === 'AbortError'
-      ? 'Server terlalu lama merespons (timeout 2 menit). Coba lagi beberapa saat.'
+      ? 'Server terlalu lama merespons. Coba lagi beberapa saat.'
       : error.message;
     state.videogen.error = errMsg;
     state.videogen.isGenerating = false;
@@ -11475,25 +11501,25 @@ async function pollVideoStatus(taskId, model) {
       // Check for completion FIRST (priority)
       const isCompleted = data.status === 'completed' || data.status === 'COMPLETED';
       if (isCompleted && data.videoUrl) {
+        if (_progressTimers[taskId]) { clearInterval(_progressTimers[taskId]); delete _progressTimers[taskId]; }
         task.status = 'completed';
+        task.progress = 100;
         task.videoUrl = data.videoUrl;
-        // Check if video with this taskId already exists (prevent duplicates from SSE)
         const alreadyExists = state.videogen.generatedVideos.some(v => v.taskId === taskId);
         if (!alreadyExists) {
           state.videogen.generatedVideos.unshift({ url: data.videoUrl, createdAt: Date.now(), taskId });
         }
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== taskId);
-        // Clear polling flag if no more active tasks
         if (state.videogen.tasks.length === 0) {
           state.videogen.isPolling = false;
         }
         showToast('Video berhasil di-generate!', 'success');
-        render(true); // Force render on completion
+        render(true);
         return;
       }
       
-      // Check for failure
       if (data.status === 'failed' || data.status === 'FAILED') {
+        if (_progressTimers[taskId]) { clearInterval(_progressTimers[taskId]); delete _progressTimers[taskId]; }
         throw new Error(data.error || 'Video generation failed');
       }
       
@@ -12068,6 +12094,7 @@ function handleSSEEvent(data) {
       
     case 'video_completed':
       console.log('[SSE] Video completed event received:', data.taskId, data.videoUrl);
+      if (_progressTimers[data.taskId]) { clearInterval(_progressTimers[data.taskId]); delete _progressTimers[data.taskId]; }
       const videoExists = state.videogen.generatedVideos.some(v => v.taskId === data.taskId);
       if (!videoExists && data.videoUrl) {
         state.videogen.generatedVideos.unshift({ 
@@ -12081,6 +12108,7 @@ function handleSSEEvent(data) {
       const completedTask = state.videogen.tasks.find(t => t.taskId === data.taskId);
       if (completedTask) {
         completedTask.status = 'completed';
+        completedTask.progress = 100;
         completedTask.videoUrl = data.videoUrl;
         state.videogen.tasks = state.videogen.tasks.filter(t => t.taskId !== data.taskId);
       }
@@ -12089,6 +12117,7 @@ function handleSSEEvent(data) {
         state.videogen.isPolling = false;
       }
       
+      _activePolls.delete(data.taskId);
       savePendingTasks();
       showToast('Video berhasil di-generate!', 'success');
       render(true);
