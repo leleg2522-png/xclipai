@@ -7233,6 +7233,11 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       requestBody.images = imageUrls;
       if (generationType) requestBody.generation_type = generationType;
     }
+
+    const callbackBaseUrl = baseUrl.includes('localhost') ? null : baseUrl;
+    if (callbackBaseUrl) {
+      requestBody.callback_url = `${callbackBaseUrl}/api/vidgen2/callback`;
+    }
     
     console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, images: requestBody.images ? ['[IMAGE]'] : undefined }));
     
@@ -7434,6 +7439,85 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
   } catch (error) {
     console.error('[VIDGEN2] Task status error:', error.message);
     res.status(500).json({ error: 'Gagal cek status task' });
+  }
+});
+
+app.post('/api/vidgen2/callback', async (req, res) => {
+  try {
+    const data = req.body.data || req.body;
+    const taskId = data.task_id;
+    console.log(`[VIDGEN2-CALLBACK] Received callback for task: ${taskId}`, JSON.stringify(req.body).substring(0, 500));
+    
+    if (!taskId) {
+      return res.status(400).json({ error: 'Missing task_id' });
+    }
+    
+    const status = data.status;
+    
+    if (status === 'completed') {
+      let videoUrl = null;
+      if (data.videos && data.videos.length > 0) {
+        videoUrl = data.videos[0];
+      } else if (data.video_url) {
+        videoUrl = data.video_url;
+      } else if (data.url) {
+        videoUrl = data.url;
+      }
+      
+      console.log(`[VIDGEN2-CALLBACK] Task ${taskId} COMPLETED, URL: ${videoUrl}`);
+      
+      if (videoUrl) {
+        try {
+          await pool.query(
+            `UPDATE video_tasks SET status = 'completed', video_url = $1, completed_at = NOW() WHERE task_id = $2`,
+            [videoUrl, taskId]
+          );
+        } catch (dbErr) {
+          console.error(`[VIDGEN2-CALLBACK] DB update error:`, dbErr.message);
+        }
+      }
+      
+      if (serverBgPollingTasks.has(taskId)) {
+        serverBgPollingTasks.delete(taskId);
+        console.log(`[VIDGEN2-CALLBACK] Removed task ${taskId} from bg polling`);
+      }
+      
+      broadcastToAll({
+        type: 'video_completed',
+        taskId: taskId,
+        videoUrl: videoUrl,
+        source: 'vidgen2'
+      });
+      
+    } else if (status === 'failed') {
+      const error = data.error || 'Generation failed';
+      console.log(`[VIDGEN2-CALLBACK] Task ${taskId} FAILED: ${error}`);
+      
+      try {
+        await pool.query(
+          `UPDATE video_tasks SET status = 'failed', completed_at = NOW() WHERE task_id = $1`,
+          [taskId]
+        );
+      } catch (dbErr) {
+        console.error(`[VIDGEN2-CALLBACK] DB update error:`, dbErr.message);
+      }
+      
+      if (serverBgPollingTasks.has(taskId)) {
+        serverBgPollingTasks.delete(taskId);
+      }
+      
+      broadcastToAll({
+        type: 'video_failed',
+        taskId: taskId,
+        error: error,
+        source: 'vidgen2'
+      });
+    }
+    
+    res.json({ received: true });
+  } catch (error) {
+    console.error('[VIDGEN2-CALLBACK] Error:', error.message);
+    res.status(500).json({ error: 'Callback processing failed' });
   }
 });
 
