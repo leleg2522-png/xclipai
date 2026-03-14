@@ -3103,8 +3103,10 @@ async function pollApimodelsTask(taskId, apiKey, model) {
     { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
   );
   const raw = statusResponse.data;
+  console.log(`[BG-POLL] Full apimodels response for ${taskId}:`, JSON.stringify(raw));
   const data = raw.data || raw;
   const status = data.status;
+  console.log(`[BG-POLL] Parsed status=${status}, videos=${JSON.stringify(data.videos || [])}, keys=${Object.keys(data).join(',')}`);
 
   if (status === 'completed') {
     let url = null;
