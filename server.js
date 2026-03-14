@@ -7138,8 +7138,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
             generationType, aspectRatio, duration, resolution, enableGif,
             watermark, style, storyboard } = req.body;
     
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt diperlukan' });
+    if (!prompt && !image) {
+      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
     const modelConfig = {
@@ -7174,6 +7174,39 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] Generating with ApiModels model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
     
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const baseUrl = `${protocol}://${host}`;
+
+    const imageUrls = [];
+    if (image) {
+      let imageUrl = image;
+      if (image.startsWith('data:')) {
+        const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
+        imageUrl = imageFile.publicUrl;
+        console.log(`[VIDGEN2] Image uploaded: ${imageUrl}`);
+      }
+      imageUrls.push(imageUrl);
+    }
+    if (startFrame) {
+      let startUrl = startFrame;
+      if (startFrame.startsWith('data:')) {
+        const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
+        startUrl = sf.publicUrl;
+        console.log(`[VIDGEN2] Start frame uploaded: ${startUrl}`);
+      }
+      imageUrls.push(startUrl);
+    }
+    if (endFrame) {
+      let endUrl = endFrame;
+      if (endFrame.startsWith('data:')) {
+        const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
+        endUrl = ef.publicUrl;
+        console.log(`[VIDGEN2] End frame uploaded: ${endUrl}`);
+      }
+      imageUrls.push(endUrl);
+    }
+
     const requestBody = {
       model: config.apiModel,
       prompt: prompt || 'Generate a cinematic video with smooth motion',
@@ -7181,8 +7214,13 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       size: videoResolution,
       duration: videoDuration
     };
+
+    if (imageUrls.length > 0) {
+      requestBody.images = imageUrls;
+      if (generationType) requestBody.generation_type = generationType;
+    }
     
-    console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
+    console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, images: requestBody.images ? ['[IMAGE]'] : undefined }));
     
     const response = await axios.post(
       'https://apimodels.app/api/v1/video/generations',

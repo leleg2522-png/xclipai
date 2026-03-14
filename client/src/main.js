@@ -6908,6 +6908,44 @@ function renderVidgen2Page() {
             <div class="card-header">
               <div class="card-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <h2 class="card-title">Image to Video</h2>
+            </div>
+            <div class="card-body">
+              <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
+                ${state.vidgen2.sourceImage ? `
+                  <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
+                  <button class="remove-reference" id="removeVidgen2Image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <span>Klik untuk upload gambar (opsional)</span>
+                    <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
+                  </div>
+                `}
+              </div>
+              <input type="file" id="vidgen2ImageInput" accept="image/*" style="display:none">
+              <p class="setting-hint" style="margin-top:8px;">Upload gambar referensi untuk Image-to-Video, atau kosongkan untuk Text-to-Video</p>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
               </div>
@@ -7042,8 +7080,9 @@ function renderVidgen2Page() {
                 const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000) : 0;
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
-                const needsPrompt = !state.vidgen2.prompt.trim();
-                const isDisabled = state.vidgen2.isGenerating || needsPrompt || state.vidgen2.tasks.length >= 3 || isOnCooldown;
+                const hasImage = !!state.vidgen2.sourceImage;
+                const needsInput = !state.vidgen2.prompt.trim() && !hasImage;
+                const isDisabled = state.vidgen2.isGenerating || needsInput || state.vidgen2.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen2.isGenerating ? `
@@ -7062,7 +7101,7 @@ function renderVidgen2Page() {
                 `}
               </button>`;
               })()}
-              ${!state.vidgen2.prompt.trim() ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt untuk generate video</p>' : ''}
+              ${!state.vidgen2.prompt.trim() && !state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
               ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
           </div>
@@ -7453,6 +7492,7 @@ async function generateVidgen2Video() {
       body: JSON.stringify({
         model: state.vidgen2.selectedModel,
         prompt: state.vidgen2.prompt,
+        image: state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
         aspectRatio: state.vidgen2.aspectRatio,
         duration: state.vidgen2.duration,
         resolution: state.vidgen2.resolution,
