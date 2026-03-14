@@ -7265,10 +7265,11 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     }
     
     await pool.query(`
-      INSERT INTO vidgen2_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, metadata)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+      INSERT INTO vidgen2_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, metadata, api_key_used)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9)
     `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt, roomKeyResult.keyName,
-        JSON.stringify({ duration: videoDuration, aspectRatio: videoAspectRatio, resolution: videoResolution, style: style || null })]);
+        JSON.stringify({ duration: videoDuration, aspectRatio: videoAspectRatio, resolution: videoResolution, style: style || null }),
+        roomKeyResult.apiKey]);
     
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
@@ -7342,35 +7343,29 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
       });
     }
     
-    const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
-    if (!roomKeyResult.error) {
+    let pollApiKey = task.api_key_used;
+    if (!pollApiKey) {
+      const bgTask = serverBgPollingTasks.get(taskId);
+      if (bgTask) {
+        pollApiKey = bgTask.apiKey;
+      }
+    }
+    if (!pollApiKey) {
+      const roomKeyResult = await getVidgen2RoomApiKey(xclipApiKey);
+      if (!roomKeyResult.error) pollApiKey = roomKeyResult.apiKey;
+    }
+    
+    if (pollApiKey) {
       try {
-        console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
+        console.log(`[VIDGEN2] Polling status for task: ${taskId} (using original key: ${pollApiKey.substring(0,8)}...)`);
         
-        let statusResponse;
-        try {
-          statusResponse = await axios.get(
-            `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
-            {
-              headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` },
-              timeout: 30000
-            }
-          );
-        } catch (getErr) {
-          if (getErr.response && (getErr.response.status === 401 || getErr.response.status === 400)) {
-            console.log(`[VIDGEN2] GET poll failed (${getErr.response.status}), trying POST`);
-            statusResponse = await axios.post(
-              'https://apimodels.app/api/v1/video/generations',
-              { task_id: taskId, model: task.model || 'grok-video-3-10s' },
-              {
-                headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}`, 'Content-Type': 'application/json' },
-                timeout: 30000
-              }
-            );
-          } else {
-            throw getErr;
+        const statusResponse = await axios.get(
+          `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+          {
+            headers: { 'Authorization': `Bearer ${pollApiKey}` },
+            timeout: 30000
           }
-        }
+        );
         
         console.log(`[VIDGEN2] Status response:`, JSON.stringify(statusResponse.data));
         
@@ -11115,6 +11110,10 @@ async function initDatabase() {
         completed_at TIMESTAMP
       )
     `);
+    
+    await pool.query(`
+      ALTER TABLE vidgen2_tasks ADD COLUMN IF NOT EXISTS api_key_used TEXT
+    `).catch(() => {});
     
     // Add vidgen2_room_id to subscriptions
     await pool.query(`
