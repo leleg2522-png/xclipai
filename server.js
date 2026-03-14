@@ -3096,6 +3096,37 @@ async function pollPoyoTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
+async function pollApimodelsTask(taskId, apiKey) {
+  const statusResponse = await axios.get(
+    `https://apimodels.app/api/v1/video/generations?task_id=${taskId}`,
+    { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 30000 }
+  );
+  const raw = statusResponse.data;
+  const data = raw.data || raw;
+  const status = data.status;
+
+  if (status === 'completed') {
+    let url = null;
+    if (data.videos && data.videos.length > 0) {
+      url = data.videos[0];
+    } else if (data.video_url) {
+      url = data.video_url;
+    } else if (data.url) {
+      url = data.url;
+    }
+    if (!url) {
+      console.error(`[BG-POLL] Apimodels task ${taskId} completed but no URL found. Raw:`, JSON.stringify(raw).substring(0, 500));
+    }
+    return { status: 'completed', url };
+  }
+
+  if (status === 'failed') {
+    return { status: 'failed', error: data.error || data.message || 'Generation failed' };
+  }
+
+  return { status: 'processing' };
+}
+
 async function pollApimartTask(taskId, apiKey) {
   const statusResponse = await axios.get(
     `https://api.apimart.ai/v1/tasks/${taskId}`,
@@ -3351,6 +3382,8 @@ setInterval(async () => {
       let result;
       if (task.apiType === 'poyo') {
         result = await pollPoyoTask(taskId, task.apiKey);
+      } else if (task.apiType === 'apimodels') {
+        result = await pollApimodelsTask(taskId, task.apiKey);
       } else if (task.apiType === 'apimart') {
         result = await pollApimartTask(taskId, task.apiKey);
       } else if (task.apiType === 'kie-4o-image') {
@@ -3475,7 +3508,7 @@ setInterval(async () => {
 async function resumePendingTaskPolling() {
   try {
     const tables = [
-      { table: 'vidgen2_tasks', apiType: 'poyo', urlCol: 'video_url', keyCol: 'used_key_name' },
+      { table: 'vidgen2_tasks', apiType: 'apimodels', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'ximage_history', apiType: 'kie-ximage', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
@@ -3521,6 +3554,15 @@ async function resumePendingTaskPolling() {
               }
             }
             if (!apiKey && process.env.POYO_API_KEY) apiKey = sanitizeApiKey(process.env.POYO_API_KEY);
+          }
+          if (!apiKey && (apiType === 'apimodels')) {
+            outer_apimodels: for (let r = 1; r <= 3; r++) {
+              for (let k = 1; k <= 3; k++) {
+                const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
+                if (pk) { apiKey = sanitizeApiKey(pk); break outer_apimodels; }
+              }
+            }
+            if (!apiKey && process.env.APIMODELS_API_KEY) apiKey = sanitizeApiKey(process.env.APIMODELS_API_KEY);
           }
           if (!apiKey && (apiType === 'apimart')) {
             if (process.env.APIMART_API_KEY) apiKey = sanitizeApiKey(process.env.APIMART_API_KEY);
@@ -6990,10 +7032,10 @@ async function getVidgen2RoomApiKey(xclipApiKey) {
   const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   
   if (availableKeys.length === 0) {
-    if (process.env.POYO_API_KEY) {
+    if (process.env.APIMODELS_API_KEY) {
       return { 
-        apiKey: process.env.POYO_API_KEY, 
-        keyName: 'POYO_API_KEY',
+        apiKey: process.env.APIMODELS_API_KEY, 
+        keyName: 'APIMODELS_API_KEY',
         roomId: vidgen2RoomId,
         userId: keyInfo.user_id,
         keyInfoId: keyInfo.id
@@ -7096,129 +7138,65 @@ app.post('/api/vidgen2/generate', async (req, res) => {
             generationType, aspectRatio, duration, resolution, enableGif,
             watermark, style, storyboard } = req.body;
     
-    if (!prompt && !image && !startFrame && !referenceImage) {
-      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt diperlukan' });
     }
     
     const modelConfig = {
-      'sora-2-stable': { 
-        apiModel: 'sora-2-stable', 
-        supportedDurations: [10, 15],
+      'grok-video-3-10s': { 
+        apiModel: 'grok-video-3-10s', 
+        supportedDurations: [10],
         defaultDuration: 10,
-        supportedResolutions: ['720p'],
-        defaultResolution: '720p',
-        type: 'sora',
-        desc: 'Sora 2 Stable'
+        supportedResolutions: ['720P', '1080P'],
+        defaultResolution: '720P',
+        type: 'grok',
+        desc: 'Grok 3 (10s) Audio+Video'
       },
-      'veo3.1-fast': { 
-        apiModel: 'veo3.1-fast', 
-        supportedDurations: [8],
+      'veo-3.1-fast': { 
+        apiModel: 'veo-3.1-fast', 
+        supportedDurations: [5, 8],
         defaultDuration: 8,
-        supportedResolutions: ['720p', '1080p'],
-        defaultResolution: '720p',
+        supportedResolutions: ['720P', '1080P', '4K'],
+        defaultResolution: '1080P',
         type: 'veo',
-        desc: 'Veo 3.1 Fast max 1080p'
+        desc: 'Veo 3.1 Fast 4K'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2-stable atau veo3.1-fast' });
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan grok-video-3-10s atau veo-3.1-fast' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
     const videoResolution = config.supportedResolutions.includes(resolution) ? resolution : config.defaultResolution;
     const videoAspectRatio = aspectRatio || '16:9';
     
-    console.log(`[VIDGEN2] Generating with Poyo AI model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
-    
-    const inputBody = {
-      prompt: prompt || 'Generate a cinematic video with smooth motion',
-      duration: videoDuration,
-      aspect_ratio: videoAspectRatio
-    };
-    
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const baseUrl = `${protocol}://${host}`;
-
-    if (config.type === 'sora') {
-      if (style && style !== 'none') inputBody.style = style;
-      if (storyboard !== undefined) inputBody.storyboard = storyboard;
-      inputBody.resolution = videoResolution;
-      
-      if (image) {
-        let imageUrl = image;
-        if (image.startsWith('data:')) {
-          const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
-          imageUrl = imageFile.publicUrl;
-          console.log(`[VIDGEN2] Sora image uploaded: ${imageUrl}`);
-        }
-        inputBody.image_urls = [imageUrl];
-      }
-    } else if (config.type === 'veo') {
-      inputBody.resolution = videoResolution;
-      if (enableGif !== undefined) inputBody.enable_gif = enableGif;
-      
-      if (generationType === 'frame') {
-        const frameUrls = [];
-        if (startFrame) {
-          let startUrl = startFrame;
-          if (startFrame.startsWith('data:')) {
-            const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
-            startUrl = sf.publicUrl;
-            console.log(`[VIDGEN2] Start frame uploaded: ${startUrl}`);
-          }
-          frameUrls.push(startUrl);
-        }
-        if (endFrame) {
-          let endUrl = endFrame;
-          if (endFrame.startsWith('data:')) {
-            const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
-            endUrl = ef.publicUrl;
-            console.log(`[VIDGEN2] End frame uploaded: ${endUrl}`);
-          }
-          frameUrls.push(endUrl);
-        }
-        if (frameUrls.length > 0) {
-          inputBody.image_urls = frameUrls;
-          inputBody.generation_type = 'frame';
-        }
-      } else if (generationType === 'reference') {
-        const refImg = referenceImage || image;
-        if (refImg) {
-          let refUrl = refImg;
-          if (refImg.startsWith('data:')) {
-            const rf = await saveBase64ToFile(refImg, 'image', baseUrl);
-            refUrl = rf.publicUrl;
-            console.log(`[VIDGEN2] Reference image uploaded: ${refUrl}`);
-          }
-          inputBody.image_urls = [refUrl];
-          inputBody.generation_type = 'reference';
-        }
-      }
-    }
+    console.log(`[VIDGEN2] Generating with ApiModels model: ${config.apiModel}, duration: ${videoDuration}s, resolution: ${videoResolution}, aspect: ${videoAspectRatio}`);
     
     const requestBody = {
       model: config.apiModel,
-      input: inputBody
+      prompt: prompt || 'Generate a cinematic video with smooth motion',
+      aspect_ratio: videoAspectRatio,
+      size: videoResolution,
+      duration: videoDuration
     };
     
-    console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, input: { ...requestBody.input, image_urls: requestBody.input.image_urls ? ['[IMAGE]'] : undefined } }));
+    console.log(`[VIDGEN2] Request body:`, JSON.stringify(requestBody));
     
     const response = await axios.post(
-      'https://api.poyo.ai/api/generate/submit',
+      'https://apimodels.app/api/v1/video/generations',
       requestBody,
       {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${roomKeyResult.apiKey}`
         },
-        timeout: 600000
+        timeout: 60000
       }
     );
     
-    console.log(`[VIDGEN2] Poyo AI response:`, JSON.stringify(response.data));
+    console.log(`[VIDGEN2] ApiModels response:`, JSON.stringify(response.data));
     
     const taskId = response.data?.data?.task_id || 
                    response.data?.task_id || 
@@ -7226,7 +7204,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     if (!taskId) {
       console.error('[VIDGEN2] No task ID in response:', response.data);
-      return res.status(500).json({ error: 'Tidak mendapat task ID dari Poyo AI' });
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari ApiModels' });
     }
     
     await pool.query(`
@@ -7244,7 +7222,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] Task created: ${taskId}`);
     
-    startServerBgPoll(taskId, 'poyo', roomKeyResult.apiKey, {
+    startServerBgPoll(taskId, 'apimodels', roomKeyResult.apiKey, {
       dbTable: 'vidgen2_tasks',
       urlColumn: 'video_url',
       model: model,
@@ -7313,10 +7291,11 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
         console.log(`[VIDGEN2] Polling status for task: ${taskId}`);
         
         const statusResponse = await axios.get(
-          `https://api.poyo.ai/api/generate/status/${taskId}`,
+          `https://apimodels.app/api/v1/video/generations?task_id=${taskId}`,
           {
             headers: {
-              'Authorization': `Bearer ${roomKeyResult.apiKey}`
+              'Authorization': `Bearer ${roomKeyResult.apiKey}`,
+              'Content-Type': 'application/json'
             },
             timeout: 30000
           }
@@ -7326,17 +7305,14 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
         
         const rawData = statusResponse.data;
         const data = rawData.data || rawData;
-        const status = data.status || data.state;
+        const status = data.status;
         
-        if (status === 'completed' || status === 'finished' || status === 'success') {
+        if (status === 'completed') {
           let videoUrl = null;
-          if (data.files && data.files.length > 0) {
-            const f = data.files[0];
-            videoUrl = typeof f === 'string' ? f : (f.url || f.file_url || f.video_url);
+          if (data.videos && data.videos.length > 0) {
+            videoUrl = data.videos[0];
           } else if (data.video_url) {
             videoUrl = data.video_url;
-          } else if (data.output?.video_url) {
-            videoUrl = data.output.video_url;
           } else if (data.url) {
             videoUrl = data.url;
           }
@@ -7386,7 +7362,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
     
     res.json({
       status: 'pending',
-      message: 'Menunggu status dari Poyo AI...'
+      message: 'Menunggu status dari ApiModels...'
     });
     
   } catch (error) {

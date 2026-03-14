@@ -219,7 +219,7 @@ const state = {
     endFrame: null,
     generationType: 'reference',
     prompt: '',
-    selectedModel: 'sora-2-stable',
+    selectedModel: 'grok-video-3-10s',
     aspectRatio: '16:9',
     duration: 10,
     resolution: '720p',
@@ -6877,25 +6877,15 @@ function attachVideoGenEventListeners() {
 
 
 function renderVidgen2Page() {
-  const isSora2 = state.vidgen2.selectedModel === 'sora-2-stable';
-  const isVeo = state.vidgen2.selectedModel === 'veo3.1-fast';
+  const isGrok = state.vidgen2.selectedModel === 'grok-video-3-10s';
+  const isVeo = state.vidgen2.selectedModel === 'veo-3.1-fast';
   const models = [
-    { id: 'sora-2-stable', name: 'Sora 2 Stable', desc: 'Video 10-15 detik, 720p, style presets', badge: 'STABLE', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
+    { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, Audio+Video, max 1080P', badge: 'AUDIO', icon: '🎵' },
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast 4K', desc: 'Video 5-8 detik, max 4K, ultra detail', badge: '4K', icon: '⚡' }
   ];
   
-  const durationOptions = isSora2 ? [10, 15] : [8];
-  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
-  
-  const styleOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'anime', label: 'Anime' },
-    { value: 'comic', label: 'Comic' },
-    { value: 'news', label: 'News' },
-    { value: 'selfie', label: 'Selfie' },
-    { value: 'nostalgic', label: 'Nostalgic' },
-    { value: 'thanksgiving', label: 'Thanksgiving' }
-  ];
+  const durationOptions = isGrok ? [10] : [5, 8];
+  const resolutionOptions = isGrok ? ['720P', '1080P'] : ['720P', '1080P', '4K'];
   
   return `
     <div class="container">
@@ -6914,150 +6904,6 @@ function renderVidgen2Page() {
 
       <div class="xmaker-layout">
         <div class="xmaker-settings">
-          ${isSora2 ? `
-          <div class="card glass-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-              </div>
-              <h2 class="card-title">Reference Image</h2>
-            </div>
-            <div class="card-body">
-              <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
-                ${state.vidgen2.sourceImage ? `
-                  <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
-                  <button class="remove-reference" id="removeVidgen2Image">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                ` : `
-                  <div class="reference-placeholder">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
-                    </svg>
-                    <span>Klik untuk upload gambar (opsional)</span>
-                    <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
-                  </div>
-                `}
-              </div>
-                <input type="file" id="vidgen2ImageInput" accept="image/*" style="display:none">
-            </div>
-          </div>
-          ` : `
-          <div class="card glass-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-              </div>
-              <h2 class="card-title">Image to Video</h2>
-            </div>
-            <div class="card-body">
-              <div class="setting-group">
-                <label class="setting-label">Generation Type</label>
-                <div class="aspect-ratio-selector">
-                  <button class="aspect-btn ${state.vidgen2.generationType === 'frame' ? 'active' : ''}" data-vidgen2-gentype="frame">
-                    <span>🎞️ Start/End Frame</span>
-                  </button>
-                  <button class="aspect-btn ${state.vidgen2.generationType === 'reference' ? 'active' : ''}" data-vidgen2-gentype="reference">
-                    <span>🖼️ Reference</span>
-                  </button>
-                </div>
-                <p class="setting-hint">${state.vidgen2.generationType === 'frame' ? 'Upload start frame dan end frame untuk mengontrol awal & akhir video' : 'Upload gambar referensi untuk gaya video'}</p>
-              </div>
-
-              ${state.vidgen2.generationType === 'frame' ? `
-              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                <div style="flex:1;min-width:0;">
-                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">Start Frame</label>
-                  <div class="reference-upload ${state.vidgen2.startFrame ? 'has-image' : ''}" id="vidgen2StartFrameZone" style="min-height:100px;">
-                    ${state.vidgen2.startFrame ? `
-                      <img src="${state.vidgen2.startFrame.data}" alt="Start" class="reference-preview">
-                      <button class="remove-reference" id="removeVidgen2StartFrame">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <line x1="18" y1="6" x2="6" y2="18"/>
-                          <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </button>
-                    ` : `
-                      <div class="reference-placeholder" style="padding:12px;">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                          <rect x="3" y="3" width="18" height="18" rx="2"/>
-                          <polyline points="8 12 12 8 16 12"/>
-                          <line x1="12" y1="16" x2="12" y2="8"/>
-                        </svg>
-                        <span style="font-size:11px;">Start Frame</span>
-                      </div>
-                    `}
-                  </div>
-                  <input type="file" id="vidgen2StartFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
-                </div>
-                <div style="flex:1;min-width:0;">
-                  <label class="setting-label" style="font-size:12px;margin-bottom:6px;">End Frame</label>
-                  <div class="reference-upload ${state.vidgen2.endFrame ? 'has-image' : ''}" id="vidgen2EndFrameZone" style="min-height:100px;">
-                    ${state.vidgen2.endFrame ? `
-                      <img src="${state.vidgen2.endFrame.data}" alt="End" class="reference-preview">
-                      <button class="remove-reference" id="removeVidgen2EndFrame">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <line x1="18" y1="6" x2="6" y2="18"/>
-                          <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </button>
-                    ` : `
-                      <div class="reference-placeholder" style="padding:12px;">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                          <rect x="3" y="3" width="18" height="18" rx="2"/>
-                          <polyline points="8 12 12 16 16 12"/>
-                          <line x1="12" y1="8" x2="12" y2="16"/>
-                        </svg>
-                        <span style="font-size:11px;">End Frame</span>
-                      </div>
-                    `}
-                  </div>
-                  <input type="file" id="vidgen2EndFrameInput" accept="image/jpeg,image/png,image/webp" style="display:none">
-                </div>
-              </div>
-              ` : `
-              <div style="margin-top:8px;">
-                <div class="reference-upload ${state.vidgen2.sourceImage ? 'has-image' : ''}" id="vidgen2UploadZone">
-                  ${state.vidgen2.sourceImage ? `
-                    <img src="${state.vidgen2.sourceImage.data}" alt="Source" class="reference-preview">
-                    <button class="remove-reference" id="removeVidgen2Image">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
-                  ` : `
-                    <div class="reference-placeholder">
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
-                      </svg>
-                      <span>Klik untuk upload referensi (opsional)</span>
-                      <span class="upload-hint">JPG, PNG, WebP (max 50MB)</span>
-                    </div>
-                  `}
-                </div>
-                  <input type="file" id="vidgen2ImageInput" accept="image/*" style="display:none">
-              </div>
-              `}
-            </div>
-          </div>
-          `}
-
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
@@ -7130,56 +6976,15 @@ function renderVidgen2Page() {
               </div>
               ` : ''}
 
-              ${isSora2 ? `
+              ${isGrok ? `
               <div class="setting-group">
-                <label class="setting-label">Video Style</label>
-                <select class="form-select" id="vidgen2StyleSelect">
-                  ${styleOptions.map(s => `
-                    <option value="${s.value}" ${state.vidgen2.style === s.value ? 'selected' : ''}>${s.label}</option>
-                  `).join('')}
-                </select>
-              </div>
-
-              <div class="setting-group">
-                <label class="setting-label">Sora 2 Options</label>
-                <div style="display:flex;flex-direction:column;gap:10px;">
-                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
-                    <span style="font-size:13px;opacity:0.85;">Watermark</span>
-                    <div class="toggle-switch-wrapper">
-                      <input type="checkbox" id="vidgen2Watermark" ${state.vidgen2.watermark ? 'checked' : ''} style="display:none;">
-                      <div class="toggle-track ${state.vidgen2.watermark ? 'active' : ''}" data-vidgen2-toggle="watermark" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.watermark ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
-                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.watermark ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
-                      </div>
-                    </div>
-                  </label>
-                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
-                    <span style="font-size:13px;opacity:0.85;">Storyboard</span>
-                    <div class="toggle-switch-wrapper">
-                      <input type="checkbox" id="vidgen2Storyboard" ${state.vidgen2.storyboard ? 'checked' : ''} style="display:none;">
-                      <div class="toggle-track ${state.vidgen2.storyboard ? 'active' : ''}" data-vidgen2-toggle="storyboard" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.storyboard ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
-                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.storyboard ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
-                      </div>
-                    </div>
-                  </label>
-                </div>
+                <p class="setting-hint" style="color:#22c55e;">🎵 Grok 3 menghasilkan video dengan audio. Text-to-Video only.</p>
               </div>
               ` : ''}
 
               ${isVeo ? `
               <div class="setting-group">
-                <label class="setting-label">Veo 3.1 Options</label>
-                <div style="display:flex;flex-direction:column;gap:10px;">
-                  <label class="toggle-switch-label" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;cursor:pointer;">
-                    <span style="font-size:13px;opacity:0.85;">Enable GIF</span>
-                    <div class="toggle-switch-wrapper">
-                      <input type="checkbox" id="vidgen2EnableGif" ${state.vidgen2.enableGif ? 'checked' : ''} style="display:none;">
-                      <div class="toggle-track ${state.vidgen2.enableGif ? 'active' : ''}" data-vidgen2-toggle="enableGif" style="width:40px;height:22px;border-radius:11px;background:${state.vidgen2.enableGif ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.15)'};position:relative;cursor:pointer;transition:background 0.3s;">
-                        <div style="width:18px;height:18px;border-radius:50%;background:white;position:absolute;top:2px;${state.vidgen2.enableGif ? 'right:2px' : 'left:2px'};transition:all 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
-                      </div>
-                    </div>
-                  </label>
-                </div>
-                ${state.vidgen2.enableGif ? `<p class="setting-hint" style="color:#f59e0b;margin-top:4px;">⚠️ GIF tidak bisa digunakan dengan resolusi 1080p/4K</p>` : ''}
+                <p class="setting-hint" style="color:#3b82f6;">⚡ Veo 3.1 Fast mendukung resolusi hingga 4K dengan kualitas ultra detail.</p>
               </div>
               ` : ''}
 
@@ -7237,8 +7042,7 @@ function renderVidgen2Page() {
                 const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen2.cooldownEndTime - now) / 1000) : 0;
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
-                const hasImage = state.vidgen2.sourceImage || state.vidgen2.startFrame || state.vidgen2.endFrame;
-                const needsPrompt = !state.vidgen2.prompt.trim() && !hasImage;
+                const needsPrompt = !state.vidgen2.prompt.trim();
                 const isDisabled = state.vidgen2.isGenerating || needsPrompt || state.vidgen2.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen2Btn" ${isDisabled ? 'disabled' : ''}>
@@ -7258,7 +7062,7 @@ function renderVidgen2Page() {
                 `}
               </button>`;
               })()}
-              ${!state.vidgen2.prompt.trim() && !state.vidgen2.sourceImage ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt atau upload gambar</p>' : ''}
+              ${!state.vidgen2.prompt.trim() ? '<p class="setting-hint" style="text-align:center;margin-top:12px;opacity:0.7;">Masukkan prompt untuk generate video</p>' : ''}
               ${state.vidgen2.tasks.length >= 3 ? '<p class="setting-hint warning" style="text-align:center;margin-top:12px;">Maks 3 video bersamaan. Tunggu salah satu selesai.</p>' : ''}
             </div>
           </div>
@@ -7498,11 +7302,11 @@ function attachVidgen2EventListeners() {
       if (modelCard && state.currentPage === 'vidgen2') {
         const newModel = modelCard.dataset.vidgen2Model;
         state.vidgen2.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2-stable' ? [10, 15] : [8];
+        const validDurations = newModel === 'grok-video-3-10s' ? [10] : [5, 8];
         if (!validDurations.includes(state.vidgen2.duration)) {
           state.vidgen2.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p', '4k'] : ['720p'];
+        const validResolutions = newModel === 'veo-3.1-fast' ? ['720P', '1080P', '4K'] : ['720P', '1080P'];
         if (!validResolutions.includes(state.vidgen2.resolution)) {
           state.vidgen2.resolution = validResolutions[0];
         }
@@ -7649,11 +7453,6 @@ async function generateVidgen2Video() {
       body: JSON.stringify({
         model: state.vidgen2.selectedModel,
         prompt: state.vidgen2.prompt,
-        image: state.vidgen2.selectedModel === 'sora-2-stable' && state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
-        startFrame: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'frame' && state.vidgen2.startFrame ? state.vidgen2.startFrame.data : null,
-        endFrame: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'frame' && state.vidgen2.endFrame ? state.vidgen2.endFrame.data : null,
-        referenceImage: state.vidgen2.selectedModel === 'veo3.1-fast' && state.vidgen2.generationType === 'reference' && state.vidgen2.sourceImage ? state.vidgen2.sourceImage.data : null,
-        generationType: state.vidgen2.selectedModel === 'veo3.1-fast' ? state.vidgen2.generationType : undefined,
         aspectRatio: state.vidgen2.aspectRatio,
         duration: state.vidgen2.duration,
         resolution: state.vidgen2.resolution,
