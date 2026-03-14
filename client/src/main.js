@@ -6878,10 +6878,11 @@ function attachVideoGenEventListeners() {
 
 function renderVidgen2Page() {
   const isGrok = state.vidgen2.selectedModel === 'grok-video-3-10s';
-  const isVeo = state.vidgen2.selectedModel === 'veo-3.1-fast';
+  const isVeo = state.vidgen2.selectedModel === 'veo-3.1-fast' || state.vidgen2.selectedModel === 'veo-3.1';
   const models = [
     { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, 720P, Audio+Video', badge: 'AUDIO', icon: '🎵' },
-    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast 4K', desc: 'Video 5-8 detik, 4K ultra detail', badge: '4K', icon: '⚡' }
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, Audio', badge: '4K FAST', icon: '⚡' },
+    { id: 'veo-3.1', name: 'Veo 3.1', desc: 'Video 8 detik, 4K, First/Last Frame', badge: '4K', icon: '🎬' }
   ];
   
   const durationOptions = isGrok ? [10] : [5, 8];
@@ -7344,7 +7345,7 @@ function attachVidgen2EventListeners() {
         if (!validDurations.includes(state.vidgen2.duration)) {
           state.vidgen2.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo-3.1-fast' ? ['4K'] : ['720P'];
+        const validResolutions = (newModel === 'veo-3.1-fast' || newModel === 'veo-3.1') ? ['4K'] : ['720P'];
         if (!validResolutions.includes(state.vidgen2.resolution)) {
           state.vidgen2.resolution = validResolutions[0];
         }

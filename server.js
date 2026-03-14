@@ -7161,12 +7161,21 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         defaultResolution: '4K',
         type: 'veo',
         desc: 'Veo 3.1 Fast 4K'
+      },
+      'veo-3.1': { 
+        apiModel: 'veo-3.1', 
+        supportedDurations: [5, 8],
+        defaultDuration: 8,
+        supportedResolutions: ['4K'],
+        defaultResolution: '4K',
+        type: 'veo',
+        desc: 'Veo 3.1 4K'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan grok-video-3-10s atau veo-3.1-fast' });
+      return res.status(400).json({ error: 'Model tidak valid. Gunakan grok-video-3-10s, veo-3.1-fast, atau veo-3.1' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
