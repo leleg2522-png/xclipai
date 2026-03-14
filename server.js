@@ -7345,7 +7345,7 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
     
     let pollApiKey = task.api_key_used;
     if (!pollApiKey) {
-      const bgTask = serverBgPollingTasks.get(taskId);
+      const bgTask = serverBgPolls.get(taskId);
       if (bgTask) {
         pollApiKey = bgTask.apiKey;
       }
@@ -7472,8 +7472,8 @@ app.post('/api/vidgen2/callback', async (req, res) => {
         }
       }
       
-      if (serverBgPollingTasks.has(taskId)) {
-        serverBgPollingTasks.delete(taskId);
+      if (serverBgPolls.has(taskId)) {
+        serverBgPolls.delete(taskId);
         console.log(`[VIDGEN2-CALLBACK] Removed task ${taskId} from bg polling`);
       }
       
@@ -7497,8 +7497,8 @@ app.post('/api/vidgen2/callback', async (req, res) => {
         console.error(`[VIDGEN2-CALLBACK] DB update error:`, dbErr.message);
       }
       
-      if (serverBgPollingTasks.has(taskId)) {
-        serverBgPollingTasks.delete(taskId);
+      if (serverBgPolls.has(taskId)) {
+        serverBgPolls.delete(taskId);
       }
       
       broadcastToAll({
