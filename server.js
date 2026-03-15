@@ -956,27 +956,31 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   const hasProxy = isProxyConfigured();
 
-  if (!useProxy || !hasProxy) {
-    const directConfig = buildConfig();
-    console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → direct (no proxy)`);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const resp = await axios(directConfig);
-        if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
-        return resp;
-      } catch (err) {
-        if (isRateLimited(err) && attempt < 2) {
-          const delay = (attempt + 1) * 3000;
-          console.log(`[FREEPIK] Rate limited (429), waiting ${delay/1000}s before retry #${attempt + 1}...`);
-          await sleep(delay);
-          continue;
-        }
-        throw err;
-      }
+  // Always try direct first to save proxy bandwidth
+  const directConfig = buildConfig();
+  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → trying direct first...`);
+  try {
+    const resp = await axios(directConfig);
+    if (isFreepikBlocked(resp)) {
+      console.log(`[FREEPIK] Direct blocked by Freepik, falling back to proxy...`);
+    } else {
+      console.log(`[FREEPIK] Direct success! No proxy needed.`);
+      return resp;
     }
+  } catch (err) {
+    if (isRateLimited(err)) {
+      console.log(`[FREEPIK] Direct 429 — throw to try next key`);
+      throw err;
+    }
+    console.log(`[FREEPIK] Direct failed: ${err.message}, falling back to proxy...`);
   }
 
-  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
+  if (!useProxy || !hasProxy) {
+    console.log(`[FREEPIK] No proxy available, giving up.`);
+    throw new Error('Direct request failed and no proxy configured');
+  }
+
+  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → using proxy`);
 
   let proxyAttempt = 0;
   while (true) {
