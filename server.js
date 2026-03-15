@@ -1014,7 +1014,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
     await waitForProxySlot(usedProxy);
 
-    console.log(`[PROXY] Attempt ${proxyAttempt + 1}/${maxProxyAttempts} via ${usedProxy.provider}: ${usedProxy.proxy_address}:${usedProxy.port}`);
+    proxyAttempt++;
+    console.log(`[PROXY] Attempt ${proxyAttempt} via Decodo: ${usedProxy.proxy_address}:${usedProxy.port}`);
     try {
       const resp = await axios(proxyConfig);
       if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
@@ -1042,7 +1043,6 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
 
       if (blocked || socketErr) {
-        proxyAttempt++;
         console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (attempt ${proxyAttempt})`);
         if (taskId) releaseProxyForTask(taskId);
         await sleep(1500);
