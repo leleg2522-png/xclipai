@@ -978,9 +978,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
 
-  const maxProxyAttempts = 20;
-  let iproyalRateLimited = false;
-  for (let proxyAttempt = 0; proxyAttempt < maxProxyAttempts; proxyAttempt++) {
+  let proxyAttempt = 0;
+  while (true) {
     let usedProxy = null;
     const proxyConfig = buildConfig();
     
@@ -1043,7 +1042,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
 
       if (blocked || socketErr) {
-        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (${proxyAttempt + 1}/${maxProxyAttempts})`);
+        proxyAttempt++;
+        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (attempt ${proxyAttempt})`);
         if (taskId) releaseProxyForTask(taskId);
         await sleep(1500);
         continue;
@@ -1052,30 +1052,6 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
     }
   }
 
-  console.log(`[FREEPIK] All proxies failed (IP issues), trying direct connection...`);
-  const directConfig = buildConfig();
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const resp = await axios(directConfig);
-      if (isFreepikBlocked(resp)) throw { response: resp, isProxyBlocked: true };
-      console.log(`[FREEPIK] Direct connection success`);
-      return resp;
-    } catch (err) {
-      if (isRateLimited(err)) {
-        // 429 = key quota habis, langsung throw supaya key berikutnya dicoba
-        console.log(`[FREEPIK] Direct connection 429 — throw to try next key`);
-        throw err;
-      }
-      if (isSocketError(err) && attempt < 1) {
-        console.log(`[FREEPIK] Socket error on direct, retry...`);
-        await sleep(2000);
-        continue;
-      }
-      console.log(`[FREEPIK] Direct connection failed: ${err.message}`);
-      throw err;
-    }
-  }
 }
 
 // ============ DROPLET PROXY SUPPORT ============
