@@ -992,18 +992,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
     }
     if (!usedProxy) {
-      let proxy;
-      if (iproyalRateLimited) {
-        proxy = preferredProvider === 'iproyal-or-rotating' ? getNextProxyIProyalOrRotating() : getNextProxyPreferWebshare();
-      } else if (preferredProvider === 'iproyal-or-rotating') {
-        proxy = getNextProxyIProyalOrRotating();
-      } else if (preferredProvider === 'iproyal') {
-        proxy = getNextProxyPreferIProyal();
-      } else if (preferredProvider === 'webshare' || preferredProvider === 'webshare-rotating') {
-        proxy = getNextProxyPreferWebshare();
-      } else {
-        proxy = getNextProxy();
-      }
+      const proxy = getNextProxy();
       if (proxy) {
         usedProxy = proxy;
         applyProxyToConfig(proxyConfig, proxy);
