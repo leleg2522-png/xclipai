@@ -3047,21 +3047,10 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
   const basePath = vidgen3Endpoints[model] || videogenEndpoints[model] || `/v1/ai/image-to-video/${model}`;
   const endpoint = `${basePath}/${taskId}`;
   
-  try {
-    const pollResponse = await makeFreepikRequest(
-      'GET',
-      `https://api.freepik.com${endpoint}`,
-      apiKey,
-      null,
-      true,
-      taskId,
-      'iproyal-or-rotating'
-    );
-    
-    if (pollResponse.data && typeof pollResponse.data === 'object') {
-      const taskData = pollResponse.data.data || pollResponse.data;
+  function parseResponse(data) {
+    if (data && typeof data === 'object') {
+      const taskData = data.data || data;
       const status = (taskData.status || '').toUpperCase();
-      
       if (status === 'COMPLETED') {
         const videoUrl = taskData.video?.url || taskData.result?.url || taskData.url;
         if (videoUrl) return { status: 'completed', url: videoUrl };
@@ -3070,8 +3059,31 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
         return { status: 'failed', error: taskData.error || 'Generation failed' };
       }
     }
-  } catch (e) {
-    // retry next cycle
+    return null;
+  }
+
+  try {
+    const directResponse = await axios.get(
+      `https://api.freepik.com${endpoint}`,
+      { headers: freepikHeaders(apiKey), timeout: 15000 }
+    );
+    const result = parseResponse(directResponse.data);
+    if (result) return result;
+    return { status: 'processing' };
+  } catch (directErr) {
+    try {
+      const proxyResponse = await makeFreepikRequest(
+        'GET',
+        `https://api.freepik.com${endpoint}`,
+        apiKey,
+        null,
+        true,
+        taskId,
+        'iproyal-or-rotating'
+      );
+      const result = parseResponse(proxyResponse.data);
+      if (result) return result;
+    } catch (e) {}
   }
   return { status: 'processing' };
 }
@@ -3224,7 +3236,7 @@ setInterval(async () => {
       }
     }
   }
-}, 15000);
+}, 30000);
 
 async function resumePendingTaskPolling() {
   try {
@@ -3985,15 +3997,23 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
 
     const pollStart = Date.now();
-    const response = await makeFreepikRequest(
-      'GET',
-      `https://api.freepik.com${endpoint}${taskId}`,
-      freepikApiKey,
-      null,
-      true,
-      null,
-      'iproyal-or-rotating'
-    );
+    let response;
+    try {
+      response = await axios.get(
+        `https://api.freepik.com${endpoint}${taskId}`,
+        { headers: freepikHeaders(freepikApiKey), timeout: 15000 }
+      );
+    } catch (directErr) {
+      response = await makeFreepikRequest(
+        'GET',
+        `https://api.freepik.com${endpoint}${taskId}`,
+        freepikApiKey,
+        null,
+        true,
+        null,
+        'iproyal-or-rotating'
+      );
+    }
     const pollLatency = Date.now() - pollStart;
     
     if (typeof response.data === 'string') {
