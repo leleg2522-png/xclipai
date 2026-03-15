@@ -911,9 +911,9 @@ function markProxyBlocked(proxy) {
   if (!proxy) return;
   if (proxy.provider === 'vps') {
     vpsFailCount++;
-    if (vpsFailCount >= 3) {
-      vpsBlockedUntil = Date.now() + 60000;
-      console.log(`[PROXY] VPS blocked ${vpsFailCount}x, cooldown 1min`);
+    if (vpsFailCount >= 10) {
+      vpsBlockedUntil = Date.now() + 30000;
+      console.log(`[PROXY] VPS blocked ${vpsFailCount}x, cooldown 30s`);
       vpsFailCount = 0;
     }
     return;
@@ -1240,7 +1240,7 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy first, direct fallback`);
 
-  const maxProxyAttempts = Math.min(6, Math.max(4, VPS_PROXIES.length));
+  const maxProxyAttempts = Math.min(8, Math.max(5, VPS_PROXIES.length * 3));
   let iproyalRateLimited = false;
   for (let proxyAttempt = 0; proxyAttempt < maxProxyAttempts; proxyAttempt++) {
     let usedProxy = null;
@@ -1305,9 +1305,12 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
 
       if (blocked || socketErr) {
-        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on ${getProviderLabel(usedProxy)}:${usedProxy.proxy_address}. Trying next proxy...`);
-        markProxyBlocked(usedProxy);
+        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on ${getProviderLabel(usedProxy)}:${usedProxy.proxy_address}. Retry ${proxyAttempt + 1}/${maxProxyAttempts}...`);
+        if (usedProxy.provider !== 'vps') markProxyBlocked(usedProxy);
         if (taskId) releaseProxyForTask(taskId);
+        if (socketErr && usedProxy.provider === 'vps') {
+          await sleep(2000);
+        }
         continue;
       }
       throw proxyErr;
