@@ -3522,6 +3522,13 @@ app.post('/api/videogen/proxy', async (req, res) => {
       return res.status(400).json({ error: 'Image diperlukan' });
     }
     
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const imgBaseUrl = `${protocol}://${host}`;
+    const imageFile = await saveBase64ToFile(image, 'image', imgBaseUrl);
+    const imageUrl = imageFile.publicUrl;
+    console.log(`[VIDEOGEN] Image saved to public URL: ${imageUrl} (saved ${(Buffer.byteLength(image) / 1024 / 1024).toFixed(1)}MB proxy bandwidth)`);
+    
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
       [keyInfo.id]
@@ -3599,9 +3606,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let requestBody = {};
     
     if (config.api === 'kling26') {
-      // Kling 2.6 Pro with native audio support
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         aspect_ratio: mappedAspectRatio,
@@ -3611,7 +3617,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       };
     } else if (config.api === 'kling-ai') {
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         aspect_ratio: mappedAspectRatio,
@@ -3619,14 +3625,14 @@ app.post('/api/videogen/proxy', async (req, res) => {
       };
     } else if (config.api === 'minimax') {
       requestBody = {
-        first_frame_image: image,
+        first_frame_image: imageUrl,
         prompt: prompt || '',
         prompt_optimizer: true,
         duration: 6
       };
     } else if (config.api === 'seedance') {
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         resolution: model.includes('1080p') ? '1080p' : '720p',
@@ -3635,7 +3641,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       };
     } else if (config.api === 'pixverse') {
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         quality: 'high',
@@ -3646,17 +3652,14 @@ app.post('/api/videogen/proxy', async (req, res) => {
         reference_strength: 0.8
       };
     } else if (config.api === 'wan26') {
-      // Wan 2.6 uses 'size' parameter with format like '1920*1080'
       let wanSize;
       if (model.includes('1080p')) {
-        // 1080p sizes
         wanSize = mappedAspectRatio === 'social_story_9_16' ? '1080*1920' : '1920*1080';
       } else {
-        // 720p sizes
         wanSize = mappedAspectRatio === 'social_story_9_16' ? '720*1280' : '1280*720';
       }
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         size: wanSize,
@@ -3664,12 +3667,11 @@ app.post('/api/videogen/proxy', async (req, res) => {
         enable_prompt_expansion: false,
         shot_type: 'single',
         seed: -1,
-        generate_audio: true  // Enable native audio generation
+        generate_audio: true
       };
     } else if (config.api === 'wan22') {
-      // Wan 2.2 uses 'aspect_ratio' parameter
       requestBody = {
-        image: image,
+        image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
         aspect_ratio: mappedAspectRatio || 'auto',
@@ -8046,7 +8048,17 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(400).json({ error: 'Prompt atau image diperlukan' });
     }
     
-    const requestBody = config.buildBody({ prompt, image, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode });
+    let imageUrlForApi = image;
+    if (image && image.includes('base64')) {
+      const v3protocol = req.headers['x-forwarded-proto'] || 'https';
+      const v3host = req.headers['x-forwarded-host'] || req.headers.host;
+      const v3baseUrl = `${v3protocol}://${v3host}`;
+      const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
+      imageUrlForApi = imgFile.publicUrl;
+      console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi} (saved ${(Buffer.byteLength(image) / 1024 / 1024).toFixed(1)}MB proxy bandwidth)`);
+    }
+    
+    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode });
     
     const webhookUrl = getWebhookUrl();
     if (webhookUrl) {
