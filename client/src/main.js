@@ -11220,7 +11220,7 @@ async function generateVideo() {
     };
     
     const genAbortController = new AbortController();
-    const genTimeout = setTimeout(() => genAbortController.abort(), 45000);
+    const genTimeout = setTimeout(() => genAbortController.abort(), 120000);
     
     let response;
     try {
