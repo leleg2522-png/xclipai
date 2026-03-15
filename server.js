@@ -673,7 +673,6 @@ function getNextVpsProxy() {
 
 function isVpsAvailable() {
   if (VPS_PROXIES.length === 0) return false;
-  if (Date.now() < vpsBlockedUntil) return false;
   return true;
 }
 
