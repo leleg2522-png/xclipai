@@ -3334,9 +3334,14 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
   const endpoint = `${basePath}/${taskId}`;
   
   try {
-    const pollResponse = await axios.get(
+    const pollResponse = await makeFreepikRequest(
+      'GET',
       `https://api.freepik.com${endpoint}`,
-      { headers: freepikHeaders(apiKey), timeout: 30000 }
+      apiKey,
+      null,
+      true,
+      taskId,
+      'iproyal-or-rotating'
     );
     
     if (pollResponse.data && typeof pollResponse.data === 'object') {
