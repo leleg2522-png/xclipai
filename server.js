@@ -3312,6 +3312,7 @@ function getFreepikKeysForRoom(roomId, keyInfo = null) {
 }
 
 const userKeyMap = new Map();
+const globalKeyCounter = new Map();
 
 function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
   const keys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
@@ -3327,19 +3328,12 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
   if (forceKeyIndex !== null && forceKeyIndex >= 0 && forceKeyIndex < keys.length) {
     keyIndex = forceKeyIndex;
     console.log(`Using saved key index: ${keyIndex + 1} of ${keys.length}`);
-  } else if (userId) {
-    const mapKey = `${userId}_room${keyInfo.room_id || 0}`;
-    if (userKeyMap.has(mapKey)) {
-      keyIndex = userKeyMap.get(mapKey);
-    } else {
-      const numericId = typeof userId === 'number' ? userId : parseInt(String(userId).replace(/\D/g, '').slice(-6)) || 0;
-      keyIndex = numericId % keys.length;
-      userKeyMap.set(mapKey, keyIndex);
-    }
-    console.log(`API key rotation: user ${userId} → key ${keyIndex + 1} of ${keys.length} (per-user)`);
   } else {
-    keyIndex = Math.floor(Math.random() * keys.length);
-    console.log(`API key rotation: random key ${keyIndex + 1} of ${keys.length}`);
+    const counterKey = `room${keyInfo.room_id || 0}`;
+    const current = globalKeyCounter.get(counterKey) || 0;
+    keyIndex = current % keys.length;
+    globalKeyCounter.set(counterKey, current + 1);
+    console.log(`API key rotation: task → key ${keyIndex + 1} of ${keys.length} (round-robin, user ${userId || 'unknown'})`);
   }
   
   return { key: keys[keyIndex], keyIndex };
@@ -3701,9 +3695,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     const usedKeyName = availableKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
-    if (keyInfo.user_id && keyInfo.room_id) {
-      userKeyMap.set(`${keyInfo.user_id}_room${keyInfo.room_id}`, finalKeyIndex);
-    }
     
     if (taskId) {
       await pool.query(
@@ -4115,19 +4106,14 @@ app.post('/api/motion/generate', async (req, res) => {
     let lastError = null;
     usedKeyName = null;
     
-    const motionUserId = keyInfo?.user_id || null;
     availableMotionKeys.sort((a, b) => {
-      if (motionUserId) {
-        const userPrefKey = `motion_${motionUserId}`;
-        const lastKeyA = userKeyMap.get(userPrefKey) === a.name;
-        const lastKeyB = userKeyMap.get(userPrefKey) === b.name;
-        if (lastKeyA && !lastKeyB) return -1;
-        if (!lastKeyA && lastKeyB) return 1;
-      }
+      const activeA = getMotionKeyActiveCount(a.name);
+      const activeB = getMotionKeyActiveCount(b.name);
+      if (activeA !== activeB) return activeA - activeB;
       const rateA = getMotionKeySuccessRate(a.name);
       const rateB = getMotionKeySuccessRate(b.name);
       if (Math.abs(rateA - rateB) > 0.1) return rateB - rateA;
-      return getMotionKeyActiveCount(a.name) - getMotionKeyActiveCount(b.name);
+      return 0;
     });
 
     for (let attempt = 0; attempt < availableMotionKeys.length; attempt++) {
@@ -4149,8 +4135,7 @@ app.post('/api/motion/generate', async (req, res) => {
         successResponse = response;
         usedKeyName = currentKey.name;
         freepikApiKey = currentKey.key;
-        if (motionUserId) userKeyMap.set(`motion_${motionUserId}`, currentKey.name);
-        console.log(`[MOTION] Key ${currentKey.name} worked! (assigned to user ${motionUserId})`);
+        console.log(`[MOTION] Key ${currentKey.name} worked!`);
         break;
         
       } catch (error) {
