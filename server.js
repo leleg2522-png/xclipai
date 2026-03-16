@@ -4735,10 +4735,15 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     let freshUrl = null;
     for (const ep of pollEndpoints) {
       try {
-        const pollResp = await axios.get(`https://api.freepik.com${ep}`, {
-          headers: freepikHeaders(apiKey),
-          timeout: 15000
-        });
+        const pollResp = await makeFreepikRequest(
+          'GET',
+          `https://api.freepik.com${ep}`,
+          apiKey,
+          null,
+          true,
+          taskId,
+          'decodo'
+        );
         const d = pollResp.data?.data || pollResp.data;
         freshUrl = (d.generated && d.generated.length > 0 ? d.generated[0] : null)
           || d.video?.url || d.result?.url || d.url;
