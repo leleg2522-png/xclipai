@@ -956,38 +956,19 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   const hasProxy = isProxyConfigured();
 
-  if (!makeFreepikRequest._directBlocked) {
+  if (!useProxy || !hasProxy) {
     const directConfig = buildConfig();
-    console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → trying direct first...`);
     try {
       const resp = await axios(directConfig);
-      if (isFreepikBlocked(resp)) {
-        console.log(`[FREEPIK] Direct blocked (403). Skipping direct for next 10 min.`);
-        makeFreepikRequest._directBlocked = Date.now();
-      } else {
-        console.log(`[FREEPIK] Direct success! No proxy needed.`);
-        return resp;
-      }
+      if (isFreepikBlocked(resp)) throw new Error('Freepik blocked direct request');
+      return resp;
     } catch (err) {
       if (isRateLimited(err)) throw err;
-      if (err.response?.status === 403) {
-        console.log(`[FREEPIK] Direct 403 blocked. Skipping direct for next 10 min.`);
-        makeFreepikRequest._directBlocked = Date.now();
-      } else {
-        console.log(`[FREEPIK] Direct failed: ${err.message}, falling back to proxy...`);
-      }
-    }
-  } else {
-    if (Date.now() - makeFreepikRequest._directBlocked > 10 * 60 * 1000) {
-      makeFreepikRequest._directBlocked = null;
+      throw err;
     }
   }
 
-  if (!useProxy || !hasProxy) {
-    throw new Error('Direct request failed and no proxy configured');
-  }
-
-  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → using proxy`);
+  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy`);
 
   let proxyAttempt = 0;
   while (true) {
