@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ruxwRpZw6Udk7yyY6cdLJ"
+uri = "file://proxy_logic_for_bot.md"
+type = "text"
+title = "Instruksi Proxy Hemat Bandwidth untuk Bot"
