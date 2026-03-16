@@ -763,7 +763,7 @@ setInterval(() => {
 
 async function getOrAssignProxyForPendingTask() {
   if (!isProxyConfigured()) return { proxy: null, pendingId: null };
-  const proxy = getNextProxyIProyalOrRotating();
+  const proxy = getNextProxy();
   if (!proxy) return { proxy: null, pendingId: null };
   const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   taskProxyMap.set(pendingId, { proxy, assignedAt: Date.now() });
