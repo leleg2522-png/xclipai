@@ -2931,11 +2931,15 @@ async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   const primaryEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
 
   try {
-    const pollConfig = {
-      headers: freepikHeaders(apiKey),
-      timeout: 25000
-    };
-    const pollResponse = await axios.get(`https://api.freepik.com${primaryEndpoint}`, pollConfig);
+    const pollResponse = await makeFreepikRequest(
+      'GET',
+      `https://api.freepik.com${primaryEndpoint}`,
+      apiKey,
+      null,
+      true,
+      taskId,
+      'iproyal-or-rotating'
+    );
     
     if (pollResponse.data && typeof pollResponse.data === 'object') {
       const taskData = pollResponse.data.data || pollResponse.data;
@@ -4484,45 +4488,32 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     let successEndpoint = null;
     
     for (const endpoint of pollEndpoints) {
-      for (let pRetry = 0; pRetry < 2; pRetry++) {
-        try {
-          console.log(`[MOTION] Trying poll endpoint: ${endpoint}${pRetry > 0 ? ' (direct retry)' : ''}`);
-          const statusPollConfig = {
-            headers: freepikHeaders(freepikApiKey),
-            timeout: 20000
-          };
-          if (pRetry === 0) {
-            const rotProxy = getWebshareRotatingProxy();
-            if (rotProxy) {
-              const pUrl = `http://${rotProxy.username}:${rotProxy.password}@${rotProxy.proxy_address}:${rotProxy.port}`;
-              statusPollConfig.httpsAgent = new HttpsProxyAgent(pUrl, { rejectUnauthorized: false, timeout: 20000 });
-              statusPollConfig.proxy = false;
-            }
-          }
-          const pollResponse = await axios.get(`https://api.freepik.com${endpoint}`, statusPollConfig);
+      try {
+        console.log(`[MOTION] Polling via proxy: ${endpoint}`);
+        const pollResponse = await makeFreepikRequest(
+          'GET',
+          `https://api.freepik.com${endpoint}`,
+          freepikApiKey,
+          null,
+          true,
+          taskId,
+          'iproyal-or-rotating'
+        );
+        
+        if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
+          response = pollResponse;
+          successEndpoint = endpoint;
+          console.log(`[MOTION] Poll success with: ${endpoint}`);
           
-          if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
-            response = pollResponse;
-            successEndpoint = endpoint;
-            console.log(`[MOTION] Poll success with: ${endpoint}`);
-            
-            const status = pollResponse.data?.data?.status || pollResponse.data?.status;
-            if (status && status !== 'CREATED') {
-              console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
-            }
-          } else if (typeof pollResponse.data === 'string') {
-            console.log(`[MOTION] Endpoint ${endpoint} returned HTML/text, skipping`);
+          const status = pollResponse.data?.data?.status || pollResponse.data?.status;
+          if (status && status !== 'CREATED') {
+            console.log(`[MOTION] Found active status ${status} on ${endpoint}`);
           }
-          break;
-        } catch (err) {
-          const isNetErr = !err.response?.status && (err.message || '').match(/socket|tls|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|ssl/i);
-          if (isNetErr && pRetry === 0) {
-            console.log(`[MOTION] Poll endpoint ${endpoint} proxy network error: ${err.message}, retrying direct...`);
-            continue;
-          }
-          console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
-          break;
+        } else if (typeof pollResponse.data === 'string') {
+          console.log(`[MOTION] Endpoint ${endpoint} returned HTML/text, skipping`);
         }
+      } catch (err) {
+        console.log(`[MOTION] Poll endpoint ${endpoint} failed:`, err.response?.data?.message || err.message);
       }
       if (response && successEndpoint) {
         const foundStatus = response.data?.data?.status || response.data?.status;
