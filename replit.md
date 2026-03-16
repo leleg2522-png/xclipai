@@ -43,7 +43,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
 - **Vidgen3 (Glio.io Video Generator)**: Advanced video generation migrated from Freepik to Glio.io API. Uses GLIO_API_KEY env var. Room-based Xclip API key system for access control. Features include:
   - 2 AI models via Glio.io:
-    - Wan Animate (wan-2-2-animate-move): Motion transfer - requires image + video input, optional resolution (480p/720p/1080p)
+    - Wan Animate (wan-2-2-animate-move): Motion transfer - requires image + video input, optional resolution (480p/720p)
     - Luma Ray 2 (luma-ray2-v2v): Video-to-video modification - requires prompt + video input
   - Glio.io API: POST /v1/jobs to create, GET /v1/jobs/{id} to poll, response field: final_result.url
   - Auth: Authorization: Bearer {GLIO_API_KEY}

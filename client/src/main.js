@@ -187,7 +187,7 @@ const state = {
     referenceVideo: null,
     prompt: '',
     selectedModel: 'wan-animate',
-    resolution: '1080p',
+    resolution: '720p',
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -3765,7 +3765,7 @@ function renderVidgen3ModelSettings() {
       <div class="setting-group">
         <label class="setting-label">Resolution</label>
         <div class="aspect-ratio-selector">
-          ${['480p', '720p', '1080p'].map(r => `
+          ${['480p', '720p'].map(r => `
             <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
               <span>${r}</span>
             </button>
