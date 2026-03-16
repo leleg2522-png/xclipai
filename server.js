@@ -6484,145 +6484,52 @@ async function getMotionRoomApiKey(xclipApiKey) {
 // ============ VIDGEN3 (Freepik Video Generation) API ============
 
 const VIDGEN3_MODEL_CONFIGS = {
-  'minimax-live': { 
-    endpoint: '/v1/ai/image-to-video/minimax-live',
-    pollEndpoint: '/v1/ai/image-to-video/minimax-live',
-    type: 'i2v',
+  'wan-animate': {
+    glioModel: 'wan-2-2-animate-move',
+    type: 'motion',
     buildBody: (params) => ({
-      prompt: params.prompt || '',
-      image_url: params.image,
-      prompt_optimizer: true
+      model: 'wan-2-2-animate-move',
+      action: 'generate',
+      params: {
+        video_url: params.videoUrl,
+        image_url: params.image,
+        ...(params.resolution ? { resolution: params.resolution } : {})
+      }
     })
   },
-  'seedance-1.5-pro-1080p': {
-    endpoint: '/v1/ai/video/seedance-1-5-pro-1080p',
-    pollEndpoint: '/v1/ai/video/seedance-1-5-pro-1080p',
-    type: 'both',
+  'luma-ray2': {
+    glioModel: 'luma-ray2-v2v',
+    type: 'v2v',
     buildBody: (params) => ({
-      prompt: params.prompt || '',
-      ...(params.image ? { image: params.image } : {}),
-      duration: parseInt(params.duration) || 5,
-      generate_audio: params.generateAudio !== false,
-      camera_fixed: params.cameraFixed || false,
-      aspect_ratio: params.aspectRatio || 'widescreen_16_9',
-      seed: -1
-    })
-  },
-  'seedance-1.5-pro-720p': {
-    endpoint: '/v1/ai/video/seedance-1-5-pro-720p',
-    pollEndpoint: '/v1/ai/video/seedance-1-5-pro-720p',
-    type: 'both',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      ...(params.image ? { image: params.image } : {}),
-      duration: parseInt(params.duration) || 5,
-      generate_audio: params.generateAudio !== false,
-      camera_fixed: params.cameraFixed || false,
-      aspect_ratio: params.aspectRatio || 'widescreen_16_9',
-      seed: -1
-    })
-  },
-  'ltx-2-pro-t2v': {
-    endpoint: '/v1/ai/text-to-video/ltx-2-pro',
-    pollEndpoint: '/v1/ai/text-to-video/ltx-2-pro',
-    type: 't2v',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      generate_audio: params.generateAudio || false,
-      seed: Math.floor(Math.random() * 4294967295),
-      resolution: params.resolution || '1080p',
-      duration: parseInt(params.duration) || 6,
-      fps: parseInt(params.fps) || 25
-    })
-  },
-  'ltx-2-pro-i2v': {
-    endpoint: '/v1/ai/image-to-video/ltx-2-pro',
-    pollEndpoint: '/v1/ai/image-to-video/ltx-2-pro',
-    type: 'i2v',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      image_url: params.image,
-      generate_audio: params.generateAudio || false,
-      seed: Math.floor(Math.random() * 4294967295),
-      resolution: params.resolution || '1080p',
-      duration: parseInt(params.duration) || 6,
-      fps: parseInt(params.fps) || 25
-    })
-  },
-  'ltx-2-fast-t2v': {
-    endpoint: '/v1/ai/text-to-video/ltx-2-fast',
-    pollEndpoint: '/v1/ai/text-to-video/ltx-2-fast',
-    type: 't2v',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      generate_audio: params.generateAudio || false,
-      seed: Math.floor(Math.random() * 4294967295),
-      resolution: params.resolution || '1080p',
-      duration: parseInt(params.duration) || 6,
-      fps: parseInt(params.fps) || 25
-    })
-  },
-  'ltx-2-fast-i2v': {
-    endpoint: '/v1/ai/image-to-video/ltx-2-fast',
-    pollEndpoint: '/v1/ai/image-to-video/ltx-2-fast',
-    type: 'i2v',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      image_url: params.image,
-      generate_audio: params.generateAudio || false,
-      seed: Math.floor(Math.random() * 4294967295),
-      resolution: params.resolution || '1080p',
-      duration: parseInt(params.duration) || 6,
-      fps: parseInt(params.fps) || 25
-    })
-  },
-  'runway-4.5-t2v': {
-    endpoint: '/v1/ai/text-to-video/runway-4-5',
-    pollEndpoint: '/v1/ai/text-to-video/runway-4-5',
-    type: 't2v',
-    buildBody: (params) => ({
-      prompt: params.prompt || '',
-      ratio: params.ratio || '1280:720',
-      duration: parseInt(params.duration) || 5
-    })
-  },
-  'runway-4.5-i2v': {
-    endpoint: '/v1/ai/image-to-video/runway-4-5',
-    pollEndpoint: '/v1/ai/image-to-video/runway-4-5',
-    type: 'i2v',
-    buildBody: (params) => ({
-      image: params.image,
-      prompt: params.prompt || '',
-      ratio: params.ratio || '1280:720',
-      duration: parseInt(params.duration) || 5,
-      seed: Math.floor(Math.random() * 4294967295)
-    })
-  },
-  'runway-gen4-turbo': {
-    endpoint: '/v1/ai/image-to-video/runway-gen4-turbo',
-    pollEndpoint: '/v1/ai/image-to-video/runway-gen4-turbo',
-    type: 'i2v',
-    buildBody: (params) => ({
-      image: params.image,
-      prompt: params.prompt || '',
-      ratio: params.ratio || '1280:720',
-      duration: parseInt(params.duration) || 10,
-      seed: Math.floor(Math.random() * 4294967295)
-    })
-  },
-  'omnihuman-1.5': {
-    endpoint: '/v1/ai/video/omni-human-1-5',
-    pollEndpoint: '/v1/ai/video/omni-human-1-5',
-    type: 'omnihuman',
-    buildBody: (params) => ({
-      image_url: params.image,
-      audio_url: params.audioUrl,
-      prompt: params.prompt || '',
-      turbo_mode: params.turboMode || false,
-      resolution: params.resolution || '1080p'
+      model: 'luma-ray2-v2v',
+      action: 'generate',
+      params: {
+        prompt: params.prompt || '',
+        video_url: params.videoUrl
+      }
     })
   }
 };
+
+const GLIO_API_BASE = 'https://api.glio.io';
+
+function glioHeaders(apiKey) {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`
+  };
+}
+
+async function makeGlioRequest(method, url, apiKey, body = null) {
+  const config = {
+    method,
+    url,
+    headers: glioHeaders(apiKey),
+    timeout: 120000
+  };
+  if (body) config.data = body;
+  return axios(config);
+}
 
 // ============ VIDGEN2 (Poyo AI) ============
 
@@ -7906,24 +7813,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     console.log('[VIDGEN3] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode } = req.body;
+    const { model, prompt, image, videoUrl, resolution } = req.body;
     
     const config = VIDGEN3_MODEL_CONFIGS[model];
     if (!config) {
       return res.status(400).json({ error: `Model tidak didukung: ${model}` });
     }
     
-    if (config.type === 'i2v' && !image) {
-      return res.status(400).json({ error: 'Image diperlukan untuk model ini' });
+    if (config.type === 'motion' && (!image || !videoUrl)) {
+      return res.status(400).json({ error: 'Image dan video URL diperlukan untuk Wan Animate' });
     }
-    if (config.type === 'omnihuman' && (!image || !audioUrl)) {
-      return res.status(400).json({ error: 'Image dan audio URL diperlukan untuk OmniHuman' });
-    }
-    if (config.type === 't2v' && !prompt) {
-      return res.status(400).json({ error: 'Prompt diperlukan untuk text-to-video' });
-    }
-    if (config.type === 'both' && !prompt && !image) {
-      return res.status(400).json({ error: 'Prompt atau image diperlukan' });
+    if (config.type === 'v2v' && (!prompt || !videoUrl)) {
+      return res.status(400).json({ error: 'Prompt dan video URL diperlukan untuk Ray 2' });
     }
     
     let imageUrlForApi = image;
@@ -7933,44 +7834,43 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       const v3baseUrl = `${v3protocol}://${v3host}`;
       const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
       imageUrlForApi = imgFile.publicUrl;
-      console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi} (saved ${(Buffer.byteLength(image) / 1024 / 1024).toFixed(1)}MB proxy bandwidth)`);
+      console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
     }
     
-    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, audioUrl, duration, aspectRatio, generateAudio, cameraFixed, ratio, resolution, fps, turboMode });
-    
-    const webhookUrl = getWebhookUrl();
-    if (webhookUrl) {
-      requestBody.webhook_url = webhookUrl;
+    let videoUrlForApi = videoUrl;
+    if (videoUrl && videoUrl.includes('base64')) {
+      const v3protocol = req.headers['x-forwarded-proto'] || 'https';
+      const v3host = req.headers['x-forwarded-host'] || req.headers.host;
+      const v3baseUrl = `${v3protocol}://${v3host}`;
+      const vidFile = await saveBase64ToFile(videoUrl, 'video', v3baseUrl);
+      videoUrlForApi = vidFile.publicUrl;
+      console.log(`[VIDGEN3] Video saved to public URL: ${videoUrlForApi}`);
     }
     
-    console.log(`[VIDGEN3] Generating with model: ${model}, endpoint: ${config.endpoint}`);
+    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution });
+    
+    const glioApiKey = process.env.GLIO_API_KEY;
+    if (!glioApiKey) {
+      return res.status(500).json({ error: 'Glio API key belum dikonfigurasi' });
+    }
+    
+    console.log(`[VIDGEN3] Generating with model: ${model} via Glio (${config.glioModel})`);
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
-    const { proxy: preProxy, pendingId } = await getOrAssignProxyForPendingTask();
-    
-    const response = await makeFreepikRequest(
+    const response = await makeGlioRequest(
       'POST',
-      `https://api.freepik.com${config.endpoint}`,
-      roomKeyResult.apiKey,
-      requestBody,
-      true,
-      pendingId,
-      'decodo'
+      `${GLIO_API_BASE}/v1/jobs`,
+      glioApiKey,
+      requestBody
     );
     
-    console.log(`[VIDGEN3] Freepik response:`, JSON.stringify(response.data));
+    console.log(`[VIDGEN3] Glio response:`, JSON.stringify(response.data));
     
-    const data = response.data?.data || response.data;
-    const taskId = data.task_id || data.id || response.data?.task_id || response.data?.id;
+    const taskId = response.data?.id;
     
     if (!taskId) {
-      if (pendingId) releaseProxyForTask(pendingId);
-      console.error('[VIDGEN3] No task_id in response:', JSON.stringify(response.data));
-      return res.status(500).json({ error: 'Tidak mendapat task_id dari Freepik' });
-    }
-    
-    if (pendingId) {
-      promoteProxyToTask(pendingId, taskId);
+      console.error('[VIDGEN3] No job id in Glio response:', JSON.stringify(response.data));
+      return res.status(500).json({ error: 'Tidak mendapat job id dari Glio' });
     }
     
     await pool.query(`
@@ -7983,23 +7883,23 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       [roomKeyResult.keyInfoId]
     );
     
-    console.log(`[VIDGEN3] Task created: ${taskId}`);
+    console.log(`[VIDGEN3] Glio job created: ${taskId}`);
     
     res.json({
       taskId: taskId,
       model: model,
-      status: 'processing'
+      status: 'processing',
+      estimatedCost: response.data?.estimated_cost || null
     });
     
   } catch (error) {
     console.error('[VIDGEN3] Generate error:', error.response?.data || error.message);
     res.status(500).json({ 
-      error: error.response?.data?.message || error.response?.data?.detail || 'Gagal generate video' 
+      error: error.response?.data?.message || error.response?.data?.error || 'Gagal generate video' 
     });
   }
 });
 
-// Check Vidgen3 task status
 app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
   try {
     const xclipApiKey = req.headers['x-xclip-key'];
@@ -8026,7 +7926,6 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     const task = localTask.rows[0];
     
     if (task.status === 'completed' && task.video_url) {
-      console.log(`[VIDGEN3] Task ${taskId} already completed, returning from DB`);
       return res.json({
         status: 'completed',
         progress: 100,
@@ -8037,7 +7936,6 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     }
     
     if (task.status === 'failed') {
-      console.log(`[VIDGEN3] Task ${taskId} already failed, returning from DB`);
       return res.json({
         status: 'failed',
         error: task.error_message || 'Video generation failed',
@@ -8045,97 +7943,47 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       });
     }
     
-    let freepikApiKey = null;
-    if (task.used_key_name && process.env[task.used_key_name]) {
-      freepikApiKey = process.env[task.used_key_name];
-      console.log(`[VIDGEN3] Using saved key: ${task.used_key_name}`);
+    const glioApiKey = process.env.GLIO_API_KEY;
+    if (!glioApiKey) {
+      return res.status(500).json({ error: 'Glio API key belum dikonfigurasi' });
     }
-    
-    if (!freepikApiKey) {
-      const roomKeyResult = await getVidgen3RoomApiKey(xclipApiKey);
-      if (!roomKeyResult.error) {
-        freepikApiKey = roomKeyResult.apiKey;
-      }
-    }
-    
-    if (!freepikApiKey) {
-      freepikApiKey = process.env.FREEPIK_API_KEY;
-    }
-    
-    if (!freepikApiKey) {
-      return res.status(500).json({ error: 'Tidak ada API key yang tersedia' });
-    }
-    
-    const modelConfig = VIDGEN3_MODEL_CONFIGS[task.model];
-    if (!modelConfig) {
-      return res.json({ status: 'processing', progress: 0, taskId });
-    }
-    
-    const pollUrl = `https://api.freepik.com${modelConfig.pollEndpoint}/${taskId}`;
-    console.log(`[VIDGEN3] Polling: ${pollUrl}`);
     
     try {
-      const pollResponse = await makeFreepikRequest(
+      const pollResponse = await makeGlioRequest(
         'GET',
-        pollUrl,
-        freepikApiKey,
-        null,
-        true,
-        taskId,
-        'decodo'
+        `${GLIO_API_BASE}/v1/jobs/${taskId}`,
+        glioApiKey
       );
       
-      if (typeof pollResponse.data === 'string') {
-        console.log(`[VIDGEN3] Poll returned HTML/text, Freepik may be blocking`);
-        return res.json({ status: 'processing', progress: 0, taskId });
-      }
+      console.log(`[VIDGEN3] Glio poll response:`, JSON.stringify(pollResponse.data));
+      const data = pollResponse.data;
+      const status = (data.status || '').toLowerCase();
       
-      console.log(`[VIDGEN3] Poll response:`, JSON.stringify(pollResponse.data));
-      const data = pollResponse.data?.data || pollResponse.data;
-      
-      let videoUrl = null;
-      if (data.generated && data.generated.length > 0) {
-        videoUrl = data.generated[0];
-      } else if (data.video_url) {
-        videoUrl = data.video_url;
-      } else if (data.video?.url) {
-        videoUrl = data.video.url;
-      } else if (data.result?.video_url) {
-        videoUrl = data.result.video_url;
-      } else if (data.output?.video_url) {
-        videoUrl = data.output.video_url;
-      } else if (data.result?.url) {
-        videoUrl = data.result.url;
-      } else if (data.output?.url) {
-        videoUrl = data.output.url;
-      } else if (data.url) {
-        videoUrl = data.url;
-      }
-      
-      const isCompleted = data.status === 'COMPLETED' || data.status === 'completed' || 
-                         data.status === 'SUCCESS' || data.status === 'success' ||
-                         (videoUrl && data.status !== 'PROCESSING' && data.status !== 'processing' && data.status !== 'PENDING');
-      
-      if (isCompleted && videoUrl) {
-        releaseProxyForTask(taskId);
-        pool.query(
-          'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
-          ['completed', videoUrl, taskId]
-        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+      if (status === 'completed') {
+        let videoUrl = null;
+        if (data.final_result) {
+          videoUrl = data.final_result.url || (data.final_result.urls && data.final_result.urls[0]) || null;
+        }
         
-        return res.json({
-          status: 'completed',
-          progress: 100,
-          videoUrl: videoUrl,
-          taskId: taskId,
-          model: task.model
-        });
+        if (videoUrl) {
+          pool.query(
+            'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+            ['completed', videoUrl, taskId]
+          ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+          
+          return res.json({
+            status: 'completed',
+            progress: 100,
+            videoUrl: videoUrl,
+            taskId: taskId,
+            model: task.model,
+            cost: data.cost_usd || null
+          });
+        }
       }
       
-      const normalizedStatus = (data.status || 'processing').toLowerCase();
-      if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
-        releaseProxyForTask(taskId);
-        const errorMsg = data.error_message || data.error || data.message || 'Generation failed';
+      if (status === 'failed') {
+        const errorMsg = data.error || data.message || 'Generation failed';
         pool.query(
           'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
           ['failed', errorMsg, taskId]
@@ -8149,13 +7997,14 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       }
       
       return res.json({
-        status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : 'processing',
-        progress: data.progress || 0,
-        taskId: taskId
+        status: 'processing',
+        progress: status === 'processing' ? 50 : (status === 'polling' ? 30 : (status === 'submitted' ? 10 : 5)),
+        taskId: taskId,
+        glioStatus: status
       });
       
     } catch (pollError) {
-      console.error('[VIDGEN3] Poll error:', pollError.response?.data || pollError.message);
+      console.error('[VIDGEN3] Glio poll error:', pollError.response?.data || pollError.message);
       return res.json({
         status: 'processing',
         progress: 0,

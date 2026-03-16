@@ -184,17 +184,10 @@ const state = {
   },
   vidgen3: {
     sourceImage: null,
-    audioFile: null,
+    referenceVideo: null,
     prompt: '',
-    selectedModel: 'seedance-1.5-pro-1080p',
-    aspectRatio: 'widescreen_16_9',
-    duration: 5,
+    selectedModel: 'wan-animate',
     resolution: '1080p',
-    fps: 25,
-    generateAudio: true,
-    cameraFixed: false,
-    turboMode: false,
-    ratio: '1280:720',
     isGenerating: false,
     isPolling: false,
     tasks: [],
@@ -451,7 +444,7 @@ const state = {
 };
 
 const PERSIST_KEYS = {
-  vidgen3: ['prompt', 'selectedModel', 'aspectRatio', 'duration', 'resolution', 'fps', 'generateAudio', 'cameraFixed', 'turboMode', 'ratio', 'customApiKey'],
+  vidgen3: ['prompt', 'selectedModel', 'resolution', 'customApiKey'],
   videogen: ['prompt', 'selectedModel', 'duration', 'aspectRatio', 'customApiKey'],
   motion: ['prompt', 'selectedModel', 'characterOrientation'],
   ximage: ['prompt', 'selectedModel', 'aspectRatio', 'mode', 'customApiKey', 'resolution', 'numberOfImages', 'quality', 'modelVariant', 'renderingSpeed', 'imageStyle', 'acceleration', 'googleSearch', 'outputFormat'],
@@ -3522,17 +3515,13 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'minimax-live', name: 'MiniMax Live', desc: 'Animasi ilustrasi, camera movements', badge: 'LIVE', icon: '🎭', type: 'i2v' },
-    { id: 'seedance-1.5-pro-1080p', name: 'Seedance 1.5 Pro', desc: '1080p, audio, T2V + I2V', badge: 'NEW', icon: '🌱', type: 'both' },
-    { id: 'ltx-2-pro-i2v', name: 'LTX Pro', desc: 'Sampai 2160p, 50fps', badge: 'PRO', icon: '🎬', type: 'both' },
-    { id: 'ltx-2-fast-i2v', name: 'LTX Fast', desc: 'Ultra-cepat, sampai 20s', badge: 'FAST', icon: '⚡', type: 'both' },
-    { id: 'runway-4.5-i2v', name: 'RunWay Gen 4.5', desc: 'Cinematic quality', badge: 'NEW', icon: '🎥', type: 'both' },
-    { id: 'runway-gen4-turbo', name: 'RunWay Gen4 Turbo', desc: 'Fast video generation', badge: 'TURBO', icon: '🚀', type: 'i2v' },
-    { id: 'omnihuman-1.5', name: 'OmniHuman 1.5', desc: 'Animasi manusia dari audio', badge: 'HUMAN', icon: '🧑', type: 'omnihuman' }
+    { id: 'wan-animate', name: 'Wan Animate', desc: 'Transfer gerakan video ke gambar', badge: 'NEW', icon: '🎭', type: 'motion' },
+    { id: 'luma-ray2', name: 'Luma Ray 2', desc: 'Modifikasi video dengan AI prompt', badge: 'AI', icon: '🔮', type: 'v2v' }
   ];
 
-  const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel);
-  const isImageOptional = selectedModelInfo && selectedModelInfo.type === 'both';
+  const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
+  const isMotionModel = selectedModelInfo.type === 'motion';
+  const isV2VModel = selectedModelInfo.type === 'v2v';
 
   return `
     <div class="container">
@@ -3551,6 +3540,7 @@ function renderVidgen3Page() {
 
       <div class="xmaker-layout">
         <div class="xmaker-settings">
+          ${isMotionModel ? `
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
@@ -3560,7 +3550,7 @@ function renderVidgen3Page() {
                   <polyline points="21 15 16 10 5 21"/>
                 </svg>
               </div>
-              <h2 class="card-title">Upload Gambar ${isImageOptional ? '<span style="font-size:12px;opacity:0.7;font-weight:normal;">(Opsional - T2V jika kosong)</span>' : ''}</h2>
+              <h2 class="card-title">Upload Gambar Target</h2>
             </div>
             <div class="card-body">
               <div class="reference-upload ${state.vidgen3.sourceImage ? 'has-image' : ''}" id="vidgen3UploadZone">
@@ -3579,41 +3569,50 @@ function renderVidgen3Page() {
                       <circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span>Klik untuk upload gambar</span>
-                    <span class="upload-hint">JPG, PNG (max 50MB)</span>
+                    <span>Klik untuk upload gambar target</span>
+                    <span class="upload-hint">JPEG, PNG, WEBP (max 10MB)</span>
                   </div>
                 `}
                 <input type="file" id="vidgen3ImageInput" accept="image/*" style="display:none">
               </div>
             </div>
           </div>
+          ` : ''}
 
-          ${state.vidgen3.selectedModel === 'omnihuman-1.5' ? `
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                 </svg>
               </div>
-              <h2 class="card-title">Audio URL <span style="font-size:12px;opacity:0.7;font-weight:normal;">(Wajib)</span></h2>
+              <h2 class="card-title">Upload Video ${isMotionModel ? 'Referensi Gerakan' : 'Input'}</h2>
             </div>
             <div class="card-body">
-              <div class="setting-group">
-                <input 
-                  type="text" 
-                  class="form-input" 
-                  id="vidgen3AudioUrl" 
-                  placeholder="Paste URL audio publik (mp3/wav)..."
-                  value="${state.vidgen3.audioFile?.url || ''}"
-                >
-                <p class="setting-hint">URL audio harus bisa diakses publik</p>
+              <div class="reference-upload ${state.vidgen3.referenceVideo ? 'has-image' : ''}" id="vidgen3VideoUploadZone">
+                ${state.vidgen3.referenceVideo ? `
+                  <video src="${state.vidgen3.referenceVideo.data}" class="reference-preview" style="max-height:200px;" controls muted></video>
+                  <button class="remove-reference" id="removeVidgen3Video">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : `
+                  <div class="reference-placeholder">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <polygon points="23 7 16 12 23 17 23 7"/>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                    </svg>
+                    <span>Klik untuk upload video</span>
+                    <span class="upload-hint">MP4, MOV (max 30MB)</span>
+                  </div>
+                `}
+                <input type="file" id="vidgen3VideoInput" accept="video/*" style="display:none">
               </div>
             </div>
           </div>
-          ` : ''}
 
           <div class="card glass-card">
             <div class="card-header">
@@ -3654,7 +3653,7 @@ function renderVidgen3Page() {
               ${renderVidgen3ModelSettings()}
 
               <div class="setting-group">
-                <label class="setting-label">Prompt ${state.vidgen3.selectedModel === 'omnihuman-1.5' ? '(Opsional)' : ''}</label>
+                <label class="setting-label">Prompt ${isMotionModel ? '(Opsional)' : ''}</label>
                 <textarea 
                   class="form-textarea" 
                   id="vidgen3Prompt" 
@@ -3708,10 +3707,10 @@ function renderVidgen3Page() {
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
                 const model = state.vidgen3.selectedModel;
-                const isOmniHuman = model === 'omnihuman-1.5';
-                const isI2VOnly = model === 'minimax-live' || model === 'runway-gen4-turbo';
-                const needsImage = isOmniHuman || isI2VOnly;
-                const isDisabled = state.vidgen3.isGenerating || (needsImage && !state.vidgen3.sourceImage) || state.vidgen3.tasks.length >= 3 || isOnCooldown;
+                const selModel = models.find(m => m.id === model) || models[0];
+                const needsImage = selModel.type === 'motion';
+                const needsVideo = true;
+                const isDisabled = state.vidgen3.isGenerating || (needsImage && !state.vidgen3.sourceImage) || (needsVideo && !state.vidgen3.referenceVideo) || state.vidgen3.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen3Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen3.isGenerating ? `
@@ -3761,141 +3760,24 @@ function renderVidgen3ModelSettings() {
   const model = state.vidgen3.selectedModel;
   let html = '';
 
-  if (model === 'seedance-1.5-pro-1080p') {
+  if (model === 'wan-animate') {
     html += `
-      <div class="setting-group">
-        <label class="setting-label">Durasi (detik)</label>
-        <div class="aspect-ratio-selector">
-          ${[4, 5, 6, 8, 10, 12].map(d => `
-            <button class="aspect-btn ${state.vidgen3.duration === d ? 'active' : ''}" data-vidgen3-duration="${d}">
-              <span>${d}s</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label">Aspect Ratio</label>
-        <div class="aspect-ratio-selector">
-          ${[{id:'widescreen_16_9',label:'16:9'},{id:'portrait_9_16',label:'9:16'},{id:'square_1_1',label:'1:1'}].map(ar => `
-            <button class="aspect-btn ${state.vidgen3.aspectRatio === ar.id ? 'active' : ''}" data-vidgen3-aspect="${ar.id}">
-              <span>${ar.label}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label" style="display:flex;align-items:center;justify-content:space-between;">
-          Generate Audio
-          <label class="toggle-switch">
-            <input type="checkbox" id="vidgen3AudioToggle" ${state.vidgen3.generateAudio ? 'checked' : ''}>
-            <span class="toggle-slider"></span>
-          </label>
-        </label>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label" style="display:flex;align-items:center;justify-content:space-between;">
-          Camera Fixed
-          <label class="toggle-switch">
-            <input type="checkbox" id="vidgen3CameraToggle" ${state.vidgen3.cameraFixed ? 'checked' : ''}>
-            <span class="toggle-slider"></span>
-          </label>
-        </label>
-      </div>
-    `;
-  } else if (model === 'ltx-2-pro-i2v' || model === 'ltx-2-fast-i2v') {
-    const isFast = model === 'ltx-2-fast-i2v';
-    const durations = isFast ? [5, 8, 10, 15, 20] : [5, 8, 10];
-    html += `
-      <div class="setting-group">
-        <label class="setting-label">Durasi (detik)</label>
-        <div class="aspect-ratio-selector">
-          ${durations.map(d => `
-            <button class="aspect-btn ${state.vidgen3.duration === d ? 'active' : ''}" data-vidgen3-duration="${d}">
-              <span>${d}s</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
       <div class="setting-group">
         <label class="setting-label">Resolution</label>
         <div class="aspect-ratio-selector">
-          ${['1080p', '1440p', '2160p'].map(r => `
+          ${['480p', '720p', '1080p'].map(r => `
             <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
               <span>${r}</span>
             </button>
           `).join('')}
         </div>
       </div>
-      <div class="setting-group">
-        <label class="setting-label">FPS</label>
-        <div class="aspect-ratio-selector">
-          ${[25, 50].map(f => `
-            <button class="aspect-btn ${state.vidgen3.fps === f ? 'active' : ''}" data-vidgen3-fps="${f}">
-              <span>${f} fps</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label" style="display:flex;align-items:center;justify-content:space-between;">
-          Generate Audio
-          <label class="toggle-switch">
-            <input type="checkbox" id="vidgen3AudioToggle" ${state.vidgen3.generateAudio ? 'checked' : ''}>
-            <span class="toggle-slider"></span>
-          </label>
-        </label>
-      </div>
+      <p class="setting-hint" style="text-align:center;opacity:0.7;">Gerakan dari video referensi akan ditransfer ke gambar target</p>
     `;
-  } else if (model === 'runway-4.5-i2v' || model === 'runway-gen4-turbo') {
-    const isTurbo = model === 'runway-gen4-turbo';
-    const durations = isTurbo ? [5, 10] : [5, 8, 10];
-    const ratios = ['1280:720', '720:1280', '1104:832', '960:960', '832:1104'];
+  } else if (model === 'luma-ray2') {
     html += `
-      <div class="setting-group">
-        <label class="setting-label">Durasi (detik)</label>
-        <div class="aspect-ratio-selector">
-          ${durations.map(d => `
-            <button class="aspect-btn ${state.vidgen3.duration === d ? 'active' : ''}" data-vidgen3-duration="${d}">
-              <span>${d}s</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label">Ratio</label>
-        <div class="aspect-ratio-selector" style="flex-wrap:wrap;">
-          ${ratios.map(r => `
-            <button class="aspect-btn ${state.vidgen3.ratio === r ? 'active' : ''}" data-vidgen3-ratio="${r}">
-              <span>${r}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
+      <p class="setting-hint" style="text-align:center;opacity:0.7;">Modifikasi video menggunakan AI prompt. Prompt wajib diisi.</p>
     `;
-  } else if (model === 'omnihuman-1.5') {
-    html += `
-      <div class="setting-group">
-        <label class="setting-label" style="display:flex;align-items:center;justify-content:space-between;">
-          Turbo Mode
-          <label class="toggle-switch">
-            <input type="checkbox" id="vidgen3TurboToggle" ${state.vidgen3.turboMode ? 'checked' : ''}>
-            <span class="toggle-slider"></span>
-          </label>
-        </label>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label">Resolution</label>
-        <div class="aspect-ratio-selector">
-          ${['720p', '1080p'].map(r => `
-            <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
-              <span>${r}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  } else if (model === 'minimax-live') {
-    html += `<p class="setting-hint" style="text-align:center;opacity:0.7;">MiniMax Live memerlukan gambar sebagai input</p>`;
   }
 
   return html;
@@ -8595,7 +8477,6 @@ function attachVidgen3EventListeners() {
   const generateBtn = document.getElementById('generateVidgen3Btn');
   const promptInput = document.getElementById('vidgen3Prompt');
   const apiKeyInput = document.getElementById('vidgen3ApiKey');
-  const audioUrlInput = document.getElementById('vidgen3AudioUrl');
 
   if (uploadZone && imageInput) {
     uploadZone.addEventListener('click', function() { imageInput.click(); });
@@ -8628,6 +8509,43 @@ function attachVidgen3EventListeners() {
     });
   }
 
+  const videoUploadZone = document.getElementById('vidgen3VideoUploadZone');
+  const videoInput = document.getElementById('vidgen3VideoInput');
+  const removeVideoBtn = document.getElementById('removeVidgen3Video');
+
+  if (videoUploadZone && videoInput) {
+    videoUploadZone.addEventListener('click', function() { videoInput.click(); });
+
+    videoUploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      videoUploadZone.classList.add('drag-over');
+    });
+
+    videoUploadZone.addEventListener('dragleave', () => {
+      videoUploadZone.classList.remove('drag-over');
+    });
+
+    videoUploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      videoUploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        handleVidgen3VideoUpload(e.dataTransfer.files[0]);
+      }
+    });
+
+    videoInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) handleVidgen3VideoUpload(e.target.files[0]);
+    });
+  }
+
+  if (removeVideoBtn) {
+    removeVideoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.vidgen3.referenceVideo = null;
+      render();
+    });
+  }
+
   if (generateBtn) {
     generateBtn.addEventListener('click', generateVidgen3Video);
   }
@@ -8646,35 +8564,6 @@ function attachVidgen3EventListeners() {
     });
   }
 
-  if (audioUrlInput) {
-    audioUrlInput.addEventListener('input', (e) => {
-      state.vidgen3.audioFile = e.target.value ? { url: e.target.value } : null;
-    });
-  }
-
-  const audioToggle = document.getElementById('vidgen3AudioToggle');
-  if (audioToggle) {
-    audioToggle.addEventListener('change', (e) => {
-      state.vidgen3.generateAudio = e.target.checked;
-      saveUserInputs('vidgen3');
-    });
-  }
-
-  const cameraToggle = document.getElementById('vidgen3CameraToggle');
-  if (cameraToggle) {
-    cameraToggle.addEventListener('change', (e) => {
-      state.vidgen3.cameraFixed = e.target.checked;
-      saveUserInputs('vidgen3');
-    });
-  }
-
-  const turboToggle = document.getElementById('vidgen3TurboToggle');
-  if (turboToggle) {
-    turboToggle.addEventListener('change', (e) => {
-      state.vidgen3.turboMode = e.target.checked;
-      saveUserInputs('vidgen3');
-    });
-  }
 
   if (!window._vidgen3DelegationAttached) {
     window._vidgen3DelegationAttached = true;
@@ -8824,17 +8713,36 @@ function handleVidgen3ImageUpload(e) {
   reader.readAsDataURL(file);
 }
 
+function handleVidgen3VideoUpload(file) {
+  if (!file || !file.type.startsWith('video/')) {
+    alert('File harus berupa video');
+    return;
+  }
+  const maxSizeMB = 30;
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    alert(`Video terlalu besar. Maksimal ${maxSizeMB}MB`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    state.vidgen3.referenceVideo = {
+      file: file,
+      data: event.target.result,
+      name: file.name
+    };
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
 async function generateVidgen3Video() {
   const model = state.vidgen3.selectedModel;
-  const isOmniHuman = model === 'omnihuman-1.5';
-  const isI2VOnly = model === 'minimax-live' || model === 'runway-gen4-turbo';
+  const isMotion = model === 'wan-animate';
+  const isV2V = model === 'luma-ray2';
 
-  if (isOmniHuman) {
-    if (!state.vidgen3.sourceImage) { alert('Upload gambar terlebih dahulu'); return; }
-    if (!state.vidgen3.audioFile) { alert('Masukkan audio URL terlebih dahulu'); return; }
-  } else if (isI2VOnly) {
-    if (!state.vidgen3.sourceImage) { alert('Upload gambar terlebih dahulu'); return; }
-  }
+  if (isMotion && !state.vidgen3.sourceImage) { alert('Upload gambar target terlebih dahulu'); return; }
+  if (!state.vidgen3.referenceVideo) { alert('Upload video terlebih dahulu'); return; }
+  if (isV2V && !state.vidgen3.prompt) { alert('Masukkan prompt terlebih dahulu'); return; }
 
   if (!state.vidgen3.customApiKey) { alert('Masukkan Xclip API Key'); return; }
   if (state.vidgen3.tasks.length >= 3) { alert('Maks 3 video bersamaan'); return; }
@@ -8850,26 +8758,12 @@ async function generateVidgen3Video() {
   render();
 
   try {
-    let actualModel = model;
-    if (!state.vidgen3.sourceImage) {
-      if (model === 'ltx-2-pro-i2v') actualModel = 'ltx-2-pro-t2v';
-      else if (model === 'ltx-2-fast-i2v') actualModel = 'ltx-2-fast-t2v';
-      else if (model === 'runway-4.5-i2v') actualModel = 'runway-4.5-t2v';
-    }
-
     const body = {
-      model: actualModel,
+      model: model,
       prompt: state.vidgen3.prompt,
       image: state.vidgen3.sourceImage?.data || null,
-      duration: state.vidgen3.duration,
-      aspectRatio: state.vidgen3.aspectRatio,
-      resolution: state.vidgen3.resolution,
-      fps: state.vidgen3.fps,
-      generateAudio: state.vidgen3.generateAudio,
-      cameraFixed: state.vidgen3.cameraFixed,
-      ratio: state.vidgen3.ratio,
-      turboMode: state.vidgen3.turboMode,
-      audioUrl: state.vidgen3.audioFile?.url || null
+      videoUrl: state.vidgen3.referenceVideo?.data || null,
+      resolution: state.vidgen3.resolution
     };
 
     const response = await fetch(`${API_URL}/api/vidgen3/proxy`, {
@@ -8889,7 +8783,7 @@ async function generateVidgen3Video() {
 
     state.vidgen3.tasks.push({
       taskId: result.taskId,
-      model: actualModel,
+      model: model,
       status: 'processing',
       progress: 0
     });
@@ -8899,7 +8793,7 @@ async function generateVidgen3Video() {
     startVidgen3CooldownTimer();
 
     savePendingTasks();
-    pollVidgen3Task(result.taskId, actualModel);
+    pollVidgen3Task(result.taskId, model);
     showToast('Video sedang diproses...', 'success');
 
   } catch (error) {

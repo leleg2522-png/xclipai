@@ -41,20 +41,18 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Freepik Video Playground)**: Advanced video generation using Freepik API with premium models. Uses its own separate room-based API key system (VIDGEN3_ROOM{N}_KEY_{1-3}). Features include:
-  - 7 AI models with per-model playground settings:
-    - MiniMax Live (I2V, animation, camera movements)
-    - Seedance 1.5 Pro 1080p/720p (T2V + I2V, audio generation, 4-12s duration)
-    - LTX 2.0 Pro (T2V + I2V, up to 2160p, 50fps)
-    - LTX 2.0 Fast (T2V + I2V, ultra-fast, up to 20s duration)
-    - RunWay Gen 4.5 (T2V + I2V, cinematic quality, multiple aspect ratios)
-    - RunWay Gen4 Turbo (I2V, fast generation)
-    - OmniHuman 1.5 (human animation from image + audio URL)
+- **Vidgen3 (Glio.io Video Generator)**: Advanced video generation migrated from Freepik to Glio.io API. Uses GLIO_API_KEY env var. Room-based Xclip API key system for access control. Features include:
+  - 2 AI models via Glio.io:
+    - Wan Animate (wan-2-2-animate-move): Motion transfer - requires image + video input, optional resolution (480p/720p/1080p)
+    - Luma Ray 2 (luma-ray2-v2v): Video-to-video modification - requires prompt + video input
+  - Glio.io API: POST /v1/jobs to create, GET /v1/jobs/{id} to poll, response field: final_result.url
+  - Auth: Authorization: Bearer {GLIO_API_KEY}
+  - Frontend uploads: image (for wan-animate) + video (required for both models), base64 converted to public URL server-side
+  - Video upload limit: 30MB (base64 through express.json)
   - Database tables: vidgen3_rooms, vidgen3_tasks
   - Room assignment via vidgen3_room_id in subscriptions
   - SSE events: vidgen3_completed, vidgen3_failed
   - Video history persistence in database
-  - Webhook integration for real-time task completion
 - **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 Stable (720p, 10/15 seconds, text-to-video + image-to-video, style presets)
