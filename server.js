@@ -3311,7 +3311,9 @@ function getFreepikKeysForRoom(roomId, keyInfo = null) {
   return [];
 }
 
-function getRotatedApiKey(keyInfo, forceKeyIndex = null) {
+const userKeyMap = new Map();
+
+function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
   const keys = getFreepikKeysForRoom(keyInfo.room_id, keyInfo);
   
   if (keys.length === 0) {
@@ -3325,11 +3327,19 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null) {
   if (forceKeyIndex !== null && forceKeyIndex >= 0 && forceKeyIndex < keys.length) {
     keyIndex = forceKeyIndex;
     console.log(`Using saved key index: ${keyIndex + 1} of ${keys.length}`);
+  } else if (userId) {
+    const mapKey = `${userId}_room${keyInfo.room_id || 0}`;
+    if (userKeyMap.has(mapKey)) {
+      keyIndex = userKeyMap.get(mapKey);
+    } else {
+      const numericId = typeof userId === 'number' ? userId : parseInt(String(userId).replace(/\D/g, '').slice(-6)) || 0;
+      keyIndex = numericId % keys.length;
+      userKeyMap.set(mapKey, keyIndex);
+    }
+    console.log(`API key rotation: user ${userId} → key ${keyIndex + 1} of ${keys.length} (per-user)`);
   } else {
-    const rotationMinutes = 3;
-    const currentMinute = Math.floor(Date.now() / (rotationMinutes * 60 * 1000));
-    keyIndex = currentMinute % keys.length;
-    console.log(`API key rotation: using key ${keyIndex + 1} of ${keys.length}`);
+    keyIndex = Math.floor(Math.random() * keys.length);
+    console.log(`API key rotation: random key ${keyIndex + 1} of ${keys.length}`);
   }
   
   return { key: keys[keyIndex], keyIndex };
@@ -3373,7 +3383,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     // PRIORITY 2: Room's rotated key if user has subscription (shared pool)
     if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo);
+      const rotated = getRotatedApiKey(keyInfo, null, keyInfo.user_id);
       freepikApiKey = rotated.key;
       usedKeyIndex = rotated.keyIndex;
       keySource = 'room';
@@ -3690,8 +3700,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
       releaseProxyForTask(pendingId);
     }
     
-    // Get the key name that was actually used
     const usedKeyName = availableKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
+    if (keyInfo.user_id && keyInfo.room_id) {
+      userKeyMap.set(`${keyInfo.user_id}_room${keyInfo.room_id}`, finalKeyIndex);
+    }
     
     if (taskId) {
       await pool.query(
@@ -4103,7 +4115,15 @@ app.post('/api/motion/generate', async (req, res) => {
     let lastError = null;
     usedKeyName = null;
     
+    const motionUserId = keyInfo?.user_id || null;
     availableMotionKeys.sort((a, b) => {
+      if (motionUserId) {
+        const userPrefKey = `motion_${motionUserId}`;
+        const lastKeyA = userKeyMap.get(userPrefKey) === a.name;
+        const lastKeyB = userKeyMap.get(userPrefKey) === b.name;
+        if (lastKeyA && !lastKeyB) return -1;
+        if (!lastKeyA && lastKeyB) return 1;
+      }
       const rateA = getMotionKeySuccessRate(a.name);
       const rateB = getMotionKeySuccessRate(b.name);
       if (Math.abs(rateA - rateB) > 0.1) return rateB - rateA;
@@ -4129,7 +4149,8 @@ app.post('/api/motion/generate', async (req, res) => {
         successResponse = response;
         usedKeyName = currentKey.name;
         freepikApiKey = currentKey.key;
-        console.log(`[MOTION] Key ${currentKey.name} worked!`);
+        if (motionUserId) userKeyMap.set(`motion_${motionUserId}`, currentKey.name);
+        console.log(`[MOTION] Key ${currentKey.name} worked! (assigned to user ${motionUserId})`);
         break;
         
       } catch (error) {
@@ -4360,7 +4381,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     }
     
     if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index);
+      const rotated = getRotatedApiKey(keyInfo, savedTask.key_index, keyInfo.user_id);
       freepikApiKey = rotated.key;
     }
     
