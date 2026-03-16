@@ -600,20 +600,8 @@ function cleanErrorForUser(errorMessage) {
   return cleaned;
 }
 
-// ============ MULTI-PROVIDER PROXY SUPPORT ============
-const IPROYAL_PROXIES = [];
-let iproyalIndex = 0;
-let iproyalInitialized = false;
+// ============ PROXY SUPPORT (Decodo only) ============
 const taskProxyMap = new Map();
-const blockedProxies = new Map();
-let webshareProxy = null;
-let webshareFailCount = 0;
-let webshareBlockedUntil = 0;
-let iproyalFailCount = 0;
-let iproyalBlockedUntil = 0;
-let proxyProviderToggle = 0;
-let webshareRotatingFailCount = 0;
-let webshareRotatingBlockedUntil = 0;
 
 // VPS Proxy Pool
 const VPS_PROXIES = [];
@@ -728,109 +716,15 @@ setInterval(() => {
   }
 }, 300000);
 
-function initIpRoyalProxy() {
-  if (iproyalInitialized) return;
-  iproyalInitialized = true;
-}
-
-const WEBSHARE_PROXIES = [];
-let webshareIndex = 0;
-let webshareInitialized = false;
-
-async function initWebshareProxy() {
-  if (webshareInitialized) return;
-  webshareInitialized = true;
-}
-
-function getWebshareRotatingProxy() {
-  const host = process.env.WEBSHARE_ROTATING_HOST || 'p.webshare.io';
-  const port = process.env.WEBSHARE_ROTATING_PORT || '80';
-  const username = process.env.WEBSHARE_ROTATING_USER;
-  const password = process.env.WEBSHARE_ROTATING_PASS;
-  if (!username || !password) return null;
-  return {
-    proxy_address: host,
-    port: parseInt(port),
-    username,
-    password,
-    provider: 'webshare-rotating',
-    country: 'rotating'
-  };
-}
-
-function getWebshareRotatingSocksAgent() {
-  const username = process.env.WEBSHARE_ROTATING_USER;
-  const password = process.env.WEBSHARE_ROTATING_PASS;
-  if (!username || !password) return null;
-  const host = process.env.WEBSHARE_ROTATING_SOCKS_HOST || 'p.webshare.io';
-  const port = process.env.WEBSHARE_ROTATING_SOCKS_PORT || '1080';
-  return new SocksProxyAgent(`socks5://${username}:${password}@${host}:${port}`);
-}
-
-function isWebshareRotatingAvailable() {
-  if (!process.env.WEBSHARE_ROTATING_USER || !process.env.WEBSHARE_ROTATING_PASS) return false;
-  if (Date.now() < webshareRotatingBlockedUntil) return false;
-  return true;
-}
-
-async function ensureProxiesInitialized() {
-  initVpsProxy();
-  initIpRoyalProxy();
-  await initWebshareProxy();
-  if (isWebshareRotatingAvailable()) {
-    console.log('[PROXY] Webshare ISP Rotating proxy configured');
-  }
-}
-
 function isProxyConfigured() {
   initVpsProxy();
   return VPS_PROXIES.length > 0;
-}
-
-function getNextIpRoyalProxy() {
-  if (IPROYAL_PROXIES.length === 0) return null;
-  const proxy = IPROYAL_PROXIES[iproyalIndex % IPROYAL_PROXIES.length];
-  iproyalIndex++;
-  return proxy;
-}
-
-function isIpRoyalAvailable() {
-  if (IPROYAL_PROXIES.length === 0) return false;
-  if (Date.now() < iproyalBlockedUntil) return false;
-  return true;
-}
-
-function isWebshareAvailable() {
-  if (WEBSHARE_PROXIES.length === 0) return false;
-  if (Date.now() < webshareBlockedUntil) return false;
-  return true;
-}
-
-function markProxyBlocked(proxy) {
-  if (!proxy) return;
-  if (proxy.provider === 'vps') return;
-}
-
-function isProxyBlocked(proxy) {
-  return false;
 }
 
 function getNextProxy() {
   initVpsProxy();
   if (VPS_PROXIES.length > 0) return getNextVpsProxy();
   return null;
-}
-
-function getNextProxyPreferWebshare() {
-  return getNextProxy();
-}
-
-function getNextProxyPreferIProyal() {
-  return getNextProxy();
-}
-
-function getNextProxyIProyalOrRotating() {
-  return getNextProxy();
 }
 
 async function assignProxyForTask(taskId) {
@@ -894,10 +788,8 @@ function buildProxyUrl(proxy) {
 }
 
 function getProviderLabel(proxy) {
-  if (proxy.provider === 'vps') return `VPS (${proxy.proxy_address})`;
-  if (proxy.provider === 'iproyal') return 'IPRoyal ISP';
-  if (proxy.provider === 'webshare-rotating') return 'Webshare ISP Rotating';
-  return 'Webshare (80M+ IPs)';
+  if (proxy.provider === 'vps') return `Decodo (${proxy.proxy_address})`;
+  return 'Decodo';
 }
 
 function applyProxyToConfig(config, proxy) {
@@ -2647,7 +2539,7 @@ async function retryMotionTask(oldTaskId, task) {
           retryBody,
           true,
           null,
-          'webshare-rotating'
+          'decodo'
         );
         
         const newTaskId = response.data?.data?.task_id || response.data?.task_id || response.data?.data?.id || response.data?.id;
@@ -2938,7 +2830,7 @@ async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
       null,
       true,
       taskId,
-      'iproyal-or-rotating'
+      'decodo'
     );
     
     if (pollResponse.data && typeof pollResponse.data === 'object') {
@@ -3055,7 +2947,7 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
       null,
       true,
       taskId,
-      'iproyal-or-rotating'
+      'decodo'
     );
     const result = parseResponse(pollResponse.data);
     if (result) return result;
@@ -3735,7 +3627,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
           requestBody,
           true,
           pendingId,
-          'iproyal-or-rotating'
+          'decodo'
         );
         
         successResponse = { data: response.data };
@@ -3981,7 +3873,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       null,
       true,
       null,
-      'iproyal-or-rotating'
+      'decodo'
     );
     const pollLatency = Date.now() - pollStart;
     
@@ -4179,7 +4071,7 @@ app.post('/api/motion/generate', async (req, res) => {
       requestBody.prompt = prompt.trim();
     }
     
-    console.log(`[MOTION] Generating motion video with model: ${model} (via Webshare Rotating proxy, fallback direct)`);
+    console.log(`[MOTION] Generating motion video with model: ${model} (via Decodo proxy)`);
     
     const quotaFilteredKeys = filterKeysByDailyQuota(allMotionKeys, 'motion');
     if (quotaFilteredKeys.length === 0 && allMotionKeys.length > 0) {
@@ -4217,7 +4109,7 @@ app.post('/api/motion/generate', async (req, res) => {
           requestBody,
           true,
           null,
-          'webshare-rotating'
+          'decodo'
         );
         
         successResponse = response;
@@ -4497,7 +4389,7 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
           null,
           true,
           taskId,
-          'iproyal-or-rotating'
+          'decodo'
         );
         
         if (pollResponse.data && typeof pollResponse.data === 'object' && !pollResponse.data?.message?.includes('Not found')) {
@@ -8038,7 +7930,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       requestBody,
       true,
       pendingId,
-      'iproyal-or-rotating'
+      'decodo'
     );
     
     console.log(`[VIDGEN3] Freepik response:`, JSON.stringify(response.data));
@@ -8165,7 +8057,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         null,
         true,
         taskId,
-        'iproyal-or-rotating'
+        'decodo'
       );
       
       if (typeof pollResponse.data === 'string') {
