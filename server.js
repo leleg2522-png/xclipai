@@ -956,27 +956,34 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   const hasProxy = isProxyConfigured();
 
-  // Always try direct first to save proxy bandwidth
-  const directConfig = buildConfig();
-  console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → trying direct first...`);
-  try {
-    const resp = await axios(directConfig);
-    if (isFreepikBlocked(resp)) {
-      console.log(`[FREEPIK] Direct blocked by Freepik, falling back to proxy...`);
-    } else {
-      console.log(`[FREEPIK] Direct success! No proxy needed.`);
-      return resp;
+  if (!makeFreepikRequest._directBlocked) {
+    const directConfig = buildConfig();
+    console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → trying direct first...`);
+    try {
+      const resp = await axios(directConfig);
+      if (isFreepikBlocked(resp)) {
+        console.log(`[FREEPIK] Direct blocked (403). Skipping direct for next 10 min.`);
+        makeFreepikRequest._directBlocked = Date.now();
+      } else {
+        console.log(`[FREEPIK] Direct success! No proxy needed.`);
+        return resp;
+      }
+    } catch (err) {
+      if (isRateLimited(err)) throw err;
+      if (err.response?.status === 403) {
+        console.log(`[FREEPIK] Direct 403 blocked. Skipping direct for next 10 min.`);
+        makeFreepikRequest._directBlocked = Date.now();
+      } else {
+        console.log(`[FREEPIK] Direct failed: ${err.message}, falling back to proxy...`);
+      }
     }
-  } catch (err) {
-    if (isRateLimited(err)) {
-      console.log(`[FREEPIK] Direct 429 — throw to try next key`);
-      throw err;
+  } else {
+    if (Date.now() - makeFreepikRequest._directBlocked > 10 * 60 * 1000) {
+      makeFreepikRequest._directBlocked = null;
     }
-    console.log(`[FREEPIK] Direct failed: ${err.message}, falling back to proxy...`);
   }
 
   if (!useProxy || !hasProxy) {
-    console.log(`[FREEPIK] No proxy available, giving up.`);
     throw new Error('Direct request failed and no proxy configured');
   }
 
@@ -3056,28 +3063,18 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
   }
 
   try {
-    const directResponse = await axios.get(
+    const pollResponse = await makeFreepikRequest(
+      'GET',
       `https://api.freepik.com${endpoint}`,
-      { headers: freepikHeaders(apiKey), timeout: 15000 }
+      apiKey,
+      null,
+      true,
+      taskId,
+      'iproyal-or-rotating'
     );
-    const result = parseResponse(directResponse.data);
+    const result = parseResponse(pollResponse.data);
     if (result) return result;
-    return { status: 'processing' };
-  } catch (directErr) {
-    try {
-      const proxyResponse = await makeFreepikRequest(
-        'GET',
-        `https://api.freepik.com${endpoint}`,
-        apiKey,
-        null,
-        true,
-        taskId,
-        'iproyal-or-rotating'
-      );
-      const result = parseResponse(proxyResponse.data);
-      if (result) return result;
-    } catch (e) {}
-  }
+  } catch (e) {}
   return { status: 'processing' };
 }
 
@@ -3992,23 +3989,15 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
 
     const pollStart = Date.now();
-    let response;
-    try {
-      response = await axios.get(
-        `https://api.freepik.com${endpoint}${taskId}`,
-        { headers: freepikHeaders(freepikApiKey), timeout: 15000 }
-      );
-    } catch (directErr) {
-      response = await makeFreepikRequest(
-        'GET',
-        `https://api.freepik.com${endpoint}${taskId}`,
-        freepikApiKey,
-        null,
-        true,
-        null,
-        'iproyal-or-rotating'
-      );
-    }
+    const response = await makeFreepikRequest(
+      'GET',
+      `https://api.freepik.com${endpoint}${taskId}`,
+      freepikApiKey,
+      null,
+      true,
+      null,
+      'iproyal-or-rotating'
+    );
     const pollLatency = Date.now() - pollStart;
     
     if (typeof response.data === 'string') {
