@@ -805,8 +805,9 @@ function applyProxyToConfig(config, proxy) {
 function isFreepikBlocked(response) {
   if (!response) return false;
   const data = response.data;
-  if (typeof data === 'string' && (data.includes('Access denied') || data.includes('<!DOCTYPE'))) return true;
-  return response.status === 403;
+  if (typeof data === 'string' && (data.includes('Access denied') || data.includes('<!DOCTYPE') || data.includes('edgesuite') || data.includes('AkamaiGHost'))) return true;
+  if (response.status === 403 && typeof data === 'string') return true;
+  return false;
 }
 
 async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = true, taskId = null, preferredProvider = null) {
@@ -902,8 +903,15 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       const bandwidthErr = isProxyBandwidthError(proxyErr);
 
       if (rateLimited) {
-        // 429 = API key quota habis, bukan masalah IP — langsung throw supaya key berikutnya dicoba
         console.log(`[PROXY] 429 rate limited on ${getProviderLabel(usedProxy)} — API key quota, skip proxy retry, try next key`);
+        if (taskId) releaseProxyForTask(taskId);
+        throw proxyErr;
+      }
+
+      const httpStatus = proxyErr.response?.status;
+      const respData = proxyErr.response?.data;
+      if (httpStatus === 403 && respData && typeof respData === 'object') {
+        console.log(`[PROXY] 403 from Freepik API (JSON response) — key/permission issue, not IP blocked. Stop retry.`);
         if (taskId) releaseProxyForTask(taskId);
         throw proxyErr;
       }
