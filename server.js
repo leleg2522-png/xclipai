@@ -862,8 +862,9 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   console.log(`[FREEPIK] ${method} ${url.split('/').slice(-2).join('/')} → proxy`);
 
+  const MAX_PROXY_ATTEMPTS = 10;
   let proxyAttempt = 0;
-  while (true) {
+  while (proxyAttempt < MAX_PROXY_ATTEMPTS) {
     let usedProxy = null;
     const proxyConfig = buildConfig();
     
@@ -916,13 +917,18 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
 
       if (blocked || socketErr) {
-        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (attempt ${proxyAttempt})`);
+        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (attempt ${proxyAttempt}/${MAX_PROXY_ATTEMPTS})`);
         if (taskId) releaseProxyForTask(taskId);
         await sleep(1500);
         continue;
       }
       throw proxyErr;
     }
+  }
+
+  if (proxyAttempt >= MAX_PROXY_ATTEMPTS) {
+    console.error(`[PROXY] Max attempts (${MAX_PROXY_ATTEMPTS}) reached for ${url.split('/').slice(-2).join('/')}`);
+    throw new Error(`Proxy failed after ${MAX_PROXY_ATTEMPTS} attempts`);
   }
 
 }
