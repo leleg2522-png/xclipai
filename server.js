@@ -11087,7 +11087,8 @@ app.listen(PORT, '0.0.0.0', () => {
   initDatabase().then(async () => {
     console.log('[STARTUP] Database init completed');
     try {
-      await ensureProxiesInitialized();
+      initVpsProxy();
+      console.log(`[STARTUP] Proxy initialized: ${isProxyConfigured() ? 'Decodo ready' : 'No proxy configured'}`);
     } catch (e) {
       console.error('Proxy init error (non-fatal):', e.message);
     }
