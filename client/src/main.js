@@ -2522,80 +2522,69 @@ function formatSize(bytes) {
 // Download video function that works on all devices
 window.downloadVideo = async function(url, filename) {
   try {
-    // Check if iOS
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const safeName = (filename || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
     
-    if (isIOS) {
-      // iOS: Use server proxy with proper download headers
-      showToast('Mempersiapkan download...', 'info');
-      const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
-      
-      // Create invisible iframe to trigger download without leaving page
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = proxyUrl;
-      document.body.appendChild(iframe);
-      
-      // Also open in new tab as backup
-      setTimeout(() => {
-        window.open(proxyUrl, '_blank');
-        showToast('File sedang diunduh. Cek folder Downloads.', 'success');
-      }, 500);
-      
-      // Clean up iframe after delay
-      setTimeout(() => {
-        if (iframe.parentNode) {
-          document.body.removeChild(iframe);
-        }
-      }, 10000);
-      return;
-    }
-    
-    // Desktop/Android: Try multiple download methods
-    showToast('Memulai download...', 'info');
-    
-    // Method 1: Try fetch + blob (works for same-origin and CORS-enabled URLs)
+    showToast('Mempersiapkan file...', 'info');
+
+    let blob;
     try {
       const response = await fetch(url, { mode: 'cors' });
-      if (response.ok) {
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = safeName + '.mp4';
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-        }, 100);
-        showToast('Download berhasil!', 'success');
-        return;
-      }
-    } catch (fetchError) {
-      console.log('Fetch failed, trying proxy method:', fetchError);
+      if (response.ok) blob = await response.blob();
+    } catch (e) {}
+
+    if (!blob) {
+      try {
+        const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
+        const response = await fetch(proxyUrl, { credentials: 'include' });
+        if (response.ok) blob = await response.blob();
+      } catch (e) {}
     }
-    
-    // Method 2: Use server proxy (for CORS-restricted URLs)
-    const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
+
+    if (!blob) {
+      const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
+      window.open(proxyUrl, '_blank');
+      showToast('Membuka video di tab baru. Tekan lama untuk simpan ke galeri.', 'info');
+      return;
+    }
+
+    const videoFile = new File([blob], safeName + '.mp4', { type: blob.type || 'video/mp4' });
+
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [videoFile] })) {
+      try {
+        await navigator.share({
+          files: [videoFile],
+          title: safeName
+        });
+        showToast('Video berhasil disimpan!', 'success');
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') {
+          showToast('Dibatalkan', 'info');
+          return;
+        }
+      }
+    }
+
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = proxyUrl;
+    a.href = blobUrl;
     a.download = safeName + '.mp4';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => document.body.removeChild(a), 100);
-    showToast('Download dimulai!', 'success');
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 100);
+    showToast('Download berhasil!', 'success');
     
   } catch (error) {
     console.error('Download error:', error);
-    // Final fallback: use proxy in new tab
     const safeName = (filename || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
     const proxyUrl = `${API_URL}/api/download-video?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeName)}`;
     window.open(proxyUrl, '_blank');
-    showToast('Cek folder Downloads', 'info');
+    showToast('Membuka video di tab baru. Tekan lama untuk simpan.', 'info');
   }
 };
 
@@ -4609,20 +4598,61 @@ function renderXImage3Gallery() {
 
 async function downloadImage(url, filename) {
   try {
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    var safeName = filename || 'image-' + Date.now() + '.png';
     var proxyPath = '/api/ximage/download';
     if (filename && filename.indexOf('ximage2') === 0) {
       proxyPath = '/api/ximage2/download';
     } else if (filename && filename.indexOf('ximage3') === 0) {
       proxyPath = '/api/ximage3/download';
     }
-    var proxyUrl = API_URL + proxyPath + '?url=' + encodeURIComponent(url);
-    var response = await fetch(proxyUrl, { credentials: 'include' });
-    if (!response.ok) throw new Error('Download failed: ' + response.status);
-    var blob = await response.blob();
+
+    showToast('Mempersiapkan file...', 'info');
+
+    var blob;
+    try {
+      var proxyUrl = API_URL + proxyPath + '?url=' + encodeURIComponent(url);
+      var response = await fetch(proxyUrl, { credentials: 'include' });
+      if (response.ok) blob = await response.blob();
+    } catch (e) {}
+
+    if (!blob) {
+      try {
+        var response2 = await fetch(url, { mode: 'cors' });
+        if (response2.ok) blob = await response2.blob();
+      } catch (e) {}
+    }
+
+    if (!blob) {
+      window.open(url, '_blank');
+      showToast('Membuka gambar di tab baru. Tekan lama untuk simpan ke galeri.', 'info');
+      return;
+    }
+
+    var ext = safeName.split('.').pop() || 'png';
+    var mimeType = blob.type || ('image/' + (ext === 'jpg' ? 'jpeg' : ext));
+    var imageFile = new File([blob], safeName, { type: mimeType });
+
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+      try {
+        await navigator.share({
+          files: [imageFile],
+          title: safeName.replace(/\.[^.]+$/, '')
+        });
+        showToast('Gambar berhasil disimpan!', 'success');
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') {
+          showToast('Dibatalkan', 'info');
+          return;
+        }
+      }
+    }
+
     var blobUrl = window.URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = blobUrl;
-    a.download = filename || 'image-' + Date.now() + '.png';
+    a.download = safeName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -4631,7 +4661,7 @@ async function downloadImage(url, filename) {
   } catch (err) {
     console.error('Download error:', err);
     window.open(url, '_blank');
-    showToast('Membuka gambar di tab baru', 'info');
+    showToast('Membuka gambar di tab baru. Tekan lama untuk simpan.', 'info');
   }
 }
 
@@ -7058,9 +7088,9 @@ function renderVidgen2Videos() {
     if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
     html += '</div>';
     html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
-    html += '<a href="/api/vidgen2/download?url=' + encodeURIComponent(video.url) + '" download="vidgen2_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen2Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
+    html += '<button onclick="downloadVideo(\'' + video.url.replace(/'/g, "\\'") + '\', \'vidgen2_' + (video.id || Date.now()) + '.mp4\')" class="btn-icon downloadVidgen2Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;display:inline-flex;">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-    html += '</a>';
+    html += '</button>';
     html += '<button class="btn-icon deleteVidgen2Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
     html += '</button>';
@@ -7983,9 +8013,9 @@ function renderVidgen4Videos() {
     if (video.prompt) html += '<p class="video-prompt-text" style="font-size:11px;opacity:0.7;margin:4px 0 0;">' + (video.prompt.length > 80 ? video.prompt.substring(0, 80) + '...' : video.prompt) + '</p>';
     html += '</div>';
     html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
-    html += '<a href="' + API_URL + '/api/vidgen4/download?url=' + encodeURIComponent(video.url) + '" download="vidgen4_' + (video.id || Date.now()) + '.mp4" class="btn-icon downloadVidgen4Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;text-decoration:none;display:inline-flex;">';
+    html += '<button onclick="downloadVideo(\'' + video.url.replace(/'/g, "\\'") + '\', \'vidgen4_' + (video.id || Date.now()) + '.mp4\')" class="btn-icon downloadVidgen4Video" title="Unduh video" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#6366f1;display:inline-flex;">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-    html += '</a>';
+    html += '</button>';
     html += '<button class="btn-icon deleteVidgen4Video" data-task-id="' + video.id + '" title="Hapus video" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px;cursor:pointer;color:#ef4444;">';
     html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
     html += '</button>';
