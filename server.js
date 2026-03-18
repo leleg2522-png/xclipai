@@ -7558,9 +7558,11 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
                          data.output?.url ||
                          data.output?.video_url;
           
+          if (Array.isArray(videoUrl)) videoUrl = videoUrl[0];
+          if (videoUrl && typeof videoUrl === 'object') videoUrl = videoUrl.url || videoUrl.video_url || null;
+          if (videoUrl && typeof videoUrl !== 'string') videoUrl = String(videoUrl);
           console.log(`[VIDGEN4] Status URL extracted: ${videoUrl ? videoUrl.substring(0,80) : 'NULL'}`);
           console.log(`[VIDGEN4] Data keys: ${JSON.stringify(Object.keys(data))}, result: ${JSON.stringify(data.result)?.substring(0,200)}`);
-          if (Array.isArray(videoUrl)) videoUrl = videoUrl[0];
           
           if (videoUrl) {
             console.log(`[VIDGEN4] Video URL found: ${videoUrl}`);
