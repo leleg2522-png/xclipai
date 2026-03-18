@@ -10238,8 +10238,13 @@ app.get('/api/ximage3/proxy-image', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.send(Buffer.from(response.data));
   } catch (error) {
-    console.error('[XIMAGE3] Proxy image error:', error.message);
-    res.status(500).json({ error: 'Gagal load image' });
+    const status = error.response?.status || 500;
+    if (status === 404) {
+      console.warn('[XIMAGE3] Image expired/not found:', (req.query.url || '').substring(0, 80));
+    } else {
+      console.error('[XIMAGE3] Proxy image error:', error.message);
+    }
+    res.status(status).json({ error: status === 404 ? 'Gambar sudah expired' : 'Gagal load image' });
   }
 });
 
