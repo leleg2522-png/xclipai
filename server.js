@@ -825,7 +825,8 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
 
   function isSocketError(err) {
     const msg = (err.message || '').toLowerCase();
-    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || msg.includes('epipe') || msg.includes('write epipe') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC';
+    const bodyStr = typeof err.response?.data === 'string' ? err.response.data.toLowerCase() : JSON.stringify(err.response?.data || '').toLowerCase();
+    return msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') || msg.includes('timeout') || msg.includes('ssl') || msg.includes('bad record mac') || msg.includes('ssl3_read_bytes') || msg.includes('epipe') || msg.includes('write epipe') || err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED' || err.code === 'EPIPE' || err.code === 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC' || msg.includes('bad gateway') || msg.includes('exit node') || bodyStr.includes('bad gateway') || bodyStr.includes('exit node') || bodyStr.includes('session has ended') || err.response?.status === 502;
   }
 
   function isProxyBandwidthError(err) {
