@@ -7927,6 +7927,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     let imageBase64ForRef = null;
     let imageMimeType = 'image/jpeg';
     
+    console.log(`[VIDGEN3] Image input: ${image ? (image.length > 200 ? image.substring(0, 100) + '...[' + image.length + ' chars]' : image) : 'NONE'}, model=${model}, useReferenceImages=${config.useReferenceImages}`);
+    
     if (image && image.includes('base64')) {
       const b64Match = image.match(/^data:(image\/\w+);base64,(.+)$/);
       if (b64Match) {
@@ -7987,6 +7989,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       } else {
         console.error('[VIDGEN3] Failed to convert image to base64 for reference_images');
         return res.status(400).json({ error: 'Gagal memproses gambar referensi. Coba upload ulang.' });
+      }
+      if (imageUrlForApi) {
+        try {
+          let cdnUrl = imageUrlForApi;
+          const cdnResult = await reuploadToCDN(imageUrlForApi);
+          if (cdnResult) cdnUrl = cdnResult;
+          requestBody.images = [cdnUrl];
+          console.log(`[VIDGEN3] Also added images URL as fallback: ${cdnUrl}`);
+        } catch (cdnErr) {
+          requestBody.images = [imageUrlForApi];
+          console.log(`[VIDGEN3] Also added images URL as fallback (no CDN): ${imageUrlForApi}`);
+        }
       }
     } else if (!config.useReferenceImages && imageUrlForApi) {
       if (!requestBody.images) {
@@ -8090,6 +8104,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         } else {
           usedFormat = 'unified';
           const body = { ...requestBody, model: currentFallback.modelName };
+          const logBody = { ...body };
+          if (logBody.reference_images) logBody.reference_images = `[${logBody.reference_images.length} items, base64 ${logBody.reference_images[0]?.bytesBase64Encoded?.length || 0} chars]`;
+          console.log(`[VIDGEN3] Sending unified request:`, JSON.stringify(logBody));
           response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, body);
         }
         
