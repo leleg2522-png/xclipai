@@ -3506,7 +3506,8 @@ function renderVidgen3Page() {
   const models = [
     { id: 'grok-15s', name: 'Grok 15s', desc: 'Video 15 detik dengan Grok AI', badge: 'NEW', icon: '🚀', type: 'text2video' },
     { id: 'grok-10s', name: 'Grok 10s', desc: 'Video 10 detik dengan Grok AI', badge: 'FAST', icon: '⚡', type: 'text2video' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video ~15 detik dengan OpenAI Sora', badge: 'PRO', icon: '🎬', type: 'text2video' }
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video ~15 detik dengan OpenAI Sora', badge: 'PRO', icon: '🎬', type: 'text2video' },
+    { id: 'veo3.1-fast-4k', name: 'Veo 3.1 Fast 4K', desc: 'Video cepat 4K dengan Google Veo 3.1', badge: '4K', icon: '🎥', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
@@ -3746,6 +3747,20 @@ function renderVidgen3ModelSettings() {
         </div>
       </div>
       <p class="setting-hint" style="text-align:center;opacity:0.7;">OpenAI Sora 2 Pro - Video ~16 detik, kualitas tinggi</p>
+    `;
+  } else if (model === 'veo3.1-fast-4k') {
+    html += `
+      <div class="setting-group">
+        <label class="setting-label">Orientasi</label>
+        <div class="aspect-ratio-selector">
+          ${['landscape', 'portrait'].map(o => `
+            <button class="aspect-btn ${(state.vidgen3.aspectRatio || 'landscape') === o ? 'active' : ''}" data-vidgen3-aspect="${o}">
+              <span>${o === 'landscape' ? '🖥 Landscape' : '📱 Portrait'}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <p class="setting-hint" style="text-align:center;opacity:0.7;">Google Veo 3.1 Fast - Video 4K, cepat & kualitas tinggi</p>
     `;
   }
 

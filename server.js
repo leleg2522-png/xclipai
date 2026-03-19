@@ -6529,6 +6529,19 @@ const VIDGEN3_MODEL_CONFIGS = {
       private: true
     })
   },
+  'veo3.1-fast-4k': {
+    yunwuModel: 'veo3.1-fast',
+    type: 'text2video',
+    label: 'Veo 3.1 Fast 4K',
+    buildBody: (params) => ({
+      model: 'veo3.1-fast',
+      prompt: params.prompt || '',
+      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
+      enable_upsample: true,
+      enhance_prompt: true,
+      ...(params.image ? { images: [params.image] } : {})
+    })
+  },
 };
 
 const YUNWU_API_BASE = 'https://yunwu.ai/v1';
