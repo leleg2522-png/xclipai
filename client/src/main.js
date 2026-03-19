@@ -3775,12 +3775,22 @@ function renderVidgen3Tasks() {
   html += '<div class="tasks-list">';
   
   state.vidgen3.tasks.forEach(function(task) {
-    html += '<div class="task-card">';
+    const isFailed = task.status === 'failed';
+    html += '<div class="task-card" data-task-id="' + task.taskId + '">';
     html += '<div class="task-card-header">';
     html += '<span class="task-model-badge">' + task.model.toUpperCase() + '</span>';
-    html += '<span class="task-status-badge processing">Processing</span>';
+    if (isFailed) {
+      html += '<span class="task-status-badge failed" style="background:rgba(239,68,68,0.2);color:#ef4444;">Failed</span>';
+      html += '<button class="btn btn-sm btn-danger vidgen3-dismiss-task" data-dismiss-task="' + task.taskId + '" style="margin-left:auto;padding:2px 8px;font-size:11px;">✕</button>';
+    } else {
+      html += '<span class="task-status-badge processing">Processing</span>';
+    }
     html += '</div>';
-    html += '<div class="task-progress-bar"><div class="task-progress-fill indeterminate"></div></div>';
+    if (isFailed) {
+      html += '<div style="color:#ef4444;font-size:12px;padding:6px 0;word-break:break-word;">' + (task.error || 'Generation gagal') + '</div>';
+    } else {
+      html += '<div class="task-progress-bar"><div class="task-progress-fill indeterminate"></div></div>';
+    }
     html += '</div>';
   });
   
@@ -8879,11 +8889,11 @@ function pollVidgen3Task(taskId, model) {
       }
 
       if (data.status === 'failed') {
+        task.status = 'failed';
         task.error = data.error || 'Generation gagal';
-        state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
         savePendingTasks();
-        showToast('Gagal generate video', 'error');
+        showToast(`Video gagal: ${task.error}`, 'error');
         render();
         return;
       }
