@@ -7878,11 +7878,20 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
     let response;
-    let usedOpenAIFormat = false;
-    const maxRetries = 5;
+    let usedFormat = 'unified';
     
-    async function tryUnifiedFormat(apiKey, body) {
-      return makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, apiKey, body);
+    const soraModelFallbacks = model === 'sora-2-pro' ? [
+      { modelName: 'sora-2-pro', format: 'unified' },
+      { modelName: 'new-sora-2-pro', format: 'unified' },
+      { modelName: 'sora-2-all', format: 'unified' },
+      { modelName: 'sora-2-pro', format: 'openai' },
+    ] : [{ modelName: config.yunwuModel, format: 'unified' }];
+    
+    let fallbackIdx = 0;
+    const maxRetries = 6;
+    
+    function isSaturatedError(str) {
+      return str.includes('upstream_saturated') || str.includes('No available channel') || str.includes('saturated') || str.includes('饱和') || str.includes('负载') || str.includes('上游');
     }
     
     async function tryOpenAIFormat(apiKey, modelName, params) {
@@ -7912,11 +7921,15 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const currentFallback = soraModelFallbacks[fallbackIdx];
       try {
-        if (!usedOpenAIFormat) {
-          response = await tryUnifiedFormat(yunwuApiKey, requestBody);
+        if (currentFallback.format === 'openai') {
+          usedFormat = 'openai';
+          response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation });
         } else {
-          response = await tryOpenAIFormat(yunwuApiKey, config.yunwuModel, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation });
+          usedFormat = 'unified';
+          const body = { ...requestBody, model: currentFallback.modelName };
+          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, body);
         }
         
         const respData = response.data || {};
@@ -7924,17 +7937,17 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         const respStatus = (respData.status || '').toLowerCase();
         if (respStatus === 'error' || respError) {
           const errStr = typeof respError === 'string' ? respError : JSON.stringify(respError);
-          const isSaturated = errStr.includes('upstream_saturated') || errStr.includes('No available channel') || errStr.includes('saturated') || errStr.includes('饱和') || errStr.includes('负载') || errStr.includes('上游');
-          const isRetryable = isSaturated || errStr.includes('rate_limit');
+          const saturated = isSaturatedError(errStr);
           
-          if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
-            console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
-            usedOpenAIFormat = true;
+          if (saturated && fallbackIdx < soraModelFallbacks.length - 1) {
+            fallbackIdx++;
+            const next = soraModelFallbacks[fallbackIdx];
+            console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
             continue;
           }
           
-          if (isRetryable && attempt < maxRetries) {
-            const delay = attempt * 8000;
+          if ((saturated || errStr.includes('rate_limit')) && attempt < maxRetries) {
+            const delay = attempt * 6000;
             console.warn(`[VIDGEN3] Yunwu API error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
             await new Promise(r => setTimeout(r, delay));
             continue;
@@ -7945,17 +7958,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       } catch (retryErr) {
         const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message || '';
         const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg);
-        const isSaturated = errStr.includes('upstream_saturated') || errStr.includes('No available channel') || errStr.includes('saturated') || errStr.includes('饱和') || errStr.includes('负载') || errStr.includes('上游');
-        const isRetryable = isSaturated || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        const saturated = isSaturatedError(errStr);
         
-        if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
-          console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
-          usedOpenAIFormat = true;
+        if (saturated && fallbackIdx < soraModelFallbacks.length - 1) {
+          fallbackIdx++;
+          const next = soraModelFallbacks[fallbackIdx];
+          console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
           continue;
         }
         
+        const isRetryable = saturated || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
         if (isRetryable && attempt < maxRetries) {
-          const delay = attempt * 8000;
+          const delay = attempt * 6000;
           console.warn(`[VIDGEN3] Yunwu request error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
           await new Promise(r => setTimeout(r, delay));
         } else {
@@ -7964,7 +7978,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       }
     }
     
-    console.log(`[VIDGEN3] Yunwu response (format=${usedOpenAIFormat ? 'openai' : 'unified'}):`, JSON.stringify(response.data));
+    console.log(`[VIDGEN3] Yunwu response (format=${usedFormat}, model=${soraModelFallbacks[fallbackIdx]?.modelName}):`, JSON.stringify(response.data));
     
     const respData = response.data || {};
     if (respData.status === 'error' && respData.error) {
