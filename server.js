@@ -8234,11 +8234,13 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         }
       }
       
-      if (status === 'failed' || detailStatus === 'failed') {
-        const rawErrorMsg = data.error || data.detail?.error_message || data.detail || data.message || 'Generation failed';
+      const hasErrorObj = data.error && (typeof data.error === 'object' ? data.error.message : data.error);
+      if (status === 'failed' || detailStatus === 'failed' || (hasErrorObj && status !== 'completed' && status !== 'success' && status !== 'in_progress' && status !== 'queued' && status !== 'processing')) {
+        const rawErr = data.error;
+        const rawErrorMsg = (typeof rawErr === 'object' && rawErr?.message) ? rawErr.message : (rawErr || data.detail?.error_message || data.detail || data.message || 'Generation failed');
         const errorMsg = typeof rawErrorMsg === 'string' ? rawErrorMsg : JSON.stringify(rawErrorMsg);
         
-        const isQueueTimeout = errorMsg.includes('请稍后重试') || errorMsg.includes('排队') || errorMsg.includes('queue') || errorMsg.includes('retry later') || errorMsg.includes('超时');
+        const isQueueTimeout = errorMsg.includes('请稍后重试') || errorMsg.includes('排队') || errorMsg.includes('queue') || errorMsg.includes('retry later') || errorMsg.includes('超时') || errorMsg.includes('重新发起请求') || errorMsg.includes('生成过程中出现异常') || errorMsg.includes('请重新');
         if (isQueueTimeout) {
           console.log(`[VIDGEN3] Queue timeout detected (${errorMsg}), auto-resubmitting...`);
           try {
