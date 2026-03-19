@@ -6523,7 +6523,10 @@ const VIDGEN3_MODEL_CONFIGS = {
       prompt: params.prompt || '',
       duration: 15,
       size: 'large',
-      ...(params.image ? { images: [params.image] } : {})
+      orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
+      watermark: false,
+      private: true,
+      images: params.image ? [params.image] : []
     })
   }
 };
@@ -6533,6 +6536,7 @@ const YUNWU_API_BASE = 'https://yunwu.ai/v1';
 function yunwuHeaders(apiKey) {
   return {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     'Authorization': `Bearer ${apiKey}`
   };
 }
