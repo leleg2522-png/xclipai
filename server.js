@@ -6528,7 +6528,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       watermark: false,
       private: true
     })
-  }
+  },
 };
 
 const YUNWU_API_BASE = 'https://yunwu.ai/v1';
