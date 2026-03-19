@@ -3523,7 +3523,7 @@ function renderVidgen3Page() {
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen3</span> AI Video Playground
         </h1>
-        <p class="hero-subtitle">Generate video dengan Grok AI & Sora 2 Pro via Yunwu AI</p>
+        <p class="hero-subtitle">Generate video dengan Grok AI & Sora 2 Pro</p>
       </div>
 
       <div class="xmaker-layout">
