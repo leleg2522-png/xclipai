@@ -3726,6 +3726,16 @@ function renderVidgen3ModelSettings() {
   } else if (model === 'sora-2-pro') {
     html += `
       <div class="setting-group">
+        <label class="setting-label">Orientasi</label>
+        <div class="aspect-ratio-selector">
+          ${['landscape', 'portrait'].map(o => `
+            <button class="aspect-btn ${(state.vidgen3.aspectRatio || 'landscape') === o ? 'active' : ''}" data-vidgen3-aspect="${o}">
+              <span>${o === 'landscape' ? '🖥 Landscape' : '📱 Portrait'}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="setting-group">
         <label class="setting-label">Resolution</label>
         <div class="aspect-ratio-selector">
           ${['720p', '1080p'].map(r => `
