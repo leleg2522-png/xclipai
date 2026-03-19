@@ -6486,12 +6486,12 @@ async function getMotionRoomApiKey(xclipApiKey) {
 
 const VIDGEN3_MODEL_CONFIGS = {
   'grok-15s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3-15s',
     type: 'text2video',
     duration: 15,
     label: 'Grok 15s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3-15s',
       prompt: params.prompt || '',
       duration: 15,
       aspect_ratio: params.aspectRatio || '16:9',
@@ -6500,12 +6500,12 @@ const VIDGEN3_MODEL_CONFIGS = {
     })
   },
   'grok-10s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3-10s',
     type: 'text2video',
     duration: 10,
     label: 'Grok 10s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3-10s',
       prompt: params.prompt || '',
       duration: 10,
       aspect_ratio: params.aspectRatio || '16:9',
