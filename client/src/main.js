@@ -8667,6 +8667,16 @@ function attachVidgen3EventListeners() {
     });
   }
 
+  document.querySelectorAll('.vidgen3-dismiss-task').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const taskId = btn.dataset.dismissTask;
+      state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
+      _activePolls.delete(taskId);
+      savePendingTasks();
+      render();
+    });
+  });
+
   document.querySelectorAll('.vidgen3-delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const videoId = btn.dataset.videoId;

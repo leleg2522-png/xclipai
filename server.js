@@ -2303,6 +2303,55 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
   }
 });
 
+async function reuploadToCDN(imageUrl) {
+  if (!imageUrl || imageUrl.includes('filesystem.site') || imageUrl.includes('catbox.moe') || imageUrl.includes('0x0.st') || imageUrl.includes('imgbb.com')) {
+    return null;
+  }
+  
+  console.log(`[CDN] Downloading image from: ${imageUrl}`);
+  const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+  const buffer = Buffer.from(imgResponse.data);
+  const contentType = imgResponse.headers['content-type'] || 'image/png';
+  const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
+  
+  const FormData = require('form-data');
+  
+  try {
+    const form1 = new FormData();
+    form1.append('reqtype', 'fileupload');
+    form1.append('fileToUpload', buffer, { filename: `image.${ext}`, contentType });
+    const catboxRes = await axios.post('https://catbox.moe/user/api.php', form1, {
+      headers: form1.getHeaders(),
+      timeout: 60000,
+      maxContentLength: 50 * 1024 * 1024
+    });
+    if (catboxRes.data && catboxRes.data.startsWith('http')) {
+      console.log(`[CDN] Catbox upload success: ${catboxRes.data}`);
+      return catboxRes.data.trim();
+    }
+  } catch (e1) {
+    console.warn(`[CDN] Catbox failed: ${e1.message}`);
+  }
+  
+  try {
+    const form2 = new FormData();
+    form2.append('file', buffer, { filename: `image.${ext}`, contentType });
+    const zeroRes = await axios.post('https://0x0.st', form2, {
+      headers: form2.getHeaders(),
+      timeout: 60000
+    });
+    if (zeroRes.data && zeroRes.data.startsWith('http')) {
+      console.log(`[CDN] 0x0.st upload success: ${zeroRes.data}`);
+      return zeroRes.data.trim();
+    }
+  } catch (e2) {
+    console.warn(`[CDN] 0x0.st failed: ${e2.message}`);
+  }
+  
+  console.warn('[CDN] All CDN uploads failed, using original URL');
+  return null;
+}
+
 // Helper function to save base64 data to file and return public URL
 async function saveBase64ToFile(base64Data, type, baseUrl) {
   const uploadsDir = path.join(__dirname, 'uploads', 'motion');
@@ -7868,6 +7917,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
       imageUrlForApi = imgFile.publicUrl;
       console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
+    }
+    
+    if (imageUrlForApi) {
+      try {
+        const cdnUrl = await reuploadToCDN(imageUrlForApi);
+        if (cdnUrl) {
+          console.log(`[VIDGEN3] Image re-uploaded to CDN: ${cdnUrl}`);
+          imageUrlForApi = cdnUrl;
+        }
+      } catch (cdnErr) {
+        console.warn(`[VIDGEN3] CDN re-upload failed, using original URL: ${cdnErr.message}`);
+      }
     }
     
     let videoUrlForApi = videoUrl;
