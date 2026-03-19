@@ -6518,15 +6518,11 @@ const VIDGEN3_MODEL_CONFIGS = {
     type: 'text2video',
     duration: 15,
     label: 'Sora 2 Pro',
+    useOpenAIFormat: true,
     buildBody: (params) => ({
       model: 'sora-2-pro',
       prompt: params.prompt || '',
-      duration: 15,
-      size: 'large',
-      orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
-      watermark: false,
-      private: true,
-      images: params.image ? [params.image] : []
+      size: params.aspectRatio === '9:16' ? '1024x1792' : '1792x1024'
     })
   }
 };
@@ -7874,19 +7870,38 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
     }
     
-    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})`);
+    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})${config.useOpenAIFormat ? ' [OpenAI format]' : ''}`);
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
     let response;
     const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        response = await makeYunwuRequest(
-          'POST',
-          `${YUNWU_API_BASE}/video/create`,
-          yunwuApiKey,
-          requestBody
-        );
+        if (config.useOpenAIFormat) {
+          const FormData = (await import('form-data')).default;
+          const formData = new FormData();
+          for (const [key, val] of Object.entries(requestBody)) {
+            formData.append(key, String(val));
+          }
+          response = await axios({
+            method: 'POST',
+            url: `${YUNWU_API_BASE}/videos`,
+            headers: {
+              ...formData.getHeaders(),
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${yunwuApiKey}`
+            },
+            data: formData,
+            timeout: 120000
+          });
+        } else {
+          response = await makeYunwuRequest(
+            'POST',
+            `${YUNWU_API_BASE}/video/create`,
+            yunwuApiKey,
+            requestBody
+          );
+        }
         
         const respData = response.data || {};
         const respError = respData.error || '';
@@ -8006,9 +8021,19 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     }
     
     try {
+      const taskModelConfig = VIDGEN3_MODEL_CONFIGS[task.model] || {};
+      const isOpenAIFormat = taskModelConfig.useOpenAIFormat || false;
+      
+      let pollUrl;
+      if (isOpenAIFormat) {
+        pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
+      } else {
+        pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
+      }
+      
       const pollResponse = await makeYunwuRequest(
         'GET',
-        `${YUNWU_API_BASE}/video/query?id=${taskId}`,
+        pollUrl,
         yunwuApiKey
       );
       
@@ -8018,6 +8043,14 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       
       if (status === 'completed' || status === 'success' || (data.video_url && data.video_url !== null)) {
         let videoUrl = data.video_url || data.url || null;
+        if (!videoUrl && isOpenAIFormat) {
+          try {
+            const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
+            videoUrl = dlResponse.data?.video_url || dlResponse.data?.url || dlResponse.request?.res?.responseUrl || null;
+          } catch (dlErr) {
+            console.warn('[VIDGEN3] Download endpoint failed:', dlErr.message);
+          }
+        }
         if (!videoUrl && data.final_result) {
           videoUrl = data.final_result.url || (data.final_result.urls && data.final_result.urls[0]) || null;
         }
