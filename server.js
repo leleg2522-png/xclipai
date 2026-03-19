@@ -6514,21 +6514,19 @@ const VIDGEN3_MODEL_CONFIGS = {
     })
   },
   'sora-2-pro': {
-    yunwuModel: 'sora-2-pro',
+    yunwuModel: 'sora-2-vip',
     type: 'text2video',
     duration: 15,
     label: 'Sora 2 Pro',
-    useChatCompletions: true,
     buildBody: (params) => ({
-      model: 'sora-2-pro',
-      max_tokens: 1000,
-      messages: [
-        {
-          role: 'user',
-          content: params.prompt || ''
-        }
-      ],
-      stream: false
+      model: 'sora-2-vip',
+      prompt: params.prompt || '',
+      duration: 15,
+      size: 'large',
+      orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
+      watermark: false,
+      private: true,
+      images: params.image ? [params.image] : []
     })
   }
 };
