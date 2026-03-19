@@ -6582,14 +6582,17 @@ const VIDGEN3_MODEL_CONFIGS = {
     yunwuModel: 'veo3.1-fast',
     type: 'text2video',
     label: 'Veo 3.1 Fast 4K',
-    buildBody: (params) => ({
-      model: 'veo3.1-fast',
-      prompt: params.prompt || '',
-      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
-      enable_upsample: true,
-      enhance_prompt: true,
-      ...(params.image ? { images: [params.image] } : {})
-    })
+    buildBody: (params) => {
+      const hasImage = !!params.image;
+      return {
+        model: hasImage ? 'veo3.1-fast-frames' : 'veo3.1-fast',
+        prompt: params.prompt || '',
+        aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
+        enable_upsample: true,
+        enhance_prompt: true,
+        ...(hasImage ? { images: [params.image] } : {})
+      };
+    }
   },
 };
 
@@ -7963,7 +7966,13 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         { modelName: 'sora-2-pro', format: 'openai' },
       ];
     } else if (model === 'veo3.1-fast-4k') {
-      modelFallbacks = [
+      const hasImg = !!imageUrlForApi;
+      modelFallbacks = hasImg ? [
+        { modelName: 'veo3.1-fast-frames', format: 'unified' },
+        { modelName: 'veo3.1-frames', format: 'unified' },
+        { modelName: 'veo3-fast-frames', format: 'unified' },
+        { modelName: 'veo_3_1', format: 'openai' },
+      ] : [
         { modelName: 'veo3.1-fast', format: 'unified' },
         { modelName: 'veo3.1-4k', format: 'unified' },
         { modelName: 'veo3.1', format: 'unified' },
