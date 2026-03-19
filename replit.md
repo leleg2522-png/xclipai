@@ -41,14 +41,14 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Glio.io Video Generator)**: Advanced video generation migrated from Freepik to Glio.io API. Uses GLIO_API_KEY env var. Room-based Xclip API key system for access control. Features include:
-  - 2 AI models via Glio.io:
-    - Wan Animate (wan-2-2-animate-move): Motion transfer - requires image + video input, optional resolution (480p/720p)
-    - Luma Ray 2 (luma-ray2-v2v): Video-to-video modification - requires prompt + video input
-  - Glio.io API: POST /v1/jobs to create, GET /v1/jobs/{id} to poll, response field: final_result.url
-  - Auth: Authorization: Bearer {GLIO_API_KEY}
-  - Frontend uploads: image (for wan-animate) + video (required for both models), base64 converted to public URL server-side
-  - Video upload limit: 30MB (base64 through express.json)
+- **Vidgen3 (Yunwu AI Video Generator)**: Advanced video generation via Yunwu AI relay API. Uses YUNWU_API_KEY env var. Room-based Xclip API key system for access control. Features include:
+  - 3 AI models via Yunwu AI (api.yunwu.ai):
+    - Grok 15s (grok-imagine-video): Text/image-to-video, 15 seconds, 480p/720p, with audio sync
+    - Grok 10s (grok-imagine-video): Text/image-to-video, 10 seconds, 480p/720p, with audio sync
+    - Sora 2 Pro (sora-2-pro): Text/image-to-video, ~16 seconds, 720p/1080p, high quality
+  - Yunwu AI API: POST /v1/videos to create, GET /v1/videos/{task_id} to poll
+  - Auth: Authorization: Bearer {YUNWU_API_KEY}
+  - Frontend: prompt (required) + optional image reference, text-to-video focused
   - Database tables: vidgen3_rooms, vidgen3_tasks
   - Room assignment via vidgen3_room_id in subscriptions
   - SSE events: vidgen3_completed, vidgen3_failed
