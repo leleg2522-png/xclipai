@@ -6582,27 +6582,27 @@ const VIDGEN3_MODEL_CONFIGS = {
   'veo3.1-fast-4k': {
     yunwuModel: 'veo3.1-fast',
     type: 'text2video',
+    useReferenceImages: true,
     label: 'Veo 3.1 Fast 4K',
     buildBody: (params) => ({
       model: 'veo3.1-fast',
       prompt: params.prompt || '',
       aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
       enable_upsample: true,
-      enhance_prompt: true,
-      ...(params.image ? { images: [params.image] } : {})
+      enhance_prompt: true
     })
   },
   'veo3.1-4k': {
     yunwuModel: 'veo3.1-4k',
     type: 'text2video',
+    useReferenceImages: true,
     label: 'Veo 3.1 4K',
     buildBody: (params) => ({
       model: 'veo3.1-4k',
       prompt: params.prompt || '',
       aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
       enable_upsample: true,
-      enhance_prompt: true,
-      ...(params.image ? { images: [params.image] } : {})
+      enhance_prompt: true
     })
   },
 };
@@ -7924,16 +7924,36 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     let imageUrlForApi = image;
+    let imageBase64ForRef = null;
+    let imageMimeType = 'image/jpeg';
+    
     if (image && image.includes('base64')) {
+      const b64Match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (b64Match) {
+        imageMimeType = b64Match[1];
+        imageBase64ForRef = b64Match[2];
+      } else {
+        imageBase64ForRef = image.replace(/^data:[^;]+;base64,/, '');
+      }
+      
       const v3protocol = req.headers['x-forwarded-proto'] || 'https';
       const v3host = req.headers['x-forwarded-host'] || req.headers.host;
       const v3baseUrl = `${v3protocol}://${v3host}`;
       const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
       imageUrlForApi = imgFile.publicUrl;
       console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
+    } else if (image) {
+      try {
+        const dlResp = await axios.get(image, { responseType: 'arraybuffer', timeout: 30000 });
+        const buf = Buffer.from(dlResp.data);
+        imageBase64ForRef = buf.toString('base64');
+        imageMimeType = dlResp.headers['content-type'] || 'image/jpeg';
+      } catch (dlErr) {
+        console.warn(`[VIDGEN3] Could not download image for base64: ${dlErr.message}`);
+      }
     }
     
-    if (imageUrlForApi) {
+    if (imageUrlForApi && !config.useReferenceImages) {
       try {
         const cdnUrl = await reuploadToCDN(imageUrlForApi);
         if (cdnUrl) {
@@ -7957,6 +7977,23 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     
     const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution, aspectRatio });
     
+    if (config.useReferenceImages && image) {
+      if (imageBase64ForRef) {
+        requestBody.reference_images = [{
+          bytesBase64Encoded: imageBase64ForRef,
+          mimeType: imageMimeType
+        }];
+        console.log(`[VIDGEN3] Using reference_images format (mimeType: ${imageMimeType}, size: ${imageBase64ForRef.length} chars)`);
+      } else {
+        console.error('[VIDGEN3] Failed to convert image to base64 for reference_images');
+        return res.status(400).json({ error: 'Gagal memproses gambar referensi. Coba upload ulang.' });
+      }
+    } else if (!config.useReferenceImages && imageUrlForApi) {
+      if (!requestBody.images) {
+        requestBody.images = [imageUrlForApi];
+      }
+    }
+    
     const yunwuApiKey = process.env.YUNWU_API_KEY;
     if (!yunwuApiKey) {
       return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
@@ -7978,17 +8015,17 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       ];
     } else if (model === 'veo3.1-fast-4k') {
       modelFallbacks = [
-        { modelName: 'veo_3_1', format: 'openai' },
         { modelName: 'veo3.1-fast', format: 'unified' },
         { modelName: 'veo3.1', format: 'unified' },
         { modelName: 'veo3-fast', format: 'unified' },
+        { modelName: 'veo_3_1', format: 'openai' },
       ];
     } else if (model === 'veo3.1-4k') {
       modelFallbacks = [
         { modelName: 'veo3.1-4k', format: 'unified' },
-        { modelName: 'veo_3_1', format: 'openai' },
         { modelName: 'veo3.1', format: 'unified' },
         { modelName: 'veo3.1-fast', format: 'unified' },
+        { modelName: 'veo_3_1', format: 'openai' },
       ];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
@@ -8125,9 +8162,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     await pool.query(`
-      INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
-    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName]);
+      INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, original_params)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', $8)
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName, JSON.stringify(requestBody)]);
     
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
@@ -8272,7 +8309,13 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
                 const origModel = origTask.model;
                 const origConfig = VIDGEN3_MODEL_CONFIGS[origModel];
                 if (origConfig) {
-                  const retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
+                  let retryBody;
+                  if (origTask.original_params) {
+                    retryBody = typeof origTask.original_params === 'string' ? JSON.parse(origTask.original_params) : origTask.original_params;
+                    retryBody.model = origConfig.yunwuModel;
+                  } else {
+                    retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
+                  }
                   const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
                   const retryData = retryResponse.data;
                   const newTaskId = retryData?.task_id || retryData?.id;
@@ -11003,10 +11046,12 @@ async function initDatabase() {
         key_index INTEGER,
         used_key_name VARCHAR(100),
         retry_count INTEGER DEFAULT 0,
+        original_params JSONB DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         completed_at TIMESTAMP
       )
     `);
+    await pool.query(`ALTER TABLE vidgen3_tasks ADD COLUMN IF NOT EXISTS original_params JSONB DEFAULT NULL`).catch(() => {});
     
     // Add vidgen3_room_id to subscriptions
     await pool.query(`
