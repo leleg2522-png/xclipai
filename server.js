@@ -8226,42 +8226,50 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         const isGoogleSafetyError = errorMsg.includes('UNSAFE_GENERATION') || errorMsg.includes('AUDIO_FILTERED') || errorMsg.includes('SAFETY') || errorMsg.includes('FILTERED');
         const isVeo3Model = taskId.startsWith('veo3');
         
-        if (isGoogleSafetyError && isVeo3Model && !task.retried_with_veo2) {
-          console.log(`[VIDGEN3] Veo3 safety filter error, auto-retrying with veo2-fast-frames...`);
+        if (isGoogleSafetyError && isVeo3Model) {
+          console.log(`[VIDGEN3] Veo3 safety filter error (${errorMsg}), auto-retrying...`);
           try {
             const retryTaskResult = await pool.query('SELECT * FROM vidgen3_tasks WHERE task_id = $1', [taskId]);
             const origTask = retryTaskResult.rows[0];
             const retryPrompt = origTask?.prompt || '';
+            const retryCount = origTask?.retry_count || 0;
             
-            const yunwuApiKey = process.env.YUNWU_API_KEY;
-            const retryModel = taskId.includes('frames') ? 'veo2-fast-frames' : 'veo2-fast';
-            const retryBody = {
-              model: retryModel,
-              prompt: retryPrompt,
-              aspect_ratio: '16:9',
-              enable_upsample: true,
-              enhance_prompt: true
-            };
-            
-            const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
-            const retryData = retryResponse.data;
-            
-            if (retryData && retryData.id) {
-              const newTaskId = retryData.id;
-              await pool.query(
-                'UPDATE vidgen3_tasks SET task_id = $1, status = $2, error_message = $3 WHERE task_id = $4',
-                [newTaskId, 'processing', `Auto-retry with ${retryModel} (Veo3 safety filter)`, taskId]
-              ).catch(e => console.error('[VIDGEN3] DB retry update error:', e));
+            if (retryCount < 2) {
+              const yunwuApiKey = process.env.YUNWU_API_KEY;
+              const retryModel = retryCount === 0 ? 'veo3.1-fast' : 'veo2-fast';
+              const retryBody = {
+                model: retryModel,
+                prompt: retryPrompt,
+                enable_upsample: true,
+                enhance_prompt: true
+              };
               
-              console.log(`[VIDGEN3] Auto-retry success! New task: ${newTaskId} (${retryModel})`);
-              return res.json({
-                status: 'processing',
-                progress: 5,
-                taskId: taskId,
-                newTaskId: newTaskId,
-                retryModel: retryModel,
-                message: `Veo3 safety filter → auto-retry dengan ${retryModel}`
-              });
+              const origImages = data.detail?.req?.images;
+              if (origImages && origImages.length > 0) {
+                retryBody.images = origImages;
+              }
+              
+              const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
+              const retryData = retryResponse.data;
+              
+              if (retryData && retryData.id) {
+                const newTaskId = retryData.id;
+                await pool.query(
+                  `UPDATE vidgen3_tasks SET task_id = $1, status = 'processing', retry_count = $2, 
+                   error_message = $3 WHERE task_id = $4`,
+                  [newTaskId, retryCount + 1, `Retry ${retryCount + 1}/2 → ${retryModel}`, taskId]
+                ).catch(e => console.error('[VIDGEN3] DB retry update error:', e));
+                
+                console.log(`[VIDGEN3] Auto-retry ${retryCount + 1}/2 success! New task: ${newTaskId} (${retryModel})`);
+                return res.json({
+                  status: 'retrying',
+                  progress: 5,
+                  taskId: taskId,
+                  newTaskId: newTaskId,
+                  retryModel: retryModel,
+                  message: `Safety filter → retry ${retryCount + 1}/2 (${retryModel})`
+                });
+              }
             }
           } catch (retryErr) {
             console.error('[VIDGEN3] Auto-retry failed:', retryErr.message);
@@ -10920,6 +10928,7 @@ async function initDatabase() {
         error_message TEXT,
         key_index INTEGER,
         used_key_name VARCHAR(100),
+        retry_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         completed_at TIMESTAMP
       )

@@ -8847,9 +8847,10 @@ async function generateVidgen3Video() {
   }
 }
 
-function pollVidgen3Task(taskId, model) {
+function pollVidgen3Task(initialTaskId, model) {
   const maxAttempts = 600;
   let attempts = 0;
+  let taskId = initialTaskId;
 
   setTimeout(() => poll(), 5000);
 
@@ -8895,6 +8896,21 @@ function pollVidgen3Task(taskId, model) {
         savePendingTasks();
         showToast('Video berhasil di-generate!', 'success');
         render();
+        return;
+      }
+
+      if (data.status === 'retrying' && data.newTaskId) {
+        const oldTaskId = task.taskId;
+        task.taskId = data.newTaskId;
+        task.status = 'processing';
+        task.progress = 5;
+        _activePolls.delete(oldTaskId);
+        _activePolls.add(data.newTaskId);
+        savePendingTasks();
+        showToast(data.message || 'Auto-retry...', 'info');
+        render();
+        taskId = data.newTaskId;
+        setTimeout(poll, 8000);
         return;
       }
 
