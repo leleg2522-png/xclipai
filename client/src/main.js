@@ -3507,7 +3507,8 @@ function renderVidgen3Page() {
     { id: 'grok-15s', name: 'Grok 15s', desc: 'Video 15 detik dengan Grok AI', badge: 'NEW', icon: '🚀', type: 'text2video' },
     { id: 'grok-10s', name: 'Grok 10s', desc: 'Video 10 detik dengan Grok AI', badge: 'FAST', icon: '⚡', type: 'text2video' },
     { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video ~15 detik dengan OpenAI Sora', badge: 'PRO', icon: '🎬', type: 'text2video' },
-    { id: 'veo3.1-fast-4k', name: 'Veo 3.1 Fast 4K', desc: 'Video cepat 4K dengan Google Veo 3.1', badge: '4K', icon: '🎥', type: 'text2video' }
+    { id: 'veo3.1-fast-4k', name: 'Veo 3.1 Fast 4K', desc: 'Video cepat 4K dengan Google Veo 3.1', badge: '4K', icon: '🎥', type: 'text2video' },
+    { id: 'veo3.1-4k', name: 'Veo 3.1 4K', desc: 'Video 4K kualitas tinggi dengan Google Veo 3.1', badge: '4K PRO', icon: '🎬', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];

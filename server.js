@@ -6592,6 +6592,19 @@ const VIDGEN3_MODEL_CONFIGS = {
       ...(params.image ? { images: [params.image] } : {})
     })
   },
+  'veo3.1-4k': {
+    yunwuModel: 'veo3.1-4k',
+    type: 'text2video',
+    label: 'Veo 3.1 4K',
+    buildBody: (params) => ({
+      model: 'veo3.1-4k',
+      prompt: params.prompt || '',
+      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
+      enable_upsample: true,
+      enhance_prompt: true,
+      ...(params.image ? { images: [params.image] } : {})
+    })
+  },
 };
 
 const YUNWU_API_BASE = 'https://yunwu.ai/v1';
@@ -7969,6 +7982,13 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         { modelName: 'veo3.1-fast', format: 'unified' },
         { modelName: 'veo3.1', format: 'unified' },
         { modelName: 'veo3-fast', format: 'unified' },
+      ];
+    } else if (model === 'veo3.1-4k') {
+      modelFallbacks = [
+        { modelName: 'veo3.1-4k', format: 'unified' },
+        { modelName: 'veo_3_1', format: 'openai' },
+        { modelName: 'veo3.1', format: 'unified' },
+        { modelName: 'veo3.1-fast', format: 'unified' },
       ];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
