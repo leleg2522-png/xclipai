@@ -7923,8 +7923,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         const respError = respData.error || '';
         const respStatus = (respData.status || '').toLowerCase();
         if (respStatus === 'error' || respError) {
-          const isSaturated = respError.includes('upstream_saturated') || respError.includes('No available channel') || respError.includes('saturated');
-          const isRetryable = isSaturated || respError.includes('rate_limit');
+          const errStr = typeof respError === 'string' ? respError : JSON.stringify(respError);
+          const isSaturated = errStr.includes('upstream_saturated') || errStr.includes('No available channel') || errStr.includes('saturated') || errStr.includes('饱和') || errStr.includes('负载') || errStr.includes('上游');
+          const isRetryable = isSaturated || errStr.includes('rate_limit');
           
           if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
             console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
@@ -7934,7 +7935,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           
           if (isRetryable && attempt < maxRetries) {
             const delay = attempt * 8000;
-            console.warn(`[VIDGEN3] Yunwu API error: ${respError}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
+            console.warn(`[VIDGEN3] Yunwu API error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
             await new Promise(r => setTimeout(r, delay));
             continue;
           }
@@ -7943,8 +7944,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         break;
       } catch (retryErr) {
         const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message || '';
-        const isSaturated = errMsg.includes('upstream_saturated') || errMsg.includes('No available channel') || errMsg.includes('saturated');
-        const isRetryable = isSaturated || errMsg.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg);
+        const isSaturated = errStr.includes('upstream_saturated') || errStr.includes('No available channel') || errStr.includes('saturated') || errStr.includes('饱和') || errStr.includes('负载') || errStr.includes('上游');
+        const isRetryable = isSaturated || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
         
         if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
           console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
@@ -7954,7 +7956,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         
         if (isRetryable && attempt < maxRetries) {
           const delay = attempt * 8000;
-          console.warn(`[VIDGEN3] Yunwu request error: ${errMsg}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
+          console.warn(`[VIDGEN3] Yunwu request error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
           await new Promise(r => setTimeout(r, delay));
         } else {
           throw retryErr;
@@ -7967,7 +7969,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const respData = response.data || {};
     if (respData.status === 'error' && respData.error) {
       console.error('[VIDGEN3] Yunwu API returned error after retries:', respData.error);
-      return res.status(503).json({ error: `Yunwu AI: ${respData.error}. Server sedang sibuk, coba lagi nanti.` });
+      return res.status(503).json({ error: 'Server video sedang sibuk, coba lagi dalam beberapa menit.' });
     }
     
     let taskId = respData.task_id || respData.id;
