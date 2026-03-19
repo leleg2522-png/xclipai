@@ -6608,7 +6608,7 @@ async function makeYunwuRequest(method, url, apiKey, body = null) {
     method,
     url,
     headers: yunwuHeaders(apiKey),
-    timeout: 120000
+    timeout: 180000
   };
   if (body) config.data = body;
   return axios(config);
@@ -8019,7 +8019,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         url: `${YUNWU_API_BASE}/videos`,
         headers,
         data: form,
-        timeout: 120000
+        timeout: 180000
       });
     }
     
@@ -8070,7 +8070,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           continue;
         }
         
-        const isRetryable = saturated || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        const isTimeout = retryErr.code === 'ECONNABORTED' || errStr.includes('timeout');
+        const isRetryable = saturated || isTimeout || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
         if (isRetryable && attempt < maxRetries) {
           const delay = attempt * 6000;
           console.warn(`[VIDGEN3] Yunwu request error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
