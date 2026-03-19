@@ -7893,12 +7893,24 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     let response;
     let usedFormat = 'unified';
     
-    const soraModelFallbacks = model === 'sora-2-pro' ? [
-      { modelName: 'sora-2-pro', format: 'unified' },
-      { modelName: 'new-sora-2-pro', format: 'unified' },
-      { modelName: 'sora-2-all', format: 'unified' },
-      { modelName: 'sora-2-pro', format: 'openai' },
-    ] : [{ modelName: config.yunwuModel, format: 'unified' }];
+    let modelFallbacks;
+    if (model === 'sora-2-pro') {
+      modelFallbacks = [
+        { modelName: 'sora-2-pro', format: 'unified' },
+        { modelName: 'new-sora-2-pro', format: 'unified' },
+        { modelName: 'sora-2-all', format: 'unified' },
+        { modelName: 'sora-2-pro', format: 'openai' },
+      ];
+    } else if (model === 'veo3.1-fast-4k') {
+      modelFallbacks = [
+        { modelName: 'veo3.1-fast', format: 'unified' },
+        { modelName: 'veo3.1-4k', format: 'unified' },
+        { modelName: 'veo3.1', format: 'unified' },
+        { modelName: 'veo_3_1', format: 'openai' },
+      ];
+    } else {
+      modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
+    }
     
     let fallbackIdx = 0;
     const maxRetries = 6;
@@ -7912,13 +7924,19 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       const form = new FormData();
       form.append('model', modelName);
       form.append('prompt', params.prompt || '');
-      const isSoraPro = modelName.includes('sora-2-pro');
-      if (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') {
-        form.append('size', isSoraPro ? '1024x1792' : '720x1280');
+      if (modelName.includes('veo')) {
+        form.append('size', (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9x16' : '16x9');
+        form.append('seconds', '8');
+        form.append('watermark', 'false');
       } else {
-        form.append('size', isSoraPro ? '1792x1024' : '1280x720');
+        const isSoraPro = modelName.includes('sora-2-pro');
+        if (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') {
+          form.append('size', isSoraPro ? '1024x1792' : '720x1280');
+        } else {
+          form.append('size', isSoraPro ? '1792x1024' : '1280x720');
+        }
+        form.append('seconds', '15');
       }
-      form.append('seconds', '15');
       if (params.image) form.append('input_reference', params.image);
       const headers = {
         ...form.getHeaders(),
@@ -7934,7 +7952,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const currentFallback = soraModelFallbacks[fallbackIdx];
+      const currentFallback = modelFallbacks[fallbackIdx];
       try {
         if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
@@ -7952,9 +7970,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           const errStr = typeof respError === 'string' ? respError : JSON.stringify(respError);
           const saturated = isSaturatedError(errStr);
           
-          if (saturated && fallbackIdx < soraModelFallbacks.length - 1) {
+          if (saturated && fallbackIdx < modelFallbacks.length - 1) {
             fallbackIdx++;
-            const next = soraModelFallbacks[fallbackIdx];
+            const next = modelFallbacks[fallbackIdx];
             console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
             continue;
           }
@@ -7973,9 +7991,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg);
         const saturated = isSaturatedError(errStr);
         
-        if (saturated && fallbackIdx < soraModelFallbacks.length - 1) {
+        if (saturated && fallbackIdx < modelFallbacks.length - 1) {
           fallbackIdx++;
-          const next = soraModelFallbacks[fallbackIdx];
+          const next = modelFallbacks[fallbackIdx];
           console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
           continue;
         }
@@ -7991,7 +8009,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       }
     }
     
-    console.log(`[VIDGEN3] Yunwu response (format=${usedFormat}, model=${soraModelFallbacks[fallbackIdx]?.modelName}):`, JSON.stringify(response.data));
+    console.log(`[VIDGEN3] Yunwu response (format=${usedFormat}, model=${modelFallbacks[fallbackIdx]?.modelName}):`, JSON.stringify(response.data));
     
     const respData = response.data || {};
     if (respData.status === 'error' && respData.error) {
