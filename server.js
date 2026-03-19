@@ -6516,13 +6516,13 @@ const VIDGEN3_MODEL_CONFIGS = {
   'sora-2-pro': {
     yunwuModel: 'sora-2-pro',
     type: 'text2video',
-    duration: 16,
+    duration: 15,
     label: 'Sora 2 Pro',
     buildBody: (params) => ({
       model: 'sora-2-pro',
       prompt: params.prompt || '',
-      duration: 16,
-      size: params.resolution === '1080p' ? '1920x1080' : '1280x720',
+      duration: 15,
+      size: 'large',
       ...(params.image ? { images: [params.image] } : {})
     })
   }
