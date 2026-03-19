@@ -6609,7 +6609,7 @@ async function makeYunwuRequest(method, url, apiKey, body = null) {
     method,
     url,
     headers: yunwuHeaders(apiKey),
-    timeout: 180000
+    timeout: 300000
   };
   if (body) config.data = body;
   return axios(config);
@@ -8020,7 +8020,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         url: `${YUNWU_API_BASE}/videos`,
         headers,
         data: form,
-        timeout: 180000
+        timeout: 300000
       });
     }
     
