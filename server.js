@@ -6514,19 +6514,19 @@ const VIDGEN3_MODEL_CONFIGS = {
     })
   },
   'sora-2-pro': {
-    yunwuModel: 'sora-2',
+    yunwuModel: 'sora-2-pro',
     type: 'text2video',
-    duration: 10,
+    duration: 15,
     label: 'Sora 2 Pro',
     buildBody: (params) => ({
-      model: 'sora-2',
-      prompt: params.prompt || '',
-      duration: 10,
-      size: 'large',
+      images: params.image ? [params.image] : [],
+      model: 'sora-2-pro',
       orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
+      prompt: params.prompt || '',
+      size: 'large',
+      duration: 15,
       watermark: false,
-      private: true,
-      images: params.image ? [params.image] : []
+      private: true
     })
   }
 };
