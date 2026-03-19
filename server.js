@@ -6496,7 +6496,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 15,
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image } : {})
+      ...(params.image ? { images: [params.image] } : {})
     })
   },
   'grok-10s': {
@@ -6510,7 +6510,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 10,
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image } : {})
+      ...(params.image ? { images: [params.image] } : {})
     })
   },
   'sora-2-pro': {
@@ -6521,9 +6521,9 @@ const VIDGEN3_MODEL_CONFIGS = {
     buildBody: (params) => ({
       model: 'sora-2-pro',
       prompt: params.prompt || '',
-      seconds: '16',
+      duration: 16,
       size: params.resolution === '1080p' ? '1920x1080' : '1280x720',
-      ...(params.image ? { image_url: params.image } : {})
+      ...(params.image ? { images: [params.image] } : {})
     })
   }
 };
