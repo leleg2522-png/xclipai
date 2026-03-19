@@ -7964,10 +7964,10 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       ];
     } else if (model === 'veo3.1-fast-4k') {
       modelFallbacks = [
+        { modelName: 'veo_3_1', format: 'openai' },
         { modelName: 'veo3.1-fast', format: 'unified' },
         { modelName: 'veo3.1', format: 'unified' },
         { modelName: 'veo3-fast', format: 'unified' },
-        { modelName: 'veo_3_1', format: 'openai' },
       ];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
@@ -7998,7 +7998,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         }
         form.append('seconds', '15');
       }
-      if (params.image) form.append('input_reference', params.image);
+      if (params.image) {
+        try {
+          const imgResp = await axios.get(params.image, { responseType: 'arraybuffer', timeout: 30000 });
+          const imgBuf = Buffer.from(imgResp.data);
+          const imgType = imgResp.headers['content-type'] || 'image/png';
+          const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
+          form.append('input_reference', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
+        } catch (dlErr) {
+          console.warn('[VIDGEN3] Could not download image for OpenAI format, sending URL:', dlErr.message);
+          form.append('input_reference', params.image);
+        }
+      }
       const headers = {
         ...form.getHeaders(),
         'Authorization': `Bearer ${apiKey}`
@@ -8017,7 +8028,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       try {
         if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
-          response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation });
+          response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
         } else {
           usedFormat = 'unified';
           const body = { ...requestBody, model: currentFallback.modelName };
