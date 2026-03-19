@@ -6486,12 +6486,12 @@ async function getMotionRoomApiKey(xclipApiKey) {
 
 const VIDGEN3_MODEL_CONFIGS = {
   'grok-15s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3',
     type: 'text2video',
     duration: 15,
     label: 'Grok 15s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3',
       prompt: params.prompt || '',
       duration: 15,
       aspect_ratio: params.aspectRatio || '16:9',
@@ -6500,12 +6500,12 @@ const VIDGEN3_MODEL_CONFIGS = {
     })
   },
   'grok-10s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3',
     type: 'text2video',
     duration: 10,
     label: 'Grok 10s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3',
       prompt: params.prompt || '',
       duration: 10,
       aspect_ratio: params.aspectRatio || '16:9',
@@ -7879,7 +7879,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       try {
         response = await makeYunwuRequest(
           'POST',
-          `${YUNWU_API_BASE}/videos`,
+          `${YUNWU_API_BASE}/video/create`,
           yunwuApiKey,
           requestBody
         );
@@ -7984,7 +7984,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     try {
       const pollResponse = await makeYunwuRequest(
         'GET',
-        `${YUNWU_API_BASE}/videos/${taskId}`,
+        `${YUNWU_API_BASE}/video/query?id=${taskId}`,
         yunwuApiKey
       );
       
@@ -7992,7 +7992,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const data = pollResponse.data;
       const status = (data.status || '').toLowerCase();
       
-      if (status === 'completed') {
+      if (status === 'completed' || status === 'success' || (data.video_url && data.video_url !== null)) {
         let videoUrl = data.video_url || data.url || null;
         if (!videoUrl && data.final_result) {
           videoUrl = data.final_result.url || (data.final_result.urls && data.final_result.urls[0]) || null;
