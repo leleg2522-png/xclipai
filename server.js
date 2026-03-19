@@ -6514,14 +6514,14 @@ const VIDGEN3_MODEL_CONFIGS = {
     })
   },
   'sora-2-pro': {
-    yunwuModel: 'sora-2-vip',
+    yunwuModel: 'sora-2',
     type: 'text2video',
-    duration: 15,
+    duration: 10,
     label: 'Sora 2 Pro',
     buildBody: (params) => ({
-      model: 'sora-2-vip',
+      model: 'sora-2',
       prompt: params.prompt || '',
-      duration: 15,
+      duration: 10,
       size: 'large',
       orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
       watermark: false,
