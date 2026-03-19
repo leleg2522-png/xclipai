@@ -6521,7 +6521,7 @@ const VIDGEN3_MODEL_CONFIGS = {
     buildBody: (params) => ({
       images: params.image ? [params.image] : [],
       model: 'sora-2-pro',
-      orientation: params.aspectRatio === '9:16' ? 'portrait' : 'landscape',
+      orientation: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? 'portrait' : 'landscape',
       prompt: params.prompt || '',
       size: 'large',
       duration: 15,
@@ -7836,7 +7836,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     console.log('[VIDGEN3] Got room API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, videoUrl, resolution } = req.body;
+    const { model, prompt, image, videoUrl, resolution, aspectRatio } = req.body;
     
     const config = VIDGEN3_MODEL_CONFIGS[model];
     if (!config) {
@@ -7867,42 +7867,71 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       console.log(`[VIDGEN3] Video saved to public URL: ${videoUrlForApi}`);
     }
     
-    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution });
+    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution, aspectRatio });
     
     const yunwuApiKey = process.env.YUNWU_API_KEY;
     if (!yunwuApiKey) {
       return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
     }
     
-    const apiFormat = config.useChatCompletions ? 'chat/completions' : 'video/create';
-    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel}) [${apiFormat}]`);
+    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})`);
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
     let response;
+    let usedOpenAIFormat = false;
     const maxRetries = 5;
+    
+    async function tryUnifiedFormat(apiKey, body) {
+      return makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, apiKey, body);
+    }
+    
+    async function tryOpenAIFormat(apiKey, modelName, params) {
+      const FormData = require('form-data');
+      const form = new FormData();
+      form.append('model', modelName);
+      form.append('prompt', params.prompt || '');
+      const isSoraPro = modelName.includes('sora-2-pro');
+      if (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') {
+        form.append('size', isSoraPro ? '1024x1792' : '720x1280');
+      } else {
+        form.append('size', isSoraPro ? '1792x1024' : '1280x720');
+      }
+      form.append('seconds', '15');
+      if (params.image) form.append('input_reference', params.image);
+      const headers = {
+        ...form.getHeaders(),
+        'Authorization': `Bearer ${apiKey}`
+      };
+      return axios({
+        method: 'POST',
+        url: `${YUNWU_API_BASE}/videos`,
+        headers,
+        data: form,
+        timeout: 120000
+      });
+    }
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        if (config.useChatCompletions) {
-          response = await makeYunwuRequest(
-            'POST',
-            `${YUNWU_API_BASE}/chat/completions`,
-            yunwuApiKey,
-            requestBody
-          );
+        if (!usedOpenAIFormat) {
+          response = await tryUnifiedFormat(yunwuApiKey, requestBody);
         } else {
-          response = await makeYunwuRequest(
-            'POST',
-            `${YUNWU_API_BASE}/video/create`,
-            yunwuApiKey,
-            requestBody
-          );
+          response = await tryOpenAIFormat(yunwuApiKey, config.yunwuModel, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation });
         }
         
         const respData = response.data || {};
         const respError = respData.error || '';
         const respStatus = (respData.status || '').toLowerCase();
         if (respStatus === 'error' || respError) {
-          const isRetryable = respError.includes('upstream_saturated') || respError.includes('No available channel') || respError.includes('rate_limit') || respError.includes('saturated');
+          const isSaturated = respError.includes('upstream_saturated') || respError.includes('No available channel') || respError.includes('saturated');
+          const isRetryable = isSaturated || respError.includes('rate_limit');
+          
+          if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
+            console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
+            usedOpenAIFormat = true;
+            continue;
+          }
+          
           if (isRetryable && attempt < maxRetries) {
             const delay = attempt * 8000;
             console.warn(`[VIDGEN3] Yunwu API error: ${respError}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
@@ -7914,7 +7943,15 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         break;
       } catch (retryErr) {
         const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message || '';
-        const isRetryable = errMsg.includes('upstream_saturated') || errMsg.includes('No available channel') || errMsg.includes('rate_limit') || errMsg.includes('saturated') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        const isSaturated = errMsg.includes('upstream_saturated') || errMsg.includes('No available channel') || errMsg.includes('saturated');
+        const isRetryable = isSaturated || errMsg.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        
+        if (isSaturated && !usedOpenAIFormat && model === 'sora-2-pro') {
+          console.warn(`[VIDGEN3] Unified format saturated, switching to OpenAI official format (/v1/videos multipart)`);
+          usedOpenAIFormat = true;
+          continue;
+        }
+        
         if (isRetryable && attempt < maxRetries) {
           const delay = attempt * 8000;
           console.warn(`[VIDGEN3] Yunwu request error: ${errMsg}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
@@ -7925,7 +7962,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       }
     }
     
-    console.log(`[VIDGEN3] Yunwu response:`, JSON.stringify(response.data));
+    console.log(`[VIDGEN3] Yunwu response (format=${usedOpenAIFormat ? 'openai' : 'unified'}):`, JSON.stringify(response.data));
     
     const respData = response.data || {};
     if (respData.status === 'error' && respData.error) {
@@ -8022,11 +8059,10 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     }
     
     try {
-      const taskModelConfig = VIDGEN3_MODEL_CONFIGS[task.model] || {};
-      const isChatFormat = taskModelConfig.useChatCompletions || false;
+      const isOpenAIFormatTask = taskId.startsWith('video_');
       
       let pollUrl;
-      if (isChatFormat) {
+      if (isOpenAIFormatTask) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8044,7 +8080,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       
       if (status === 'completed' || status === 'success' || (data.video_url && data.video_url !== null)) {
         let videoUrl = data.video_url || data.url || null;
-        if (!videoUrl && isChatFormat) {
+        if (!videoUrl && isOpenAIFormatTask) {
           try {
             const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
             videoUrl = dlResponse.data?.video_url || dlResponse.data?.url || dlResponse.request?.res?.responseUrl || null;

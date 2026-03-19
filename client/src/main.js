@@ -8769,7 +8769,8 @@ async function generateVidgen3Video() {
       prompt: state.vidgen3.prompt,
       image: state.vidgen3.sourceImage?.data || null,
       videoUrl: state.vidgen3.referenceVideo?.data || null,
-      resolution: state.vidgen3.resolution
+      resolution: state.vidgen3.resolution,
+      aspectRatio: state.vidgen3.aspectRatio || 'landscape'
     };
 
     const response = await fetch(`${API_URL}/api/vidgen3/proxy`, {
