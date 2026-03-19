@@ -8125,8 +8125,9 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const data = pollResponse.data;
       const status = (data.status || '').toLowerCase();
       
-      if (status === 'completed' || status === 'success' || (data.video_url && data.video_url !== null)) {
-        let videoUrl = data.video_url || data.url || null;
+      const detailStatus = (data.detail?.status || '').toLowerCase();
+      if (status === 'completed' || status === 'success' || detailStatus === 'completed' || (data.video_url && data.video_url !== null)) {
+        let videoUrl = data.video_url || data.detail?.video_url || data.url || null;
         if (!videoUrl && isOpenAIFormatTask) {
           try {
             const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
@@ -8159,8 +8160,8 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         }
       }
       
-      if (status === 'failed') {
-        const errorMsg = data.error || data.message || 'Generation failed';
+      if (status === 'failed' || detailStatus === 'failed') {
+        const errorMsg = data.error || data.detail?.error_message || data.message || 'Generation failed';
         pool.query(
           'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
           ['failed', errorMsg, taskId]
