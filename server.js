@@ -8232,6 +8232,51 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       
       if (status === 'failed' || detailStatus === 'failed') {
         const errorMsg = data.error || data.detail?.error_message || data.message || 'Generation failed';
+        const isGoogleSafetyError = errorMsg.includes('UNSAFE_GENERATION') || errorMsg.includes('AUDIO_FILTERED') || errorMsg.includes('SAFETY') || errorMsg.includes('FILTERED');
+        const isVeo3Model = taskId.startsWith('veo3');
+        
+        if (isGoogleSafetyError && isVeo3Model && !task.retried_with_veo2) {
+          console.log(`[VIDGEN3] Veo3 safety filter error, auto-retrying with veo2-fast-frames...`);
+          try {
+            const retryTaskResult = await pool.query('SELECT * FROM vidgen3_tasks WHERE task_id = $1', [taskId]);
+            const origTask = retryTaskResult.rows[0];
+            const retryPrompt = origTask?.prompt || '';
+            
+            const yunwuApiKey = process.env.YUNWU_API_KEY;
+            const retryModel = taskId.includes('frames') ? 'veo2-fast-frames' : 'veo2-fast';
+            const retryBody = {
+              model: retryModel,
+              prompt: retryPrompt,
+              aspect_ratio: '16:9',
+              enable_upsample: true,
+              enhance_prompt: true
+            };
+            
+            const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
+            const retryData = retryResponse.data;
+            
+            if (retryData && retryData.id) {
+              const newTaskId = retryData.id;
+              await pool.query(
+                'UPDATE vidgen3_tasks SET task_id = $1, status = $2, error_message = $3 WHERE task_id = $4',
+                [newTaskId, 'processing', `Auto-retry with ${retryModel} (Veo3 safety filter)`, taskId]
+              ).catch(e => console.error('[VIDGEN3] DB retry update error:', e));
+              
+              console.log(`[VIDGEN3] Auto-retry success! New task: ${newTaskId} (${retryModel})`);
+              return res.json({
+                status: 'processing',
+                progress: 5,
+                taskId: taskId,
+                newTaskId: newTaskId,
+                retryModel: retryModel,
+                message: `Veo3 safety filter → auto-retry dengan ${retryModel}`
+              });
+            }
+          } catch (retryErr) {
+            console.error('[VIDGEN3] Auto-retry failed:', retryErr.message);
+          }
+        }
+        
         pool.query(
           'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
           ['failed', errorMsg, taskId]
