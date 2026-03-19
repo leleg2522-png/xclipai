@@ -4192,7 +4192,8 @@ app.post('/api/motion/generate', async (req, res) => {
         markMotionKeyFree(currentKey.name);
         lastError = error;
         const status = error.response?.status;
-        const errorMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
+        const rawErrMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
+        const errorMsg = typeof rawErrMsg === 'string' ? rawErrMsg : JSON.stringify(rawErrMsg);
         const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
         const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
         
@@ -8234,7 +8235,47 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       }
       
       if (status === 'failed' || detailStatus === 'failed') {
-        const errorMsg = data.error || data.detail?.error_message || data.message || 'Generation failed';
+        const rawErrorMsg = data.error || data.detail?.error_message || data.detail || data.message || 'Generation failed';
+        const errorMsg = typeof rawErrorMsg === 'string' ? rawErrorMsg : JSON.stringify(rawErrorMsg);
+        
+        const isQueueTimeout = errorMsg.includes('请稍后重试') || errorMsg.includes('排队') || errorMsg.includes('queue') || errorMsg.includes('retry later') || errorMsg.includes('超时');
+        if (isQueueTimeout) {
+          console.log(`[VIDGEN3] Queue timeout detected (${errorMsg}), auto-resubmitting...`);
+          try {
+            const retryTaskResult = await pool.query('SELECT * FROM vidgen3_tasks WHERE task_id = $1', [taskId]);
+            const origTask = retryTaskResult.rows[0];
+            if (origTask) {
+              const retryCount = origTask.retry_count || 0;
+              if (retryCount < 3) {
+                const origModel = origTask.model;
+                const origConfig = VIDGEN3_MODEL_CONFIGS[origModel];
+                if (origConfig) {
+                  const retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
+                  const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
+                  const retryData = retryResponse.data;
+                  const newTaskId = retryData?.task_id || retryData?.id;
+                  if (newTaskId) {
+                    await pool.query(
+                      `UPDATE vidgen3_tasks SET task_id = $1, status = 'processing', retry_count = $2, error_message = $3 WHERE task_id = $4`,
+                      [newTaskId, retryCount + 1, `Queue retry ${retryCount + 1}/3`, taskId]
+                    ).catch(e => console.error('[VIDGEN3] DB queue retry error:', e));
+                    console.log(`[VIDGEN3] Queue retry ${retryCount + 1}/3 → new task: ${newTaskId}`);
+                    return res.json({
+                      status: 'retrying',
+                      progress: 5,
+                      taskId: taskId,
+                      newTaskId: newTaskId,
+                      message: `Antrian penuh, retry otomatis ${retryCount + 1}/3`
+                    });
+                  }
+                }
+              }
+            }
+          } catch (qRetryErr) {
+            console.error('[VIDGEN3] Queue retry failed:', qRetryErr.message);
+          }
+        }
+        
         const isGoogleSafetyError = errorMsg.includes('UNSAFE_GENERATION') || errorMsg.includes('AUDIO_FILTERED') || errorMsg.includes('SAFETY') || errorMsg.includes('FILTERED');
         const isVeo3Model = taskId.startsWith('veo3');
         
@@ -8247,7 +8288,6 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
             const retryCount = origTask?.retry_count || 0;
             
             if (retryCount < 2) {
-              const yunwuApiKey = process.env.YUNWU_API_KEY;
               const retryModel = retryCount === 0 ? 'veo3.1-fast' : 'veo2-fast';
               const retryBody = {
                 model: retryModel,
