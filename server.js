@@ -8257,8 +8257,16 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const status = (data.status || '').toLowerCase();
       
       const detailStatus = (data.detail?.status || '').toLowerCase();
-      if (status === 'completed' || status === 'success' || detailStatus === 'completed' || (data.video_url && data.video_url !== null)) {
-        let videoUrl = data.video_url || data.detail?.video_url || data.url || null;
+      const upsampleStatus = (data.detail?.upsample_status || '').toUpperCase();
+      const isUpsampling = status === 'video_upsampling' || detailStatus === 'video_upsampling';
+      const isUpsampleDone = upsampleStatus === 'MEDIA_GENERATION_STATUS_SUCCESSFUL' || upsampleStatus === 'MEDIA_GENERATION_STATUS_COMPLETED';
+      
+      const isCompleted = status === 'completed' || status === 'success' || detailStatus === 'completed' 
+        || (isUpsampling && isUpsampleDone)
+        || (data.video_url && data.video_url !== null);
+      
+      if (isCompleted) {
+        let videoUrl = data.detail?.upsample_video_url || data.video_url || data.detail?.video_url || data.url || null;
         if (!videoUrl && isOpenAIFormatTask) {
           try {
             const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
@@ -8405,12 +8413,13 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         });
       }
       
-      const progress = data.progress || (status === 'in_progress' ? 50 : (status === 'queued' ? 10 : 5));
+      const progress = data.progress || (isUpsampling ? 85 : (status === 'in_progress' ? 50 : (status === 'queued' ? 10 : 5)));
       return res.json({
         status: 'processing',
         progress: progress,
         taskId: taskId,
-        yunwuStatus: status
+        yunwuStatus: status,
+        ...(isUpsampling ? { message: 'Video berhasil, sedang upscale ke 4K...' } : {})
       });
       
     } catch (pollError) {
