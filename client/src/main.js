@@ -186,7 +186,7 @@ const state = {
     sourceImage: null,
     referenceVideo: null,
     prompt: '',
-    selectedModel: 'wan-animate',
+    selectedModel: 'grok-15s',
     resolution: '720p',
     isGenerating: false,
     isPolling: false,
@@ -3504,13 +3504,12 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'wan-animate', name: 'Wan Animate', desc: 'Transfer gerakan video ke gambar', badge: 'NEW', icon: '🎭', type: 'motion' },
-    { id: 'luma-ray2', name: 'Luma Ray 2', desc: 'Modifikasi video dengan AI prompt', badge: 'AI', icon: '🔮', type: 'v2v' }
+    { id: 'grok-15s', name: 'Grok 15s', desc: 'Video 15 detik dengan Grok AI', badge: 'NEW', icon: '🚀', type: 'text2video' },
+    { id: 'grok-10s', name: 'Grok 10s', desc: 'Video 10 detik dengan Grok AI', badge: 'FAST', icon: '⚡', type: 'text2video' },
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video ~15 detik dengan OpenAI Sora', badge: 'PRO', icon: '🎬', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
-  const isMotionModel = selectedModelInfo.type === 'motion';
-  const isV2VModel = selectedModelInfo.type === 'v2v';
 
   return `
     <div class="container">
@@ -3524,12 +3523,11 @@ function renderVidgen3Page() {
         <h1 class="hero-title">
           <span class="gradient-text">Vidgen3</span> AI Video Playground
         </h1>
-        <p class="hero-subtitle">Generate video dengan berbagai AI model terbaik</p>
+        <p class="hero-subtitle">Generate video dengan Grok AI & Sora 2 Pro via Yunwu AI</p>
       </div>
 
       <div class="xmaker-layout">
         <div class="xmaker-settings">
-          ${isMotionModel ? `
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
@@ -3539,7 +3537,7 @@ function renderVidgen3Page() {
                   <polyline points="21 15 16 10 5 21"/>
                 </svg>
               </div>
-              <h2 class="card-title">Upload Gambar Target</h2>
+              <h2 class="card-title">Gambar Referensi (Opsional)</h2>
             </div>
             <div class="card-body">
               <div class="reference-upload ${state.vidgen3.sourceImage ? 'has-image' : ''}" id="vidgen3UploadZone">
@@ -3558,47 +3556,11 @@ function renderVidgen3Page() {
                       <circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span>Klik untuk upload gambar target</span>
-                    <span class="upload-hint">JPEG, PNG, WEBP (max 10MB)</span>
+                    <span>Klik untuk upload gambar referensi</span>
+                    <span class="upload-hint">JPEG, PNG, WEBP (max 10MB) - Opsional, untuk image-to-video</span>
                   </div>
                 `}
                 <input type="file" id="vidgen3ImageInput" accept="image/*" style="display:none">
-              </div>
-            </div>
-          </div>
-          ` : ''}
-
-          <div class="card glass-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="23 7 16 12 23 17 23 7"/>
-                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                </svg>
-              </div>
-              <h2 class="card-title">Upload Video ${isMotionModel ? 'Referensi Gerakan' : 'Input'}</h2>
-            </div>
-            <div class="card-body">
-              <div class="reference-upload ${state.vidgen3.referenceVideo ? 'has-image' : ''}" id="vidgen3VideoUploadZone">
-                ${state.vidgen3.referenceVideo ? `
-                  <video src="${state.vidgen3.referenceVideo.data}" class="reference-preview" style="max-height:200px;" controls muted></video>
-                  <button class="remove-reference" id="removeVidgen3Video">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                ` : `
-                  <div class="reference-placeholder">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <polygon points="23 7 16 12 23 17 23 7"/>
-                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                    </svg>
-                    <span>Klik untuk upload video</span>
-                    <span class="upload-hint">MP4, MOV (max 30MB)</span>
-                  </div>
-                `}
-                <input type="file" id="vidgen3VideoInput" accept="video/*" style="display:none">
               </div>
             </div>
           </div>
@@ -3642,11 +3604,11 @@ function renderVidgen3Page() {
               ${renderVidgen3ModelSettings()}
 
               <div class="setting-group">
-                <label class="setting-label">Prompt ${isMotionModel ? '(Opsional)' : ''}</label>
+                <label class="setting-label">Prompt</label>
                 <textarea 
                   class="form-textarea" 
                   id="vidgen3Prompt" 
-                  placeholder="Deskripsikan gerakan atau aksi yang diinginkan..."
+                  placeholder="Deskripsikan video yang ingin dibuat... contoh: A cat walking on the beach at sunset"
                   rows="3"
                 >${state.vidgen3.prompt}</textarea>
               </div>
@@ -3696,10 +3658,8 @@ function renderVidgen3Page() {
                 const cooldownMins = Math.floor(cooldownSecs / 60);
                 const cooldownRemSecs = cooldownSecs % 60;
                 const model = state.vidgen3.selectedModel;
-                const selModel = models.find(m => m.id === model) || models[0];
-                const needsImage = selModel.type === 'motion';
-                const needsVideo = true;
-                const isDisabled = state.vidgen3.isGenerating || (needsImage && !state.vidgen3.sourceImage) || (needsVideo && !state.vidgen3.referenceVideo) || state.vidgen3.tasks.length >= 3 || isOnCooldown;
+                const needsPrompt = !state.vidgen3.prompt && !state.vidgen3.sourceImage;
+                const isDisabled = state.vidgen3.isGenerating || needsPrompt || state.vidgen3.tasks.length >= 3 || isOnCooldown;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen3Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen3.isGenerating ? `
@@ -3749,7 +3709,7 @@ function renderVidgen3ModelSettings() {
   const model = state.vidgen3.selectedModel;
   let html = '';
 
-  if (model === 'wan-animate') {
+  if (model === 'grok-15s' || model === 'grok-10s') {
     html += `
       <div class="setting-group">
         <label class="setting-label">Resolution</label>
@@ -3761,11 +3721,21 @@ function renderVidgen3ModelSettings() {
           `).join('')}
         </div>
       </div>
-      <p class="setting-hint" style="text-align:center;opacity:0.7;">Gerakan dari video referensi akan ditransfer ke gambar target</p>
+      <p class="setting-hint" style="text-align:center;opacity:0.7;">Grok AI - Video ${model === 'grok-15s' ? '15' : '10'} detik, dengan audio sinkron</p>
     `;
-  } else if (model === 'luma-ray2') {
+  } else if (model === 'sora-2-pro') {
     html += `
-      <p class="setting-hint" style="text-align:center;opacity:0.7;">Modifikasi video menggunakan AI prompt. Prompt wajib diisi.</p>
+      <div class="setting-group">
+        <label class="setting-label">Resolution</label>
+        <div class="aspect-ratio-selector">
+          ${['720p', '1080p'].map(r => `
+            <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
+              <span>${r}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+      <p class="setting-hint" style="text-align:center;opacity:0.7;">OpenAI Sora 2 Pro - Video ~16 detik, kualitas tinggi</p>
     `;
   }
 
@@ -8767,12 +8737,8 @@ function handleVidgen3VideoUpload(file) {
 
 async function generateVidgen3Video() {
   const model = state.vidgen3.selectedModel;
-  const isMotion = model === 'wan-animate';
-  const isV2V = model === 'luma-ray2';
 
-  if (isMotion && !state.vidgen3.sourceImage) { alert('Upload gambar target terlebih dahulu'); return; }
-  if (!state.vidgen3.referenceVideo) { alert('Upload video terlebih dahulu'); return; }
-  if (isV2V && !state.vidgen3.prompt) { alert('Masukkan prompt terlebih dahulu'); return; }
+  if (!state.vidgen3.prompt && !state.vidgen3.sourceImage) { alert('Masukkan prompt atau upload gambar referensi'); return; }
 
   if (!state.vidgen3.customApiKey) { alert('Masukkan Xclip API Key'); return; }
   if (state.vidgen3.tasks.length >= 3) { alert('Maks 3 video bersamaan'); return; }

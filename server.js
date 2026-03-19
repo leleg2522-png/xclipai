@@ -6482,50 +6482,66 @@ async function getMotionRoomApiKey(xclipApiKey) {
   };
 }
 
-// ============ VIDGEN3 (Freepik Video Generation) API ============
+// ============ VIDGEN3 (Yunwu AI Video Generation) API ============
 
 const VIDGEN3_MODEL_CONFIGS = {
-  'wan-animate': {
-    glioModel: 'wan-2-2-animate-move',
-    type: 'motion',
+  'grok-15s': {
+    yunwuModel: 'grok-imagine-video',
+    type: 'text2video',
+    duration: 15,
+    label: 'Grok 15s',
     buildBody: (params) => ({
-      model: 'wan-2-2-animate-move',
-      action: 'generate',
-      params: {
-        video_url: params.videoUrl,
-        image_url: params.image,
-        ...(params.resolution ? { resolution: params.resolution } : {})
-      }
+      model: 'grok-imagine-video',
+      prompt: params.prompt || '',
+      duration: 15,
+      aspect_ratio: params.aspectRatio || '16:9',
+      resolution: params.resolution || '720p',
+      ...(params.image ? { image_url: params.image } : {})
     })
   },
-  'luma-ray2': {
-    glioModel: 'luma-ray2-v2v',
-    type: 'v2v',
+  'grok-10s': {
+    yunwuModel: 'grok-imagine-video',
+    type: 'text2video',
+    duration: 10,
+    label: 'Grok 10s',
     buildBody: (params) => ({
-      model: 'luma-ray2-v2v',
-      action: 'generate',
-      params: {
-        prompt: params.prompt || '',
-        video_url: params.videoUrl
-      }
+      model: 'grok-imagine-video',
+      prompt: params.prompt || '',
+      duration: 10,
+      aspect_ratio: params.aspectRatio || '16:9',
+      resolution: params.resolution || '720p',
+      ...(params.image ? { image_url: params.image } : {})
+    })
+  },
+  'sora-2-pro': {
+    yunwuModel: 'sora-2-pro',
+    type: 'text2video',
+    duration: 16,
+    label: 'Sora 2 Pro',
+    buildBody: (params) => ({
+      model: 'sora-2-pro',
+      prompt: params.prompt || '',
+      seconds: '16',
+      size: params.resolution === '1080p' ? '1920x1080' : '1280x720',
+      ...(params.image ? { image_url: params.image } : {})
     })
   }
 };
 
-const GLIO_API_BASE = 'https://api.glio.io';
+const YUNWU_API_BASE = 'https://api.yunwu.ai/v1';
 
-function glioHeaders(apiKey) {
+function yunwuHeaders(apiKey) {
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`
   };
 }
 
-async function makeGlioRequest(method, url, apiKey, body = null) {
+async function makeYunwuRequest(method, url, apiKey, body = null) {
   const config = {
     method,
     url,
-    headers: glioHeaders(apiKey),
+    headers: yunwuHeaders(apiKey),
     timeout: 120000
   };
   if (body) config.data = body;
@@ -7823,11 +7839,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(400).json({ error: `Model tidak didukung: ${model}` });
     }
     
-    if (config.type === 'motion' && (!image || !videoUrl)) {
-      return res.status(400).json({ error: 'Image dan video URL diperlukan untuk Wan Animate' });
-    }
-    if (config.type === 'v2v' && (!prompt || !videoUrl)) {
-      return res.status(400).json({ error: 'Prompt dan video URL diperlukan untuk Ray 2' });
+    if (!prompt && !image) {
+      return res.status(400).json({ error: 'Prompt atau gambar referensi diperlukan' });
     }
     
     let imageUrlForApi = image;
@@ -7852,28 +7865,28 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     
     const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution });
     
-    const glioApiKey = process.env.GLIO_API_KEY;
-    if (!glioApiKey) {
-      return res.status(500).json({ error: 'Glio API key belum dikonfigurasi' });
+    const yunwuApiKey = process.env.YUNWU_API_KEY;
+    if (!yunwuApiKey) {
+      return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
     }
     
-    console.log(`[VIDGEN3] Generating with model: ${model} via Glio (${config.glioModel})`);
+    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})`);
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
-    const response = await makeGlioRequest(
+    const response = await makeYunwuRequest(
       'POST',
-      `${GLIO_API_BASE}/v1/jobs`,
-      glioApiKey,
+      `${YUNWU_API_BASE}/videos`,
+      yunwuApiKey,
       requestBody
     );
     
-    console.log(`[VIDGEN3] Glio response:`, JSON.stringify(response.data));
+    console.log(`[VIDGEN3] Yunwu response:`, JSON.stringify(response.data));
     
-    const taskId = response.data?.id;
+    const taskId = response.data?.task_id || response.data?.id;
     
     if (!taskId) {
-      console.error('[VIDGEN3] No job id in Glio response:', JSON.stringify(response.data));
-      return res.status(500).json({ error: 'Tidak mendapat job id dari Glio' });
+      console.error('[VIDGEN3] No task id in Yunwu response:', JSON.stringify(response.data));
+      return res.status(500).json({ error: 'Tidak mendapat task id dari Yunwu AI' });
     }
     
     await pool.query(`
@@ -7886,7 +7899,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       [roomKeyResult.keyInfoId]
     );
     
-    console.log(`[VIDGEN3] Glio job created: ${taskId}`);
+    console.log(`[VIDGEN3] Yunwu job created: ${taskId}`);
     
     res.json({
       taskId: taskId,
@@ -7946,26 +7959,29 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       });
     }
     
-    const glioApiKey = process.env.GLIO_API_KEY;
-    if (!glioApiKey) {
-      return res.status(500).json({ error: 'Glio API key belum dikonfigurasi' });
+    const yunwuApiKey = process.env.YUNWU_API_KEY;
+    if (!yunwuApiKey) {
+      return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
     }
     
     try {
-      const pollResponse = await makeGlioRequest(
+      const pollResponse = await makeYunwuRequest(
         'GET',
-        `${GLIO_API_BASE}/v1/jobs/${taskId}`,
-        glioApiKey
+        `${YUNWU_API_BASE}/videos/${taskId}`,
+        yunwuApiKey
       );
       
-      console.log(`[VIDGEN3] Glio poll response:`, JSON.stringify(pollResponse.data));
+      console.log(`[VIDGEN3] Yunwu poll response:`, JSON.stringify(pollResponse.data));
       const data = pollResponse.data;
       const status = (data.status || '').toLowerCase();
       
       if (status === 'completed') {
-        let videoUrl = null;
-        if (data.final_result) {
+        let videoUrl = data.video_url || data.url || null;
+        if (!videoUrl && data.final_result) {
           videoUrl = data.final_result.url || (data.final_result.urls && data.final_result.urls[0]) || null;
+        }
+        if (!videoUrl && data.data && data.data[0]) {
+          videoUrl = data.data[0].url || null;
         }
         
         if (videoUrl) {
@@ -7980,7 +7996,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
             videoUrl: videoUrl,
             taskId: taskId,
             model: task.model,
-            cost: data.cost_usd || null
+            cost: data.cost || data.cost_usd || null
           });
         }
       }
@@ -7999,15 +8015,16 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
         });
       }
       
+      const progress = data.progress || (status === 'in_progress' ? 50 : (status === 'queued' ? 10 : 5));
       return res.json({
         status: 'processing',
-        progress: status === 'processing' ? 50 : (status === 'polling' ? 30 : (status === 'submitted' ? 10 : 5)),
+        progress: progress,
         taskId: taskId,
-        glioStatus: status
+        yunwuStatus: status
       });
       
     } catch (pollError) {
-      console.error('[VIDGEN3] Glio poll error:', pollError.response?.data || pollError.message);
+      console.error('[VIDGEN3] Yunwu poll error:', pollError.response?.data || pollError.message);
       return res.json({
         status: 'processing',
         progress: 0,
