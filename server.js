@@ -7874,7 +7874,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
     let response;
-    const maxRetries = 3;
+    const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         response = await makeYunwuRequest(
@@ -7883,13 +7883,27 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           yunwuApiKey,
           requestBody
         );
+        
+        const respData = response.data || {};
+        const respError = respData.error || '';
+        const respStatus = (respData.status || '').toLowerCase();
+        if (respStatus === 'error' || respError) {
+          const isRetryable = respError.includes('upstream_saturated') || respError.includes('No available channel') || respError.includes('rate_limit') || respError.includes('saturated');
+          if (isRetryable && attempt < maxRetries) {
+            const delay = attempt * 8000;
+            console.warn(`[VIDGEN3] Yunwu API error: ${respError}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+        }
+        
         break;
       } catch (retryErr) {
-        const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.message || '';
-        const isRetryable = errMsg.includes('upstream_saturated') || errMsg.includes('No available channel') || errMsg.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
+        const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message || '';
+        const isRetryable = errMsg.includes('upstream_saturated') || errMsg.includes('No available channel') || errMsg.includes('rate_limit') || errMsg.includes('saturated') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
         if (isRetryable && attempt < maxRetries) {
-          const delay = attempt * 5000;
-          console.warn(`[VIDGEN3] Yunwu upstream saturated/unavailable, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
+          const delay = attempt * 8000;
+          console.warn(`[VIDGEN3] Yunwu request error: ${errMsg}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
           await new Promise(r => setTimeout(r, delay));
         } else {
           throw retryErr;
@@ -7899,10 +7913,16 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     
     console.log(`[VIDGEN3] Yunwu response:`, JSON.stringify(response.data));
     
-    const taskId = response.data?.task_id || response.data?.id;
+    const respData = response.data || {};
+    if (respData.status === 'error' && respData.error) {
+      console.error('[VIDGEN3] Yunwu API returned error after retries:', respData.error);
+      return res.status(503).json({ error: `Yunwu AI: ${respData.error}. Server sedang sibuk, coba lagi nanti.` });
+    }
+    
+    const taskId = respData.task_id || respData.id;
     
     if (!taskId) {
-      console.error('[VIDGEN3] No task id in Yunwu response:', JSON.stringify(response.data));
+      console.error('[VIDGEN3] No task id in Yunwu response:', JSON.stringify(respData));
       return res.status(500).json({ error: 'Tidak mendapat task id dari Yunwu AI' });
     }
     
