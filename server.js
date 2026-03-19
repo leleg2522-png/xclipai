@@ -6585,6 +6585,7 @@ const VIDGEN3_MODEL_CONFIGS = {
     buildBody: (params) => ({
       model: 'veo3.1-fast',
       prompt: params.prompt || '',
+      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
       enable_upsample: true,
       enhance_prompt: true,
       ...(params.image ? { images: [params.image] } : {})
