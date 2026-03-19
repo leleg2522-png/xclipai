@@ -6518,11 +6518,17 @@ const VIDGEN3_MODEL_CONFIGS = {
     type: 'text2video',
     duration: 15,
     label: 'Sora 2 Pro',
-    useOpenAIFormat: true,
+    useChatCompletions: true,
     buildBody: (params) => ({
       model: 'sora-2-pro',
-      prompt: params.prompt || '',
-      size: params.aspectRatio === '9:16' ? '1024x1792' : '1792x1024'
+      max_tokens: 1000,
+      messages: [
+        {
+          role: 'user',
+          content: params.prompt || ''
+        }
+      ],
+      stream: false
     })
   }
 };
@@ -7870,30 +7876,21 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
     }
     
-    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})${config.useOpenAIFormat ? ' [OpenAI format]' : ''}`);
+    const apiFormat = config.useChatCompletions ? 'chat/completions' : 'video/create';
+    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel}) [${apiFormat}]`);
     console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
     
     let response;
     const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        if (config.useOpenAIFormat) {
-          const FormData = (await import('form-data')).default;
-          const formData = new FormData();
-          for (const [key, val] of Object.entries(requestBody)) {
-            formData.append(key, String(val));
-          }
-          response = await axios({
-            method: 'POST',
-            url: `${YUNWU_API_BASE}/videos`,
-            headers: {
-              ...formData.getHeaders(),
-              'Accept': 'application/json',
-              'Authorization': `Bearer ${yunwuApiKey}`
-            },
-            data: formData,
-            timeout: 120000
-          });
+        if (config.useChatCompletions) {
+          response = await makeYunwuRequest(
+            'POST',
+            `${YUNWU_API_BASE}/chat/completions`,
+            yunwuApiKey,
+            requestBody
+          );
         } else {
           response = await makeYunwuRequest(
             'POST',
@@ -7938,7 +7935,13 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(503).json({ error: `Yunwu AI: ${respData.error}. Server sedang sibuk, coba lagi nanti.` });
     }
     
-    const taskId = respData.task_id || respData.id;
+    let taskId = respData.task_id || respData.id;
+    if (config.useChatCompletions && !taskId) {
+      const content = respData.choices?.[0]?.message?.content || '';
+      const idMatch = content.match(/task[_-][\w-]+/) || content.match(/video[_-][\w-]+/);
+      if (idMatch) taskId = idMatch[0];
+      if (!taskId && respData.id) taskId = respData.id;
+    }
     
     if (!taskId) {
       console.error('[VIDGEN3] No task id in Yunwu response:', JSON.stringify(respData));
@@ -8022,10 +8025,10 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     
     try {
       const taskModelConfig = VIDGEN3_MODEL_CONFIGS[task.model] || {};
-      const isOpenAIFormat = taskModelConfig.useOpenAIFormat || false;
+      const isChatFormat = taskModelConfig.useChatCompletions || false;
       
       let pollUrl;
-      if (isOpenAIFormat) {
+      if (isChatFormat) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8043,7 +8046,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       
       if (status === 'completed' || status === 'success' || (data.video_url && data.video_url !== null)) {
         let videoUrl = data.video_url || data.url || null;
-        if (!videoUrl && isOpenAIFormat) {
+        if (!videoUrl && isChatFormat) {
           try {
             const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
             videoUrl = dlResponse.data?.video_url || dlResponse.data?.url || dlResponse.request?.res?.responseUrl || null;
