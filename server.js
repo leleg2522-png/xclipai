@@ -6542,13 +6542,14 @@ const VIDGEN3_MODEL_CONFIGS = {
     label: 'Grok 15s',
     buildBody: (params) => {
       const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
-      return {
+      const body = {
         model: 'grok-video-3',
-        prompt: (params.prompt || '') + ' --mode=custom',
+        prompt: params.prompt || '',
         aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P',
-        ...(params.image ? { images: [params.image] } : {})
+        size: '720P'
       };
+      if (params.image) body.images = [params.image];
+      return body;
     }
   },
   'grok-10s': {
@@ -6558,13 +6559,14 @@ const VIDGEN3_MODEL_CONFIGS = {
     label: 'Grok 10s',
     buildBody: (params) => {
       const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
-      return {
+      const body = {
         model: 'grok-video-3',
-        prompt: (params.prompt || '') + ' --mode=custom',
+        prompt: params.prompt || '',
         aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P',
-        ...(params.image ? { images: [params.image] } : {})
+        size: '720P'
       };
+      if (params.image) body.images = [params.image];
+      return body;
     }
   },
   'sora-2-pro': {
