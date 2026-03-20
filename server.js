@@ -6623,12 +6623,12 @@ function yunwuHeaders(apiKey) {
   };
 }
 
-async function makeYunwuRequest(method, url, apiKey, body = null) {
+async function makeYunwuRequest(method, url, apiKey, body = null, timeoutMs = 300000) {
   const config = {
     method,
     url,
     headers: yunwuHeaders(apiKey),
-    timeout: 300000
+    timeout: timeoutMs
   };
   if (body) config.data = body;
   return axios(config);
@@ -8057,7 +8057,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     
     let fallbackIdx = 0;
     const isGrokRequest = config.type === 'grok';
-    const maxRetries = isGrokRequest ? 3 : 6;
+    const maxRetries = isGrokRequest ? 2 : 6;
     
     function isSaturatedError(str) {
       return str.includes('upstream_saturated') || str.includes('No available channel') || str.includes('saturated') || str.includes('饱和') || str.includes('负载') || str.includes('上游');
@@ -8112,8 +8112,29 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         if (currentFallback.format === 'grok') {
           usedFormat = 'grok';
           const grokBody = { ...requestBody, model: currentFallback.modelName };
-          console.log(`[VIDGEN3] Sending Grok request to /v1/video/create:`, JSON.stringify(grokBody));
-          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, grokBody);
+          console.log(`[VIDGEN3] Sending Grok request:`, JSON.stringify(grokBody));
+          const grokStartTime = Date.now();
+          const grokUrls = [
+            `${YUNWU_API_BASE}/video/create`,
+            'https://api.yunwu.ai/v1/video/create'
+          ];
+          let grokSuccess = false;
+          for (const grokUrl of grokUrls) {
+            try {
+              console.log(`[VIDGEN3] Trying Grok URL: ${grokUrl}`);
+              response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody, 60000);
+              console.log(`[VIDGEN3] Grok response from ${grokUrl} in ${Date.now() - grokStartTime}ms, status=${response.status}`);
+              grokSuccess = true;
+              break;
+            } catch (grokUrlErr) {
+              const isTimeout = grokUrlErr.code === 'ECONNABORTED' || (grokUrlErr.message || '').includes('timeout');
+              console.warn(`[VIDGEN3] Grok URL ${grokUrl} failed: ${isTimeout ? 'TIMEOUT' : grokUrlErr.response?.status || grokUrlErr.message}`);
+              if (!isTimeout) throw grokUrlErr;
+            }
+          }
+          if (!grokSuccess) {
+            throw new Error('Grok API timeout: server tidak merespond dalam 60 detik');
+          }
         } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
           response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
