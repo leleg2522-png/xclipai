@@ -6536,31 +6536,31 @@ async function getMotionRoomApiKey(xclipApiKey) {
 
 const VIDGEN3_MODEL_CONFIGS = {
   'grok-15s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3',
     type: 'grok',
     duration: 15,
     label: 'Grok 15s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3',
       prompt: params.prompt || '',
       duration: 15,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { image: { url: params.image } } : {})
+      ...(params.image ? { images: [params.image] } : {})
     })
   },
   'grok-10s': {
-    yunwuModel: 'grok-imagine-video',
+    yunwuModel: 'grok-video-3',
     type: 'grok',
     duration: 10,
     label: 'Grok 10s',
     buildBody: (params) => ({
-      model: 'grok-imagine-video',
+      model: 'grok-video-3',
       prompt: params.prompt || '',
       duration: 10,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { image: { url: params.image } } : {})
+      ...(params.image ? { images: [params.image] } : {})
     })
   },
   'sora-2-pro': {
@@ -8042,7 +8042,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         { modelName: 'veo_3_1', format: 'openai' },
       ];
     } else if (model === 'grok-15s' || model === 'grok-10s') {
-      modelFallbacks = [{ modelName: 'grok-imagine-video', format: 'grok' }];
+      modelFallbacks = [{ modelName: 'grok-video-3', format: 'grok' }];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
     }
@@ -8262,16 +8262,13 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     
     try {
       const isOpenAIFormatTask = taskId.startsWith('video_');
-      const isGrokTask = taskId.startsWith('gvg_') || taskId.startsWith('req_');
       
       const dbTask = await pool.query('SELECT model FROM vidgen3_tasks WHERE task_id = $1', [taskId]).catch(() => null);
       const taskModel = dbTask?.rows?.[0]?.model || '';
       const isGrokModel = taskModel.startsWith('grok-');
       
       let pollUrl;
-      if (isGrokTask || isGrokModel) {
-        pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
-      } else if (isOpenAIFormatTask) {
+      if (isOpenAIFormatTask) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8286,31 +8283,6 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       console.log(`[VIDGEN3] Yunwu poll response:`, JSON.stringify(pollResponse.data));
       const data = pollResponse.data;
       const status = (data.status || '').toLowerCase();
-      
-      if ((isGrokTask || isGrokModel) && status === 'done') {
-        const videoUrl = data.video?.url || data.video_url || data.url || null;
-        if (videoUrl) {
-          pool.query(
-            'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
-            ['completed', videoUrl, taskId]
-          ).catch(e => console.error('[VIDGEN3] DB update error:', e));
-          return res.json({ status: 'completed', videoUrl, taskId });
-        }
-      }
-      
-      if ((isGrokTask || isGrokModel) && (status === 'error' || status === 'failed')) {
-        const errMsg = data.error?.message || data.error || 'Grok video generation failed';
-        pool.query(
-          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-          ['failed', typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), taskId]
-        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
-        return res.json({ status: 'failed', error: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), taskId });
-      }
-      
-      if ((isGrokTask || isGrokModel) && status !== 'done') {
-        const progress = status === 'in_progress' || status === 'processing' ? 50 : 15;
-        return res.json({ status: 'processing', progress, taskId, yunwuStatus: status });
-      }
       
       const detailStatus = (data.detail?.status || '').toLowerCase();
       const upsampleStatus = (data.detail?.upsample_status || '').toUpperCase();
