@@ -6536,31 +6536,31 @@ async function getMotionRoomApiKey(xclipApiKey) {
 
 const VIDGEN3_MODEL_CONFIGS = {
   'grok-15s': {
-    yunwuModel: 'grok-video-3',
-    type: 'text2video',
+    yunwuModel: 'grok-imagine-video',
+    type: 'grok',
     duration: 15,
     label: 'Grok 15s',
     buildBody: (params) => ({
-      model: 'grok-video-3',
+      model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 15,
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: params.resolution || '720p',
-      ...(params.image ? { images: [params.image] } : {})
+      ...(params.image ? { image: { url: params.image } } : {})
     })
   },
   'grok-10s': {
-    yunwuModel: 'grok-video-3',
-    type: 'text2video',
+    yunwuModel: 'grok-imagine-video',
+    type: 'grok',
     duration: 10,
     label: 'Grok 10s',
     buildBody: (params) => ({
-      model: 'grok-video-3',
+      model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 10,
       aspect_ratio: params.aspectRatio || '16:9',
       resolution: params.resolution || '720p',
-      ...(params.image ? { images: [params.image] } : {})
+      ...(params.image ? { image: { url: params.image } } : {})
     })
   },
   'sora-2-pro': {
@@ -8041,6 +8041,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         { modelName: 'veo3.1-fast', format: 'unified' },
         { modelName: 'veo_3_1', format: 'openai' },
       ];
+    } else if (model === 'grok-15s' || model === 'grok-10s') {
+      modelFallbacks = [{ modelName: 'grok-imagine-video', format: 'grok' }];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
     }
@@ -8098,7 +8100,21 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const currentFallback = modelFallbacks[fallbackIdx];
       try {
-        if (currentFallback.format === 'openai') {
+        if (currentFallback.format === 'grok') {
+          usedFormat = 'grok';
+          const grokBody = requestBody;
+          console.log(`[VIDGEN3] Sending Grok request to /v1/videos/generations:`, JSON.stringify(grokBody));
+          response = await axios({
+            method: 'POST',
+            url: `${YUNWU_API_BASE}/videos/generations`,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${yunwuApiKey}`
+            },
+            data: grokBody,
+            timeout: 300000
+          });
+        } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
           response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
         } else {
@@ -8165,7 +8181,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       return res.status(503).json({ error: 'Server video sedang sibuk, coba lagi dalam beberapa menit.' });
     }
     
-    let taskId = respData.task_id || respData.id;
+    let taskId = respData.task_id || respData.request_id || respData.id;
     if (config.useChatCompletions && !taskId) {
       const content = respData.choices?.[0]?.message?.content || '';
       const idMatch = content.match(/task[_-][\w-]+/) || content.match(/video[_-][\w-]+/);
@@ -8255,9 +8271,16 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
     
     try {
       const isOpenAIFormatTask = taskId.startsWith('video_');
+      const isGrokTask = taskId.startsWith('gvg_') || taskId.startsWith('req_');
+      
+      const dbTask = await pool.query('SELECT model FROM vidgen3_tasks WHERE task_id = $1', [taskId]).catch(() => null);
+      const taskModel = dbTask?.rows?.[0]?.model || '';
+      const isGrokModel = taskModel.startsWith('grok-');
       
       let pollUrl;
-      if (isOpenAIFormatTask) {
+      if (isGrokTask || isGrokModel) {
+        pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
+      } else if (isOpenAIFormatTask) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8272,6 +8295,31 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       console.log(`[VIDGEN3] Yunwu poll response:`, JSON.stringify(pollResponse.data));
       const data = pollResponse.data;
       const status = (data.status || '').toLowerCase();
+      
+      if ((isGrokTask || isGrokModel) && status === 'done') {
+        const videoUrl = data.video?.url || data.video_url || data.url || null;
+        if (videoUrl) {
+          pool.query(
+            'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+            ['completed', videoUrl, taskId]
+          ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+          return res.json({ status: 'completed', videoUrl, taskId });
+        }
+      }
+      
+      if ((isGrokTask || isGrokModel) && (status === 'error' || status === 'failed')) {
+        const errMsg = data.error?.message || data.error || 'Grok video generation failed';
+        pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+          ['failed', typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), taskId]
+        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+        return res.json({ status: 'failed', error: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), taskId });
+      }
+      
+      if ((isGrokTask || isGrokModel) && status !== 'done') {
+        const progress = status === 'in_progress' || status === 'processing' ? 50 : 15;
+        return res.json({ status: 'processing', progress, taskId, yunwuStatus: status });
+      }
       
       const detailStatus = (data.detail?.status || '').toLowerCase();
       const upsampleStatus = (data.detail?.upsample_status || '').toUpperCase();
