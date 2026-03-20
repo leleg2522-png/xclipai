@@ -3712,7 +3712,26 @@ function renderVidgen3ModelSettings() {
   let html = '';
 
   if (model === 'grok-15s' || model === 'grok-10s') {
+    const grokAspects = [
+      { id: '16:9', label: '🖥 16:9' },
+      { id: '9:16', label: '📱 9:16' },
+      { id: '1:1', label: '⬜ 1:1' },
+      { id: '4:3', label: '📺 4:3' },
+      { id: '3:4', label: '📲 3:4' },
+      { id: '3:2', label: '🖼 3:2' },
+      { id: '2:3', label: '🎴 2:3' }
+    ];
     html += `
+      <div class="setting-group">
+        <label class="setting-label">Aspect Ratio</label>
+        <div class="aspect-ratio-selector" style="flex-wrap:wrap;gap:6px;">
+          ${grokAspects.map(a => `
+            <button class="aspect-btn ${(state.vidgen3.aspectRatio || '16:9') === a.id ? 'active' : ''}" data-vidgen3-aspect="${a.id}">
+              <span>${a.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
       <div class="setting-group">
         <label class="setting-label">Resolution</label>
         <div class="aspect-ratio-selector">

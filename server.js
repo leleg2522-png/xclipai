@@ -6544,7 +6544,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 15,
-      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
+      aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
       ...(params.image ? { image: { url: params.image } } : {})
     })
@@ -6558,7 +6558,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 10,
-      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
+      aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
       ...(params.image ? { image: { url: params.image } } : {})
     })
