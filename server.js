@@ -6546,7 +6546,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 15,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { images: [params.image] } : {})
+      ...(params.image ? { image_url: params.image } : {})
     })
   },
   'grok-10s': {
@@ -6560,7 +6560,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 10,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { images: [params.image] } : {})
+      ...(params.image ? { image_url: params.image } : {})
     })
   },
   'sora-2-pro': {
@@ -8044,9 +8044,6 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     } else if (model === 'grok-15s' || model === 'grok-10s') {
       modelFallbacks = [
         { modelName: 'grok-video-3', format: 'grok' },
-        { modelName: 'grok-imagine-video', format: 'grok' },
-        { modelName: 'grok_video_3', format: 'grok' },
-        { modelName: 'grok-3-video', format: 'grok' },
       ];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
@@ -8109,8 +8106,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         if (currentFallback.format === 'grok') {
           usedFormat = 'grok';
           const grokBody = { ...requestBody, model: currentFallback.modelName };
-          console.log(`[VIDGEN3] Sending Grok request to /v1/video/create:`, JSON.stringify(grokBody));
-          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, grokBody);
+          const grokUrl = YUNWU_API_BASE.replace('/v1', '/v2') + '/videos/generations';
+          console.log(`[VIDGEN3] Sending Grok request to ${grokUrl}:`, JSON.stringify(grokBody));
+          response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody);
         } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
           response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
@@ -8282,7 +8280,9 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const isGrokModel = taskModel.startsWith('grok-');
       
       let pollUrl;
-      if (isOpenAIFormatTask) {
+      if (isGrokModel) {
+        pollUrl = YUNWU_API_BASE.replace('/v1', '/v2') + `/videos/generations/${taskId}`;
+      } else if (isOpenAIFormatTask) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8303,12 +8303,12 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const isUpsampling = status === 'video_upsampling' || detailStatus === 'video_upsampling';
       const isUpsampleDone = upsampleStatus === 'MEDIA_GENERATION_STATUS_SUCCESSFUL' || upsampleStatus === 'MEDIA_GENERATION_STATUS_COMPLETED';
       
-      const isCompleted = status === 'completed' || status === 'success' || detailStatus === 'completed' 
+      const isCompleted = status === 'completed' || status === 'success' || status === 'done' || detailStatus === 'completed' 
         || (isUpsampling && isUpsampleDone)
         || (data.video_url && data.video_url !== null);
       
       if (isCompleted) {
-        let videoUrl = data.detail?.upsample_video_url || data.video_url || data.detail?.video_url || data.url || null;
+        let videoUrl = data.video?.url || data.detail?.upsample_video_url || data.video_url || data.detail?.video_url || data.url || null;
         if (!videoUrl && isOpenAIFormatTask) {
           try {
             const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
@@ -8342,7 +8342,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       }
       
       const hasErrorObj = data.error && (typeof data.error === 'object' ? data.error.message : data.error);
-      if (status === 'failed' || detailStatus === 'failed' || (hasErrorObj && status !== 'completed' && status !== 'success' && status !== 'in_progress' && status !== 'queued' && status !== 'processing')) {
+      if (status === 'failed' || detailStatus === 'failed' || (hasErrorObj && status !== 'completed' && status !== 'success' && status !== 'done' && status !== 'in_progress' && status !== 'queued' && status !== 'processing')) {
         const rawErr = data.error;
         const rawErrorMsg = (typeof rawErr === 'object' && rawErr?.message) ? rawErr.message : (rawErr || data.detail?.error_message || data.detail || data.message || 'Generation failed');
         const errorMsg = typeof rawErrorMsg === 'string' ? rawErrorMsg : JSON.stringify(rawErrorMsg);
@@ -8366,9 +8366,13 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
                   } else {
                     retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
                   }
-                  const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
+                  const isGrokRetry = origConfig.type === 'grok';
+                  const retryUrl = isGrokRetry 
+                    ? YUNWU_API_BASE.replace('/v1', '/v2') + '/videos/generations'
+                    : `${YUNWU_API_BASE}/video/create`;
+                  const retryResponse = await makeYunwuRequest('POST', retryUrl, yunwuApiKey, retryBody);
                   const retryData = retryResponse.data;
-                  const newTaskId = retryData?.task_id || retryData?.id;
+                  const newTaskId = retryData?.request_id || retryData?.task_id || retryData?.id;
                   if (newTaskId) {
                     await pool.query(
                       `UPDATE vidgen3_tasks SET task_id = $1, status = 'processing', retry_count = $2, error_message = $3 WHERE task_id = $4`,
