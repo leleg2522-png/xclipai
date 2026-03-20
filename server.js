@@ -6540,28 +6540,32 @@ const VIDGEN3_MODEL_CONFIGS = {
     type: 'grok',
     duration: 15,
     label: 'Grok 15s',
-    buildBody: (params) => ({
-      model: 'grok-video-3',
-      prompt: params.prompt || '',
-      duration: 15,
-      aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
-      resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image, images: [params.image] } : {})
-    })
+    buildBody: (params) => {
+      const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
+      return {
+        model: 'grok-video-3',
+        prompt: (params.prompt || '') + ' --mode=custom',
+        aspect_ratio: arMap[params.aspectRatio] || '3:2',
+        size: '720P',
+        ...(params.image ? { images: [params.image] } : {})
+      };
+    }
   },
   'grok-10s': {
     yunwuModel: 'grok-video-3',
     type: 'grok',
     duration: 10,
     label: 'Grok 10s',
-    buildBody: (params) => ({
-      model: 'grok-video-3',
-      prompt: params.prompt || '',
-      duration: 10,
-      aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
-      resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image, images: [params.image] } : {})
-    })
+    buildBody: (params) => {
+      const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
+      return {
+        model: 'grok-video-3',
+        prompt: (params.prompt || '') + ' --mode=custom',
+        aspect_ratio: arMap[params.aspectRatio] || '3:2',
+        size: '720P',
+        ...(params.image ? { images: [params.image] } : {})
+      };
+    }
   },
   'sora-2-pro': {
     yunwuModel: 'sora-2-pro',
