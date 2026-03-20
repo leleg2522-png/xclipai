@@ -6544,7 +6544,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 15,
-      aspect_ratio: params.aspectRatio || '16:9',
+      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
       resolution: params.resolution || '720p',
       ...(params.image ? { image: { url: params.image } } : {})
     })
@@ -6558,7 +6558,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       model: 'grok-imagine-video',
       prompt: params.prompt || '',
       duration: 10,
-      aspect_ratio: params.aspectRatio || '16:9',
+      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
       resolution: params.resolution || '720p',
       ...(params.image ? { image: { url: params.image } } : {})
     })
@@ -8002,7 +8002,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           console.log(`[VIDGEN3] Also added images URL as fallback (no CDN): ${imageUrlForApi}`);
         }
       }
-    } else if (!config.useReferenceImages && imageUrlForApi) {
+    } else if (!config.useReferenceImages && config.type !== 'grok' && imageUrlForApi) {
       if (!requestBody.images) {
         requestBody.images = [imageUrlForApi];
       }
