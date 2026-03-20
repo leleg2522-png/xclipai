@@ -6583,7 +6583,8 @@ const VIDGEN3_MODEL_CONFIGS = {
         model: 'grok-video-3',
         prompt: params.prompt || '',
         aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P'
+        size: '720P',
+        duration: 15
       };
       if (params.image) body.images = [params.image];
       return body;
@@ -6600,7 +6601,8 @@ const VIDGEN3_MODEL_CONFIGS = {
         model: 'grok-video-3',
         prompt: params.prompt || '',
         aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P'
+        size: '720P',
+        duration: 10
       };
       if (params.image) body.images = [params.image];
       return body;
