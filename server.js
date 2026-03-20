@@ -8102,18 +8102,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       try {
         if (currentFallback.format === 'grok') {
           usedFormat = 'grok';
-          const grokBody = requestBody;
-          console.log(`[VIDGEN3] Sending Grok request to /v1/videos/generations:`, JSON.stringify(grokBody));
-          response = await axios({
-            method: 'POST',
-            url: `${YUNWU_API_BASE}/videos/generations`,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${yunwuApiKey}`
-            },
-            data: grokBody,
-            timeout: 300000
-          });
+          const grokBody = { ...requestBody, model: currentFallback.modelName };
+          console.log(`[VIDGEN3] Sending Grok request to /v1/video/create:`, JSON.stringify(grokBody));
+          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, grokBody);
         } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
           response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
