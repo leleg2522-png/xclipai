@@ -6613,7 +6613,8 @@ const VIDGEN3_MODEL_CONFIGS = {
   },
 };
 
-const YUNWU_API_BASE = 'https://yunwu.ai/v1';
+const YUNWU_API_BASE = 'https://api.apiplus.org/v1';
+const YUNWU_API_FALLBACK_BASES = ['https://api3.wlai.vip/v1', 'https://yunwu.ai/v1'];
 
 function yunwuHeaders(apiKey) {
   return {
@@ -6623,7 +6624,7 @@ function yunwuHeaders(apiKey) {
   };
 }
 
-async function makeYunwuRequest(method, url, apiKey, body = null, timeoutMs = 300000) {
+async function makeYunwuRequest(method, url, apiKey, body = null, timeoutMs = 120000) {
   const config = {
     method,
     url,
@@ -6631,7 +6632,26 @@ async function makeYunwuRequest(method, url, apiKey, body = null, timeoutMs = 30
     timeout: timeoutMs
   };
   if (body) config.data = body;
-  return axios(config);
+  
+  try {
+    return await axios(config);
+  } catch (err) {
+    const isTimeout = err.code === 'ECONNABORTED' || (err.message || '').includes('timeout');
+    const isConnErr = err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
+    if ((isTimeout || isConnErr) && YUNWU_API_FALLBACK_BASES.length > 0) {
+      for (const fallbackBase of YUNWU_API_FALLBACK_BASES) {
+        const fallbackUrl = url.replace(YUNWU_API_BASE, fallbackBase);
+        if (fallbackUrl === url) continue;
+        try {
+          console.log(`[YUNWU] Primary ${url} failed (${isTimeout ? 'timeout' : err.code}), trying fallback: ${fallbackUrl}`);
+          return await axios({ ...config, url: fallbackUrl });
+        } catch (fbErr) {
+          console.warn(`[YUNWU] Fallback ${fallbackUrl} also failed: ${fbErr.code || fbErr.message}`);
+        }
+      }
+    }
+    throw err;
+  }
 }
 
 // ============ VIDGEN2 (Poyo AI) ============
@@ -8116,24 +8136,25 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           const grokStartTime = Date.now();
           const grokUrls = [
             `${YUNWU_API_BASE}/video/create`,
-            'https://api.yunwu.ai/v1/video/create'
+            ...YUNWU_API_FALLBACK_BASES.map(b => `${b}/video/create`)
           ];
           let grokSuccess = false;
           for (const grokUrl of grokUrls) {
             try {
               console.log(`[VIDGEN3] Trying Grok URL: ${grokUrl}`);
-              response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody, 60000);
+              response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody, 30000);
               console.log(`[VIDGEN3] Grok response from ${grokUrl} in ${Date.now() - grokStartTime}ms, status=${response.status}`);
               grokSuccess = true;
               break;
             } catch (grokUrlErr) {
               const isTimeout = grokUrlErr.code === 'ECONNABORTED' || (grokUrlErr.message || '').includes('timeout');
-              console.warn(`[VIDGEN3] Grok URL ${grokUrl} failed: ${isTimeout ? 'TIMEOUT' : grokUrlErr.response?.status || grokUrlErr.message}`);
-              if (!isTimeout) throw grokUrlErr;
+              const isConnErr = grokUrlErr.code === 'ECONNREFUSED' || grokUrlErr.code === 'ENOTFOUND';
+              console.warn(`[VIDGEN3] Grok URL ${grokUrl} failed: ${isTimeout ? 'TIMEOUT(30s)' : grokUrlErr.response?.status || grokUrlErr.code || grokUrlErr.message}`);
+              if (!isTimeout && !isConnErr) throw grokUrlErr;
             }
           }
           if (!grokSuccess) {
-            throw new Error('Grok API timeout: server tidak merespond dalam 60 detik');
+            throw new Error('Semua server Yunwu timeout untuk Grok. Model mungkin sedang maintenance.');
           }
         } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
