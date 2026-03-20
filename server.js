@@ -2303,6 +2303,43 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
   }
 });
 
+async function uploadToYunwuImageHost(imageBuffer, apiKey, filename = 'image.png') {
+  const FormData = require('form-data');
+  try {
+    const form = new FormData();
+    const contentType = filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+    form.append('file', imageBuffer, { filename, contentType });
+    const res = await axios.post('https://imageproxy.zhongzhuan.chat/api/upload', form, {
+      headers: {
+        ...form.getHeaders(),
+        'Authorization': `Bearer ${apiKey}`
+      },
+      timeout: 30000
+    });
+    if (res.data && typeof res.data === 'object') {
+      const url = res.data.url || res.data.data?.url || res.data.image_url || res.data.link;
+      if (url) {
+        console.log(`[CDN] Yunwu image host upload success: ${url}`);
+        return url;
+      }
+      console.log(`[CDN] Yunwu image host response:`, JSON.stringify(res.data).substring(0, 500));
+      const jsonStr = JSON.stringify(res.data);
+      const urlMatch = jsonStr.match(/https?:\/\/[^\s"',}]+\.(png|jpg|jpeg|gif|webp)/i);
+      if (urlMatch) {
+        console.log(`[CDN] Yunwu image host extracted URL: ${urlMatch[0]}`);
+        return urlMatch[0];
+      }
+    } else if (typeof res.data === 'string' && res.data.startsWith('http')) {
+      console.log(`[CDN] Yunwu image host upload success (string): ${res.data}`);
+      return res.data.trim();
+    }
+    console.warn(`[CDN] Yunwu image host returned unexpected format:`, typeof res.data, JSON.stringify(res.data).substring(0, 200));
+  } catch (e) {
+    console.warn(`[CDN] Yunwu image host failed: ${e.response?.status || ''} ${e.message}`);
+  }
+  return null;
+}
+
 async function reuploadToCDN(imageUrl) {
   if (!imageUrl || imageUrl.includes('filesystem.site') || imageUrl.includes('catbox.moe') || imageUrl.includes('0x0.st') || imageUrl.includes('imgbb.com')) {
     return null;
@@ -7982,14 +8019,46 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     if (imageUrlForApi && !config.useReferenceImages) {
-      try {
-        const cdnUrl = await reuploadToCDN(imageUrlForApi);
-        if (cdnUrl) {
-          console.log(`[VIDGEN3] Image re-uploaded to CDN: ${cdnUrl}`);
-          imageUrlForApi = cdnUrl;
+      if (config.type === 'grok') {
+        try {
+          const yunwuKey = process.env.YUNWU_API_KEY;
+          if (yunwuKey) {
+            console.log(`[VIDGEN3] Grok model: uploading image to Yunwu image host for China accessibility`);
+            let imgBuffer;
+            if (imageBase64ForRef) {
+              imgBuffer = Buffer.from(imageBase64ForRef, 'base64');
+            } else {
+              const dlResp = await axios.get(imageUrlForApi, { responseType: 'arraybuffer', timeout: 30000 });
+              imgBuffer = Buffer.from(dlResp.data);
+            }
+            const ext = (imageMimeType || '').includes('jpeg') || (imageMimeType || '').includes('jpg') ? 'jpg' : 'png';
+            const yunwuImgUrl = await uploadToYunwuImageHost(imgBuffer, yunwuKey, `grok_ref.${ext}`);
+            if (yunwuImgUrl) {
+              console.log(`[VIDGEN3] Grok image uploaded to Yunwu host: ${yunwuImgUrl}`);
+              imageUrlForApi = yunwuImgUrl;
+            } else {
+              console.warn(`[VIDGEN3] Yunwu image host returned null, trying catbox/0x0 fallback`);
+              const cdnUrl = await reuploadToCDN(imageUrlForApi);
+              if (cdnUrl) imageUrlForApi = cdnUrl;
+            }
+          }
+        } catch (grokImgErr) {
+          console.warn(`[VIDGEN3] Grok image upload failed: ${grokImgErr.message}, trying CDN fallback`);
+          try {
+            const cdnUrl = await reuploadToCDN(imageUrlForApi);
+            if (cdnUrl) imageUrlForApi = cdnUrl;
+          } catch (e) {}
         }
-      } catch (cdnErr) {
-        console.warn(`[VIDGEN3] CDN re-upload failed, using original URL: ${cdnErr.message}`);
+      } else {
+        try {
+          const cdnUrl = await reuploadToCDN(imageUrlForApi);
+          if (cdnUrl) {
+            console.log(`[VIDGEN3] Image re-uploaded to CDN: ${cdnUrl}`);
+            imageUrlForApi = cdnUrl;
+          }
+        } catch (cdnErr) {
+          console.warn(`[VIDGEN3] CDN re-upload failed, using original URL: ${cdnErr.message}`);
+        }
       }
     }
     
