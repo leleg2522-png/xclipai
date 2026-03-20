@@ -6546,7 +6546,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 15,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image } : {})
+      ...(params.image ? { image_url: params.image, images: [params.image] } : {})
     })
   },
   'grok-10s': {
@@ -6560,7 +6560,7 @@ const VIDGEN3_MODEL_CONFIGS = {
       duration: 10,
       aspect_ratio: ['16:9','9:16','1:1','4:3','3:4','3:2','2:3'].includes(params.aspectRatio) ? params.aspectRatio : (params.aspectRatio === 'portrait' ? '9:16' : '16:9'),
       resolution: params.resolution || '720p',
-      ...(params.image ? { image_url: params.image } : {})
+      ...(params.image ? { image_url: params.image, images: [params.image] } : {})
     })
   },
   'sora-2-pro': {
@@ -8106,9 +8106,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         if (currentFallback.format === 'grok') {
           usedFormat = 'grok';
           const grokBody = { ...requestBody, model: currentFallback.modelName };
-          const grokUrl = YUNWU_API_BASE.replace('/v1', '/v2') + '/videos/generations';
-          console.log(`[VIDGEN3] Sending Grok request to ${grokUrl}:`, JSON.stringify(grokBody));
-          response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody);
+          console.log(`[VIDGEN3] Sending Grok request to /v1/video/create:`, JSON.stringify(grokBody));
+          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, grokBody);
         } else if (currentFallback.format === 'openai') {
           usedFormat = 'openai';
           response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
@@ -8280,9 +8279,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       const isGrokModel = taskModel.startsWith('grok-');
       
       let pollUrl;
-      if (isGrokModel) {
-        pollUrl = YUNWU_API_BASE.replace('/v1', '/v2') + `/videos/generations/${taskId}`;
-      } else if (isOpenAIFormatTask) {
+      if (isOpenAIFormatTask) {
         pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
       } else {
         pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
@@ -8366,11 +8363,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
                   } else {
                     retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
                   }
-                  const isGrokRetry = origConfig.type === 'grok';
-                  const retryUrl = isGrokRetry 
-                    ? YUNWU_API_BASE.replace('/v1', '/v2') + '/videos/generations'
-                    : `${YUNWU_API_BASE}/video/create`;
-                  const retryResponse = await makeYunwuRequest('POST', retryUrl, yunwuApiKey, retryBody);
+                  const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
                   const retryData = retryResponse.data;
                   const newTaskId = retryData?.request_id || retryData?.task_id || retryData?.id;
                   if (newTaskId) {
