@@ -6613,8 +6613,8 @@ const VIDGEN3_MODEL_CONFIGS = {
   },
 };
 
-const YUNWU_API_BASE = 'https://api.apiplus.org/v1';
-const YUNWU_API_FALLBACK_BASES = ['https://api3.wlai.vip/v1', 'https://yunwu.ai/v1'];
+const YUNWU_API_BASE = 'https://yunwu.ai/v1';
+const YUNWU_API_FALLBACK_BASES = [];
 
 function yunwuHeaders(apiKey) {
   return {
