@@ -8042,13 +8042,19 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
         { modelName: 'veo_3_1', format: 'openai' },
       ];
     } else if (model === 'grok-15s' || model === 'grok-10s') {
-      modelFallbacks = [{ modelName: 'grok-video-3', format: 'grok' }];
+      modelFallbacks = [
+        { modelName: 'grok-video-3', format: 'grok' },
+        { modelName: 'grok-imagine-video', format: 'grok' },
+        { modelName: 'grok_video_3', format: 'grok' },
+        { modelName: 'grok-3-video', format: 'grok' },
+      ];
     } else {
       modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
     }
     
     let fallbackIdx = 0;
-    const maxRetries = 6;
+    const isGrokRequest = config.type === 'grok';
+    const maxRetries = isGrokRequest ? 3 : 6;
     
     function isSaturatedError(str) {
       return str.includes('upstream_saturated') || str.includes('No available channel') || str.includes('saturated') || str.includes('饱和') || str.includes('负载') || str.includes('上游');
@@ -8205,10 +8211,18 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[VIDGEN3] Generate error:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: error.response?.data?.message || error.response?.data?.error || 'Gagal generate video' 
-    });
+    const errData = error.response?.data;
+    const rawErr = errData?.error || errData?.message || error.message || 'Gagal generate video';
+    const errStr = typeof rawErr === 'object' ? (rawErr.message || JSON.stringify(rawErr)) : String(rawErr);
+    console.error('[VIDGEN3] Generate error:', errStr);
+    
+    const isChannelError = errStr.includes('No available channel') || errStr.includes('available channel');
+    const statusCode = isChannelError ? 503 : (error.response?.status || 500);
+    const userMsg = isChannelError 
+      ? `Model ${model} sedang tidak tersedia di Yunwu. Coba lagi nanti atau gunakan model lain.`
+      : errStr;
+    
+    res.status(statusCode).json({ error: userMsg });
   }
 });
 
