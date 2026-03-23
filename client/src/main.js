@@ -2722,9 +2722,8 @@ function render(force = false) {
     return;
   }
   
-  // Throttle renders to prevent performance issues
   const now = Date.now();
-  if (now - lastRenderTime < RENDER_THROTTLE) {
+  if (!force && now - lastRenderTime < RENDER_THROTTLE) {
     if (renderTimeout) clearTimeout(renderTimeout);
     renderTimeout = setTimeout(() => render(force), RENDER_THROTTLE);
     return;

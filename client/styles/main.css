@@ -4095,10 +4095,15 @@ textarea.form-input {
   }
 
   .header-right {
-    flex: 1;
+    flex-shrink: 0;
+    margin-left: auto;
     justify-content: flex-end;
     gap: var(--space-2);
     overflow: visible;
+  }
+
+  .logo {
+    flex-shrink: 0;
   }
 
   .header-right .subscription-timer {
@@ -4120,6 +4125,12 @@ textarea.form-input {
     width: 28px;
     height: 28px;
     font-size: 12px;
+  }
+
+  .user-dropdown {
+    z-index: 10000;
+    right: 0;
+    min-width: 200px;
   }
 
   .nav-menu {
