@@ -12596,8 +12596,9 @@ function handleSSEEvent(data) {
           if (data.results && Array.isArray(data.results)) {
             state.sceneStudio.batchResults = data.results;
           }
+          loadSceneStudioHistory();
         }
-        render();
+        render(true);
       }
       break;
 

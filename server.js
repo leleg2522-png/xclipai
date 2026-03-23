@@ -11056,10 +11056,13 @@ app.post('/api/scene-studio/generate', async (req, res) => {
             );
 
             const respData = response.data;
+            console.log(`[SCENE-STUDIO] Prompt ${i+1} API response keys:`, Object.keys(respData), respData.data ? `data[0] keys: ${Object.keys(respData.data[0] || {})}` : 'no data array');
             let directImageUrl = null;
             if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
-              if (respData.data[0].url) directImageUrl = respData.data[0].url;
-              else if (respData.data[0].b64_json) directImageUrl = `data:image/png;base64,${respData.data[0].b64_json}`;
+              const item = respData.data[0];
+              if (item.url) directImageUrl = item.url;
+              else if (item.b64_json) directImageUrl = `data:image/png;base64,${item.b64_json}`;
+              else if (item.image_url) directImageUrl = item.image_url;
             }
 
             if (directImageUrl) {
@@ -11076,12 +11079,21 @@ app.post('/api/scene-studio/generate', async (req, res) => {
                     const pollRes = await axios.get(`https://api.apimart.ai/v1/tasks/${taskId}`, { headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 30000 });
                     const pd = pollRes.data;
                     const ts = pd.status || pd.data?.status;
-                    if (ts === 'completed' || ts === 'success') {
-                      let url = pd.result?.url || pd.result?.image_url || pd.data?.url;
+                    console.log(`[SCENE-STUDIO] Poll ${taskId} attempt ${attempt+1}: status=${ts}, keys=${Object.keys(pd)}`);
+                    if (ts === 'completed' || ts === 'success' || ts === 'succeeded') {
+                      let url = pd.result?.url || pd.result?.image_url || pd.data?.url || pd.data?.image_url;
+                      if (pd.data?.data?.[0]?.url) url = pd.data.data[0].url;
                       if (pd.result?.images?.[0]) { const img = pd.result.images[0]; url = typeof img === 'string' ? img : (img.url || img.image_url); }
+                      if (pd.output?.image_url) url = pd.output.image_url;
+                      if (pd.output?.images?.[0]) { const img = pd.output.images[0]; url = typeof img === 'string' ? img : (img.url || img.image_url); }
                       if (url) {
                         results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: url });
                         sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: url, current: i + 1, total: prompts.length });
+                        polled = true; break;
+                      } else {
+                        console.log(`[SCENE-STUDIO] Task ${taskId} completed but no URL found. Full response:`, JSON.stringify(pd).substring(0, 500));
+                        results.push({ index: i, prompt: promptText, status: 'failed', error: 'Task completed but no image URL found' });
+                        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Gambar selesai tapi URL tidak ditemukan', current: i + 1, total: prompts.length });
                         polled = true; break;
                       }
                     }
