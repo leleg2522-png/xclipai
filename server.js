@@ -3070,13 +3070,10 @@ setInterval(async () => {
       try {
         const table = task.dbTable || 'vidgen4_tasks';
         const urlCol = task.urlColumn || 'video_url';
-        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history' || table === 'scene_studio_results') {
+        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history') {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
         } else {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = 'Timeout', completed_at = NOW() WHERE task_id = $1 AND status != 'completed'`, [taskId]);
-        }
-        if (table === 'scene_studio_results' && task.userId && task.extraSSE) {
-          sendSSEToUser(task.userId, { type: 'scene_studio_progress', ...task.extraSSE, status: 'failed', error: 'Timeout' });
         }
       } catch (e) {}
       continue;
@@ -3113,9 +3110,7 @@ setInterval(async () => {
         if (isMotionNoUrl && task.usedKeyName) markMotionKeyFree(task.usedKeyName);
         await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         if (task.userId) {
-          if (table === 'scene_studio_results') {
-            sendSSEToUser(task.userId, { type: 'scene_studio_progress', ...(task.extraSSE || {}), status: 'failed', taskId, error: 'No result URL from API' });
-          } else {
+          {
             const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
             let sseType = table === 'ximage3_history' ? 'ximage3_failed' : isImage ? (table === 'ximage2_history' ? 'ximage2_failed' : 'ximage_failed') : 'video_failed';
             sendSSEToUser(task.userId, { type: sseType, taskId, error: 'No result URL from API' });
@@ -3131,12 +3126,6 @@ setInterval(async () => {
           [result.url, taskId]
         );
         if (task.userId) {
-          if (table === 'scene_studio_results') {
-            sendSSEToUser(task.userId, { type: 'scene_studio_progress', ...(task.extraSSE || {}), status: 'completed', taskId, imageUrl: result.url });
-            console.log(`[BG-POLL] Scene Studio SSE sent to user ${task.userId}`);
-            serverBgPolls.delete(taskId);
-            continue;
-          }
           const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
           const isMotion = isMotionCompleted;
           let sseType = 'video_completed';
@@ -3188,15 +3177,13 @@ setInterval(async () => {
           console.log(`[BG-POLL] Motion task ${taskId} auto-retry failed, marking as failed`);
         }
         
-        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history' || table === 'scene_studio_results') {
+        if (table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history') {
           await pool.query(`UPDATE ${table} SET status = 'failed', completed_at = NOW() WHERE task_id = $1 AND status IN ('pending', 'processing')`, [taskId]);
         } else {
           await pool.query(`UPDATE ${table} SET status = 'failed', error_message = $1, completed_at = NOW() WHERE task_id = $2 AND status IN ('pending', 'processing')`, [result.error, taskId]);
         }
         if (task.userId) {
-          if (table === 'scene_studio_results') {
-            sendSSEToUser(task.userId, { type: 'scene_studio_progress', ...(task.extraSSE || {}), status: 'failed', taskId, error: result.error });
-          } else {
+          {
             const isImage = table === 'ximage_history' || table === 'ximage2_history' || table === 'ximage3_history';
             let sseType = 'video_failed';
             if (table === 'ximage3_history') sseType = 'ximage3_failed';
@@ -10887,7 +10874,7 @@ app.get('/api/ximage/download', async (req, res) => {
   }
 });
 
-// ============ SCENE STUDIO (Batch Image Generation with Character Consistency) ============
+// ============ SCENE STUDIO (Simple Batch Image Generation) ============
 
 const SCENE_STUDIO_MODELS = { ...XIMAGE2_MODELS };
 
@@ -10924,248 +10911,28 @@ app.get('/api/scene-studio/models', (req, res) => {
   res.json({ models });
 });
 
-app.get('/api/scene-studio/projects', async (req, res) => {
+app.get('/api/scene-studio/history', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
   try {
-    const result = await pool.query(`
-      SELECT p.*, 
-        (SELECT COUNT(*) FROM scene_studio_characters c WHERE c.project_id = p.id) as character_count,
-        (SELECT COUNT(*) FROM scene_studio_scenes s WHERE s.project_id = p.id) as scene_count
-      FROM scene_studio_projects p WHERE p.user_id = $1 ORDER BY p.updated_at DESC
-    `, [req.session.userId]);
-    res.json({ projects: result.rows });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Get projects error:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan daftar project' });
-  }
-});
-
-app.post('/api/scene-studio/projects', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const { name, description } = req.body;
-    if (!name) return res.status(400).json({ error: 'Nama project diperlukan' });
     const result = await pool.query(
-      `INSERT INTO scene_studio_projects (user_id, name, description) VALUES ($1, $2, $3) RETURNING *`,
-      [req.session.userId, name, description || '']
+      `SELECT * FROM scene_studio_batches WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [req.session.userId]
     );
-    res.json({ project: result.rows[0] });
+    res.json({ batches: result.rows });
   } catch (error) {
-    console.error('[SCENE-STUDIO] Create project error:', error);
-    res.status(500).json({ error: 'Gagal membuat project' });
+    console.error('[SCENE-STUDIO] Get history error:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan history' });
   }
 });
 
-app.put('/api/scene-studio/projects/:id', async (req, res) => {
+app.delete('/api/scene-studio/history/:id', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
   try {
-    const { name, description } = req.body;
-    const result = await pool.query(
-      `UPDATE scene_studio_projects SET name = COALESCE($1, name), description = COALESCE($2, description), updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING *`,
-      [name, description, req.params.id, req.session.userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    res.json({ project: result.rows[0] });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Update project error:', error);
-    res.status(500).json({ error: 'Gagal mengupdate project' });
-  }
-});
-
-app.delete('/api/scene-studio/projects/:id', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    await pool.query('DELETE FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.id, req.session.userId]);
+    await pool.query('DELETE FROM scene_studio_batches WHERE id = $1 AND user_id = $2', [req.params.id, req.session.userId]);
     res.json({ success: true });
   } catch (error) {
-    console.error('[SCENE-STUDIO] Delete project error:', error);
-    res.status(500).json({ error: 'Gagal menghapus project' });
-  }
-});
-
-app.get('/api/scene-studio/projects/:projectId/characters', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.projectId, req.session.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    const result = await pool.query('SELECT * FROM scene_studio_characters WHERE project_id = $1 ORDER BY created_at ASC', [req.params.projectId]);
-    res.json({ characters: result.rows });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Get characters error:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan daftar karakter' });
-  }
-});
-
-app.post('/api/scene-studio/projects/:projectId/characters', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.projectId, req.session.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    const { name, description, referenceImages } = req.body;
-    if (!name) return res.status(400).json({ error: 'Nama karakter diperlukan' });
-    if (!description) return res.status(400).json({ error: 'Deskripsi karakter diperlukan' });
-    
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const baseUrl = `${protocol}://${host}`;
-    let savedRefs = [];
-    if (referenceImages && referenceImages.length > 0) {
-      for (const img of referenceImages) {
-        if (img && img.startsWith('data:')) {
-          const uploaded = await saveBase64ToFile(img, 'image', baseUrl);
-          savedRefs.push(uploaded.publicUrl);
-        } else if (img) {
-          savedRefs.push(img);
-        }
-      }
-    }
-    const result = await pool.query(
-      `INSERT INTO scene_studio_characters (project_id, name, description, reference_images) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [req.params.projectId, name, description, JSON.stringify(savedRefs)]
-    );
-    await pool.query('UPDATE scene_studio_projects SET updated_at = NOW() WHERE id = $1', [req.params.projectId]);
-    res.json({ character: result.rows[0] });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Create character error:', error);
-    res.status(500).json({ error: 'Gagal membuat karakter' });
-  }
-});
-
-app.put('/api/scene-studio/characters/:id', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const char = await pool.query(`
-      SELECT c.* FROM scene_studio_characters c 
-      JOIN scene_studio_projects p ON c.project_id = p.id 
-      WHERE c.id = $1 AND p.user_id = $2
-    `, [req.params.id, req.session.userId]);
-    if (char.rows.length === 0) return res.status(404).json({ error: 'Karakter tidak ditemukan' });
-    const { name, description, referenceImages } = req.body;
-    
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const baseUrl = `${protocol}://${host}`;
-    let savedRefs = referenceImages ? [] : undefined;
-    if (referenceImages) {
-      for (const img of referenceImages) {
-        if (img && img.startsWith('data:')) {
-          const uploaded = await saveBase64ToFile(img, 'image', baseUrl);
-          savedRefs.push(uploaded.publicUrl);
-        } else if (img) {
-          savedRefs.push(img);
-        }
-      }
-    }
-    const result = await pool.query(
-      `UPDATE scene_studio_characters SET 
-        name = COALESCE($1, name), description = COALESCE($2, description), 
-        reference_images = COALESCE($3, reference_images), updated_at = NOW() 
-      WHERE id = $4 RETURNING *`,
-      [name, description, savedRefs ? JSON.stringify(savedRefs) : null, req.params.id]
-    );
-    res.json({ character: result.rows[0] });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Update character error:', error);
-    res.status(500).json({ error: 'Gagal mengupdate karakter' });
-  }
-});
-
-app.delete('/api/scene-studio/characters/:id', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const char = await pool.query(`
-      SELECT c.id, c.project_id FROM scene_studio_characters c 
-      JOIN scene_studio_projects p ON c.project_id = p.id 
-      WHERE c.id = $1 AND p.user_id = $2
-    `, [req.params.id, req.session.userId]);
-    if (char.rows.length === 0) return res.status(404).json({ error: 'Karakter tidak ditemukan' });
-    await pool.query('DELETE FROM scene_studio_characters WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Delete character error:', error);
-    res.status(500).json({ error: 'Gagal menghapus karakter' });
-  }
-});
-
-app.get('/api/scene-studio/projects/:projectId/scenes', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.projectId, req.session.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    const result = await pool.query(`
-      SELECT s.*, r.image_url, r.status as result_status 
-      FROM scene_studio_scenes s 
-      LEFT JOIN scene_studio_results r ON r.scene_id = s.id AND r.id = (
-        SELECT id FROM scene_studio_results WHERE scene_id = s.id ORDER BY created_at DESC LIMIT 1
-      )
-      WHERE s.project_id = $1 ORDER BY s.scene_order ASC
-    `, [req.params.projectId]);
-    res.json({ scenes: result.rows });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Get scenes error:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan daftar scene' });
-  }
-});
-
-app.post('/api/scene-studio/projects/:projectId/scenes', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.projectId, req.session.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    const { prompt, characterIds, setting, sceneOrder } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Deskripsi scene diperlukan' });
-    const maxOrder = await pool.query('SELECT COALESCE(MAX(scene_order), 0) as max_order FROM scene_studio_scenes WHERE project_id = $1', [req.params.projectId]);
-    const order = sceneOrder || (parseInt(maxOrder.rows[0].max_order) + 1);
-    const result = await pool.query(
-      `INSERT INTO scene_studio_scenes (project_id, scene_order, prompt, character_ids, setting) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.params.projectId, order, prompt, JSON.stringify(characterIds || []), setting || '']
-    );
-    await pool.query('UPDATE scene_studio_projects SET updated_at = NOW() WHERE id = $1', [req.params.projectId]);
-    res.json({ scene: result.rows[0] });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Create scene error:', error);
-    res.status(500).json({ error: 'Gagal membuat scene' });
-  }
-});
-
-app.put('/api/scene-studio/scenes/:id', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const scene = await pool.query(`
-      SELECT s.* FROM scene_studio_scenes s 
-      JOIN scene_studio_projects p ON s.project_id = p.id 
-      WHERE s.id = $1 AND p.user_id = $2
-    `, [req.params.id, req.session.userId]);
-    if (scene.rows.length === 0) return res.status(404).json({ error: 'Scene tidak ditemukan' });
-    const { prompt, characterIds, setting, sceneOrder } = req.body;
-    const result = await pool.query(
-      `UPDATE scene_studio_scenes SET 
-        prompt = COALESCE($1, prompt), character_ids = COALESCE($2, character_ids),
-        setting = COALESCE($3, setting), scene_order = COALESCE($4, scene_order), updated_at = NOW()
-      WHERE id = $5 RETURNING *`,
-      [prompt, characterIds ? JSON.stringify(characterIds) : null, setting, sceneOrder, req.params.id]
-    );
-    res.json({ scene: result.rows[0] });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Update scene error:', error);
-    res.status(500).json({ error: 'Gagal mengupdate scene' });
-  }
-});
-
-app.delete('/api/scene-studio/scenes/:id', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const scene = await pool.query(`
-      SELECT s.id, s.project_id FROM scene_studio_scenes s 
-      JOIN scene_studio_projects p ON s.project_id = p.id 
-      WHERE s.id = $1 AND p.user_id = $2
-    `, [req.params.id, req.session.userId]);
-    if (scene.rows.length === 0) return res.status(404).json({ error: 'Scene tidak ditemukan' });
-    await pool.query('DELETE FROM scene_studio_scenes WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Delete scene error:', error);
-    res.status(500).json({ error: 'Gagal menghapus scene' });
+    console.error('[SCENE-STUDIO] Delete history error:', error);
+    res.status(500).json({ error: 'Gagal menghapus' });
   }
 });
 
@@ -11176,314 +10943,133 @@ app.post('/api/scene-studio/generate', async (req, res) => {
     const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
     if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
 
-    const { projectId, sceneIds, model, size, resolution } = req.body;
-    if (!projectId) return res.status(400).json({ error: 'Project ID diperlukan' });
-    
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [projectId, roomKeyResult.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
+    const { prompts, characterDesc, model, size, resolution } = req.body;
+    if (!prompts || !Array.isArray(prompts) || prompts.length === 0) return res.status(400).json({ error: 'Minimal 1 prompt diperlukan' });
+    if (prompts.length > 20) return res.status(400).json({ error: 'Maksimal 20 prompt per batch' });
 
     const modelConfig = SCENE_STUDIO_MODELS[model];
     if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid' });
 
-    const characters = await pool.query('SELECT * FROM scene_studio_characters WHERE project_id = $1', [projectId]);
-    
-    let scenesQuery;
-    if (sceneIds && sceneIds.length > 0) {
-      scenesQuery = await pool.query('SELECT * FROM scene_studio_scenes WHERE project_id = $1 AND id = ANY($2) ORDER BY scene_order ASC', [projectId, sceneIds]);
-    } else {
-      scenesQuery = await pool.query('SELECT * FROM scene_studio_scenes WHERE project_id = $1 ORDER BY scene_order ASC', [projectId]);
-    }
-    const scenes = scenesQuery.rows;
-    if (scenes.length === 0) return res.status(400).json({ error: 'Tidak ada scene untuk di-generate' });
-
-    console.log(`[SCENE-STUDIO] Batch generate: ${scenes.length} scenes, model: ${model}, characters: ${characters.rows.length}`);
-
-    const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const baseUrl = `${protocol}://${host}`;
-
-    const charMap = {};
-    characters.rows.forEach(c => { charMap[c.id] = c; });
-
     const batchId = uuidv4();
-    const results = [];
-
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i];
-      const sceneCharIds = safeParseJsonb(scene.character_ids, []);
-      const sceneChars = sceneCharIds.map(id => charMap[id]).filter(Boolean);
-
-      let charDescriptions = sceneChars.map(c => `[${c.name}]: ${c.description}`).join('\n');
-      let fullPrompt = scene.prompt;
-      if (charDescriptions) {
-        fullPrompt = `Characters in this scene:\n${charDescriptions}\n\nScene: ${scene.prompt}`;
-      }
-      if (scene.setting) {
-        fullPrompt += `\nSetting/Background: ${scene.setting}`;
-      }
-
-      let imageUrls = [];
-      for (const ch of sceneChars) {
-        const refs = safeParseJsonb(ch.reference_images, []);
-        imageUrls.push(...refs);
-      }
-      if (i > 0) {
-        const prevResult = await pool.query(
-          `SELECT image_url FROM scene_studio_results WHERE scene_id = $1 AND status = 'completed' ORDER BY created_at DESC LIMIT 1`,
-          [scenes[i-1].id]
-        );
-        if (prevResult.rows.length > 0 && prevResult.rows[0].image_url) {
-          imageUrls.push(prevResult.rows[0].image_url);
-        }
-      }
-      imageUrls = imageUrls.slice(0, modelConfig.maxRefs || 10);
-
-      const requestBody = { model, prompt: fullPrompt };
-      if (size) requestBody.size = size;
-      requestBody.n = 1;
-      if (imageUrls.length > 0 && modelConfig.supportsI2I) {
-        requestBody.image_urls = imageUrls;
-      }
-      if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
-      if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
-
-      console.log(`[SCENE-STUDIO] Generating scene ${i+1}/${scenes.length}: "${scene.prompt.substring(0, 50)}..." with ${imageUrls.length} ref images`);
-
-      try {
-        const response = await axios.post(
-          'https://api.apimart.ai/v1/images/generations',
-          requestBody,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${roomKeyResult.apiKey}`
-            },
-            timeout: 600000
-          }
-        );
-
-        const respData = response.data;
-        let directImageUrl = null;
-        if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
-          if (respData.data[0].url) directImageUrl = respData.data[0].url;
-          else if (respData.data[0].b64_json) directImageUrl = `data:image/png;base64,${respData.data[0].b64_json}`;
-        }
-
-        if (directImageUrl) {
-          await pool.query(
-            `INSERT INTO scene_studio_results (scene_id, batch_id, model, prompt_used, image_url, status, completed_at) VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-            [scene.id, batchId, model, fullPrompt, directImageUrl]
-          );
-          results.push({ sceneId: scene.id, sceneOrder: scene.scene_order, status: 'completed', imageUrl: directImageUrl });
-          sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, sceneId: scene.id, sceneOrder: scene.scene_order, status: 'completed', imageUrl: directImageUrl, current: i + 1, total: scenes.length });
-        } else {
-          const taskId = respData.data?.[0]?.task_id || respData.task_id || respData.id;
-          if (taskId) {
-            await pool.query(
-              `INSERT INTO scene_studio_results (scene_id, batch_id, task_id, model, prompt_used, status) VALUES ($1, $2, $3, $4, $5, 'processing')`,
-              [scene.id, batchId, taskId, model, fullPrompt]
-            );
-            startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
-              dbTable: 'scene_studio_results',
-              urlColumn: 'image_url',
-              model: model,
-              userId: roomKeyResult.userId,
-              extraSSE: { batchId, sceneId: scene.id, sceneOrder: scene.scene_order, current: i + 1, total: scenes.length }
-            });
-            results.push({ sceneId: scene.id, sceneOrder: scene.scene_order, status: 'processing', taskId });
-            sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, sceneId: scene.id, sceneOrder: scene.scene_order, status: 'processing', taskId, current: i + 1, total: scenes.length });
-          } else {
-            results.push({ sceneId: scene.id, sceneOrder: scene.scene_order, status: 'failed', error: 'No result from API' });
-            await pool.query(
-              `INSERT INTO scene_studio_results (scene_id, batch_id, model, prompt_used, status) VALUES ($1, $2, $3, $4, 'failed')`,
-              [scene.id, batchId, model, fullPrompt]
-            );
-          }
-        }
-      } catch (sceneError) {
-        const errMsg = sceneError.response?.data?.error?.message || sceneError.response?.data?.message || sceneError.message || 'Generation failed';
-        console.error(`[SCENE-STUDIO] Scene ${scene.id} generation error:`, errMsg);
-        results.push({ sceneId: scene.id, sceneOrder: scene.scene_order, status: 'failed', error: errMsg });
-        await pool.query(
-          `INSERT INTO scene_studio_results (scene_id, batch_id, model, prompt_used, status) VALUES ($1, $2, $3, $4, 'failed')`,
-          [scene.id, batchId, model, fullPrompt]
-        );
-        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, sceneId: scene.id, sceneOrder: scene.scene_order, status: 'failed', error: errMsg, current: i + 1, total: scenes.length });
-      }
-      
-      if (i < scenes.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    await pool.query(
-      'UPDATE xclip_api_keys SET requests_count = requests_count + $1, last_used_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [scenes.length, roomKeyResult.keyInfoId]
+    const batchRow = await pool.query(
+      `INSERT INTO scene_studio_batches (user_id, batch_id, model, character_desc, prompts, status, total) VALUES ($1, $2, $3, $4, $5, 'processing', $6) RETURNING *`,
+      [roomKeyResult.userId, batchId, model, characterDesc || '', JSON.stringify(prompts), prompts.length]
     );
 
-    res.json({ success: true, batchId, results, totalScenes: scenes.length });
+    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}`);
+
+    res.json({ success: true, batchId, batchDbId: batchRow.rows[0].id, total: prompts.length });
+
+    (async () => {
+      const results = [];
+      try {
+        for (let i = 0; i < prompts.length; i++) {
+          const promptText = prompts[i];
+          let fullPrompt = promptText;
+          if (characterDesc && characterDesc.trim()) {
+            fullPrompt = `${characterDesc.trim()}\n\n${promptText}`;
+          }
+
+          const requestBody = { model, prompt: fullPrompt, n: 1 };
+          if (size) requestBody.size = size;
+          if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
+          if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
+
+          if (i > 0 && modelConfig.supportsI2I) {
+            const prevCompleted = results.filter(r => r.status === 'completed' && r.imageUrl);
+            if (prevCompleted.length > 0) {
+              requestBody.image_urls = [prevCompleted[prevCompleted.length - 1].imageUrl];
+            }
+          }
+
+          console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length}: "${promptText.substring(0, 50)}..."`);
+
+          try {
+            const response = await axios.post(
+              'https://api.apimart.ai/v1/images/generations',
+              requestBody,
+              { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 600000 }
+            );
+
+            const respData = response.data;
+            let directImageUrl = null;
+            if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
+              if (respData.data[0].url) directImageUrl = respData.data[0].url;
+              else if (respData.data[0].b64_json) directImageUrl = `data:image/png;base64,${respData.data[0].b64_json}`;
+            }
+
+            if (directImageUrl) {
+              results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: directImageUrl });
+              sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: directImageUrl, current: i + 1, total: prompts.length });
+            } else {
+              const taskId = respData.data?.[0]?.task_id || respData.task_id || respData.id;
+              if (taskId) {
+                sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'processing', taskId, current: i + 1, total: prompts.length });
+                let polled = false;
+                for (let attempt = 0; attempt < 60; attempt++) {
+                  await new Promise(r => setTimeout(r, 5000));
+                  try {
+                    const pollRes = await axios.get(`https://api.apimart.ai/v1/tasks/${taskId}`, { headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 30000 });
+                    const pd = pollRes.data;
+                    const ts = pd.status || pd.data?.status;
+                    if (ts === 'completed' || ts === 'success') {
+                      let url = pd.result?.url || pd.result?.image_url || pd.data?.url;
+                      if (pd.result?.images?.[0]) { const img = pd.result.images[0]; url = typeof img === 'string' ? img : (img.url || img.image_url); }
+                      if (url) {
+                        results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: url });
+                        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: url, current: i + 1, total: prompts.length });
+                        polled = true; break;
+                      }
+                    }
+                    if (ts === 'failed') {
+                      results.push({ index: i, prompt: promptText, status: 'failed', error: 'Task failed' });
+                      sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Task failed', current: i + 1, total: prompts.length });
+                      polled = true; break;
+                    }
+                  } catch (pe) {}
+                }
+                if (!polled) {
+                  results.push({ index: i, prompt: promptText, status: 'failed', error: 'Timeout' });
+                  sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Timeout', current: i + 1, total: prompts.length });
+                }
+              } else {
+                results.push({ index: i, prompt: promptText, status: 'failed', error: 'No result' });
+                sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'No result from API', current: i + 1, total: prompts.length });
+              }
+            }
+          } catch (genErr) {
+            const errMsg = genErr.response?.data?.error?.message || genErr.response?.data?.message || genErr.message || 'Generation failed';
+            console.error(`[SCENE-STUDIO] Prompt ${i+1} error:`, errMsg);
+            results.push({ index: i, prompt: promptText, status: 'failed', error: errMsg });
+            sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: errMsg, current: i + 1, total: prompts.length });
+          }
+
+          if (i < prompts.length - 1) await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } finally {
+        const completed = results.filter(r => r.status === 'completed').length;
+        const failed = results.filter(r => r.status === 'failed').length;
+        const finalStatus = failed === prompts.length ? 'failed' : completed === prompts.length ? 'completed' : 'partial';
+
+        try {
+          await pool.query(
+            `UPDATE scene_studio_batches SET results = $1, status = $2, completed = $3, failed = $4, completed_at = NOW() WHERE batch_id = $5`,
+            [JSON.stringify(results), finalStatus, completed, failed, batchId]
+          );
+          await pool.query(
+            'UPDATE xclip_api_keys SET requests_count = requests_count + $1, last_used_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [prompts.length, roomKeyResult.keyInfoId]
+          );
+        } catch (dbErr) {
+          console.error(`[SCENE-STUDIO] DB finalize error for batch ${batchId}:`, dbErr.message);
+        }
+
+        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, status: 'batch_done', results, completed, failed, total: prompts.length });
+      }
+    })();
   } catch (error) {
     console.error('[SCENE-STUDIO] Batch generate error:', error.message);
     res.status(500).json({ error: 'Gagal batch generate: ' + (error.message || 'Unknown error') });
-  }
-});
-
-app.post('/api/scene-studio/generate-single', async (req, res) => {
-  try {
-    const xclipApiKey = req.headers['x-xclip-key'];
-    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
-    const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
-    if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
-
-    const { sceneId, model, size, resolution } = req.body;
-    if (!sceneId) return res.status(400).json({ error: 'Scene ID diperlukan' });
-
-    const scene = await pool.query(`
-      SELECT s.*, p.user_id FROM scene_studio_scenes s 
-      JOIN scene_studio_projects p ON s.project_id = p.id 
-      WHERE s.id = $1 AND p.user_id = $2
-    `, [sceneId, roomKeyResult.userId]);
-    if (scene.rows.length === 0) return res.status(404).json({ error: 'Scene tidak ditemukan' });
-    const sceneData = scene.rows[0];
-
-    const modelConfig = SCENE_STUDIO_MODELS[model];
-    if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid' });
-
-    const characters = await pool.query('SELECT * FROM scene_studio_characters WHERE project_id = $1', [sceneData.project_id]);
-    const charMap = {};
-    characters.rows.forEach(c => { charMap[c.id] = c; });
-    
-    const sceneCharIds = safeParseJsonb(sceneData.character_ids, []);
-    const sceneChars = sceneCharIds.map(id => charMap[id]).filter(Boolean);
-
-    let charDescriptions = sceneChars.map(c => `[${c.name}]: ${c.description}`).join('\n');
-    let fullPrompt = sceneData.prompt;
-    if (charDescriptions) fullPrompt = `Characters in this scene:\n${charDescriptions}\n\nScene: ${sceneData.prompt}`;
-    if (sceneData.setting) fullPrompt += `\nSetting/Background: ${sceneData.setting}`;
-
-    let imageUrls = [];
-    for (const ch of sceneChars) {
-      const refs = safeParseJsonb(ch.reference_images, []);
-      imageUrls.push(...refs);
-    }
-    imageUrls = imageUrls.slice(0, modelConfig.maxRefs || 10);
-
-    const requestBody = { model, prompt: fullPrompt, n: 1 };
-    if (size) requestBody.size = size;
-    if (imageUrls.length > 0 && modelConfig.supportsI2I) requestBody.image_urls = imageUrls;
-    if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
-    if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
-
-    const response = await axios.post(
-      'https://api.apimart.ai/v1/images/generations',
-      requestBody,
-      { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 600000 }
-    );
-
-    const respData = response.data;
-    let directImageUrl = null;
-    if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
-      if (respData.data[0].url) directImageUrl = respData.data[0].url;
-      else if (respData.data[0].b64_json) directImageUrl = `data:image/png;base64,${respData.data[0].b64_json}`;
-    }
-
-    if (directImageUrl) {
-      await pool.query(
-        `INSERT INTO scene_studio_results (scene_id, batch_id, model, prompt_used, image_url, status, completed_at) VALUES ($1, $2, $3, $4, $5, 'completed', NOW())`,
-        [sceneId, 'single-' + Date.now(), model, fullPrompt, directImageUrl]
-      );
-      await pool.query('UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1', [roomKeyResult.keyInfoId]);
-      return res.json({ success: true, direct: true, imageUrl: directImageUrl });
-    }
-
-    const taskId = respData.data?.[0]?.task_id || respData.task_id || respData.id;
-    if (!taskId) return res.status(500).json({ error: 'Tidak mendapat task ID dari API' });
-
-    await pool.query(
-      `INSERT INTO scene_studio_results (scene_id, batch_id, task_id, model, prompt_used, status) VALUES ($1, $2, $3, $4, $5, 'processing')`,
-      [sceneId, 'single-' + Date.now(), taskId, model, fullPrompt]
-    );
-    await pool.query('UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1', [roomKeyResult.keyInfoId]);
-
-    startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
-      dbTable: 'scene_studio_results',
-      urlColumn: 'image_url',
-      model, userId: roomKeyResult.userId
-    });
-
-    res.json({ success: true, taskId });
-  } catch (error) {
-    const errMsg = error.response?.data?.error?.message || error.response?.data?.message || error.message;
-    console.error('[SCENE-STUDIO] Single generate error:', errMsg);
-    res.status(error.response?.status || 500).json({ error: errMsg || 'Gagal generate scene' });
-  }
-});
-
-app.get('/api/scene-studio/projects/:projectId/results', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login diperlukan' });
-  try {
-    const proj = await pool.query('SELECT id FROM scene_studio_projects WHERE id = $1 AND user_id = $2', [req.params.projectId, req.session.userId]);
-    if (proj.rows.length === 0) return res.status(404).json({ error: 'Project tidak ditemukan' });
-    const result = await pool.query(`
-      SELECT r.*, s.scene_order, s.prompt as scene_prompt
-      FROM scene_studio_results r
-      JOIN scene_studio_scenes s ON r.scene_id = s.id
-      WHERE s.project_id = $1
-      ORDER BY s.scene_order ASC, r.created_at DESC
-    `, [req.params.projectId]);
-    res.json({ results: result.rows });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Get results error:', error);
-    res.status(500).json({ error: 'Gagal mendapatkan hasil generate' });
-  }
-});
-
-app.get('/api/scene-studio/results/status/:taskId', async (req, res) => {
-  try {
-    const xclipApiKey = req.headers['x-xclip-key'];
-    if (!xclipApiKey) return res.status(401).json({ error: 'Xclip API key diperlukan' });
-    const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
-    if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
-
-    const localTask = await pool.query(`
-      SELECT r.* FROM scene_studio_results r
-      JOIN scene_studio_scenes s ON r.scene_id = s.id
-      JOIN scene_studio_projects p ON s.project_id = p.id
-      WHERE r.task_id = $1 AND p.user_id = $2
-    `, [req.params.taskId, roomKeyResult.userId]);
-    if (localTask.rows.length === 0) return res.status(404).json({ error: 'Task tidak ditemukan' });
-    if (localTask.rows[0].status === 'completed') {
-      return res.json({ status: 'completed', imageUrl: localTask.rows[0].image_url });
-    }
-    if (localTask.rows[0].status === 'failed') {
-      return res.json({ status: 'failed', error: 'Generation failed' });
-    }
-
-    const statusResponse = await axios.get(
-      `https://api.apimart.ai/v1/tasks/${req.params.taskId}`,
-      { headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 30000 }
-    );
-    const data = statusResponse.data;
-    const taskStatus = data.status || data.data?.status;
-    if (taskStatus === 'completed' || taskStatus === 'success') {
-      let url = data.result?.url || data.result?.image_url || data.data?.url;
-      if (data.result?.images?.[0]) {
-        const img = data.result.images[0];
-        url = typeof img === 'string' ? img : (img.url || img.image_url);
-      }
-      if (url) {
-        await pool.query("UPDATE scene_studio_results SET status = 'completed', image_url = $1, completed_at = NOW() WHERE task_id = $2", [url, req.params.taskId]);
-      }
-      return res.json({ status: 'completed', imageUrl: url });
-    }
-    if (taskStatus === 'failed') {
-      await pool.query("UPDATE scene_studio_results SET status = 'failed' WHERE task_id = $1", [req.params.taskId]);
-      return res.json({ status: 'failed', error: data.error || 'Generation failed' });
-    }
-    res.json({ status: 'processing' });
-  } catch (error) {
-    console.error('[SCENE-STUDIO] Status check error:', error.message);
-    res.json({ status: 'processing' });
   }
 });
 
@@ -12112,56 +11698,22 @@ async function initDatabase() {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS scene_studio_projects (
+      CREATE TABLE IF NOT EXISTS scene_studio_batches (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(200) NOT NULL,
-        description TEXT DEFAULT '',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS scene_studio_characters (
-        id SERIAL PRIMARY KEY,
-        project_id INTEGER REFERENCES scene_studio_projects(id) ON DELETE CASCADE,
-        name VARCHAR(200) NOT NULL,
-        description TEXT NOT NULL,
-        reference_images JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS scene_studio_scenes (
-        id SERIAL PRIMARY KEY,
-        project_id INTEGER REFERENCES scene_studio_projects(id) ON DELETE CASCADE,
-        scene_order INTEGER DEFAULT 1,
-        prompt TEXT NOT NULL,
-        character_ids JSONB DEFAULT '[]',
-        setting TEXT DEFAULT '',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS scene_studio_results (
-        id SERIAL PRIMARY KEY,
-        scene_id INTEGER REFERENCES scene_studio_scenes(id) ON DELETE CASCADE,
-        batch_id VARCHAR(255),
-        task_id VARCHAR(255),
+        batch_id VARCHAR(255) UNIQUE,
         model VARCHAR(100),
-        prompt_used TEXT,
-        image_url TEXT,
+        character_desc TEXT DEFAULT '',
+        prompts JSONB DEFAULT '[]',
+        results JSONB DEFAULT '[]',
         status VARCHAR(50) DEFAULT 'pending',
+        total INTEGER DEFAULT 0,
+        completed INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         completed_at TIMESTAMP
       )
     `);
-    await pool.query(`ALTER TABLE scene_studio_projects ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`).catch(() => {});
     console.log('Scene Studio tables created');
 
     console.log('[DB] Database initialized successfully');

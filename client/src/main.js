@@ -371,22 +371,17 @@ const state = {
     cooldownEnd: 0
   },
   sceneStudio: {
-    view: 'projects',
-    projects: [],
-    currentProject: null,
-    characters: [],
-    scenes: [],
-    results: [],
+    prompts: [''],
+    characterDesc: '',
     models: [],
     selectedModel: 'doubao-seedance-4-5',
     selectedSize: '1:1',
     selectedResolution: '2K',
     isGenerating: false,
     batchProgress: { current: 0, total: 0, batchId: null },
+    batchResults: [],
+    history: [],
     error: null,
-    editingCharacter: null,
-    editingScene: null,
-    newCharRefImages: [],
     _modelsLoaded: false
   },
   pricing: {
@@ -1007,6 +1002,13 @@ async function handleLogout() {
     state.payment.selectedPlan = null;
     state.payment.proofFile = null;
     state.chat.messages = [];
+    state.sceneStudio.prompts = [''];
+    state.sceneStudio.characterDesc = '';
+    state.sceneStudio.batchResults = [];
+    state.sceneStudio.isGenerating = false;
+    state.sceneStudio.batchProgress = { current: 0, total: 0, batchId: null };
+    state.sceneStudio.history = [];
+    state.sceneStudio._historyLoaded = false;
     state.currentPage = 'video';
     
     // Clear countdown timer
@@ -6147,165 +6149,39 @@ async function loadSceneStudioModels() {
   } catch (e) { console.error('Load scene studio models error:', e); }
 }
 
-async function loadSceneStudioProjects() {
+async function loadSceneStudioHistory() {
   try {
-    const response = await fetch(`${API_URL}/api/scene-studio/projects`, { credentials: 'include' });
+    const response = await fetch(`${API_URL}/api/scene-studio/history`, { credentials: 'include' });
     const data = await response.json();
-    state.sceneStudio.projects = data.projects || [];
-  } catch (e) { console.error('Load scene studio projects error:', e); }
-  render();
-}
-
-async function loadSceneStudioProject(projectId) {
-  try {
-    const [charsRes, scenesRes, resultsRes] = await Promise.all([
-      fetch(`${API_URL}/api/scene-studio/projects/${projectId}/characters`, { credentials: 'include' }),
-      fetch(`${API_URL}/api/scene-studio/projects/${projectId}/scenes`, { credentials: 'include' }),
-      fetch(`${API_URL}/api/scene-studio/projects/${projectId}/results`, { credentials: 'include' })
-    ]);
-    const [charsData, scenesData, resultsData] = await Promise.all([charsRes.json(), scenesRes.json(), resultsRes.json()]);
-    state.sceneStudio.characters = charsData.characters || [];
-    state.sceneStudio.scenes = scenesData.scenes || [];
-    state.sceneStudio.results = resultsData.results || [];
-  } catch (e) { console.error('Load scene studio project error:', e); }
-  render();
-}
-
-async function createSceneStudioProject() {
-  const name = document.getElementById('ssProjectName')?.value;
-  const description = document.getElementById('ssProjectDesc')?.value;
-  if (!name) return alert('Nama project diperlukan');
-  try {
-    const response = await fetch(`${API_URL}/api/scene-studio/projects`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description })
+    state.sceneStudio.history = (data.batches || []).map(b => {
+      b.prompts = safeJsonbArray(b.prompts);
+      b.results = safeJsonbArray(b.results);
+      return b;
     });
-    const data = await response.json();
-    if (data.project) {
-      state.sceneStudio.currentProject = data.project;
-      state.sceneStudio.view = 'editor';
-      state.sceneStudio.characters = [];
-      state.sceneStudio.scenes = [];
-      state.sceneStudio.results = [];
-      await loadSceneStudioProjects();
-    } else { alert(data.error || 'Gagal membuat project'); }
-  } catch (e) { alert('Error: ' + e.message); }
+  } catch (e) { console.error('Load scene studio history error:', e); }
+  render();
 }
 
-async function deleteSceneStudioProject(id) {
-  if (!confirm('Hapus project ini beserta semua karakter dan scene?')) return;
+async function deleteSceneStudioBatch(id) {
+  if (!confirm('Hapus batch ini?')) return;
   try {
-    await fetch(`${API_URL}/api/scene-studio/projects/${id}`, { method: 'DELETE', credentials: 'include' });
-    if (state.sceneStudio.currentProject?.id === id) {
-      state.sceneStudio.currentProject = null;
-      state.sceneStudio.view = 'projects';
-    }
-    await loadSceneStudioProjects();
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-async function openSceneStudioProject(project) {
-  state.sceneStudio.currentProject = project;
-  state.sceneStudio.view = 'editor';
-  await loadSceneStudioProject(project.id);
-}
-
-async function saveSceneStudioCharacter() {
-  const name = document.getElementById('ssCharName')?.value;
-  const description = document.getElementById('ssCharDesc')?.value;
-  if (!name || !description) return alert('Nama dan deskripsi karakter diperlukan');
-  
-  const projectId = state.sceneStudio.currentProject?.id;
-  if (!projectId) return;
-  
-  const refImages = [...state.sceneStudio.newCharRefImages];
-  
-  try {
-    const editing = state.sceneStudio.editingCharacter;
-    let response;
-    if (editing) {
-      response = await fetch(`${API_URL}/api/scene-studio/characters/${editing.id}`, {
-        method: 'PUT', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, referenceImages: refImages })
-      });
-    } else {
-      response = await fetch(`${API_URL}/api/scene-studio/projects/${projectId}/characters`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, referenceImages: refImages })
-      });
-    }
-    const data = await response.json();
-    if (data.character) {
-      state.sceneStudio.editingCharacter = null;
-      state.sceneStudio.newCharRefImages = [];
-      await loadSceneStudioProject(projectId);
-    } else { alert(data.error || 'Gagal menyimpan karakter'); }
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-async function deleteSceneStudioCharacter(id) {
-  if (!confirm('Hapus karakter ini?')) return;
-  try {
-    await fetch(`${API_URL}/api/scene-studio/characters/${id}`, { method: 'DELETE', credentials: 'include' });
-    await loadSceneStudioProject(state.sceneStudio.currentProject.id);
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-async function saveSceneStudioScene() {
-  const prompt = document.getElementById('ssScenePrompt')?.value;
-  const setting = document.getElementById('ssSceneSetting')?.value;
-  if (!prompt) return alert('Deskripsi scene diperlukan');
-  
-  const projectId = state.sceneStudio.currentProject?.id;
-  if (!projectId) return;
-  
-  const checkedIds = [];
-  document.querySelectorAll('.ss-char-check:checked').forEach(cb => checkedIds.push(parseInt(cb.value)));
-  
-  try {
-    const editing = state.sceneStudio.editingScene;
-    let response;
-    if (editing) {
-      response = await fetch(`${API_URL}/api/scene-studio/scenes/${editing.id}`, {
-        method: 'PUT', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, characterIds: checkedIds, setting })
-      });
-    } else {
-      response = await fetch(`${API_URL}/api/scene-studio/projects/${projectId}/scenes`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, characterIds: checkedIds, setting })
-      });
-    }
-    const data = await response.json();
-    if (data.scene) {
-      state.sceneStudio.editingScene = null;
-      await loadSceneStudioProject(projectId);
-    } else { alert(data.error || 'Gagal menyimpan scene'); }
-  } catch (e) { alert('Error: ' + e.message); }
-}
-
-async function deleteSceneStudioScene(id) {
-  if (!confirm('Hapus scene ini?')) return;
-  try {
-    await fetch(`${API_URL}/api/scene-studio/scenes/${id}`, { method: 'DELETE', credentials: 'include' });
-    await loadSceneStudioProject(state.sceneStudio.currentProject.id);
+    await fetch(`${API_URL}/api/scene-studio/history/${id}`, { method: 'DELETE', credentials: 'include' });
+    await loadSceneStudioHistory();
   } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function generateSceneStudioBatch() {
-  const projectId = state.sceneStudio.currentProject?.id;
-  if (!projectId) return;
-  const apiKey = state.sceneStudio.customApiKey || state.ximage2.customApiKey;
-  if (!apiKey) return alert('Xclip API key diperlukan. Masukkan di X Image2 room terlebih dahulu.');
+  const ss = state.sceneStudio;
+  const validPrompts = ss.prompts.filter(p => p.trim());
+  if (validPrompts.length === 0) return alert('Minimal 1 prompt diperlukan');
   
-  state.sceneStudio.isGenerating = true;
-  state.sceneStudio.error = null;
-  state.sceneStudio.batchProgress = { current: 0, total: state.sceneStudio.scenes.length, batchId: null };
+  const apiKey = ss.customApiKey || state.ximage2.customApiKey;
+  if (!apiKey) return alert('Xclip API key diperlukan. Masukkan di X Image2 terlebih dahulu.');
+  
+  ss.isGenerating = true;
+  ss.error = null;
+  ss.batchResults = [];
+  ss.batchProgress = { current: 0, total: validPrompts.length, batchId: null };
   render();
 
   try {
@@ -6313,96 +6189,25 @@ async function generateSceneStudioBatch() {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'x-xclip-key': apiKey },
       body: JSON.stringify({
-        projectId,
-        model: state.sceneStudio.selectedModel,
-        size: state.sceneStudio.selectedSize,
-        resolution: state.sceneStudio.selectedResolution
+        prompts: validPrompts,
+        characterDesc: ss.characterDesc,
+        model: ss.selectedModel,
+        size: ss.selectedSize,
+        resolution: ss.selectedResolution
       })
     });
     const data = await response.json();
     if (data.success) {
-      state.sceneStudio.batchProgress.batchId = data.batchId;
-      await loadSceneStudioProject(projectId);
+      ss.batchProgress.batchId = data.batchId;
     } else {
-      state.sceneStudio.error = data.error || 'Gagal generate batch';
+      ss.error = data.error || 'Gagal generate batch';
+      ss.isGenerating = false;
     }
   } catch (e) {
-    state.sceneStudio.error = e.message;
+    ss.error = e.message;
+    ss.isGenerating = false;
   }
-  state.sceneStudio.isGenerating = false;
   render();
-}
-
-async function regenerateSceneStudioScene(sceneId) {
-  const apiKey = state.sceneStudio.customApiKey || state.ximage2.customApiKey;
-  if (!apiKey) return alert('Xclip API key diperlukan');
-  
-  state.sceneStudio.isGenerating = true;
-  render();
-
-  try {
-    const response = await fetch(`${API_URL}/api/scene-studio/generate-single`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'x-xclip-key': apiKey },
-      body: JSON.stringify({
-        sceneId,
-        model: state.sceneStudio.selectedModel,
-        size: state.sceneStudio.selectedSize,
-        resolution: state.sceneStudio.selectedResolution
-      })
-    });
-    const data = await response.json();
-    if (data.success && data.direct) {
-      await loadSceneStudioProject(state.sceneStudio.currentProject.id);
-    } else if (data.success && data.taskId) {
-      pollSceneStudioTask(data.taskId);
-    } else {
-      alert(data.error || 'Gagal regenerate scene');
-    }
-  } catch (e) { alert('Error: ' + e.message); }
-  state.sceneStudio.isGenerating = false;
-  render();
-}
-
-async function pollSceneStudioTask(taskId) {
-  const apiKey = state.sceneStudio.customApiKey || state.ximage2.customApiKey;
-  if (!apiKey) return;
-  let attempts = 0;
-  const maxAttempts = 120;
-  const poll = async () => {
-    if (attempts >= maxAttempts) return;
-    attempts++;
-    try {
-      const response = await fetch(`${API_URL}/api/scene-studio/results/status/${taskId}`, {
-        headers: { 'x-xclip-key': apiKey }, credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.status === 'completed') {
-        await loadSceneStudioProject(state.sceneStudio.currentProject.id);
-        return;
-      }
-      if (data.status === 'failed') {
-        state.sceneStudio.error = data.error || 'Generation failed';
-        render();
-        return;
-      }
-    } catch (e) {}
-    setTimeout(poll, 5000);
-  };
-  poll();
-}
-
-function handleSceneStudioCharRefUpload(e) {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-  for (const file of files) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      state.sceneStudio.newCharRefImages.push(ev.target.result);
-      render();
-    };
-    reader.readAsDataURL(file);
-  }
 }
 
 function renderSceneStudioPage() {
@@ -6412,170 +6217,95 @@ function renderSceneStudioPage() {
       <p style="color:var(--text-secondary);text-align:center;">Login untuk menggunakan Scene Studio</p>
     </div></div>`;
   }
-  if (!state.sceneStudio._modelsLoaded) loadSceneStudioModels();
-  if (state.sceneStudio.view === 'projects') return renderSSProjectList();
-  return renderSSEditor();
-}
-
-function renderSSProjectList() {
   const ss = state.sceneStudio;
-  return `
-    <div class="page-container">
-      <div class="feature-section" style="max-width:700px;margin:0 auto;">
-        <h2 class="section-title">Scene Studio</h2>
-        <div style="display:flex;gap:8px;margin-bottom:20px;">
-          <input type="text" id="ssProjectName" placeholder="Nama project baru..." style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-          <button class="btn-primary" id="ssCreateProjectBtn" style="padding:10px 20px;white-space:nowrap;">+ Buat</button>
-        </div>
-        <input type="hidden" id="ssProjectDesc" value="">
-        ${ss.projects.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:30px 0;">Belum ada project.</p>' : ''}
-        ${ss.projects.map(p => `
-          <div class="ss-project-card" data-project-id="${p.id}" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;cursor:pointer;">
-            <div>
-              <div style="color:var(--text-primary);font-weight:600;">${escapeHtml(p.name)}</div>
-              <div style="color:var(--text-secondary);font-size:12px;margin-top:2px;">${p.character_count || 0} karakter · ${p.scene_count || 0} scene</div>
-            </div>
-            <div style="display:flex;gap:6px;">
-              <button class="ss-open-project" data-id="${p.id}" style="padding:6px 14px;background:rgba(99,102,241,0.3);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;">Buka</button>
-              <button class="ss-delete-project" data-id="${p.id}" style="padding:6px 10px;background:rgba(239,68,68,0.2);border:none;border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;">×</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function renderSSEditor() {
-  const proj = state.sceneStudio.currentProject;
-  if (!proj) return '';
-  const ss = state.sceneStudio;
-  const chars = ss.characters;
-  const scenes = ss.scenes;
-  const results = ss.results;
+  if (!ss._modelsLoaded) loadSceneStudioModels();
+  if (!ss._historyLoaded) { ss._historyLoaded = true; loadSceneStudioHistory(); }
   const models = ss.models;
-  const editChar = ss.editingCharacter;
-  const editScene = ss.editingScene;
-  const charMap = {};
-  chars.forEach(c => { charMap[c.id] = c; });
-  const resultsByScene = {};
-  results.forEach(r => { if (!resultsByScene[r.scene_id]) resultsByScene[r.scene_id] = []; resultsByScene[r.scene_id].push(r); });
   const selectedModelConfig = models.find(m => m.id === ss.selectedModel);
+  const completedResults = ss.batchResults.filter(r => r.status === 'completed' && r.imageUrl);
 
   return `
     <div class="page-container">
       <div class="feature-section" style="max-width:800px;margin:0 auto;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-          <button id="ssBackToProjects" style="padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">←</button>
-          <h2 class="section-title" style="margin:0;flex:1;">${escapeHtml(proj.name)}</h2>
+        <h2 class="section-title">Scene Studio — Batch Image</h2>
+
+        <textarea id="ssCharDesc" placeholder="Deskripsi karakter/style global (opsional, ditambahkan ke semua prompt untuk konsistensi)&#10;Contoh: Andi, laki-laki 25 tahun, rambut hitam pendek, kaos merah, celana jeans biru" rows="3" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:14px;font-size:13px;">${escapeHtml(ss.characterDesc)}</textarea>
+
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="color:var(--text-primary);font-weight:600;font-size:14px;">Daftar Prompt</label>
+            <button id="ssAddPrompt" style="padding:4px 12px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.3);border-radius:6px;color:#a5b4fc;cursor:pointer;font-size:12px;">+ Tambah</button>
+          </div>
+          ${ss.prompts.map((p, i) => `
+            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+              <span style="color:var(--text-secondary);font-size:11px;width:20px;text-align:center;flex-shrink:0;">${i + 1}</span>
+              <input type="text" class="ss-prompt-input" data-idx="${i}" value="${escapeHtml(p)}" placeholder="Prompt gambar ke-${i + 1}..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;font-size:13px;">
+              ${ss.prompts.length > 1 ? `<button class="ss-remove-prompt" data-idx="${i}" style="padding:4px 8px;background:rgba(239,68,68,0.15);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:12px;flex-shrink:0;">×</button>` : ''}
+            </div>
+          `).join('')}
         </div>
 
-        <!-- TAB: Characters -->
-        <details open style="margin-bottom:16px;">
-          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Karakter (${chars.length})</summary>
-          <div style="padding-top:10px;">
-            <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="ssCharName" placeholder="Nama" value="${editChar ? escapeHtml(editChar.name) : ''}" style="width:140px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-              <input type="text" id="ssCharDesc" placeholder="Deskripsi fisik karakter (rambut, baju, ciri khas...)" value="${editChar ? escapeHtml(editChar.description) : ''}" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-              <label style="color:var(--text-secondary);font-size:12px;">Ref:</label>
-              <input type="file" id="ssCharRefUpload" accept="image/*" multiple style="font-size:12px;color:var(--text-secondary);flex:1;">
-              ${ss.newCharRefImages.length > 0 ? `<span style="color:#a5b4fc;font-size:12px;">${ss.newCharRefImages.length} gambar</span>` : ''}
-              ${ss.newCharRefImages.map((img, i) => `<div style="width:32px;height:32px;border-radius:4px;overflow:hidden;position:relative;"><img src="${img}" style="width:100%;height:100%;object-fit:cover;"><button class="ss-remove-ref" data-idx="${i}" style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;cursor:pointer;">×</button></div>`).join('')}
-            </div>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
-              <button class="btn-primary" id="ssSaveCharBtn" style="padding:7px 18px;font-size:13px;">${editChar ? 'Update' : '+ Tambah'}</button>
-              ${editChar ? '<button id="ssCancelCharBtn" style="padding:7px 14px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">Batal</button>' : ''}
-            </div>
-            ${chars.map(c => {
-              const refs = safeJsonbArray(c.reference_images);
-              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;margin-bottom:6px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  ${refs.length > 0 ? `<img src="${refs[0]}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">` : `<div style="width:28px;height:28px;border-radius:50%;background:rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:bold;">${escapeHtml(c.name.charAt(0).toUpperCase())}</div>`}
-                  <div><span style="color:var(--text-primary);font-size:13px;font-weight:600;">${escapeHtml(c.name)}</span> <span style="color:var(--text-secondary);font-size:11px;">— ${escapeHtml(c.description.substring(0, 50))}${c.description.length > 50 ? '...' : ''}</span></div>
-                </div>
-                <div style="display:flex;gap:4px;">
-                  <button class="ss-edit-char" data-id="${c.id}" style="padding:3px 8px;background:rgba(99,102,241,0.2);border:none;border-radius:4px;color:#a5b4fc;cursor:pointer;font-size:11px;">Edit</button>
-                  <button class="ss-del-char" data-id="${c.id}" style="padding:3px 8px;background:rgba(239,68,68,0.15);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:11px;">×</button>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>
-        </details>
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+          <select id="ssModelSelect" style="flex:1;min-width:150px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
+            ${models.map(m => `<option value="${m.id}" ${m.id === ss.selectedModel ? 'selected' : ''}>${m.name}</option>`).join('')}
+          </select>
+          <select id="ssSizeSelect" style="width:80px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
+            ${(selectedModelConfig?.sizes || ['1:1','16:9','9:16']).map(s => `<option value="${s}" ${s === ss.selectedSize ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          ${selectedModelConfig?.resolutions ? `<select id="ssResolutionSelect" style="width:70px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">${selectedModelConfig.resolutions.map(r => `<option value="${r}" ${r === ss.selectedResolution ? 'selected' : ''}>${r}</option>`).join('')}</select>` : ''}
+        </div>
 
-        <!-- TAB: Scenes -->
-        <details open style="margin-bottom:16px;">
-          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Scene (${scenes.length})</summary>
-          <div style="padding-top:10px;">
-            <textarea id="ssScenePrompt" placeholder="Deskripsi adegan..." rows="2" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:8px;font-size:13px;">${editScene ? escapeHtml(editScene.prompt) : ''}</textarea>
-            <input type="text" id="ssSceneSetting" placeholder="Setting/Latar (opsional)" value="${editScene ? escapeHtml(editScene.setting || '') : ''}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;margin-bottom:8px;box-sizing:border-box;font-size:13px;">
-            ${chars.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${chars.map(c => {
-              const editCharIds = editScene ? safeJsonbArray(editScene.character_ids) : [];
-              const checked = editCharIds.includes(c.id) ? 'checked' : '';
-              return `<label style="display:flex;align-items:center;gap:3px;color:var(--text-primary);font-size:12px;background:rgba(0,0,0,0.2);padding:3px 8px;border-radius:5px;cursor:pointer;"><input type="checkbox" class="ss-char-check" value="${c.id}" ${checked}> ${escapeHtml(c.name)}</label>`;
-            }).join('')}</div>` : ''}
-            <div style="display:flex;gap:8px;margin-bottom:14px;">
-              <button class="btn-primary" id="ssSaveSceneBtn" style="padding:7px 18px;font-size:13px;background:linear-gradient(135deg,#22c55e,#16a34a);">${editScene ? 'Update' : '+ Tambah Scene'}</button>
-              ${editScene ? '<button id="ssCancelSceneBtn" style="padding:7px 14px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">Batal</button>' : ''}
-            </div>
-            ${scenes.map(s => {
-              const sceneCharIds = safeJsonbArray(s.character_ids);
-              const sceneChars = sceneCharIds.map(id => charMap[id]).filter(Boolean);
-              const sceneResults = resultsByScene[s.id] || [];
-              const latestResult = sceneResults[0];
-              const hasImage = latestResult && latestResult.image_url;
-              const isProcessing = latestResult && latestResult.status === 'processing';
-              return `<div style="display:flex;gap:10px;padding:10px 12px;background:rgba(0,0,0,0.15);border-radius:8px;margin-bottom:6px;align-items:center;">
-                ${hasImage ? `<img src="${latestResult.image_url}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;flex-shrink:0;" onclick="window.open('${latestResult.image_url}','_blank')">` : isProcessing ? `<div style="width:56px;height:56px;border-radius:6px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><div style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.1);border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;"></div></div>` : `<div style="width:56px;height:56px;border-radius:6px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:11px;flex-shrink:0;">#${s.scene_order}</div>`}
-                <div style="flex:1;min-width:0;">
-                  <div style="color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.prompt)}</div>
-                  <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
-                    ${s.setting ? `<span style="color:var(--text-secondary);font-size:10px;">📍${escapeHtml(s.setting)}</span>` : ''}
-                    ${sceneChars.map(c => `<span style="background:rgba(99,102,241,0.15);color:#a5b4fc;font-size:10px;padding:1px 5px;border-radius:3px;">${escapeHtml(c.name)}</span>`).join('')}
-                  </div>
-                </div>
-                <div style="display:flex;gap:4px;flex-shrink:0;">
-                  <button class="ss-regen-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(34,197,94,0.15);border:none;border-radius:4px;color:#86efac;cursor:pointer;font-size:12px;" ${ss.isGenerating ? 'disabled' : ''} title="Regenerate">↻</button>
-                  <button class="ss-edit-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(99,102,241,0.15);border:none;border-radius:4px;color:#a5b4fc;cursor:pointer;font-size:12px;" title="Edit">✎</button>
-                  <button class="ss-del-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(239,68,68,0.1);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:12px;" title="Hapus">×</button>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>
-        </details>
+        ${ss.error ? `<div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:8px 12px;color:#fca5a5;font-size:12px;margin-bottom:10px;">${escapeHtml(ss.error)}</div>` : ''}
 
-        <!-- Generate -->
-        ${scenes.length > 0 ? `
-        <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-bottom:16px;">
-          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-            <select id="ssModelSelect" style="flex:1;min-width:150px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
-              ${models.map(m => `<option value="${m.id}" ${m.id === ss.selectedModel ? 'selected' : ''}>${m.name}</option>`).join('')}
-            </select>
-            <select id="ssSizeSelect" style="width:80px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
-              ${(selectedModelConfig?.sizes || ['1:1','16:9','9:16']).map(s => `<option value="${s}" ${s === ss.selectedSize ? 'selected' : ''}>${s}</option>`).join('')}
-            </select>
-            ${selectedModelConfig?.resolutions ? `<select id="ssResolutionSelect" style="width:70px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">${selectedModelConfig.resolutions.map(r => `<option value="${r}" ${r === ss.selectedResolution ? 'selected' : ''}>${r}</option>`).join('')}</select>` : ''}
+        ${ss.isGenerating ? `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;color:var(--text-secondary);font-size:12px;margin-bottom:4px;"><span>Generating...</span><span>${ss.batchProgress.current}/${ss.batchProgress.total}</span></div><div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${ss.batchProgress.total > 0 ? (ss.batchProgress.current / ss.batchProgress.total * 100) : 0}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:2px;transition:width 0.3s;"></div></div></div>` : ''}
+
+        <button class="btn-primary" id="ssGenerateBtn" style="width:100%;padding:12px;font-size:14px;background:linear-gradient(135deg,#6366f1,#a855f7);margin-bottom:20px;" ${ss.isGenerating ? 'disabled' : ''}>
+          ${ss.isGenerating ? 'Generating...' : `Generate ${ss.prompts.filter(p => p.trim()).length} Gambar`}
+        </button>
+
+        ${completedResults.length > 0 ? `
+        <div style="margin-bottom:20px;">
+          <h3 style="color:var(--text-primary);font-size:15px;font-weight:600;margin-bottom:10px;">Hasil Batch Terakhir</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+            ${completedResults.map(r => `
+              <div style="border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);cursor:pointer;" onclick="window.open('${r.imageUrl}','_blank')">
+                <img src="${r.imageUrl}" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;" loading="lazy">
+                <div style="padding:4px 6px;color:var(--text-secondary);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">#${r.index + 1} ${escapeHtml(r.prompt || '')}</div>
+              </div>
+            `).join('')}
           </div>
-          ${ss.error ? `<div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:8px 12px;color:#fca5a5;font-size:12px;margin-bottom:10px;">${escapeHtml(ss.error)}</div>` : ''}
-          ${ss.isGenerating ? `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;color:var(--text-secondary);font-size:12px;margin-bottom:4px;"><span>Generating...</span><span>${ss.batchProgress.current}/${ss.batchProgress.total}</span></div><div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${ss.batchProgress.total > 0 ? (ss.batchProgress.current / ss.batchProgress.total * 100) : 0}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:2px;transition:width 0.3s;"></div></div></div>` : ''}
-          <button class="btn-primary" id="ssGenerateAllBtn" style="width:100%;padding:10px;font-size:14px;background:linear-gradient(135deg,#6366f1,#a855f7);" ${ss.isGenerating ? 'disabled' : ''}>
-            ${ss.isGenerating ? 'Generating...' : `Generate ${scenes.length} Scene`}
-          </button>
         </div>
         ` : ''}
 
-        <!-- Results -->
-        ${results.filter(r => r.status === 'completed' && r.image_url).length > 0 ? `
-        <details open style="margin-bottom:16px;">
-          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Hasil (${results.filter(r => r.status === 'completed').length})</summary>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding-top:10px;">
-            ${results.filter(r => r.status === 'completed' && r.image_url).map(r => `
-              <div style="border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);cursor:pointer;" onclick="window.open('${r.image_url}','_blank')">
-                <img src="${r.image_url}" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;">
-                <div style="padding:4px 6px;color:var(--text-secondary);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">#${r.scene_order} ${escapeHtml(r.scene_prompt || '')}</div>
-              </div>
-            `).join('')}
+        ${ss.batchResults.filter(r => r.status === 'failed').length > 0 ? `
+        <div style="margin-bottom:20px;">
+          ${ss.batchResults.filter(r => r.status === 'failed').map(r => `
+            <div style="background:rgba(239,68,68,0.08);border-radius:6px;padding:6px 10px;color:#fca5a5;font-size:11px;margin-bottom:4px;">#${r.index + 1} gagal: ${escapeHtml(r.error || 'Unknown')}</div>
+          `).join('')}
+        </div>
+        ` : ''}
+
+        ${ss.history.length > 0 ? `
+        <details style="margin-bottom:16px;">
+          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Riwayat (${ss.history.length})</summary>
+          <div style="padding-top:10px;">
+            ${ss.history.map(b => {
+              const bResults = safeJsonbArray(b.results).filter(r => r.status === 'completed' && r.imageUrl);
+              const bDate = new Date(b.created_at).toLocaleString('id-ID', { day:'numeric',month:'short',hour:'2-digit',minute:'2-digit' });
+              return `
+                <div style="background:rgba(0,0,0,0.15);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <div>
+                      <span style="color:var(--text-primary);font-size:13px;font-weight:600;">${escapeHtml(b.model || '')}</span>
+                      <span style="color:var(--text-secondary);font-size:11px;margin-left:8px;">${bDate}</span>
+                      <span style="color:var(--text-secondary);font-size:11px;margin-left:8px;">${b.completed || 0}/${b.total || 0}</span>
+                    </div>
+                    <button class="ss-del-batch" data-id="${b.id}" style="padding:3px 8px;background:rgba(239,68,68,0.15);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:11px;">×</button>
+                  </div>
+                  ${bResults.length > 0 ? `<div style="display:flex;gap:6px;overflow-x:auto;">${bResults.map(r => `<img src="${r.imageUrl}" style="width:64px;height:64px;border-radius:6px;object-fit:cover;cursor:pointer;flex-shrink:0;" onclick="window.open('${r.imageUrl}','_blank')" loading="lazy">`).join('')}</div>` : '<div style="color:var(--text-secondary);font-size:11px;">Tidak ada gambar</div>'}
+                </div>
+              `;
+            }).join('')}
           </div>
         </details>
         ` : ''}
@@ -7064,138 +6794,37 @@ function attachEventListeners() {
 }
 
 function attachSceneStudioEventListeners() {
-  const createBtn = document.getElementById('ssCreateProjectBtn');
-  if (createBtn) createBtn.addEventListener('click', createSceneStudioProject);
+  const ss = state.sceneStudio;
 
-  document.querySelectorAll('.ss-open-project').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = parseInt(btn.dataset.id);
-      const proj = state.sceneStudio.projects.find(p => p.id === id);
-      if (proj) openSceneStudioProject(proj);
-    });
+  const charDescEl = document.getElementById('ssCharDesc');
+  if (charDescEl) charDescEl.addEventListener('input', () => { ss.characterDesc = charDescEl.value; });
+
+  document.querySelectorAll('.ss-prompt-input').forEach(input => {
+    input.addEventListener('input', () => { ss.prompts[parseInt(input.dataset.idx)] = input.value; });
   });
 
-  document.querySelectorAll('.ss-project-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const id = parseInt(card.dataset.projectId);
-      const proj = state.sceneStudio.projects.find(p => p.id === id);
-      if (proj) openSceneStudioProject(proj);
-    });
-  });
+  const addPromptBtn = document.getElementById('ssAddPrompt');
+  if (addPromptBtn) addPromptBtn.addEventListener('click', () => { ss.prompts.push(''); render(); });
 
-  document.querySelectorAll('.ss-delete-project').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteSceneStudioProject(parseInt(btn.dataset.id));
-    });
-  });
-
-  const backBtn = document.getElementById('ssBackToProjects');
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      state.sceneStudio.view = 'projects';
-      state.sceneStudio.currentProject = null;
-      state.sceneStudio.editingCharacter = null;
-      state.sceneStudio.editingScene = null;
-      state.sceneStudio.newCharRefImages = [];
-      loadSceneStudioProjects();
-    });
-  }
-
-  const charRefUpload = document.getElementById('ssCharRefUpload');
-  if (charRefUpload) charRefUpload.addEventListener('change', handleSceneStudioCharRefUpload);
-
-  document.querySelectorAll('.ss-remove-ref').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.idx);
-      state.sceneStudio.newCharRefImages.splice(idx, 1);
-      render();
-    });
-  });
-
-  const saveCharBtn = document.getElementById('ssSaveCharBtn');
-  if (saveCharBtn) saveCharBtn.addEventListener('click', saveSceneStudioCharacter);
-
-  const cancelCharBtn = document.getElementById('ssCancelCharBtn');
-  if (cancelCharBtn) {
-    cancelCharBtn.addEventListener('click', () => {
-      state.sceneStudio.editingCharacter = null;
-      state.sceneStudio.newCharRefImages = [];
-      render();
-    });
-  }
-
-  document.querySelectorAll('.ss-edit-char').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = parseInt(btn.dataset.id);
-      const char = state.sceneStudio.characters.find(c => c.id === id);
-      if (char) {
-        state.sceneStudio.editingCharacter = char;
-        state.sceneStudio.newCharRefImages = [];
-        render();
-      }
-    });
-  });
-
-  document.querySelectorAll('.ss-del-char').forEach(btn => {
-    btn.addEventListener('click', () => deleteSceneStudioCharacter(parseInt(btn.dataset.id)));
-  });
-
-  const saveSceneBtn = document.getElementById('ssSaveSceneBtn');
-  if (saveSceneBtn) saveSceneBtn.addEventListener('click', saveSceneStudioScene);
-
-  const cancelSceneBtn = document.getElementById('ssCancelSceneBtn');
-  if (cancelSceneBtn) {
-    cancelSceneBtn.addEventListener('click', () => {
-      state.sceneStudio.editingScene = null;
-      render();
-    });
-  }
-
-  document.querySelectorAll('.ss-edit-scene').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = parseInt(btn.dataset.id);
-      const scene = state.sceneStudio.scenes.find(s => s.id === id);
-      if (scene) {
-        state.sceneStudio.editingScene = scene;
-        render();
-      }
-    });
-  });
-
-  document.querySelectorAll('.ss-regen-scene').forEach(btn => {
-    btn.addEventListener('click', () => regenerateSceneStudioScene(parseInt(btn.dataset.id)));
-  });
-
-  document.querySelectorAll('.ss-del-scene').forEach(btn => {
-    btn.addEventListener('click', () => deleteSceneStudioScene(parseInt(btn.dataset.id)));
+  document.querySelectorAll('.ss-remove-prompt').forEach(btn => {
+    btn.addEventListener('click', () => { ss.prompts.splice(parseInt(btn.dataset.idx), 1); render(); });
   });
 
   const modelSelect = document.getElementById('ssModelSelect');
-  if (modelSelect) {
-    modelSelect.addEventListener('change', () => {
-      state.sceneStudio.selectedModel = modelSelect.value;
-      render();
-    });
-  }
+  if (modelSelect) modelSelect.addEventListener('change', () => { ss.selectedModel = modelSelect.value; render(); });
 
   const sizeSelect = document.getElementById('ssSizeSelect');
-  if (sizeSelect) {
-    sizeSelect.addEventListener('change', () => {
-      state.sceneStudio.selectedSize = sizeSelect.value;
-    });
-  }
+  if (sizeSelect) sizeSelect.addEventListener('change', () => { ss.selectedSize = sizeSelect.value; });
 
   const resSelect = document.getElementById('ssResolutionSelect');
-  if (resSelect) {
-    resSelect.addEventListener('change', () => {
-      state.sceneStudio.selectedResolution = resSelect.value;
-    });
-  }
+  if (resSelect) resSelect.addEventListener('change', () => { ss.selectedResolution = resSelect.value; });
 
-  const generateAllBtn = document.getElementById('ssGenerateAllBtn');
-  if (generateAllBtn) generateAllBtn.addEventListener('click', generateSceneStudioBatch);
+  const generateBtn = document.getElementById('ssGenerateBtn');
+  if (generateBtn) generateBtn.addEventListener('click', generateSceneStudioBatch);
+
+  document.querySelectorAll('.ss-del-batch').forEach(btn => {
+    btn.addEventListener('click', () => deleteSceneStudioBatch(parseInt(btn.dataset.id)));
+  });
 }
 
 function attachVideoEventListeners() {
@@ -12778,18 +12407,29 @@ function handleSSEEvent(data) {
       break;
       
     case 'scene_studio_progress':
-      if (data.batchId) {
-        state.sceneStudio.batchProgress.batchId = data.batchId;
-        state.sceneStudio.batchProgress.current = data.current || 0;
-        state.sceneStudio.batchProgress.total = data.total || 0;
+      if (data.batchId && data.batchId === state.sceneStudio.batchProgress.batchId) {
+        if (data.current) state.sceneStudio.batchProgress.current = data.current;
+        if (data.total) state.sceneStudio.batchProgress.total = data.total;
+        if (data.status === 'completed' && data.imageUrl) {
+          const exists = state.sceneStudio.batchResults.some(r => r.index === data.index && r.status === 'completed');
+          if (!exists) state.sceneStudio.batchResults.push({ index: data.index, prompt: data.prompt || '', status: 'completed', imageUrl: data.imageUrl });
+        }
+        if (data.status === 'failed') {
+          const exists = state.sceneStudio.batchResults.some(r => r.index === data.index && r.status === 'failed');
+          if (!exists) {
+            state.sceneStudio.batchResults.push({ index: data.index, prompt: data.prompt || '', status: 'failed', error: data.error || 'Failed' });
+            showToast(`Prompt #${(data.index || 0) + 1} gagal: ${data.error || 'Generation failed'}`, 'error');
+          }
+        }
+        if (data.status === 'batch_done') {
+          state.sceneStudio.isGenerating = false;
+          state.sceneStudio._historyLoaded = false;
+          if (data.results && Array.isArray(data.results)) {
+            state.sceneStudio.batchResults = data.results;
+          }
+        }
+        render();
       }
-      if (data.status === 'completed' && data.imageUrl && state.sceneStudio.currentProject) {
-        loadSceneStudioProject(state.sceneStudio.currentProject.id);
-      }
-      if (data.status === 'failed') {
-        showToast(`Scene ${data.sceneOrder || ''} gagal: ${data.error || 'Generation failed'}`, 'error');
-      }
-      render();
       break;
 
     case 'ping':

@@ -122,19 +122,17 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Image history persistence in database
   - SSE events: ximage3_completed, ximage3_failed
   - Server-side background polling with apiType 'poyo'
-- **Scene Studio (Batch AI Image Generation)**: Create consistent multi-character visual stories using batch AI image generation. Uses Apimart.ai API (same as X Image2). Features include:
-  - Project-based workflow: create projects with characters and scenes
-  - Character profiles with detailed descriptions and reference images for consistency
-  - Scene/storyboard composer: define scenes with prompts, settings, and character assignments
-  - Batch generation: generate all scenes at once with character descriptions injected into prompts
-  - Single scene regeneration for iterating on individual scenes
-  - Previous scene results used as reference for visual consistency across scenes
+- **Scene Studio (Simple Batch Image Generation)**: Generate multiple images at once with optional character/style consistency. Uses Apimart.ai API (same as X Image2). Features include:
+  - Simple single-page UI: character/style description (global prefix) + list of prompts + model/size picker + generate button
+  - Character description automatically prepended to all prompts for visual consistency
+  - Previous completed images used as reference (via image_urls) for consistency across batch
   - All X Image2 models available (GPT-4o, Seedream, Flux, Nano Banana, etc.)
-  - Real-time SSE progress updates during batch generation
-  - Results gallery with scene thumbnails
-  - Database tables: scene_studio_projects, scene_studio_characters, scene_studio_scenes, scene_studio_results
+  - Real-time SSE progress updates during batch generation (per-prompt completion/failure)
+  - Async server-side processing with inline polling for task-based APIs
+  - Results grid + batch history with thumbnails
+  - Database table: scene_studio_batches (stores prompts, results as JSONB)
   - Reuses XIMAGE2_ROOM{N}_KEY_{1-3} keys or APIMART_API_KEY fallback
-  - API: POST /api/scene-studio/generate (batch), POST /api/scene-studio/generate-single
+  - API: POST /api/scene-studio/generate (batch), GET /api/scene-studio/history, DELETE /api/scene-studio/history/:id
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
