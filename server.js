@@ -2466,7 +2466,7 @@ const RATE_LIMIT_CONFIG = {
     label: 'Vidgen2'
   },
   vidgen4: {
-    cooldownMs: 240 * 1000,
+    cooldownMs: 300 * 1000,
     dailyQuotaPerKey: 50,
     jitterMinMs: 1000,
     jitterMaxMs: 3000,

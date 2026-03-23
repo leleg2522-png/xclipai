@@ -9283,7 +9283,7 @@ async function generateVidgen3Video() {
       progress: 0
     });
 
-    state.vidgen3.cooldownEndTime = Date.now() + 60000;
+    state.vidgen3.cooldownEndTime = Date.now() + 300000;
     localStorage.setItem('vidgen3_cooldown', state.vidgen3.cooldownEndTime.toString());
     startVidgen3CooldownTimer();
 
