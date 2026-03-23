@@ -6147,6 +6147,7 @@ async function loadSceneStudioModels() {
     const data = await response.json();
     state.sceneStudio.models = data.models || [];
     state.sceneStudio._modelsLoaded = true;
+    render(true);
   } catch (e) { console.error('Load scene studio models error:', e); }
 }
 
@@ -6160,7 +6161,7 @@ async function loadSceneStudioHistory() {
       return b;
     });
   } catch (e) { console.error('Load scene studio history error:', e); }
-  render();
+  render(true);
 }
 
 async function deleteSceneStudioBatch(id) {
@@ -6447,7 +6448,7 @@ function attachEventListeners() {
       state.currentPage = btn.dataset.page;
       if (btn.dataset.page === 'sceneStudio') {
         loadSceneStudioModels();
-        loadSceneStudioProjects();
+        loadSceneStudioHistory();
       }
       closeMobileMenu();
       render(true);
