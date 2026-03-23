@@ -4098,7 +4098,7 @@ textarea.form-input {
     flex-shrink: 0;
     margin-left: auto;
     justify-content: flex-end;
-    gap: var(--space-2);
+    gap: 6px;
     overflow: visible;
   }
 
@@ -4106,10 +4106,23 @@ textarea.form-input {
     flex-shrink: 0;
   }
 
+  .logo-text {
+    display: none;
+  }
+
   .header-right .subscription-timer {
-    font-size: 11px;
-    padding: 4px 8px;
+    font-size: 10px;
+    padding: 3px 6px;
     min-width: unset;
+    border-radius: 12px;
+  }
+
+  .header-right .subscription-timer .timer-icon {
+    display: none;
+  }
+
+  #subscriptionTimer {
+    min-width: unset !important;
   }
 
   .header-right .user-name {
@@ -4117,14 +4130,18 @@ textarea.form-input {
   }
 
   .header-right .user-btn {
-    padding: 4px 8px;
+    padding: 4px 6px;
     gap: 4px;
   }
 
+  .header-right .user-btn svg {
+    display: none;
+  }
+
   .header-right .user-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
   }
 
   .user-dropdown {
