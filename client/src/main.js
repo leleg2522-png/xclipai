@@ -6409,56 +6409,38 @@ function renderSceneStudioPage() {
   if (!state.auth.user) {
     return `<div class="page-container"><div class="feature-section">
       <h2 class="section-title">Scene Studio</h2>
-      <p style="color: var(--text-secondary); text-align: center;">Login untuk menggunakan Scene Studio</p>
+      <p style="color:var(--text-secondary);text-align:center;">Login untuk menggunakan Scene Studio</p>
     </div></div>`;
   }
-
   if (!state.sceneStudio._modelsLoaded) loadSceneStudioModels();
-
-  if (state.sceneStudio.view === 'projects') {
-    return renderSSProjectList();
-  }
+  if (state.sceneStudio.view === 'projects') return renderSSProjectList();
   return renderSSEditor();
 }
 
 function renderSSProjectList() {
+  const ss = state.sceneStudio;
   return `
     <div class="page-container">
-      <div class="feature-section">
-        <h2 class="section-title" style="display:flex;align-items:center;gap:10px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>
-          </svg>
-          Scene Studio
-        </h2>
-        <p style="color: var(--text-secondary); margin-bottom: 20px;">Generate batch gambar dengan konsistensi karakter tinggi menggunakan AI.</p>
-
-        <div class="ss-create-project" style="background: rgba(99,102,241,0.1); border: 1px dashed rgba(99,102,241,0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <h3 style="color: var(--text-primary); margin-bottom: 12px;">Buat Project Baru</h3>
-          <input type="text" id="ssProjectName" placeholder="Nama Project (misal: Animasi Andi & Budi)" 
-            style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;margin-bottom:8px;box-sizing:border-box;">
-          <input type="text" id="ssProjectDesc" placeholder="Deskripsi singkat (opsional)"
-            style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;margin-bottom:12px;box-sizing:border-box;">
-          <button class="btn-primary" id="ssCreateProjectBtn" style="padding:10px 24px;">Buat Project</button>
+      <div class="feature-section" style="max-width:700px;margin:0 auto;">
+        <h2 class="section-title">Scene Studio</h2>
+        <div style="display:flex;gap:8px;margin-bottom:20px;">
+          <input type="text" id="ssProjectName" placeholder="Nama project baru..." style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+          <button class="btn-primary" id="ssCreateProjectBtn" style="padding:10px 20px;white-space:nowrap;">+ Buat</button>
         </div>
-
-        <div class="ss-project-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
-          ${state.sceneStudio.projects.length === 0 ? '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;padding:40px 0;">Belum ada project. Buat project pertamamu!</p>' : ''}
-          ${state.sceneStudio.projects.map(p => `
-            <div class="ss-project-card" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s;" data-project-id="${p.id}">
-              <h3 style="color:var(--text-primary);margin-bottom:6px;">${escapeHtml(p.name)}</h3>
-              <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">${escapeHtml(p.description || 'Tidak ada deskripsi')}</p>
-              <div style="display:flex;gap:12px;color:var(--text-secondary);font-size:12px;">
-                <span>👤 ${p.character_count || 0} Karakter</span>
-                <span>🎬 ${p.scene_count || 0} Scene</span>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px;">
-                <button class="btn-sm ss-open-project" data-id="${p.id}" style="flex:1;padding:6px 12px;background:rgba(99,102,241,0.3);border:none;border-radius:6px;color:#fff;cursor:pointer;">Buka</button>
-                <button class="btn-sm ss-delete-project" data-id="${p.id}" style="padding:6px 12px;background:rgba(239,68,68,0.3);border:none;border-radius:6px;color:#fff;cursor:pointer;">Hapus</button>
-              </div>
+        <input type="hidden" id="ssProjectDesc" value="">
+        ${ss.projects.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:30px 0;">Belum ada project.</p>' : ''}
+        ${ss.projects.map(p => `
+          <div class="ss-project-card" data-project-id="${p.id}" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;cursor:pointer;">
+            <div>
+              <div style="color:var(--text-primary);font-weight:600;">${escapeHtml(p.name)}</div>
+              <div style="color:var(--text-secondary);font-size:12px;margin-top:2px;">${p.character_count || 0} karakter · ${p.scene_count || 0} scene</div>
             </div>
-          `).join('')}
-        </div>
+            <div style="display:flex;gap:6px;">
+              <button class="ss-open-project" data-id="${p.id}" style="padding:6px 14px;background:rgba(99,102,241,0.3);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;">Buka</button>
+              <button class="ss-delete-project" data-id="${p.id}" style="padding:6px 10px;background:rgba(239,68,68,0.2);border:none;border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;">×</button>
+            </div>
+          </div>
+        `).join('')}
       </div>
     </div>
   `;
@@ -6467,239 +6449,135 @@ function renderSSProjectList() {
 function renderSSEditor() {
   const proj = state.sceneStudio.currentProject;
   if (!proj) return '';
-  const chars = state.sceneStudio.characters;
-  const scenes = state.sceneStudio.scenes;
-  const results = state.sceneStudio.results;
-  const models = state.sceneStudio.models;
-  const editChar = state.sceneStudio.editingCharacter;
-  const editScene = state.sceneStudio.editingScene;
-  
+  const ss = state.sceneStudio;
+  const chars = ss.characters;
+  const scenes = ss.scenes;
+  const results = ss.results;
+  const models = ss.models;
+  const editChar = ss.editingCharacter;
+  const editScene = ss.editingScene;
   const charMap = {};
   chars.forEach(c => { charMap[c.id] = c; });
-  
   const resultsByScene = {};
-  results.forEach(r => {
-    if (!resultsByScene[r.scene_id]) resultsByScene[r.scene_id] = [];
-    resultsByScene[r.scene_id].push(r);
-  });
-
-  const selectedModelConfig = models.find(m => m.id === state.sceneStudio.selectedModel);
+  results.forEach(r => { if (!resultsByScene[r.scene_id]) resultsByScene[r.scene_id] = []; resultsByScene[r.scene_id].push(r); });
+  const selectedModelConfig = models.find(m => m.id === ss.selectedModel);
 
   return `
     <div class="page-container">
-      <div class="feature-section">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-          <button class="btn-sm" id="ssBackToProjects" style="padding:6px 12px;background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:#fff;cursor:pointer;">← Kembali</button>
-          <h2 class="section-title" style="margin:0;">${escapeHtml(proj.name)}</h2>
+      <div class="feature-section" style="max-width:800px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+          <button id="ssBackToProjects" style="padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">←</button>
+          <h2 class="section-title" style="margin:0;flex:1;">${escapeHtml(proj.name)}</h2>
         </div>
 
-        <!-- Characters Section -->
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:20px;">
-          <h3 style="color:var(--text-primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-            <span>👤</span> Karakter (${chars.length})
-          </h3>
-          
-          <!-- Character Form -->
-          <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px;margin-bottom:16px;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-              <input type="text" id="ssCharName" placeholder="Nama Karakter" value="${editChar ? escapeHtml(editChar.name) : ''}"
-                style="padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-              <div>
-                <label style="color:var(--text-secondary);font-size:12px;display:block;margin-bottom:4px;">Referensi Gambar</label>
-                <input type="file" id="ssCharRefUpload" accept="image/*" multiple style="font-size:12px;color:var(--text-secondary);">
-              </div>
+        <!-- TAB: Characters -->
+        <details open style="margin-bottom:16px;">
+          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Karakter (${chars.length})</summary>
+          <div style="padding-top:10px;">
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="ssCharName" placeholder="Nama" value="${editChar ? escapeHtml(editChar.name) : ''}" style="width:140px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
+              <input type="text" id="ssCharDesc" placeholder="Deskripsi fisik karakter (rambut, baju, ciri khas...)" value="${editChar ? escapeHtml(editChar.description) : ''}" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
             </div>
-            <textarea id="ssCharDesc" placeholder="Deskripsi detail karakter (rambut hitam pendek, mata biru, kaos merah, celana jeans biru, tinggi, dll)" rows="3"
-              style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:10px;">${editChar ? escapeHtml(editChar.description) : ''}</textarea>
-            
-            ${state.sceneStudio.newCharRefImages.length > 0 || (editChar && safeJsonbArray(editChar.reference_images).length > 0) ? `
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                ${(editChar ? safeJsonbArray(editChar.reference_images) : []).map((img, i) => `
-                  <div style="width:60px;height:60px;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);">
-                    <img src="${img}" style="width:100%;height:100%;object-fit:cover;">
-                  </div>
-                `).join('')}
-                ${state.sceneStudio.newCharRefImages.map((img, i) => `
-                  <div style="width:60px;height:60px;border-radius:6px;overflow:hidden;border:2px solid rgba(99,102,241,0.5);position:relative;">
-                    <img src="${img}" style="width:100%;height:100%;object-fit:cover;">
-                    <button class="ss-remove-ref" data-idx="${i}" style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
-                  </div>
-                `).join('')}
-              </div>
-            ` : ''}
-            
-            <div style="display:flex;gap:8px;">
-              <button class="btn-primary" id="ssSaveCharBtn" style="padding:8px 20px;">${editChar ? 'Update Karakter' : 'Tambah Karakter'}</button>
-              ${editChar ? '<button class="btn-sm" id="ssCancelCharBtn" style="padding:8px 16px;background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:#fff;cursor:pointer;">Batal</button>' : ''}
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <label style="color:var(--text-secondary);font-size:12px;">Ref:</label>
+              <input type="file" id="ssCharRefUpload" accept="image/*" multiple style="font-size:12px;color:var(--text-secondary);flex:1;">
+              ${ss.newCharRefImages.length > 0 ? `<span style="color:#a5b4fc;font-size:12px;">${ss.newCharRefImages.length} gambar</span>` : ''}
+              ${ss.newCharRefImages.map((img, i) => `<div style="width:32px;height:32px;border-radius:4px;overflow:hidden;position:relative;"><img src="${img}" style="width:100%;height:100%;object-fit:cover;"><button class="ss-remove-ref" data-idx="${i}" style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:8px;cursor:pointer;">×</button></div>`).join('')}
             </div>
-          </div>
-
-          <!-- Character List -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <button class="btn-primary" id="ssSaveCharBtn" style="padding:7px 18px;font-size:13px;">${editChar ? 'Update' : '+ Tambah'}</button>
+              ${editChar ? '<button id="ssCancelCharBtn" style="padding:7px 14px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">Batal</button>' : ''}
+            </div>
             ${chars.map(c => {
               const refs = safeJsonbArray(c.reference_images);
-              return `
-                <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;">
-                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                    ${refs.length > 0 ? `<img src="${refs[0]}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '<div style="width:40px;height:40px;border-radius:50%;background:rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;">' + escapeHtml(c.name.charAt(0).toUpperCase()) + '</div>'}
-                    <div>
-                      <div style="color:var(--text-primary);font-weight:600;font-size:14px;">${escapeHtml(c.name)}</div>
-                      <div style="color:var(--text-secondary);font-size:11px;">${refs.length} ref image</div>
-                    </div>
-                  </div>
-                  <p style="color:var(--text-secondary);font-size:12px;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(c.description)}</p>
-                  <div style="display:flex;gap:6px;">
-                    <button class="ss-edit-char" data-id="${c.id}" style="flex:1;padding:4px 10px;background:rgba(99,102,241,0.2);border:none;border-radius:6px;color:#a5b4fc;cursor:pointer;font-size:12px;">Edit</button>
-                    <button class="ss-del-char" data-id="${c.id}" style="padding:4px 10px;background:rgba(239,68,68,0.2);border:none;border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;">Hapus</button>
-                  </div>
+              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;margin-bottom:6px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  ${refs.length > 0 ? `<img src="${refs[0]}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">` : `<div style="width:28px;height:28px;border-radius:50%;background:rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:bold;">${escapeHtml(c.name.charAt(0).toUpperCase())}</div>`}
+                  <div><span style="color:var(--text-primary);font-size:13px;font-weight:600;">${escapeHtml(c.name)}</span> <span style="color:var(--text-secondary);font-size:11px;">— ${escapeHtml(c.description.substring(0, 50))}${c.description.length > 50 ? '...' : ''}</span></div>
                 </div>
-              `;
+                <div style="display:flex;gap:4px;">
+                  <button class="ss-edit-char" data-id="${c.id}" style="padding:3px 8px;background:rgba(99,102,241,0.2);border:none;border-radius:4px;color:#a5b4fc;cursor:pointer;font-size:11px;">Edit</button>
+                  <button class="ss-del-char" data-id="${c.id}" style="padding:3px 8px;background:rgba(239,68,68,0.15);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:11px;">×</button>
+                </div>
+              </div>`;
             }).join('')}
           </div>
-        </div>
+        </details>
 
-        <!-- Scenes Section -->
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;margin-bottom:20px;">
-          <h3 style="color:var(--text-primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-            <span>🎬</span> Scene / Adegan (${scenes.length})
-          </h3>
-
-          <!-- Scene Form -->
-          <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:16px;margin-bottom:16px;">
-            <textarea id="ssScenePrompt" placeholder="Deskripsi adegan (misal: Andi dan Budi bertemu di taman, Andi tersenyum lebar sambil melambaikan tangan, Budi terlihat terkejut)" rows="3"
-              style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:10px;">${editScene ? escapeHtml(editScene.prompt) : ''}</textarea>
-            <input type="text" id="ssSceneSetting" placeholder="Setting/Latar (misal: taman kota saat sore hari, sunset)" value="${editScene ? escapeHtml(editScene.setting || '') : ''}"
-              style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;margin-bottom:10px;box-sizing:border-box;">
-            
-            ${chars.length > 0 ? `
-              <div style="margin-bottom:10px;">
-                <label style="color:var(--text-secondary);font-size:12px;display:block;margin-bottom:6px;">Karakter dalam scene ini:</label>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                  ${chars.map(c => {
-                    const editCharIds = editScene ? safeJsonbArray(editScene.character_ids) : [];
-                    const checked = editCharIds.includes(c.id) ? 'checked' : '';
-                    return `<label style="display:flex;align-items:center;gap:4px;color:var(--text-primary);font-size:13px;background:rgba(0,0,0,0.2);padding:4px 10px;border-radius:6px;cursor:pointer;">
-                      <input type="checkbox" class="ss-char-check" value="${c.id}" ${checked}> ${escapeHtml(c.name)}
-                    </label>`;
-                  }).join('')}
-                </div>
-              </div>
-            ` : '<p style="color:var(--text-secondary);font-size:12px;margin-bottom:10px;">Tambahkan karakter terlebih dahulu di atas.</p>'}
-            
-            <div style="display:flex;gap:8px;">
-              <button class="btn-primary" id="ssSaveSceneBtn" style="padding:8px 20px;background:linear-gradient(135deg,#22c55e,#16a34a);">${editScene ? 'Update Scene' : 'Tambah Scene'}</button>
-              ${editScene ? '<button class="btn-sm" id="ssCancelSceneBtn" style="padding:8px 16px;background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:#fff;cursor:pointer;">Batal</button>' : ''}
+        <!-- TAB: Scenes -->
+        <details open style="margin-bottom:16px;">
+          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Scene (${scenes.length})</summary>
+          <div style="padding-top:10px;">
+            <textarea id="ssScenePrompt" placeholder="Deskripsi adegan..." rows="2" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:8px;font-size:13px;">${editScene ? escapeHtml(editScene.prompt) : ''}</textarea>
+            <input type="text" id="ssSceneSetting" placeholder="Setting/Latar (opsional)" value="${editScene ? escapeHtml(editScene.setting || '') : ''}" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;margin-bottom:8px;box-sizing:border-box;font-size:13px;">
+            ${chars.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${chars.map(c => {
+              const editCharIds = editScene ? safeJsonbArray(editScene.character_ids) : [];
+              const checked = editCharIds.includes(c.id) ? 'checked' : '';
+              return `<label style="display:flex;align-items:center;gap:3px;color:var(--text-primary);font-size:12px;background:rgba(0,0,0,0.2);padding:3px 8px;border-radius:5px;cursor:pointer;"><input type="checkbox" class="ss-char-check" value="${c.id}" ${checked}> ${escapeHtml(c.name)}</label>`;
+            }).join('')}</div>` : ''}
+            <div style="display:flex;gap:8px;margin-bottom:14px;">
+              <button class="btn-primary" id="ssSaveSceneBtn" style="padding:7px 18px;font-size:13px;background:linear-gradient(135deg,#22c55e,#16a34a);">${editScene ? 'Update' : '+ Tambah Scene'}</button>
+              ${editScene ? '<button id="ssCancelSceneBtn" style="padding:7px 14px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:13px;">Batal</button>' : ''}
             </div>
-          </div>
-
-          <!-- Scenes List (Storyboard) -->
-          <div class="ss-storyboard" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
-            ${scenes.map((s, idx) => {
+            ${scenes.map(s => {
               const sceneCharIds = safeJsonbArray(s.character_ids);
               const sceneChars = sceneCharIds.map(id => charMap[id]).filter(Boolean);
               const sceneResults = resultsByScene[s.id] || [];
               const latestResult = sceneResults[0];
-              return `
-                <div class="ss-scene-card" style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;">
-                  <div style="position:relative;aspect-ratio:16/9;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">
-                    ${latestResult && latestResult.image_url ? `
-                      <img src="${latestResult.image_url}" style="width:100%;height:100%;object-fit:cover;">
-                    ` : latestResult && latestResult.status === 'processing' ? `
-                      <div style="color:var(--text-secondary);font-size:13px;text-align:center;">
-                        <div class="spinner" style="width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 8px;"></div>
-                        Processing...
-                      </div>
-                    ` : `
-                      <div style="color:var(--text-secondary);font-size:13px;">Scene ${s.scene_order}</div>
-                    `}
-                    <div style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;">#${s.scene_order}</div>
-                  </div>
-                  <div style="padding:12px;">
-                    <p style="color:var(--text-primary);font-size:13px;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(s.prompt)}</p>
-                    ${s.setting ? `<p style="color:var(--text-secondary);font-size:11px;margin-bottom:6px;">📍 ${escapeHtml(s.setting)}</p>` : ''}
-                    ${sceneChars.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${sceneChars.map(c => `<span style="background:rgba(99,102,241,0.2);color:#a5b4fc;font-size:10px;padding:2px 6px;border-radius:4px;">${escapeHtml(c.name)}</span>`).join('')}</div>` : ''}
-                    <div style="display:flex;gap:6px;">
-                      <button class="ss-edit-scene" data-id="${s.id}" style="flex:1;padding:4px 8px;background:rgba(99,102,241,0.2);border:none;border-radius:6px;color:#a5b4fc;cursor:pointer;font-size:11px;">Edit</button>
-                      <button class="ss-regen-scene" data-id="${s.id}" style="padding:4px 8px;background:rgba(34,197,94,0.2);border:none;border-radius:6px;color:#86efac;cursor:pointer;font-size:11px;" ${state.sceneStudio.isGenerating ? 'disabled' : ''}>🔄</button>
-                      <button class="ss-del-scene" data-id="${s.id}" style="padding:4px 8px;background:rgba(239,68,68,0.2);border:none;border-radius:6px;color:#fca5a5;cursor:pointer;font-size:11px;">🗑</button>
-                    </div>
+              const hasImage = latestResult && latestResult.image_url;
+              const isProcessing = latestResult && latestResult.status === 'processing';
+              return `<div style="display:flex;gap:10px;padding:10px 12px;background:rgba(0,0,0,0.15);border-radius:8px;margin-bottom:6px;align-items:center;">
+                ${hasImage ? `<img src="${latestResult.image_url}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;cursor:pointer;flex-shrink:0;" onclick="window.open('${latestResult.image_url}','_blank')">` : isProcessing ? `<div style="width:56px;height:56px;border-radius:6px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><div style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.1);border-top-color:#6366f1;border-radius:50%;animation:spin 1s linear infinite;"></div></div>` : `<div style="width:56px;height:56px;border-radius:6px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:11px;flex-shrink:0;">#${s.scene_order}</div>`}
+                <div style="flex:1;min-width:0;">
+                  <div style="color:var(--text-primary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.prompt)}</div>
+                  <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
+                    ${s.setting ? `<span style="color:var(--text-secondary);font-size:10px;">📍${escapeHtml(s.setting)}</span>` : ''}
+                    ${sceneChars.map(c => `<span style="background:rgba(99,102,241,0.15);color:#a5b4fc;font-size:10px;padding:1px 5px;border-radius:3px;">${escapeHtml(c.name)}</span>`).join('')}
                   </div>
                 </div>
-              `;
+                <div style="display:flex;gap:4px;flex-shrink:0;">
+                  <button class="ss-regen-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(34,197,94,0.15);border:none;border-radius:4px;color:#86efac;cursor:pointer;font-size:12px;" ${ss.isGenerating ? 'disabled' : ''} title="Regenerate">↻</button>
+                  <button class="ss-edit-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(99,102,241,0.15);border:none;border-radius:4px;color:#a5b4fc;cursor:pointer;font-size:12px;" title="Edit">✎</button>
+                  <button class="ss-del-scene" data-id="${s.id}" style="padding:4px 6px;background:rgba(239,68,68,0.1);border:none;border-radius:4px;color:#fca5a5;cursor:pointer;font-size:12px;" title="Hapus">×</button>
+                </div>
+              </div>`;
             }).join('')}
           </div>
-        </div>
+        </details>
 
-        <!-- Generation Controls -->
+        <!-- Generate -->
         ${scenes.length > 0 ? `
-        <div style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(168,85,247,0.1));border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:20px;margin-bottom:20px;">
-          <h3 style="color:var(--text-primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-            <span>🚀</span> Generate Semua Scene
-          </h3>
-          
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
-            <div>
-              <label style="color:var(--text-secondary);font-size:12px;display:block;margin-bottom:4px;">Model AI</label>
-              <select id="ssModelSelect" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-                ${models.map(m => `<option value="${m.id}" ${m.id === state.sceneStudio.selectedModel ? 'selected' : ''}>${m.name} (${m.provider})</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label style="color:var(--text-secondary);font-size:12px;display:block;margin-bottom:4px;">Ukuran</label>
-              <select id="ssSizeSelect" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-                ${(selectedModelConfig?.sizes || ['1:1','16:9','9:16']).map(s => `<option value="${s}" ${s === state.sceneStudio.selectedSize ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
-            </div>
-            ${selectedModelConfig?.resolutions ? `
-            <div>
-              <label style="color:var(--text-secondary);font-size:12px;display:block;margin-bottom:4px;">Resolusi</label>
-              <select id="ssResolutionSelect" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;box-sizing:border-box;">
-                ${selectedModelConfig.resolutions.map(r => `<option value="${r}" ${r === state.sceneStudio.selectedResolution ? 'selected' : ''}>${r}</option>`).join('')}
-              </select>
-            </div>
-            ` : ''}
+        <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-bottom:16px;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <select id="ssModelSelect" style="flex:1;min-width:150px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
+              ${models.map(m => `<option value="${m.id}" ${m.id === ss.selectedModel ? 'selected' : ''}>${m.name}</option>`).join('')}
+            </select>
+            <select id="ssSizeSelect" style="width:80px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">
+              ${(selectedModelConfig?.sizes || ['1:1','16:9','9:16']).map(s => `<option value="${s}" ${s === ss.selectedSize ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+            ${selectedModelConfig?.resolutions ? `<select id="ssResolutionSelect" style="width:70px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;font-size:12px;box-sizing:border-box;">${selectedModelConfig.resolutions.map(r => `<option value="${r}" ${r === ss.selectedResolution ? 'selected' : ''}>${r}</option>`).join('')}</select>` : ''}
           </div>
-
-          ${state.sceneStudio.error ? `<div style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;color:#fca5a5;font-size:13px;margin-bottom:12px;">${escapeHtml(state.sceneStudio.error)}</div>` : ''}
-          
-          ${state.sceneStudio.isGenerating ? `
-            <div style="margin-bottom:12px;">
-              <div style="display:flex;justify-content:space-between;color:var(--text-secondary);font-size:13px;margin-bottom:6px;">
-                <span>Generating scenes...</span>
-                <span>${state.sceneStudio.batchProgress.current}/${state.sceneStudio.batchProgress.total}</span>
-              </div>
-              <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
-                <div style="height:100%;width:${state.sceneStudio.batchProgress.total > 0 ? (state.sceneStudio.batchProgress.current / state.sceneStudio.batchProgress.total * 100) : 0}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:3px;transition:width 0.3s;"></div>
-              </div>
-            </div>
-          ` : ''}
-
-          <button class="btn-primary" id="ssGenerateAllBtn" style="padding:12px 32px;font-size:15px;background:linear-gradient(135deg,#6366f1,#a855f7);width:100%;" ${state.sceneStudio.isGenerating ? 'disabled' : ''}>
-            ${state.sceneStudio.isGenerating ? '⏳ Generating...' : `🎨 Generate ${scenes.length} Scene Sekaligus`}
+          ${ss.error ? `<div style="background:rgba(239,68,68,0.1);border-radius:6px;padding:8px 12px;color:#fca5a5;font-size:12px;margin-bottom:10px;">${escapeHtml(ss.error)}</div>` : ''}
+          ${ss.isGenerating ? `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;color:var(--text-secondary);font-size:12px;margin-bottom:4px;"><span>Generating...</span><span>${ss.batchProgress.current}/${ss.batchProgress.total}</span></div><div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${ss.batchProgress.total > 0 ? (ss.batchProgress.current / ss.batchProgress.total * 100) : 0}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:2px;transition:width 0.3s;"></div></div></div>` : ''}
+          <button class="btn-primary" id="ssGenerateAllBtn" style="width:100%;padding:10px;font-size:14px;background:linear-gradient(135deg,#6366f1,#a855f7);" ${ss.isGenerating ? 'disabled' : ''}>
+            ${ss.isGenerating ? 'Generating...' : `Generate ${scenes.length} Scene`}
           </button>
         </div>
         ` : ''}
 
-        <!-- Results Gallery -->
-        ${results.length > 0 ? `
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:20px;">
-          <h3 style="color:var(--text-primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-            <span>🖼</span> Hasil Generate (${results.filter(r => r.status === 'completed').length} gambar)
-          </h3>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+        <!-- Results -->
+        ${results.filter(r => r.status === 'completed' && r.image_url).length > 0 ? `
+        <details open style="margin-bottom:16px;">
+          <summary style="color:var(--text-primary);font-weight:600;cursor:pointer;padding:10px 0;font-size:15px;">Hasil (${results.filter(r => r.status === 'completed').length})</summary>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding-top:10px;">
             ${results.filter(r => r.status === 'completed' && r.image_url).map(r => `
-              <div style="border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
-                <div style="position:relative;aspect-ratio:1/1;">
-                  <img src="${r.image_url}" style="width:100%;height:100%;object-fit:cover;cursor:pointer;" onclick="window.open('${r.image_url}','_blank')">
-                  <div style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;">Scene ${r.scene_order}</div>
-                </div>
-                <div style="padding:8px;">
-                  <p style="color:var(--text-secondary);font-size:11px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(r.scene_prompt || '')}</p>
-                </div>
+              <div style="border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);cursor:pointer;" onclick="window.open('${r.image_url}','_blank')">
+                <img src="${r.image_url}" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;">
+                <div style="padding:4px 6px;color:var(--text-secondary);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">#${r.scene_order} ${escapeHtml(r.scene_prompt || '')}</div>
               </div>
             `).join('')}
           </div>
-        </div>
+        </details>
         ` : ''}
       </div>
     </div>
