@@ -2780,6 +2780,7 @@ function render(force = false) {
 
 function renderNavMenu() {
   return `
+    <button class="mobile-close-btn" id="mobileCloseBtn">×</button>
     <button class="nav-btn ${state.currentPage === 'video' ? 'active' : ''}" data-page="video">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="23 7 16 12 23 17 23 7"/>
@@ -6413,16 +6414,50 @@ function scrollChatToBottom() {
   }, 100);
 }
 
+function closeMobileMenu() {
+  const navMenu = document.getElementById('navMenu');
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  if (navMenu) navMenu.classList.remove('mobile-open');
+  if (hamburgerBtn) hamburgerBtn.classList.remove('active');
+}
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    closeMobileMenu();
+  }
+});
+
 function attachEventListeners() {
+  const hamburgerBtn = document.getElementById('hamburgerBtn');
+  if (hamburgerBtn) {
+    hamburgerBtn.onclick = (e) => {
+      e.stopPropagation();
+      const navMenu = document.getElementById('navMenu');
+      if (navMenu) {
+        navMenu.classList.toggle('mobile-open');
+        hamburgerBtn.classList.toggle('active');
+      }
+    };
+  }
+
+  const mobileCloseBtn = document.getElementById('mobileCloseBtn');
+  if (mobileCloseBtn) {
+    mobileCloseBtn.onclick = (e) => {
+      e.stopPropagation();
+      closeMobileMenu();
+    };
+  }
+
   document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.onclick = () => {
       state.currentPage = btn.dataset.page;
       if (btn.dataset.page === 'sceneStudio') {
         loadSceneStudioModels();
         loadSceneStudioProjects();
       }
+      closeMobileMenu();
       render(true);
-    });
+    };
   });
 
   const loginBtn = document.getElementById('loginBtn');

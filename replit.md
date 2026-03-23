@@ -172,6 +172,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **checkAuth() Timeout**: Added 8-second AbortController timeout to the auth check fetch to prevent indefinite hanging.
 - **initApp() Fallback**: Added 10-second timeout fallback in `initApp()` to force-show the login UI if loading takes too long.
 - **Service Worker Cache**: Updated CACHE_NAME to 'xclip-v2' to bust old cached JS files.
+- **Mobile Hamburger Menu**: On screens ≤768px, nav buttons are hidden and replaced by a hamburger (☰) button that opens a fullscreen overlay menu with large, tappable nav items. Close via × button or tapping a menu item. Desktop nav unchanged. Resize to desktop auto-closes mobile menu.
 
 ## Running the Application
 The application starts with `npm start` which runs `node server.js`. The server:
