@@ -12161,6 +12161,7 @@ async function initDatabase() {
         completed_at TIMESTAMP
       )
     `);
+    await pool.query(`ALTER TABLE scene_studio_projects ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`).catch(() => {});
     console.log('Scene Studio tables created');
 
     console.log('[DB] Database initialized successfully');
