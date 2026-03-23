@@ -373,6 +373,7 @@ const state = {
   sceneStudio: {
     prompts: [''],
     characterDesc: '',
+    characterRefImages: [],
     models: [],
     selectedModel: 'doubao-seedance-4-5',
     selectedSize: '1:1',
@@ -1004,6 +1005,7 @@ async function handleLogout() {
     state.chat.messages = [];
     state.sceneStudio.prompts = [''];
     state.sceneStudio.characterDesc = '';
+    state.sceneStudio.characterRefImages = [];
     state.sceneStudio.batchResults = [];
     state.sceneStudio.isGenerating = false;
     state.sceneStudio.batchProgress = { current: 0, total: 0, batchId: null };
@@ -6191,6 +6193,7 @@ async function generateSceneStudioBatch() {
       body: JSON.stringify({
         prompts: validPrompts,
         characterDesc: ss.characterDesc,
+        characterRefImages: ss.characterRefImages,
         model: ss.selectedModel,
         size: ss.selectedSize,
         resolution: ss.selectedResolution
@@ -6230,6 +6233,29 @@ function renderSceneStudioPage() {
         <h2 class="section-title">Scene Studio — Batch Image</h2>
 
         <textarea id="ssCharDesc" placeholder="Deskripsi karakter/style global (opsional, ditambahkan ke semua prompt untuk konsistensi)&#10;Contoh: Andi, laki-laki 25 tahun, rambut hitam pendek, kaos merah, celana jeans biru" rows="3" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:14px;font-size:13px;">${escapeHtml(ss.characterDesc)}</textarea>
+
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="color:var(--text-primary);font-weight:600;font-size:14px;">Gambar Referensi Karakter</label>
+            <span style="color:var(--text-secondary);font-size:11px;">Maks 4 gambar</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            ${ss.characterRefImages.map((img, i) => `
+              <div style="position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid rgba(139,92,246,0.3);">
+                <img src="${img}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                <button class="ss-remove-ref" data-idx="${i}" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.7);border:none;color:#fca5a5;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>
+              </div>
+            `).join('')}
+            ${ss.characterRefImages.length < 4 ? `
+              <label id="ssRefUploadLabel" style="width:72px;height:72px;border-radius:8px;border:2px dashed rgba(139,92,246,0.3);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:rgba(139,92,246,0.05);transition:all 0.2s;">
+                <span style="font-size:20px;color:rgba(139,92,246,0.5);line-height:1;">+</span>
+                <span style="font-size:9px;color:var(--text-secondary);margin-top:2px;">Upload</span>
+                <input type="file" id="ssRefFileInput" accept="image/*" multiple style="display:none;">
+              </label>
+            ` : ''}
+          </div>
+          <p style="color:var(--text-secondary);font-size:11px;margin-top:6px;margin-bottom:0;">Upload foto referensi karakter untuk menjaga konsistensi wajah & penampilan di semua gambar</p>
+        </div>
 
         <div style="margin-bottom:14px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -6798,6 +6824,32 @@ function attachSceneStudioEventListeners() {
 
   const charDescEl = document.getElementById('ssCharDesc');
   if (charDescEl) charDescEl.addEventListener('input', () => { ss.characterDesc = charDescEl.value; });
+
+  const refFileInput = document.getElementById('ssRefFileInput');
+  if (refFileInput) {
+    refFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      const remaining = 4 - ss.characterRefImages.length;
+      const toProcess = files.slice(0, remaining);
+      toProcess.forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+        if (file.size > 10 * 1024 * 1024) { showToast('Gambar terlalu besar (maks 10MB)', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ss.characterRefImages.length < 4) {
+            ss.characterRefImages.push(ev.target.result);
+            render();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    });
+  }
+
+  document.querySelectorAll('.ss-remove-ref').forEach(btn => {
+    btn.addEventListener('click', () => { ss.characterRefImages.splice(parseInt(btn.dataset.idx), 1); render(); });
+  });
 
   document.querySelectorAll('.ss-prompt-input').forEach(input => {
     input.addEventListener('input', () => { ss.prompts[parseInt(input.dataset.idx)] = input.value; });

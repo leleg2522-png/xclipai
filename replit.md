@@ -123,9 +123,10 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - SSE events: ximage3_completed, ximage3_failed
   - Server-side background polling with apiType 'poyo'
 - **Scene Studio (Simple Batch Image Generation)**: Generate multiple images at once with optional character/style consistency. Uses Apimart.ai API (same as X Image2). Features include:
-  - Simple single-page UI: character/style description (global prefix) + list of prompts + model/size picker + generate button
+  - Simple single-page UI: character/style description (global prefix) + reference image upload + list of prompts + model/size picker + generate button
   - Character description automatically prepended to all prompts for visual consistency
-  - Previous completed images used as reference (via image_urls) for consistency across batch
+  - Character reference images (up to 4): uploaded as base64, saved server-side via saveBase64ToFile, sent as image_urls with every prompt for face/appearance consistency
+  - Previous completed images combined with reference images as image_urls for consistency across batch
   - All X Image2 models available (GPT-4o, Seedream, Flux, Nano Banana, etc.)
   - Real-time SSE progress updates during batch generation (per-prompt completion/failure)
   - Async server-side processing with inline polling for task-based APIs

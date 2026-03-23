@@ -10943,12 +10943,31 @@ app.post('/api/scene-studio/generate', async (req, res) => {
     const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
     if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
 
-    const { prompts, characterDesc, model, size, resolution } = req.body;
+    const { prompts, characterDesc, characterRefImages, model, size, resolution } = req.body;
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) return res.status(400).json({ error: 'Minimal 1 prompt diperlukan' });
     if (prompts.length > 20) return res.status(400).json({ error: 'Maksimal 20 prompt per batch' });
 
     const modelConfig = SCENE_STUDIO_MODELS[model];
     if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid' });
+
+    const hasRefImages = Array.isArray(characterRefImages) && characterRefImages.length > 0;
+    let refImageUrls = [];
+    if (hasRefImages) {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      for (const refImg of characterRefImages.slice(0, 4)) {
+        try {
+          if (refImg.startsWith('data:')) {
+            const uploaded = await saveBase64ToFile(refImg, 'image', baseUrl);
+            refImageUrls.push(uploaded.publicUrl);
+            console.log(`[SCENE-STUDIO] Ref image uploaded: ${uploaded.publicUrl}`);
+          } else if (refImg.startsWith('http')) {
+            refImageUrls.push(refImg);
+          }
+        } catch (ue) {
+          console.error('[SCENE-STUDIO] Failed to upload ref image:', ue.message);
+        }
+      }
+    }
 
     const batchId = uuidv4();
     const batchRow = await pool.query(
@@ -10956,7 +10975,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
       [roomKeyResult.userId, batchId, model, characterDesc || '', JSON.stringify(prompts), prompts.length]
     );
 
-    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}`);
+    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}, refImages: ${refImageUrls.length}`);
 
     res.json({ success: true, batchId, batchDbId: batchRow.rows[0].id, total: prompts.length });
 
@@ -10975,11 +10994,15 @@ app.post('/api/scene-studio/generate', async (req, res) => {
           if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
           if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
 
+          const imageRefs = [...refImageUrls];
           if (i > 0 && modelConfig.supportsI2I) {
             const prevCompleted = results.filter(r => r.status === 'completed' && r.imageUrl);
             if (prevCompleted.length > 0) {
-              requestBody.image_urls = [prevCompleted[prevCompleted.length - 1].imageUrl];
+              imageRefs.push(prevCompleted[prevCompleted.length - 1].imageUrl);
             }
+          }
+          if (imageRefs.length > 0) {
+            requestBody.image_urls = imageRefs;
           }
 
           console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length}: "${promptText.substring(0, 50)}..."`);
