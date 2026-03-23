@@ -10943,7 +10943,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
     const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
     if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
 
-    const { prompts, characterDesc, characterRefImages, bgRefImages, model, size, resolution } = req.body;
+    const { prompts, characterDesc, characterRefImages, bgRefImages, stylePreset, model, size, resolution } = req.body;
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) return res.status(400).json({ error: 'Minimal 1 prompt diperlukan' });
     if (prompts.length > 20) return res.status(400).json({ error: 'Maksimal 20 prompt per batch' });
 
@@ -10992,7 +10992,28 @@ app.post('/api/scene-studio/generate', async (req, res) => {
       [roomKeyResult.userId, batchId, model, characterDesc || '', JSON.stringify(prompts), prompts.length]
     );
 
-    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}, charRefs: ${refImageUrls.length}, bgRefs: ${bgImageUrls.length}`);
+    const STYLE_PROMPTS = {
+      'realistic': 'Ultra realistic photography style, photorealistic, natural lighting, high detail, 8K resolution.',
+      'anime': 'Anime art style, vibrant colors, clean lines, expressive characters, Japanese animation aesthetic.',
+      'manga': 'Black and white manga style, ink drawing, screentones, dramatic shading, Japanese comic art.',
+      'comic': 'Western comic book style, bold outlines, dynamic colors, action-oriented, graphic novel aesthetic.',
+      'webtoon': 'Korean webtoon style, clean digital art, soft colors, vertical scroll format aesthetic, manhwa style.',
+      'pixar': 'Pixar 3D animation style, cute characters, smooth rendering, vibrant colors, CGI quality.',
+      'ghibli': 'Studio Ghibli style, hand-drawn animation, soft watercolor tones, detailed backgrounds, whimsical atmosphere.',
+      'watercolor': 'Watercolor painting style, soft edges, transparent layers, flowing colors, artistic brushstrokes.',
+      'oil-painting': 'Oil painting style, rich textures, deep colors, visible brushstrokes, classical art technique.',
+      'pencil-sketch': 'Pencil sketch style, graphite drawing, detailed shading, hand-drawn lines, monochrome artwork.',
+      'digital-art': 'High quality digital art, polished illustration, vivid colors, professional concept art.',
+      'cinematic': 'Cinematic style, dramatic lighting, film color grading, wide angle shot, movie scene quality, anamorphic lens.',
+      'fantasy': 'Fantasy art style, epic magical atmosphere, detailed world-building, mythical elements, dramatic lighting.',
+      'chibi': 'Chibi style, super deformed cute characters, big head small body, kawaii aesthetic, adorable expressions.',
+      'pop-art': 'Pop art style, bold colors, Ben-Day dots, graphic shapes, Andy Warhol / Roy Lichtenstein inspired.',
+      'pixel-art': 'Pixel art style, retro game aesthetic, 16-bit/32-bit graphics, clean pixels, nostalgic gaming look.',
+      'storybook': 'Children\'s storybook illustration style, warm soft colors, gentle whimsical art, picture book quality.',
+    };
+    const stylePrefix = stylePreset && STYLE_PROMPTS[stylePreset] ? STYLE_PROMPTS[stylePreset] : '';
+
+    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}, style: ${stylePreset || 'default'}, charRefs: ${refImageUrls.length}, bgRefs: ${bgImageUrls.length}`);
 
     res.json({ success: true, batchId, batchDbId: batchRow.rows[0].id, total: prompts.length });
 
@@ -11002,8 +11023,11 @@ app.post('/api/scene-studio/generate', async (req, res) => {
         for (let i = 0; i < prompts.length; i++) {
           const promptText = prompts[i];
           let fullPrompt = promptText;
+          if (stylePrefix) {
+            fullPrompt = `${stylePrefix}\n\n${fullPrompt}`;
+          }
           if (characterDesc && characterDesc.trim()) {
-            fullPrompt = `${characterDesc.trim()}\n\n${promptText}`;
+            fullPrompt = `${characterDesc.trim()}\n\n${fullPrompt}`;
           }
 
           const requestBody = { model, prompt: fullPrompt, n: 1 };

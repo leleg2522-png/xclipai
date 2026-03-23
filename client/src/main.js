@@ -375,6 +375,7 @@ const state = {
     characterDesc: '',
     characterRefImages: [],
     bgRefImages: [],
+    selectedStyle: '',
     models: [],
     selectedModel: 'doubao-seedance-4-5',
     selectedSize: '1:1',
@@ -1008,6 +1009,7 @@ async function handleLogout() {
     state.sceneStudio.characterDesc = '';
     state.sceneStudio.characterRefImages = [];
     state.sceneStudio.bgRefImages = [];
+    state.sceneStudio.selectedStyle = '';
     state.sceneStudio.batchResults = [];
     state.sceneStudio.isGenerating = false;
     state.sceneStudio.batchProgress = { current: 0, total: 0, batchId: null };
@@ -6197,6 +6199,7 @@ async function generateSceneStudioBatch() {
         characterDesc: ss.characterDesc,
         characterRefImages: ss.characterRefImages,
         bgRefImages: ss.bgRefImages,
+        stylePreset: ss.selectedStyle,
         model: ss.selectedModel,
         size: ss.selectedSize,
         resolution: ss.selectedResolution
@@ -6236,6 +6239,34 @@ function renderSceneStudioPage() {
         <h2 class="section-title">Scene Studio — Batch Image</h2>
 
         <textarea id="ssCharDesc" placeholder="Deskripsi karakter/style global (opsional, ditambahkan ke semua prompt untuk konsistensi)&#10;Contoh: Andi, laki-laki 25 tahun, rambut hitam pendek, kaos merah, celana jeans biru" rows="3" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.3);color:#fff;resize:vertical;box-sizing:border-box;margin-bottom:14px;font-size:13px;">${escapeHtml(ss.characterDesc)}</textarea>
+
+        <div style="margin-bottom:14px;">
+          <label style="color:var(--text-primary);font-weight:600;font-size:14px;display:block;margin-bottom:8px;">Gaya / Style Gambar</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="ssStyleGrid">
+            ${[
+              { id: '', label: 'Default', icon: '🎨' },
+              { id: 'realistic', label: 'Realistis', icon: '📷' },
+              { id: 'anime', label: 'Anime', icon: '🌸' },
+              { id: 'manga', label: 'Manga B&W', icon: '📖' },
+              { id: 'comic', label: 'Komik', icon: '💥' },
+              { id: 'webtoon', label: 'Webtoon', icon: '📱' },
+              { id: 'pixar', label: 'Pixar 3D', icon: '🧸' },
+              { id: 'ghibli', label: 'Studio Ghibli', icon: '🏯' },
+              { id: 'watercolor', label: 'Cat Air', icon: '🎨' },
+              { id: 'oil-painting', label: 'Lukisan Minyak', icon: '🖼️' },
+              { id: 'pencil-sketch', label: 'Sketsa Pensil', icon: '✏️' },
+              { id: 'digital-art', label: 'Digital Art', icon: '🖥️' },
+              { id: 'cinematic', label: 'Sinematik', icon: '🎬' },
+              { id: 'fantasy', label: 'Fantasi', icon: '🐉' },
+              { id: 'chibi', label: 'Chibi', icon: '🧒' },
+              { id: 'pop-art', label: 'Pop Art', icon: '🟡' },
+              { id: 'pixel-art', label: 'Pixel Art', icon: '👾' },
+              { id: 'storybook', label: 'Buku Cerita', icon: '📚' },
+            ].map(s => `
+              <button class="ss-style-btn" data-style="${s.id}" style="padding:6px 12px;border-radius:8px;border:1px solid ${ss.selectedStyle === s.id ? 'rgba(139,92,246,0.7)' : 'rgba(255,255,255,0.08)'};background:${ss.selectedStyle === s.id ? 'rgba(139,92,246,0.2)' : 'rgba(0,0,0,0.2)'};color:${ss.selectedStyle === s.id ? '#c4b5fd' : 'var(--text-secondary)'};cursor:pointer;font-size:12px;transition:all 0.15s;white-space:nowrap;">${s.icon} ${s.label}</button>
+            `).join('')}
+          </div>
+        </div>
 
         <div style="margin-bottom:14px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -6850,6 +6881,10 @@ function attachSceneStudioEventListeners() {
 
   const charDescEl = document.getElementById('ssCharDesc');
   if (charDescEl) charDescEl.addEventListener('input', () => { ss.characterDesc = charDescEl.value; });
+
+  document.querySelectorAll('.ss-style-btn').forEach(btn => {
+    btn.addEventListener('click', () => { ss.selectedStyle = btn.dataset.style; render(); });
+  });
 
   const refFileInput = document.getElementById('ssRefFileInput');
   if (refFileInput) {
