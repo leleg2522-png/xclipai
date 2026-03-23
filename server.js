@@ -10943,28 +10943,45 @@ app.post('/api/scene-studio/generate', async (req, res) => {
     const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
     if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
 
-    const { prompts, characterDesc, characterRefImages, model, size, resolution } = req.body;
+    const { prompts, characterDesc, characterRefImages, bgRefImages, model, size, resolution } = req.body;
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) return res.status(400).json({ error: 'Minimal 1 prompt diperlukan' });
     if (prompts.length > 20) return res.status(400).json({ error: 'Maksimal 20 prompt per batch' });
 
     const modelConfig = SCENE_STUDIO_MODELS[model];
     if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid' });
 
-    const hasRefImages = Array.isArray(characterRefImages) && characterRefImages.length > 0;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     let refImageUrls = [];
-    if (hasRefImages) {
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+    let bgImageUrls = [];
+
+    if (Array.isArray(characterRefImages) && characterRefImages.length > 0) {
       for (const refImg of characterRefImages.slice(0, 4)) {
         try {
           if (refImg.startsWith('data:')) {
             const uploaded = await saveBase64ToFile(refImg, 'image', baseUrl);
             refImageUrls.push(uploaded.publicUrl);
-            console.log(`[SCENE-STUDIO] Ref image uploaded: ${uploaded.publicUrl}`);
+            console.log(`[SCENE-STUDIO] Char ref uploaded: ${uploaded.publicUrl}`);
           } else if (refImg.startsWith('http')) {
             refImageUrls.push(refImg);
           }
         } catch (ue) {
-          console.error('[SCENE-STUDIO] Failed to upload ref image:', ue.message);
+          console.error('[SCENE-STUDIO] Failed to upload char ref:', ue.message);
+        }
+      }
+    }
+
+    if (Array.isArray(bgRefImages) && bgRefImages.length > 0) {
+      for (const bgImg of bgRefImages.slice(0, 2)) {
+        try {
+          if (bgImg.startsWith('data:')) {
+            const uploaded = await saveBase64ToFile(bgImg, 'image', baseUrl);
+            bgImageUrls.push(uploaded.publicUrl);
+            console.log(`[SCENE-STUDIO] BG ref uploaded: ${uploaded.publicUrl}`);
+          } else if (bgImg.startsWith('http')) {
+            bgImageUrls.push(bgImg);
+          }
+        } catch (ue) {
+          console.error('[SCENE-STUDIO] Failed to upload bg ref:', ue.message);
         }
       }
     }
@@ -10975,7 +10992,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
       [roomKeyResult.userId, batchId, model, characterDesc || '', JSON.stringify(prompts), prompts.length]
     );
 
-    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}, refImages: ${refImageUrls.length}`);
+    console.log(`[SCENE-STUDIO] Batch generate: ${prompts.length} prompts, model: ${model}, charRefs: ${refImageUrls.length}, bgRefs: ${bgImageUrls.length}`);
 
     res.json({ success: true, batchId, batchDbId: batchRow.rows[0].id, total: prompts.length });
 
@@ -10994,7 +11011,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
           if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
           if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
 
-          const imageRefs = [...refImageUrls];
+          const imageRefs = [...refImageUrls, ...bgImageUrls];
           if (i > 0 && modelConfig.supportsI2I) {
             const prevCompleted = results.filter(r => r.status === 'completed' && r.imageUrl);
             if (prevCompleted.length > 0) {

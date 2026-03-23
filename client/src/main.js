@@ -374,6 +374,7 @@ const state = {
     prompts: [''],
     characterDesc: '',
     characterRefImages: [],
+    bgRefImages: [],
     models: [],
     selectedModel: 'doubao-seedance-4-5',
     selectedSize: '1:1',
@@ -1006,6 +1007,7 @@ async function handleLogout() {
     state.sceneStudio.prompts = [''];
     state.sceneStudio.characterDesc = '';
     state.sceneStudio.characterRefImages = [];
+    state.sceneStudio.bgRefImages = [];
     state.sceneStudio.batchResults = [];
     state.sceneStudio.isGenerating = false;
     state.sceneStudio.batchProgress = { current: 0, total: 0, batchId: null };
@@ -6194,6 +6196,7 @@ async function generateSceneStudioBatch() {
         prompts: validPrompts,
         characterDesc: ss.characterDesc,
         characterRefImages: ss.characterRefImages,
+        bgRefImages: ss.bgRefImages,
         model: ss.selectedModel,
         size: ss.selectedSize,
         resolution: ss.selectedResolution
@@ -6255,6 +6258,29 @@ function renderSceneStudioPage() {
             ` : ''}
           </div>
           <p style="color:var(--text-secondary);font-size:11px;margin-top:6px;margin-bottom:0;">Upload foto referensi karakter untuk menjaga konsistensi wajah & penampilan di semua gambar</p>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="color:var(--text-primary);font-weight:600;font-size:14px;">Gambar Referensi Latar/Background</label>
+            <span style="color:var(--text-secondary);font-size:11px;">Maks 2 gambar</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            ${ss.bgRefImages.map((img, i) => `
+              <div style="position:relative;width:96px;height:64px;border-radius:8px;overflow:hidden;border:1px solid rgba(34,197,94,0.3);">
+                <img src="${img}" style="width:100%;height:100%;object-fit:cover;display:block;">
+                <button class="ss-remove-bg-ref" data-idx="${i}" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.7);border:none;color:#fca5a5;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>
+              </div>
+            `).join('')}
+            ${ss.bgRefImages.length < 2 ? `
+              <label id="ssBgRefUploadLabel" style="width:96px;height:64px;border-radius:8px;border:2px dashed rgba(34,197,94,0.3);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:rgba(34,197,94,0.05);transition:all 0.2s;">
+                <span style="font-size:20px;color:rgba(34,197,94,0.5);line-height:1;">+</span>
+                <span style="font-size:9px;color:var(--text-secondary);margin-top:2px;">Upload</span>
+                <input type="file" id="ssBgRefFileInput" accept="image/*" multiple style="display:none;">
+              </label>
+            ` : ''}
+          </div>
+          <p style="color:var(--text-secondary);font-size:11px;margin-top:6px;margin-bottom:0;">Upload contoh latar/setting yang diinginkan agar suasana & lokasi konsisten di semua gambar</p>
         </div>
 
         <div style="margin-bottom:14px;">
@@ -6849,6 +6875,32 @@ function attachSceneStudioEventListeners() {
 
   document.querySelectorAll('.ss-remove-ref').forEach(btn => {
     btn.addEventListener('click', () => { ss.characterRefImages.splice(parseInt(btn.dataset.idx), 1); render(); });
+  });
+
+  const bgRefFileInput = document.getElementById('ssBgRefFileInput');
+  if (bgRefFileInput) {
+    bgRefFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      const remaining = 2 - ss.bgRefImages.length;
+      const toProcess = files.slice(0, remaining);
+      toProcess.forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+        if (file.size > 10 * 1024 * 1024) { showToast('Gambar terlalu besar (maks 10MB)', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ss.bgRefImages.length < 2) {
+            ss.bgRefImages.push(ev.target.result);
+            render();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    });
+  }
+
+  document.querySelectorAll('.ss-remove-bg-ref').forEach(btn => {
+    btn.addEventListener('click', () => { ss.bgRefImages.splice(parseInt(btn.dataset.idx), 1); render(); });
   });
 
   document.querySelectorAll('.ss-prompt-input').forEach(input => {
