@@ -2892,11 +2892,6 @@ function renderNavMenu() {
 
 function renderHeaderRight() {
   return `
-    <div class="credit">
-      <span class="credit-label">Created by</span>
-      <span class="credit-name">MANAZIL</span>
-    </div>
-    
     ${state.auth.user && state.roomManager.hasSubscription ? `
       <div class="subscription-timer">
         <span class="timer-icon">⏱️</span>

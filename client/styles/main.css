@@ -4087,11 +4087,39 @@ textarea.form-input {
 @media (max-width: 768px) {
   .header-content {
     flex-wrap: nowrap;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
 
   .hamburger-btn {
     display: flex;
+  }
+
+  .header-right {
+    flex: 1;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    overflow: visible;
+  }
+
+  .header-right .subscription-timer {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-width: unset;
+  }
+
+  .header-right .user-name {
+    display: none;
+  }
+
+  .header-right .user-btn {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .header-right .user-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
   }
 
   .nav-menu {
@@ -4108,10 +4136,13 @@ textarea.form-input {
     flex-direction: column;
     padding: 80px 20px 40px;
     gap: 4px;
+    overflow: visible;
     overflow-y: auto;
     border: none;
     border-radius: 0;
     animation: none;
+    width: 100%;
+    height: 100%;
   }
 
   .nav-menu::before {
