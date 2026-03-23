@@ -11077,29 +11077,48 @@ app.post('/api/scene-studio/generate', async (req, res) => {
                   await new Promise(r => setTimeout(r, 5000));
                   try {
                     const pollRes = await axios.get(`https://api.apimart.ai/v1/tasks/${taskId}`, { headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 30000 });
-                    const pd = pollRes.data;
-                    const ts = pd.status || pd.data?.status;
-                    console.log(`[SCENE-STUDIO] Poll ${taskId} attempt ${attempt+1}: status=${ts}, keys=${Object.keys(pd)}`);
-                    if (ts === 'completed' || ts === 'success' || ts === 'succeeded') {
-                      let url = pd.result?.url || pd.result?.image_url || pd.data?.url || pd.data?.image_url;
-                      if (pd.data?.data?.[0]?.url) url = pd.data.data[0].url;
-                      if (pd.result?.images?.[0]) { const img = pd.result.images[0]; url = typeof img === 'string' ? img : (img.url || img.image_url); }
-                      if (pd.output?.image_url) url = pd.output.image_url;
-                      if (pd.output?.images?.[0]) { const img = pd.output.images[0]; url = typeof img === 'string' ? img : (img.url || img.image_url); }
+                    const rawPd = pollRes.data;
+                    const pd = rawPd.data || rawPd;
+                    const ts = pd.status || pd.state || rawPd.status;
+                    console.log(`[SCENE-STUDIO] Poll ${taskId} attempt ${attempt+1}: status=${ts}, keys=${Object.keys(pd)}, result keys: ${pd.result ? Object.keys(pd.result) : 'none'}`);
+                    if (ts === 'completed' || ts === 'success' || ts === 'succeeded' || ts === 'finished') {
+                      let url = pd.result?.images?.[0]?.url ||
+                                pd.result?.image_url ||
+                                pd.result?.url ||
+                                pd.result?.outputs?.[0]?.url ||
+                                pd.result?.output?.url ||
+                                pd.result?.output?.image_url ||
+                                pd.images?.[0]?.url ||
+                                pd.image_url ||
+                                pd.url ||
+                                pd.output?.url ||
+                                pd.output?.image_url ||
+                                pd.output?.images?.[0]?.url ||
+                                pd.media_url ||
+                                rawPd.data?.url ||
+                                rawPd.data?.image_url;
+                      if (Array.isArray(url)) url = url[0];
+                      if (!url && pd.result?.images?.[0]) {
+                        url = typeof pd.result.images[0] === 'string' ? pd.result.images[0] : null;
+                      }
+                      if (!url && Array.isArray(pd.images) && pd.images[0]) {
+                        url = typeof pd.images[0] === 'string' ? pd.images[0] : (pd.images[0].url || pd.images[0].image_url);
+                      }
                       if (url) {
                         results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: url });
                         sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: url, current: i + 1, total: prompts.length });
                         polled = true; break;
                       } else {
-                        console.log(`[SCENE-STUDIO] Task ${taskId} completed but no URL found. Full response:`, JSON.stringify(pd).substring(0, 500));
+                        console.log(`[SCENE-STUDIO] Task ${taskId} completed but no URL found. Full response:`, JSON.stringify(rawPd).substring(0, 800));
                         results.push({ index: i, prompt: promptText, status: 'failed', error: 'Task completed but no image URL found' });
                         sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Gambar selesai tapi URL tidak ditemukan', current: i + 1, total: prompts.length });
                         polled = true; break;
                       }
                     }
-                    if (ts === 'failed') {
-                      results.push({ index: i, prompt: promptText, status: 'failed', error: 'Task failed' });
-                      sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Task failed', current: i + 1, total: prompts.length });
+                    if (ts === 'failed' || ts === 'error') {
+                      const failErr = pd.error || pd.message || pd.result?.error || 'Task failed';
+                      results.push({ index: i, prompt: promptText, status: 'failed', error: failErr });
+                      sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: failErr, current: i + 1, total: prompts.length });
                       polled = true; break;
                     }
                   } catch (pe) {}
