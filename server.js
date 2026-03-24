@@ -6931,17 +6931,9 @@ app.post('/api/vidgen2/generate', async (req, res) => {
 
     if (config.type === 'kling') {
       requestBody.generate_audio = true;
-      if (imageUrls.length > 0) {
-        requestBody.images = imageUrls;
-        requestBody.element_refs = imageUrls.map(url => ({
-          frontal_image_url: url
-        }));
-        if (!requestBody.prompt.includes('@Element1')) {
-          requestBody.prompt = `@Element1 ${requestBody.prompt}`;
-        }
-        if (generationType) requestBody.generation_type = generationType;
-      }
-    } else if (imageUrls.length > 0) {
+    }
+
+    if (imageUrls.length > 0) {
       requestBody.images = imageUrls;
       if (generationType) requestBody.generation_type = generationType;
     }
