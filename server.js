@@ -6895,45 +6895,32 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     const isKlingModel = config.type === 'kling';
 
     const imageUrls = [];
-    const rawImages = { main: null, start: null, end: null };
     if (image) {
-      if (isKlingModel) {
-        rawImages.main = image;
-      } else {
-        let imageUrl = image;
-        if (image.startsWith('data:')) {
-          const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
-          imageUrl = imageFile.publicUrl;
-          console.log(`[VIDGEN2] Image uploaded: ${imageUrl}`);
-        }
-        imageUrls.push(imageUrl);
+      let imageUrl = image;
+      if (image.startsWith('data:')) {
+        const imageFile = await saveBase64ToFile(image, 'image', baseUrl);
+        imageUrl = imageFile.publicUrl;
+        console.log(`[VIDGEN2] Image uploaded: ${imageUrl}`);
       }
+      imageUrls.push(imageUrl);
     }
     if (startFrame) {
-      if (isKlingModel) {
-        rawImages.start = startFrame;
-      } else {
-        let startUrl = startFrame;
-        if (startFrame.startsWith('data:')) {
-          const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
-          startUrl = sf.publicUrl;
-          console.log(`[VIDGEN2] Start frame uploaded: ${startUrl}`);
-        }
-        imageUrls.push(startUrl);
+      let startUrl = startFrame;
+      if (startFrame.startsWith('data:')) {
+        const sf = await saveBase64ToFile(startFrame, 'image', baseUrl);
+        startUrl = sf.publicUrl;
+        console.log(`[VIDGEN2] Start frame uploaded: ${startUrl}`);
       }
+      imageUrls.push(startUrl);
     }
     if (endFrame) {
-      if (isKlingModel) {
-        rawImages.end = endFrame;
-      } else {
-        let endUrl = endFrame;
-        if (endFrame.startsWith('data:')) {
-          const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
-          endUrl = ef.publicUrl;
-          console.log(`[VIDGEN2] End frame uploaded: ${endUrl}`);
-        }
-        imageUrls.push(endUrl);
+      let endUrl = endFrame;
+      if (endFrame.startsWith('data:')) {
+        const ef = await saveBase64ToFile(endFrame, 'image', baseUrl);
+        endUrl = ef.publicUrl;
+        console.log(`[VIDGEN2] End frame uploaded: ${endUrl}`);
       }
+      imageUrls.push(endUrl);
     }
 
     const requestBody = {
@@ -6948,13 +6935,10 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       requestBody.sound = 'on';
       requestBody.cfg_scale = 0.9;
       requestBody.negative_prompt = 'blur, distort, low quality, change face, different person, different character';
-      const klingImage = rawImages.main || rawImages.start;
-      if (klingImage) {
-        requestBody.image = klingImage;
-        console.log(`[VIDGEN2] Kling image sent as ${klingImage.startsWith('data:') ? 'base64' : 'URL'} (${klingImage.substring(0, 50)}...)`);
-      }
-      if (rawImages.end) {
-        requestBody.image_tail = rawImages.end;
+      if (imageUrls.length > 0) {
+        requestBody.image = imageUrls[0];
+        console.log(`[VIDGEN2] Kling image URL: ${imageUrls[0]}`);
+        if (imageUrls.length > 1) requestBody.image_tail = imageUrls[imageUrls.length - 1];
       }
     } else {
       requestBody.size = videoResolution;
