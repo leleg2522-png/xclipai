@@ -11430,6 +11430,14 @@ async function initDatabase() {
           ('1 Bulan', 30, 200000, 'Akses semua fitur selama 30 hari')
       `);
       console.log('Subscription plans seeded');
+    } else {
+      await pool.query(`
+        UPDATE subscription_plans SET price_idr = 30000 WHERE name = '1 Hari' AND price_idr != 30000;
+        UPDATE subscription_plans SET price_idr = 65000 WHERE name = '3 Hari' AND price_idr != 65000;
+        UPDATE subscription_plans SET price_idr = 100000 WHERE name = '1 Minggu' AND price_idr != 100000;
+        UPDATE subscription_plans SET price_idr = 200000 WHERE name = '1 Bulan' AND price_idr != 200000;
+      `);
+      console.log('Subscription plans prices synced');
     }
     
     // Create vidgen2_rooms table
