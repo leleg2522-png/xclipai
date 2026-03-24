@@ -6865,6 +6865,15 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         defaultResolution: '1080P',
         type: 'vidu',
         desc: 'Vidu Q3 Turbo'
+      },
+      'qn-kling-v3': {
+        apiModel: 'qn-kling-v3',
+        supportedDurations: [5, 10, 15],
+        defaultDuration: 10,
+        supportedResolutions: ['720P', '1080P'],
+        defaultResolution: '1080P',
+        type: 'kling',
+        desc: 'Kling V3 (Stable-QN)'
       }
     };
     

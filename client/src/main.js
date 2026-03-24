@@ -7250,15 +7250,17 @@ function renderVidgen2Page() {
   const isGrok = state.vidgen2.selectedModel === 'grok-video-3-10s';
   const isVeo = state.vidgen2.selectedModel === 'veo-3.1-fast' || state.vidgen2.selectedModel === 'veo-3.1';
   const isVidu = state.vidgen2.selectedModel === 'vidu-q3-turbo';
+  const isKling = state.vidgen2.selectedModel === 'qn-kling-v3';
   const models = [
     { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, 720P, Audio+Video', badge: 'AUDIO', icon: '🎵' },
     { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, Audio', badge: '4K FAST', icon: '⚡' },
     { id: 'veo-3.1', name: 'Veo 3.1', desc: 'Video 8 detik, 4K, First/Last Frame', badge: '4K', icon: '🎬' },
-    { id: 'vidu-q3-turbo', name: 'Vidu Q3 Turbo', desc: 'Video 4-10 detik, 1080P, Cepat', badge: 'TURBO', icon: '🚀' }
+    { id: 'vidu-q3-turbo', name: 'Vidu Q3 Turbo', desc: 'Video 4-10 detik, 1080P, Cepat', badge: 'TURBO', icon: '🚀' },
+    { id: 'qn-kling-v3', name: 'Kling V3', desc: 'Video 5-15 detik, 1080P, Audio', badge: 'V3', icon: '🎥' }
   ];
   
-  const durationOptions = isGrok ? [10] : isVidu ? [4, 8, 10] : [5, 8];
-  const resolutionOptions = isGrok ? ['720P'] : isVidu ? ['720P', '1080P'] : ['4K'];
+  const durationOptions = isGrok ? [10] : isVidu ? [4, 8, 10] : isKling ? [5, 10, 15] : [5, 8];
+  const resolutionOptions = isGrok ? ['720P'] : (isVidu || isKling) ? ['720P', '1080P'] : ['4K'];
   
   return `
     <div class="container">
@@ -7713,11 +7715,11 @@ function attachVidgen2EventListeners() {
       if (modelCard && state.currentPage === 'vidgen2') {
         const newModel = modelCard.dataset.vidgen2Model;
         state.vidgen2.selectedModel = newModel;
-        const validDurations = newModel === 'grok-video-3-10s' ? [10] : newModel === 'vidu-q3-turbo' ? [4, 8, 10] : [5, 8];
+        const validDurations = newModel === 'grok-video-3-10s' ? [10] : newModel === 'vidu-q3-turbo' ? [4, 8, 10] : newModel === 'qn-kling-v3' ? [5, 10, 15] : [5, 8];
         if (!validDurations.includes(state.vidgen2.duration)) {
           state.vidgen2.duration = validDurations[validDurations.length - 1];
         }
-        const validResolutions = (newModel === 'veo-3.1-fast' || newModel === 'veo-3.1') ? ['4K'] : newModel === 'vidu-q3-turbo' ? ['720P', '1080P'] : ['720P'];
+        const validResolutions = (newModel === 'veo-3.1-fast' || newModel === 'veo-3.1') ? ['4K'] : (newModel === 'vidu-q3-turbo' || newModel === 'qn-kling-v3') ? ['720P', '1080P'] : ['720P'];
         if (!validResolutions.includes(state.vidgen2.resolution)) {
           state.vidgen2.resolution = validResolutions[0];
         }
