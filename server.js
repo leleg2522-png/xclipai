@@ -6856,12 +6856,21 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         defaultResolution: '4K',
         type: 'veo',
         desc: 'Veo 3.1 4K'
+      },
+      'vidu-q3-turbo': {
+        apiModel: 'vidu-q3-turbo',
+        supportedDurations: [4, 8],
+        defaultDuration: 8,
+        supportedResolutions: ['720P', '1080P'],
+        defaultResolution: '1080P',
+        type: 'vidu',
+        desc: 'Vidu Q3 Turbo'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan grok-video-3-10s, veo-3.1-fast, atau veo-3.1' });
+      return res.status(400).json({ error: 'Model tidak valid' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
