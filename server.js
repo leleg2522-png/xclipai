@@ -6929,6 +6929,10 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       duration: videoDuration
     };
 
+    if (config.type === 'kling') {
+      requestBody.generate_audio = true;
+    }
+
     if (imageUrls.length > 0) {
       requestBody.images = imageUrls;
       if (generationType) requestBody.generation_type = generationType;
