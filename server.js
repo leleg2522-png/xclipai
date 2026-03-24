@@ -26,7 +26,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 function sanitizeApiKey(key) {
-  return key.replace(/[^\x20-\x7E]/g, '').trim();
+  return key.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, '').trim();
 }
 
 const FREEPIK_HEADERS_BASE = {
