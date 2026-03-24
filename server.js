@@ -7103,6 +7103,11 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
               ['completed', videoUrl, taskId]
             );
             
+            if (serverBgPolls.has(taskId)) {
+              serverBgPolls.delete(taskId);
+              console.log(`[VIDGEN2] Removed bg poll for completed task ${taskId}`);
+            }
+            
             return res.json({
               status: 'completed',
               videoUrl: videoUrl,
@@ -7119,6 +7124,11 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
             'UPDATE vidgen2_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
             ['failed', errorMsg, taskId]
           );
+          
+          if (serverBgPolls.has(taskId)) {
+            serverBgPolls.delete(taskId);
+            console.log(`[VIDGEN2] Removed bg poll for failed task ${taskId}`);
+          }
           
           return res.json({
             status: 'failed',
@@ -7151,12 +7161,14 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
 
 app.post('/api/vidgen2/callback', async (req, res) => {
   try {
-    const data = req.body.data || req.body;
-    const taskId = data.task_id;
-    console.log(`[VIDGEN2-CALLBACK] Received callback for task: ${taskId}`, JSON.stringify(req.body).substring(0, 500));
+    const rawBody = req.body;
+    const data = rawBody.data || rawBody;
+    const taskId = data.task_id || rawBody.task_id || data.taskId || rawBody.taskId;
+    console.log(`[VIDGEN2-CALLBACK] Received callback for task: ${taskId}`, JSON.stringify(rawBody).substring(0, 800));
     
     if (!taskId) {
-      return res.status(400).json({ error: 'Missing task_id' });
+      console.log(`[VIDGEN2-CALLBACK] No task_id found in callback. Full body keys:`, Object.keys(rawBody), 'data keys:', Object.keys(data));
+      return res.json({ received: true });
     }
     
     const status = data.status;
