@@ -6950,7 +6950,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       requestBody.callback_url = `${callbackBaseUrl}/api/vidgen2/callback`;
     }
     
-    console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, images: requestBody.images ? ['[IMAGE]'] : undefined }));
+    console.log(`[VIDGEN2] Request body:`, JSON.stringify({ ...requestBody, images: requestBody.images ? ['[IMAGE]'] : undefined, image: requestBody.image ? '[IMAGE_URL]' : undefined }));
     
     const response = await axios.post(
       'https://apimodels.app/api/v1/video/generations',
