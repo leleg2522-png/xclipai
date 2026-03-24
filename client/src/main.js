@@ -839,7 +839,7 @@ function updateOnlineCounter() {
 
 const FAKE_NAMES = ['Ar***a', 'Bu***i', 'De***k', 'Fi***a', 'Gi***t', 'Ha***n', 'Ir***i', 'Ja***l', 'Ki***a', 'Li***n', 'Ma***d', 'Na***a', 'Om***r', 'Pa***i', 'Qu***n', 'Ra***a', 'Sa***i', 'Ti***o', 'Ul***a', 'Vi***o'];
 const FAKE_PLANS = ['1 Hari', '3 Hari', '1 Minggu', '1 Bulan'];
-const FAKE_PRICES = [15000, 35000, 65000, 199000];
+const FAKE_PRICES = [30000, 65000, 100000, 200000];
 
 function showRandomPurchaseAnimation() {
   const randomName = FAKE_NAMES[Math.floor(Math.random() * FAKE_NAMES.length)];

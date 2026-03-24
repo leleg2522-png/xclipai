@@ -11424,10 +11424,10 @@ async function initDatabase() {
     if (parseInt(existingPlans.rows[0].count) === 0) {
       await pool.query(`
         INSERT INTO subscription_plans (name, duration_days, price_idr, description) VALUES
-          ('1 Hari', 1, 15000, 'Akses semua fitur selama 1 hari'),
-          ('3 Hari', 3, 35000, 'Akses semua fitur selama 3 hari'),
-          ('1 Minggu', 7, 65000, 'Akses semua fitur selama 7 hari'),
-          ('1 Bulan', 30, 199000, 'Akses semua fitur selama 30 hari')
+          ('1 Hari', 1, 30000, 'Akses semua fitur selama 1 hari'),
+          ('3 Hari', 3, 65000, 'Akses semua fitur selama 3 hari'),
+          ('1 Minggu', 7, 100000, 'Akses semua fitur selama 7 hari'),
+          ('1 Bulan', 30, 200000, 'Akses semua fitur selama 30 hari')
       `);
       console.log('Subscription plans seeded');
     }
