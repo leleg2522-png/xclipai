@@ -7254,10 +7254,10 @@ function renderVidgen2Page() {
     { id: 'grok-video-3-10s', name: 'Grok 3 (10s)', desc: 'Video 10 detik, 720P, Audio+Video', badge: 'AUDIO', icon: '🎵' },
     { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, Audio', badge: '4K FAST', icon: '⚡' },
     { id: 'veo-3.1', name: 'Veo 3.1', desc: 'Video 8 detik, 4K, First/Last Frame', badge: '4K', icon: '🎬' },
-    { id: 'vidu-q3-turbo', name: 'Vidu Q3 Turbo', desc: 'Video 4-8 detik, 1080P, Cepat', badge: 'TURBO', icon: '🚀' }
+    { id: 'vidu-q3-turbo', name: 'Vidu Q3 Turbo', desc: 'Video 4-10 detik, 1080P, Cepat', badge: 'TURBO', icon: '🚀' }
   ];
   
-  const durationOptions = isGrok ? [10] : isVidu ? [4, 8] : [5, 8];
+  const durationOptions = isGrok ? [10] : isVidu ? [4, 8, 10] : [5, 8];
   const resolutionOptions = isGrok ? ['720P'] : isVidu ? ['720P', '1080P'] : ['4K'];
   
   return `
@@ -7713,7 +7713,7 @@ function attachVidgen2EventListeners() {
       if (modelCard && state.currentPage === 'vidgen2') {
         const newModel = modelCard.dataset.vidgen2Model;
         state.vidgen2.selectedModel = newModel;
-        const validDurations = newModel === 'grok-video-3-10s' ? [10] : newModel === 'vidu-q3-turbo' ? [4, 8] : [5, 8];
+        const validDurations = newModel === 'grok-video-3-10s' ? [10] : newModel === 'vidu-q3-turbo' ? [4, 8, 10] : [5, 8];
         if (!validDurations.includes(state.vidgen2.duration)) {
           state.vidgen2.duration = validDurations[validDurations.length - 1];
         }

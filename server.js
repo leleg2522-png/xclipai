@@ -6859,7 +6859,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       },
       'vidu-q3-turbo': {
         apiModel: 'vidu-q3-turbo',
-        supportedDurations: [4, 8],
+        supportedDurations: [4, 8, 10],
         defaultDuration: 8,
         supportedResolutions: ['720P', '1080P'],
         defaultResolution: '1080P',
