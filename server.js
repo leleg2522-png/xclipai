@@ -6931,6 +6931,8 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     if (config.type === 'kling') {
       requestBody.mode = videoResolution === '1080P' ? 'pro' : 'std';
       requestBody.sound = 'on';
+      requestBody.cfg_scale = 0.9;
+      requestBody.negative_prompt = 'blur, distort, low quality, change face, different person, different character';
       if (imageUrls.length > 0) {
         requestBody.image = imageUrls[0];
         if (imageUrls.length > 1) requestBody.image_tail = imageUrls[imageUrls.length - 1];
