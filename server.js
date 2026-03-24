@@ -6866,14 +6866,14 @@ app.post('/api/vidgen2/generate', async (req, res) => {
         type: 'vidu',
         desc: 'Vidu Q3 Turbo'
       },
-      'qn-kling-v3': {
-        apiModel: 'qn-kling-v3',
+      'kling-v3': {
+        apiModel: 'kling-v3',
         supportedDurations: [5, 10, 15],
         defaultDuration: 10,
         supportedResolutions: ['720P', '1080P'],
         defaultResolution: '1080P',
         type: 'kling',
-        desc: 'Kling V3 (Stable-QN)'
+        desc: 'Kling V3'
       }
     };
     
@@ -6925,17 +6925,22 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       model: config.apiModel,
       prompt: prompt || 'Generate a cinematic video with smooth motion',
       aspect_ratio: videoAspectRatio,
-      size: videoResolution,
       duration: videoDuration
     };
 
     if (config.type === 'kling') {
-      requestBody.generate_audio = true;
-    }
-
-    if (imageUrls.length > 0) {
-      requestBody.images = imageUrls;
-      if (generationType) requestBody.generation_type = generationType;
+      requestBody.mode = videoResolution === '1080P' ? 'pro' : 'std';
+      requestBody.sound = 'on';
+      if (imageUrls.length > 0) {
+        requestBody.image = imageUrls[0];
+        if (imageUrls.length > 1) requestBody.image_tail = imageUrls[imageUrls.length - 1];
+      }
+    } else {
+      requestBody.size = videoResolution;
+      if (imageUrls.length > 0) {
+        requestBody.images = imageUrls;
+        if (generationType) requestBody.generation_type = generationType;
+      }
     }
 
     const callbackBaseUrl = baseUrl.includes('localhost') ? null : baseUrl;
