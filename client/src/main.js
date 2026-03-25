@@ -7994,13 +7994,15 @@ async function pollVidgen2Task(taskId) {
 function renderVidgen4Page() {
   const isSora2 = state.vidgen4.selectedModel === 'sora-2-vip';
   const isVeo = state.vidgen4.selectedModel === 'veo3.1-fast';
+  const isGrokV4 = state.vidgen4.selectedModel === 'grok-video';
   const models = [
     { id: 'sora-2-vip', name: 'Sora 2 VIP', desc: 'Video hingga 15 detik, 720p, kualitas premium', badge: 'VIP', icon: '🎬' },
-    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' }
+    { id: 'veo3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, max 1080p, start/end frame', badge: 'FAST', icon: '⚡' },
+    { id: 'grok-video', name: 'Grok Video', desc: 'Video 6-10 detik, 480p/720p, image reference', badge: 'NEW', icon: '🤖' }
   ];
   
-  const durationOptions = isSora2 ? [10, 15] : [8];
-  const resolutionOptions = isVeo ? ['720p', '1080p'] : ['720p'];
+  const durationOptions = isSora2 ? [10, 15] : isGrokV4 ? [6, 10] : [8];
+  const resolutionOptions = isVeo ? ['720p', '1080p'] : isGrokV4 ? ['480p', '720p'] : ['720p'];
   
   const styleOptions = [
     { value: 'none', label: 'None' },
@@ -8029,7 +8031,7 @@ function renderVidgen4Page() {
 
       <div class="xmaker-layout">
         <div class="xmaker-settings">
-          ${isSora2 ? `
+          ${isSora2 || isGrokV4 ? `
           <div class="card glass-card">
             <div class="card-header">
               <div class="card-icon">
@@ -8642,11 +8644,11 @@ function attachVidgen4EventListeners() {
       if (modelCard && state.currentPage === 'vidgen4') {
         const newModel = modelCard.dataset.vidgen4Model;
         state.vidgen4.selectedModel = newModel;
-        const validDurations = newModel === 'sora-2-vip' ? [10, 15] : [8];
+        const validDurations = newModel === 'sora-2-vip' ? [10, 15] : newModel === 'grok-video' ? [6, 10] : [8];
         if (!validDurations.includes(state.vidgen4.duration)) {
           state.vidgen4.duration = validDurations[0];
         }
-        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p'] : ['720p'];
+        const validResolutions = newModel === 'veo3.1-fast' ? ['720p', '1080p'] : newModel === 'grok-video' ? ['480p', '720p'] : ['720p'];
         if (!validResolutions.includes(state.vidgen4.resolution)) {
           state.vidgen4.resolution = validResolutions[0];
         }
@@ -8793,7 +8795,7 @@ async function generateVidgen4Video() {
       body: JSON.stringify({
         model: state.vidgen4.selectedModel,
         prompt: state.vidgen4.prompt,
-        image: state.vidgen4.selectedModel === 'sora-2-vip' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
+        image: (state.vidgen4.selectedModel === 'sora-2-vip' || state.vidgen4.selectedModel === 'grok-video') && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,
         startFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.startFrame ? state.vidgen4.startFrame.data : null,
         endFrame: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'frame' && state.vidgen4.endFrame ? state.vidgen4.endFrame.data : null,
         referenceImage: state.vidgen4.selectedModel === 'veo3.1-fast' && state.vidgen4.generationType === 'reference' && state.vidgen4.sourceImage ? state.vidgen4.sourceImage.data : null,

@@ -7528,12 +7528,21 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         defaultResolution: '720p',
         type: 'veo',
         desc: 'Veo 3.1 Fast max 1080p'
+      },
+      'grok-video': {
+        apiModel: 'grok-imagine-1.0-video-apimart',
+        supportedDurations: [6, 10],
+        defaultDuration: 6,
+        supportedResolutions: ['480p', '720p'],
+        defaultResolution: '480p',
+        type: 'grok',
+        desc: 'Grok Imagine Video'
       }
     };
     
     const config = modelConfig[model];
     if (!config) {
-      return res.status(400).json({ error: 'Model tidak valid. Gunakan sora-2-vip atau veo3.1-fast' });
+      return res.status(400).json({ error: 'Model tidak valid' });
     }
     
     const videoDuration = config.supportedDurations.includes(duration) ? duration : config.defaultDuration;
@@ -7618,6 +7627,21 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           const consistencyBoost = 'Maintain exact character appearance, facial features, clothing, hair style and color from the reference image throughout the entire video. Keep the character identical to the reference. ';
           requestBody.prompt = consistencyBoost + requestBody.prompt;
         }
+      }
+    } else if (config.type === 'grok') {
+      requestBody.size = videoAspectRatio;
+      requestBody.quality = videoResolution;
+      delete requestBody.aspect_ratio;
+      
+      const refImg = image || referenceImage;
+      if (refImg) {
+        let refUrl = refImg;
+        if (refImg.startsWith('data:')) {
+          const rf = await saveBase64ToFile(refImg, 'image', baseUrl);
+          refUrl = rf.publicUrl;
+          console.log(`[VIDGEN4] Grok reference image uploaded: ${refUrl}`);
+        }
+        requestBody.image_urls = [refUrl];
       }
     }
     
