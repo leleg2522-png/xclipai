@@ -2799,13 +2799,18 @@ async function pollApimodelsTask(taskId, apiKey, model) {
     let url = null;
     if (data.videos && data.videos.length > 0) {
       url = data.videos[0];
+    } else if (data.resultUrls && data.resultUrls.length > 0) {
+      url = data.resultUrls[0];
     } else if (data.video_url) {
       url = data.video_url;
     } else if (data.url) {
       url = data.url;
+    } else if (data.thumbnailUrl) {
+      url = data.thumbnailUrl;
     }
     if (!url) {
-      console.error(`[BG-POLL] Apimodels task ${taskId} completed but no URL found. Raw:`, JSON.stringify(raw).substring(0, 500));
+      console.log(`[BG-POLL] Apimodels task ${taskId} completed but no URL yet - will wait for callback`);
+      return { status: 'processing' };
     }
     return { status: 'completed', url };
   }
@@ -7179,10 +7184,14 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       let videoUrl = null;
       if (data.videos && data.videos.length > 0) {
         videoUrl = data.videos[0];
+      } else if (data.resultUrls && data.resultUrls.length > 0) {
+        videoUrl = data.resultUrls[0];
       } else if (data.video_url) {
         videoUrl = data.video_url;
       } else if (data.url) {
         videoUrl = data.url;
+      } else if (data.thumbnailUrl) {
+        videoUrl = data.thumbnailUrl;
       }
       
       console.log(`[VIDGEN2-CALLBACK] Task ${taskId} COMPLETED, URL: ${videoUrl}`);
