@@ -3254,7 +3254,7 @@ async function resumePendingTaskPolling() {
     const tables = [
       { table: 'vidgen2_tasks', apiType: 'apimodels', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
-      { table: 'ximage_history', apiType: 'kie-ximage', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage_history', apiType: 'apimodels-image', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
       { table: 'ximage3_history', apiType: 'poyo', urlCol: 'image_url', keyCol: null },
       { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
@@ -3327,18 +3327,6 @@ async function resumePendingTaskPolling() {
             let resolvedType = apiType;
             if (apiType === 'freepik-auto') {
               resolvedType = isMotionTask ? 'freepik-motion' : 'freepik-video';
-            }
-            if (apiType === 'kie-ximage') {
-              const mc = XIMAGE_MODELS[row.model];
-              if (mc) {
-                if (mc.apiType === 'apimodels' || mc.apiType === 'apimodels-sync' || mc.apiType === 'apimodels-edit') {
-                  resolvedType = 'apimodels-image';
-                } else {
-                  resolvedType = mc.apiType;
-                }
-              } else {
-                resolvedType = 'kie-4o-image';
-              }
             }
             const bgPollOpts = {
               dbTable: table,
@@ -8800,30 +8788,30 @@ app.delete('/api/vidgen3/videos/all', async (req, res) => {
 
 // X Image model configuration
 const XIMAGE_MODELS = {
-  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, apiType: 'kie-market', apiModel: 'seedream/4.5-text-to-image', i2iModel: 'seedream/4.5-edit', supportsQuality: true, i2iImageField: 'image_urls', i2iImageArray: true },
-  'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/flex-text-to-image', i2iModel: 'flux-2/flex-image-to-image' },
-  'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'flux-2/pro-text-to-image', i2iModel: 'flux-2/pro-image-to-image' },
-  'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'kie-market', apiModel: 'google/nano-banana', i2iModel: 'google/nano-banana-edit', useImageSize: true },
-  'nano-banana-2': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'google/nanobanana2', i2iModel: 'google/nanobanana2', i2iImageField: 'image_input', i2iImageArray: true, supportsGoogleSearch: true, supportsOutputFormat: true },
-  'nano-banana-pro': { name: 'Nano Banana Pro', provider: 'Google', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'google/nano-banana-pro', i2iModel: 'google/nano-banana-pro', i2iImageField: 'image_input', i2iImageArray: true, supportsGoogleSearch: true, supportsOutputFormat: true },
-  'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsResolution: true, apiType: 'kie-market', apiModel: 'bytedance/seedream-v4-text-to-image', i2iModel: 'bytedance/seedream-v4-edit', useNamedSize: true, resolutionField: 'image_resolution', i2iImageField: 'image_urls', i2iImageArray: true },
-  'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, supportsN: true, apiType: 'kie-4o-image', apiModel: 'gpt-image-1' },
-  'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'kie-flux-kontext' },
-  'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, supportsN: true, apiType: 'kie-market', apiModel: 'google/imagen4-fast', variantModels: { fast: 'google/imagen4-fast', ultra: 'google/imagen4-ultra', standard: 'google/imagen4' } },
-  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/v3-text-to-image', i2iModel: 'ideogram/v3-edit', useNamedSize: true, supportsRenderingSpeed: true, supportsStyle: true, i2iImageField: 'image_url' },
-  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', useNamedSize: true, i2iImageField: 'image_url', supportsRenderingSpeed: true, supportsStyle: true },
-  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/image-edit', i2iModel: 'qwen/image-edit', useNamedSize: true, i2iImageField: 'image_url', supportsAcceleration: true },
-  'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'z-image' },
-  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image', i2iModel: 'grok-imagine-image', desc: 'Text-to-image & editing, HD' },
-  'grok-imagine-pro': { name: 'Grok Imagine Pro', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image-pro', i2iModel: 'grok-imagine-image-pro', desc: 'Pro detail, higher precision' },
-  'grok-4.2-image': { name: 'Grok 4.2 Image', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-4.2-image', i2iModel: 'grok-4.2-image', desc: 'Image editing & mask inpainting' },
-  'kling-omni-image': { name: 'Kling Omni-Image', provider: 'Kuaishou', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'kling-image-o1', i2iModel: 'kling-image-o1', desc: '1K/2K resolution' },
-  'nanobanana2': { name: 'Nanobanana 2', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana2', i2iModel: 'nanobanana2', desc: '1K/2K/4K, Gemini Flash' },
-  'nanobanana2-beta': { name: 'Nanobanana 2 Beta', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-2-beta', i2iModel: 'nanobanana-2-beta', desc: 'Budget, 1K/2K/4K' },
-  'seedream-5.0': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-5-0-260128', i2iModel: 'doubao-seedream-5-0-260128', desc: '2K/3K, multi-image fusion' },
-  'seedream-4.5-doubao': { name: 'Seedream 4.5 Doubao', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-4-5-251128', i2iModel: 'doubao-seedream-4-5-251128', desc: '2K/4K resolution' },
-  'p-image': { name: 'P-Image', provider: 'Pruna AI', supportsI2I: false, apiType: 'apimodels-sync', apiModel: 'p-image', desc: 'Sub 1s, LoRA support' },
-  'p-image-edit': { name: 'P-Image Edit', provider: 'Pruna AI', supportsI2I: true, apiType: 'apimodels-edit', apiModel: 'p-image-edit', i2iModel: 'p-image-edit', desc: 'Sub 1s multi-image editing' },
+  'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'doubao-seedream-4-5-251128', i2iModel: 'doubao-seedream-4-5-251128' },
+  'flux-2-flex': { name: 'FLUX.2 Flex', provider: 'Black Forest Labs', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'flux-2-flex', i2iModel: 'flux-2-flex' },
+  'flux-2-pro': { name: 'FLUX.2 Pro', provider: 'Black Forest Labs', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'flux-2-pro', i2iModel: 'flux-2-pro' },
+  'google-nano-banana': { name: 'Nano Banana', provider: 'Google', supportsI2I: true, apiType: 'apimodels', apiModel: 'nanobanana', i2iModel: 'nanobanana' },
+  'nano-banana-2': { name: 'Nano Banana 2', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana2', i2iModel: 'nanobanana2' },
+  'nano-banana-pro': { name: 'Nano Banana Pro', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-pro', i2iModel: 'nanobanana-pro' },
+  'seedream-api': { name: 'Seedream API', provider: 'ByteDance', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'doubao-seedream-5-0-260128', i2iModel: 'doubao-seedream-5-0-260128' },
+  'gpt-image-1.5': { name: '4o Image', provider: 'OpenAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'gpt-image-1', i2iModel: 'gpt-image-1' },
+  'flux-1-kontext': { name: 'Flux.1 Kontext', provider: 'Black Forest Labs', supportsI2I: true, apiType: 'apimodels', apiModel: 'flux-kontext-pro', i2iModel: 'flux-kontext-pro', variantModels: { pro: 'flux-kontext-pro', max: 'flux-kontext-max' } },
+  'imagen-4': { name: 'Imagen 4', provider: 'Google', supportsI2I: false, apiType: 'apimodels', apiModel: 'imagen-4-fast', variantModels: { fast: 'imagen-4-fast', ultra: 'imagen-4-ultra', standard: 'imagen-4' } },
+  'ideogram-v3': { name: 'Ideogram V3', provider: 'Ideogram', supportsI2I: true, apiType: 'apimodels', apiModel: 'ideogram-v3', i2iModel: 'ideogram-v3' },
+  'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, apiType: 'apimodels', apiModel: 'ideogram-character', i2iModel: 'ideogram-character' },
+  'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'apimodels', apiModel: 'qwen-image-edit', i2iModel: 'qwen-image-edit' },
+  'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'apimodels', apiModel: 'z-image' },
+  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image', i2iModel: 'grok-imagine-image' },
+  'grok-imagine-pro': { name: 'Grok Imagine Pro', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image-pro', i2iModel: 'grok-imagine-image-pro' },
+  'grok-4.2-image': { name: 'Grok 4.2 Image', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-4.2-image', i2iModel: 'grok-4.2-image' },
+  'kling-omni-image': { name: 'Kling Omni-Image', provider: 'Kuaishou', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'kling-image-o1', i2iModel: 'kling-image-o1' },
+  'nanobanana2': { name: 'Nanobanana 2', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana2', i2iModel: 'nanobanana2' },
+  'nanobanana2-beta': { name: 'Nanobanana 2 Beta', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-2-beta', i2iModel: 'nanobanana-2-beta' },
+  'seedream-5.0': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-5-0-260128', i2iModel: 'doubao-seedream-5-0-260128' },
+  'seedream-4.5-doubao': { name: 'Seedream 4.5 Doubao', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-4-5-251128', i2iModel: 'doubao-seedream-4-5-251128' },
+  'p-image': { name: 'P-Image', provider: 'Pruna AI', supportsI2I: false, apiType: 'apimodels-sync', apiModel: 'p-image' },
+  'p-image-edit': { name: 'P-Image Edit', provider: 'Pruna AI', supportsI2I: true, apiType: 'apimodels-edit', apiModel: 'p-image-edit', i2iModel: 'p-image-edit' },
 };
 
 // Get X Image room API key
@@ -9045,66 +9033,21 @@ app.post('/api/ximage/generate', async (req, res) => {
     }
     
     const isI2I = mode === 'image-to-image' && imageUrls.length > 0;
-    const kieApiKey = roomKeyResult.apiKey;
-    const reqHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${kieApiKey}` };
     
     let taskId;
     let bgPollType;
     let lastResponse;
-    
-    const NAMED_SIZE_MAP = {
-      '1:1': 'square', 'Square': 'square', 'Square HD': 'square_hd',
-      '16:9': 'landscape_16_9', '9:16': 'portrait_16_9',
-      '4:3': 'landscape_4_3', '3:4': 'portrait_4_3',
-      '3:2': 'landscape_3_2', '2:3': 'portrait_3_2',
-      '21:9': 'landscape_21_9'
-    };
 
-    if (modelConfig.apiType === 'kie-4o-image') {
-      const body = {
-        prompt,
-        size: aspectRatio || '1:1',
-        nVariants: modelConfig.supportsN ? (parseInt(numberOfImages) || 1) : 1
-      };
-      if (isI2I && imageUrls.length > 0) {
-        body.filesUrl = imageUrls;
-      }
-      console.log('[XIMAGE] 4o-image request:', JSON.stringify({ ...body, filesUrl: body.filesUrl ? ['[IMAGES]'] : undefined }));
-      lastResponse = await axios.post(
-        'https://api.kie.ai/api/v1/gpt4o-image/generate',
-        body,
-        { headers: reqHeaders, timeout: 60000 }
-      );
-      console.log('[XIMAGE] kie.ai 4o-image response:', JSON.stringify(lastResponse.data));
-      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
-      bgPollType = 'kie-4o-image';
-    } else if (modelConfig.apiType === 'kie-flux-kontext') {
-      const kontextModel = modelVariant === 'max' ? 'flux-kontext-max' : 'flux-kontext-pro';
-      const body = {
-        prompt,
-        aspectRatio: aspectRatio || '1:1',
-        model: kontextModel,
-        outputFormat: 'jpeg'
-      };
-      if (isI2I && imageUrls.length > 0) {
-        body.inputImage = imageUrls[0];
-      }
-      console.log('[XIMAGE] Flux Kontext request:', JSON.stringify({ ...body, inputImage: body.inputImage ? '[IMAGE]' : undefined }));
-      lastResponse = await axios.post(
-        'https://api.kie.ai/api/v1/flux/kontext/generate',
-        body,
-        { headers: reqHeaders, timeout: 60000 }
-      );
-      console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(lastResponse.data));
-      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
-      bgPollType = 'kie-flux-kontext';
-    } else if (modelConfig.apiType === 'apimodels' || modelConfig.apiType === 'apimodels-sync' || modelConfig.apiType === 'apimodels-edit') {
+    if (modelConfig.apiType === 'apimodels' || modelConfig.apiType === 'apimodels-sync' || modelConfig.apiType === 'apimodels-edit') {
       const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
       if (!apimodelsKey) {
         return res.status(500).json({ error: 'ApiModels API key tidak tersedia. Hubungi admin.' });
       }
       const amHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` };
-      const amModel = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+      let amModel = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+      if (modelConfig.variantModels && modelVariant && modelConfig.variantModels[modelVariant]) {
+        amModel = modelConfig.variantModels[modelVariant];
+      }
 
       if (modelConfig.apiType === 'apimodels-sync') {
         const body = { model: amModel, prompt, aspect_ratio: aspectRatio || '1:1' };
@@ -9171,67 +9114,7 @@ app.post('/api/ximage/generate', async (req, res) => {
         bgPollType = 'apimodels-image';
       }
     } else {
-      let kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
-      if (modelConfig.variantModels && modelVariant && modelConfig.variantModels[modelVariant]) {
-        kieModelId = modelConfig.variantModels[modelVariant];
-      }
-      const inputBody = { prompt };
-      if (modelConfig.useNamedSize) {
-        inputBody.image_size = NAMED_SIZE_MAP[aspectRatio] || 'square';
-      } else if (modelConfig.useImageSize) {
-        inputBody.image_size = aspectRatio || '1:1';
-        inputBody.output_format = 'png';
-      } else {
-        inputBody.aspect_ratio = aspectRatio || '1:1';
-      }
-      if (modelConfig.supportsResolution && resolution) {
-        const resField = modelConfig.resolutionField || 'resolution';
-        inputBody[resField] = resolution;
-      }
-      if (modelConfig.supportsQuality && quality) {
-        inputBody.quality = quality;
-      }
-      if (modelConfig.supportsN && numberOfImages && parseInt(numberOfImages) > 1) {
-        inputBody.num_images = String(parseInt(numberOfImages));
-      }
-      if (renderingSpeed && modelConfig.supportsRenderingSpeed) {
-        inputBody.rendering_speed = renderingSpeed;
-      }
-      if (imageStyle && modelConfig.supportsStyle) {
-        inputBody.style = imageStyle;
-      }
-      if (acceleration && modelConfig.supportsAcceleration) {
-        inputBody.acceleration = acceleration;
-      }
-      if (modelConfig.supportsGoogleSearch && googleSearch) {
-        inputBody.google_search = true;
-      }
-      if (modelConfig.supportsOutputFormat && outputFormat) {
-        inputBody.output_format = outputFormat;
-      }
-      if (isI2I && imageUrls.length > 0) {
-        if (modelConfig.i2iImageField) {
-          if (modelConfig.i2iImageArray) {
-            inputBody[modelConfig.i2iImageField] = imageUrls;
-          } else {
-            inputBody[modelConfig.i2iImageField] = imageUrls[0];
-          }
-        } else if (modelConfig.useImageSize) {
-          inputBody.image_urls = imageUrls;
-        } else {
-          inputBody.input_urls = imageUrls;
-        }
-      }
-      const body = { model: kieModelId, input: inputBody };
-      console.log('[XIMAGE] Market API request:', JSON.stringify(body).replace(/"(image_urls|input_urls|image_url)":\s*("[^"]*"|\[[^\]]*\])/g, '"$1":"[IMAGE]"'));
-      lastResponse = await axios.post(
-        'https://api.kie.ai/api/v1/jobs/createTask',
-        body,
-        { headers: reqHeaders, timeout: 60000 }
-      );
-      console.log('[XIMAGE] kie.ai market response:', JSON.stringify(lastResponse.data));
-      taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
-      bgPollType = 'kie-market';
+      return res.status(400).json({ error: 'API type tidak dikenal: ' + modelConfig.apiType });
     }
     
     if (!taskId) {
@@ -9250,7 +9133,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
     `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
     
-    const pollApiKey = bgPollType === 'apimodels-image' ? (process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1) : kieApiKey;
+    const pollApiKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
     startServerBgPoll(taskId, bgPollType, pollApiKey, {
       dbTable: 'ximage_history',
       urlColumn: 'image_url',
@@ -9266,16 +9149,16 @@ app.post('/api/ximage/generate', async (req, res) => {
     console.error('[XIMAGE] Generate error:', statusCode, typeof errData === 'string' ? errData.substring(0, 200) : JSON.stringify(errData));
     let errMsg;
     if (typeof errData === 'string' && errData.includes('<html')) {
-      errMsg = `kie.ai returned HTTP ${statusCode || 'error'}. Coba lagi nanti.`;
+      errMsg = `API returned HTTP ${statusCode || 'error'}. Coba lagi nanti.`;
     } else if (errData && typeof errData === 'object') {
       errMsg = errData.msg || errData.message || errData.error?.message || errData.error || error.message;
     } else {
       errMsg = error.message;
     }
     if (statusCode === 401 || statusCode === 403) {
-      errMsg = 'API key kie.ai tidak valid atau expired. Hubungi admin untuk update key.';
+      errMsg = 'API key tidak valid atau expired. Hubungi admin untuk update key.';
     } else if (statusCode === 404) {
-      errMsg = 'Model atau endpoint kie.ai tidak ditemukan (404). Kemungkinan model belum tersedia.';
+      errMsg = 'Model atau endpoint tidak ditemukan (404). Kemungkinan model belum tersedia.';
     }
     res.status(error.response?.status || 500).json({ error: errMsg });
   }
@@ -9311,19 +9194,14 @@ app.get('/api/ximage/status/:taskId', async (req, res) => {
         return res.json({ status: 'failed', error: 'Image generation gagal' });
       }
       
-      // Still processing - poll kie.ai
       const model = row.model;
-      const modelConfig = XIMAGE_MODELS[model];
-      const kieApiKey = roomKeyResult.apiKey;
+      const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
       
       let result;
-      if (!modelConfig || modelConfig.apiType === 'kie-4o-image') {
-        result = await pollKie4oImageTask(taskId, kieApiKey);
-      } else if (modelConfig.apiType === 'kie-flux-kontext') {
-        result = await pollKieFluxKontextTask(taskId, kieApiKey);
-      } else {
-        result = await pollKieMarketImageTask(taskId, kieApiKey);
+      if (taskId.startsWith('am-sync-') || taskId.startsWith('am-edit-')) {
+        return res.json({ status: 'completed', imageUrl: row.image_url });
       }
+      result = await pollApimodelsImageTask(taskId, apimodelsKey);
       
       if (result.status === 'completed' && result.url) {
         await pool.query(
