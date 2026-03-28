@@ -3915,7 +3915,17 @@ function renderXImagePage() {
     { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'GENERAL', 'REALISTIC', 'DESIGN'], maxRefs: 1, sizes: ['Square', 'Square HD', '3:4', '9:16', '4:3', '16:9'] },
     { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'REALISTIC', 'FICTION'], hasN: true, maxRefs: 1, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
     { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, hasAcceleration: true, accelerations: ['none', 'regular', 'high'], maxRefs: 1, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] }
+    { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: true, badge: 'NEW', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'grok-imagine-pro', name: 'Grok Imagine Pro', icon: 'xai', supportsI2I: true, badge: 'PRO', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'grok-4.2-image', name: 'Grok 4.2 Image', icon: 'xai', supportsI2I: true, badge: 'NEW', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'kling-omni-image', name: 'Kling Omni-Image', icon: 'openai', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2', name: 'Nanobanana 2 AM', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'seedream-5.0', name: 'Seedream 5.0 Lite AM', icon: 'bytedance', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'seedream-4.5-doubao', name: 'Seedream 4.5 Doubao', icon: 'bytedance', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'p-image', name: 'P-Image', icon: 'flux', supportsI2I: false, badge: 'FAST', sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'p-image-edit', name: 'P-Image Edit', icon: 'flux', supportsI2I: true, badge: 'FAST', maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] }
   ];
   
   var currentModelConfig = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; }) || ximageModels[0];
@@ -9554,7 +9564,17 @@ function attachXImageEventListeners() {
             { id: 'ideogram-v3', supportsI2I: true },
             { id: 'ideogram-character', supportsI2I: true },
             { id: 'qwen-image', supportsI2I: true },
-            { id: 'z-image', supportsI2I: false }
+            { id: 'z-image', supportsI2I: false },
+            { id: 'grok-imagine', supportsI2I: true },
+            { id: 'grok-imagine-pro', supportsI2I: true },
+            { id: 'grok-4.2-image', supportsI2I: true },
+            { id: 'kling-omni-image', supportsI2I: true },
+            { id: 'nanobanana2', supportsI2I: true },
+            { id: 'nanobanana2-beta', supportsI2I: true },
+            { id: 'seedream-5.0', supportsI2I: true },
+            { id: 'seedream-4.5-doubao', supportsI2I: true },
+            { id: 'p-image', supportsI2I: false },
+            { id: 'p-image-edit', supportsI2I: true }
           ];
           var currentModel = ximageModels.find(function(m) { return m.id === state.ximage.selectedModel; });
           if (!currentModel || !currentModel.supportsI2I) {
@@ -9867,7 +9887,18 @@ async function generateXImage() {
       throw new Error(data.error || 'Gagal generate image');
     }
     
-    // Add task to tracking
+    if (data.imageUrl) {
+      state.ximage.generatedImages.unshift({
+        taskId: data.taskId,
+        model: data.model || state.ximage.selectedModel,
+        url: data.imageUrl,
+        prompt: requestBody.prompt,
+        completedAt: new Date().toISOString()
+      });
+      render();
+      return;
+    }
+    
     state.ximage.tasks.push({
       taskId: data.taskId,
       model: state.ximage.selectedModel,

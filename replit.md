@@ -31,13 +31,24 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - ideogram-character: Ideogram Character (Ideogram) via Market API, supports I2I via image_url, N images, rendering_speed, style (AUTO/REALISTIC/FICTION)
     - qwen-image: Qwen Image Edit (Alibaba) via Market API, supports I2I via image_url, acceleration (none/regular/high)
     - z-image: Z-Image (Tongyi-MAI) via Market API, text-only
-  - Three kie.ai API paths:
+    - grok-imagine: Grok Imagine (xAI) via ApiModels, supports I2I
+    - grok-imagine-pro: Grok Imagine Pro (xAI) via ApiModels, supports I2I
+    - grok-4.2-image: Grok 4.2 Image (xAI) via ApiModels, supports I2I
+    - kling-omni-image: Kling Omni-Image (Kuaishou) via ApiModels, supports I2I, resolution 1K/2K
+    - nanobanana2: Nanobanana 2 AM (Google) via ApiModels, supports I2I, resolution 1K/2K/4K
+    - nanobanana2-beta: Nanobanana 2 Beta (Google) via ApiModels, supports I2I, resolution 1K/2K/4K
+    - seedream-5.0: Seedream 5.0 Lite AM (ByteDance) via ApiModels, supports I2I
+    - seedream-4.5-doubao: Seedream 4.5 Doubao (ByteDance) via ApiModels, supports I2I
+    - p-image: P-Image (Pruna AI) via ApiModels sync endpoint, text-only, sub-1s
+    - p-image-edit: P-Image Edit (Pruna AI) via ApiModels edit endpoint, supports I2I, sub-1s
+  - Four API paths:
     - 4o-image: POST https://api.kie.ai/api/v1/gpt4o-image/generate, poll /record-info?taskId=
     - Market: POST https://api.kie.ai/api/v1/jobs/createTask, poll /jobs/recordInfo?taskId=
     - Flux Kontext: POST https://api.kie.ai/api/v1/flux/kontext/generate, poll /flux/kontext/record-info?taskId=
+    - ApiModels: POST https://apimodels.app/api/v1/images/generations (async), /generations-sync (P-Image), /edit (P-Image-Edit)
   - Market API size formats: aspect_ratio (ratio string), image_size (ratio string), or named sizes (square/portrait_4_3/landscape_16_9 etc.)
   - Base64 images converted to public URLs via local file storage for kie.ai I2I
-  - Background polling types: kie-4o-image, kie-market, kie-flux-kontext
+  - Background polling types: kie-4o-image, kie-market, kie-flux-kontext, apimodels-image
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)

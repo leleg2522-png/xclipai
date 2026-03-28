@@ -2783,6 +2783,38 @@ async function pollPoyoTask(taskId, apiKey) {
   return { status: 'processing' };
 }
 
+async function pollApimodelsImageTask(taskId, apiKey) {
+  console.log(`[BG-POLL] Polling apimodels IMAGE task=${taskId}`);
+  const statusResponse = await axios.get(
+    `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(taskId)}`,
+    { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
+  );
+  const raw = statusResponse.data;
+  const data = raw.data || raw;
+  const status = data.state || data.status;
+  console.log(`[BG-POLL] Apimodels image status=${status}, keys=${Object.keys(data).join(',')}`);
+
+  if (status === 'completed') {
+    let url = null;
+    if (data.resultUrls && data.resultUrls.length > 0) {
+      url = data.resultUrls[0];
+    } else if (data.url) {
+      url = data.url;
+    } else if (data.image_url) {
+      url = data.image_url;
+    }
+    if (!url) {
+      console.log(`[BG-POLL] Apimodels image ${taskId} completed but no URL yet`);
+      return { status: 'processing' };
+    }
+    return { status: 'completed', url };
+  }
+  if (status === 'failed') {
+    return { status: 'failed', error: data.failMsg || data.error || 'Image generation failed' };
+  }
+  return { status: 'processing' };
+}
+
 async function pollApimodelsTask(taskId, apiKey, model) {
   console.log(`[BG-POLL] Polling apimodels task=${taskId}, key=${apiKey ? apiKey.substring(0,10)+'...' : 'NONE'}`);
   const statusResponse = await axios.get(
@@ -3090,6 +3122,8 @@ setInterval(async () => {
         result = await pollPoyoTask(taskId, task.apiKey);
       } else if (task.apiType === 'apimodels') {
         result = await pollApimodelsTask(taskId, task.apiKey, task.model);
+      } else if (task.apiType === 'apimodels-image') {
+        result = await pollApimodelsImageTask(taskId, task.apiKey);
       } else if (task.apiType === 'apimart') {
         result = await pollApimartTask(taskId, task.apiKey);
       } else if (task.apiType === 'kie-4o-image') {
@@ -3265,7 +3299,7 @@ async function resumePendingTaskPolling() {
             }
             if (!apiKey && process.env.POYO_API_KEY) apiKey = sanitizeApiKey(process.env.POYO_API_KEY);
           }
-          if (!apiKey && (apiType === 'apimodels')) {
+          if (!apiKey && (apiType === 'apimodels' || apiType === 'apimodels-image')) {
             outer_apimodels: for (let r = 1; r <= 3; r++) {
               for (let k = 1; k <= 3; k++) {
                 const pk = process.env[`VIDGEN2_ROOM${r}_KEY_${k}`];
@@ -3296,7 +3330,15 @@ async function resumePendingTaskPolling() {
             }
             if (apiType === 'kie-ximage') {
               const mc = XIMAGE_MODELS[row.model];
-              resolvedType = mc ? mc.apiType : 'kie-4o-image';
+              if (mc) {
+                if (mc.apiType === 'apimodels' || mc.apiType === 'apimodels-sync' || mc.apiType === 'apimodels-edit') {
+                  resolvedType = 'apimodels-image';
+                } else {
+                  resolvedType = mc.apiType;
+                }
+              } else {
+                resolvedType = 'kie-4o-image';
+              }
             }
             const bgPollOpts = {
               dbTable: table,
@@ -8772,6 +8814,16 @@ const XIMAGE_MODELS = {
   'ideogram-character': { name: 'Ideogram Character', provider: 'Ideogram', supportsI2I: true, supportsN: true, apiType: 'kie-market', apiModel: 'ideogram/character', i2iModel: 'ideogram/character-edit', useNamedSize: true, i2iImageField: 'image_url', supportsRenderingSpeed: true, supportsStyle: true },
   'qwen-image': { name: 'Qwen Image Edit', provider: 'Alibaba', supportsI2I: true, apiType: 'kie-market', apiModel: 'qwen/image-edit', i2iModel: 'qwen/image-edit', useNamedSize: true, i2iImageField: 'image_url', supportsAcceleration: true },
   'z-image': { name: 'Z-Image', provider: 'Tongyi-MAI', supportsI2I: false, apiType: 'kie-market', apiModel: 'z-image' },
+  'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image', i2iModel: 'grok-imagine-image', desc: 'Text-to-image & editing, HD' },
+  'grok-imagine-pro': { name: 'Grok Imagine Pro', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image-pro', i2iModel: 'grok-imagine-image-pro', desc: 'Pro detail, higher precision' },
+  'grok-4.2-image': { name: 'Grok 4.2 Image', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-4.2-image', i2iModel: 'grok-4.2-image', desc: 'Image editing & mask inpainting' },
+  'kling-omni-image': { name: 'Kling Omni-Image', provider: 'Kuaishou', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'kling-image-o1', i2iModel: 'kling-image-o1', desc: '1K/2K resolution' },
+  'nanobanana2': { name: 'Nanobanana 2', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana2', i2iModel: 'nanobanana2', desc: '1K/2K/4K, Gemini Flash' },
+  'nanobanana2-beta': { name: 'Nanobanana 2 Beta', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-2-beta', i2iModel: 'nanobanana-2-beta', desc: 'Budget, 1K/2K/4K' },
+  'seedream-5.0': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-5-0-260128', i2iModel: 'doubao-seedream-5-0-260128', desc: '2K/3K, multi-image fusion' },
+  'seedream-4.5-doubao': { name: 'Seedream 4.5 Doubao', provider: 'ByteDance', supportsI2I: true, apiType: 'apimodels', apiModel: 'doubao-seedream-4-5-251128', i2iModel: 'doubao-seedream-4-5-251128', desc: '2K/4K resolution' },
+  'p-image': { name: 'P-Image', provider: 'Pruna AI', supportsI2I: false, apiType: 'apimodels-sync', apiModel: 'p-image', desc: 'Sub 1s, LoRA support' },
+  'p-image-edit': { name: 'P-Image Edit', provider: 'Pruna AI', supportsI2I: true, apiType: 'apimodels-edit', apiModel: 'p-image-edit', i2iModel: 'p-image-edit', desc: 'Sub 1s multi-image editing' },
 };
 
 // Get X Image room API key
@@ -9046,6 +9098,78 @@ app.post('/api/ximage/generate', async (req, res) => {
       console.log('[XIMAGE] kie.ai flux-kontext response:', JSON.stringify(lastResponse.data));
       taskId = lastResponse.data?.data?.taskId || lastResponse.data?.data?.task_id || lastResponse.data?.taskId || lastResponse.data?.task_id || lastResponse.data?.id;
       bgPollType = 'kie-flux-kontext';
+    } else if (modelConfig.apiType === 'apimodels' || modelConfig.apiType === 'apimodels-sync' || modelConfig.apiType === 'apimodels-edit') {
+      const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
+      if (!apimodelsKey) {
+        return res.status(500).json({ error: 'ApiModels API key tidak tersedia. Hubungi admin.' });
+      }
+      const amHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` };
+      const amModel = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
+
+      if (modelConfig.apiType === 'apimodels-sync') {
+        const body = { prompt, aspect_ratio: aspectRatio || '1:1' };
+        console.log('[XIMAGE] ApiModels sync request:', JSON.stringify(body));
+        lastResponse = await axios.post(
+          'https://apimodels.app/api/v1/images/generations-sync',
+          body,
+          { headers: amHeaders, timeout: 60000 }
+        );
+        console.log('[XIMAGE] ApiModels sync response:', JSON.stringify(lastResponse.data).substring(0, 500));
+        const syncData = lastResponse.data?.data || lastResponse.data;
+        const syncUrl = syncData?.url || syncData?.resultUrls?.[0];
+        if (syncUrl) {
+          const syncTaskId = `am-sync-${Date.now()}`;
+          await pool.query(`
+            INSERT INTO ximage_history (user_id, task_id, model, prompt, mode, aspect_ratio, reference_image, status, image_url, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, NOW())
+          `, [roomKeyResult.userId, syncTaskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', null, syncUrl]);
+          sendSSEToUser(roomKeyResult.userId, { type: 'ximage_completed', taskId: syncTaskId, imageUrl: syncUrl });
+          return res.json({ taskId: syncTaskId, model, imageUrl: syncUrl, message: 'Image generated' });
+        }
+        return res.status(500).json({ error: 'Tidak ada URL dari P-Image' });
+      } else if (modelConfig.apiType === 'apimodels-edit') {
+        const body = { prompt, aspect_ratio: aspectRatio || 'match_input_image' };
+        if (imageUrls.length > 0) body.images = imageUrls;
+        console.log('[XIMAGE] ApiModels edit request:', JSON.stringify({ ...body, images: body.images ? ['[IMAGES]'] : undefined }));
+        lastResponse = await axios.post(
+          'https://apimodels.app/api/v1/images/edit',
+          body,
+          { headers: amHeaders, timeout: 60000 }
+        );
+        console.log('[XIMAGE] ApiModels edit response:', JSON.stringify(lastResponse.data).substring(0, 500));
+        const editData = lastResponse.data?.data || lastResponse.data;
+        const editUrl = editData?.url || editData?.resultUrls?.[0];
+        if (editUrl) {
+          const editTaskId = `am-edit-${Date.now()}`;
+          await pool.query(`
+            INSERT INTO ximage_history (user_id, task_id, model, prompt, mode, aspect_ratio, reference_image, status, image_url, completed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, NOW())
+          `, [roomKeyResult.userId, editTaskId, model, prompt, mode || 'image-to-image', aspectRatio || '1:1', imageUrls[0] || null, editUrl]);
+          sendSSEToUser(roomKeyResult.userId, { type: 'ximage_completed', taskId: editTaskId, imageUrl: editUrl });
+          return res.json({ taskId: editTaskId, model, imageUrl: editUrl, message: 'Image edited' });
+        }
+        return res.status(500).json({ error: 'Tidak ada URL dari P-Image-Edit' });
+      } else {
+        const body = { model: amModel, prompt, aspect_ratio: aspectRatio || '1:1' };
+        if (modelConfig.supportsQuality && (resolution || quality)) body.resolution = resolution || quality;
+        if (isI2I && imageUrls.length > 0) {
+          if (imageUrls.length === 1) {
+            body.image_url = imageUrls[0];
+          } else {
+            body.image_urls = imageUrls;
+          }
+        }
+        console.log('[XIMAGE] ApiModels async request:', JSON.stringify({ ...body, image_url: body.image_url ? '[IMAGE]' : undefined, image_urls: body.image_urls ? ['[IMAGES]'] : undefined }));
+        lastResponse = await axios.post(
+          'https://apimodels.app/api/v1/images/generations',
+          body,
+          { headers: amHeaders, timeout: 60000 }
+        );
+        console.log('[XIMAGE] ApiModels async response:', JSON.stringify(lastResponse.data).substring(0, 500));
+        const amData = lastResponse.data?.data || lastResponse.data;
+        taskId = amData?.taskId || amData?.task_id || amData?.id;
+        bgPollType = 'apimodels-image';
+      }
     } else {
       let kieModelId = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
       if (modelConfig.variantModels && modelVariant && modelConfig.variantModels[modelVariant]) {
@@ -9116,9 +9240,9 @@ app.post('/api/ximage/generate', async (req, res) => {
       const apiCode = respBody.code || respBody.status;
       const apiError = respBody.msg || respBody.message || respBody.error?.message || respBody.error || '';
       if (apiCode === 401 || apiCode === 403) {
-        return res.status(500).json({ error: 'API key kie.ai tidak valid atau expired. Hubungi admin untuk update key.' });
+        return res.status(500).json({ error: 'API key tidak valid atau expired. Hubungi admin untuk update key.' });
       }
-      return res.status(500).json({ error: apiError ? `kie.ai: ${apiError}` : 'Gagal mendapatkan task ID dari kie.ai' });
+      return res.status(500).json({ error: apiError ? `API: ${apiError}` : 'Gagal mendapatkan task ID' });
     }
     
     await pool.query(`
@@ -9126,7 +9250,8 @@ app.post('/api/ximage/generate', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
     `, [roomKeyResult.userId, taskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
     
-    startServerBgPoll(taskId, bgPollType, kieApiKey, {
+    const pollApiKey = bgPollType === 'apimodels-image' ? (process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1) : kieApiKey;
+    startServerBgPoll(taskId, bgPollType, pollApiKey, {
       dbTable: 'ximage_history',
       urlColumn: 'image_url',
       model,
