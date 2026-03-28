@@ -2824,7 +2824,7 @@ async function pollApimodelsTask(taskId, apiKey, model) {
   const raw = statusResponse.data;
   console.log(`[BG-POLL] Full apimodels response for ${taskId}:`, JSON.stringify(raw));
   const data = raw.data || raw;
-  const status = data.status;
+  const status = data.state || data.status;
   console.log(`[BG-POLL] Parsed status=${status}, videos=${JSON.stringify(data.videos || [])}, keys=${Object.keys(data).join(',')}`);
 
   if (status === 'completed') {
@@ -7220,7 +7220,7 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       return res.json({ received: true });
     }
     
-    const status = data.status;
+    const status = data.state || data.status;
     
     if (status === 'completed') {
       let videoUrl = null;
@@ -9107,7 +9107,7 @@ app.post('/api/ximage/generate', async (req, res) => {
       const amModel = isI2I && modelConfig.i2iModel ? modelConfig.i2iModel : modelConfig.apiModel;
 
       if (modelConfig.apiType === 'apimodels-sync') {
-        const body = { prompt, aspect_ratio: aspectRatio || '1:1' };
+        const body = { model: amModel, prompt, aspect_ratio: aspectRatio || '1:1' };
         console.log('[XIMAGE] ApiModels sync request:', JSON.stringify(body));
         lastResponse = await axios.post(
           'https://apimodels.app/api/v1/images/generations-sync',
@@ -9128,7 +9128,7 @@ app.post('/api/ximage/generate', async (req, res) => {
         }
         return res.status(500).json({ error: 'Tidak ada URL dari P-Image' });
       } else if (modelConfig.apiType === 'apimodels-edit') {
-        const body = { prompt, aspect_ratio: aspectRatio || 'match_input_image' };
+        const body = { model: amModel, prompt, aspect_ratio: aspectRatio || 'match_input_image' };
         if (imageUrls.length > 0) body.images = imageUrls;
         console.log('[XIMAGE] ApiModels edit request:', JSON.stringify({ ...body, images: body.images ? ['[IMAGES]'] : undefined }));
         lastResponse = await axios.post(
