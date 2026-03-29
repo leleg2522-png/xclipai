@@ -7209,6 +7209,15 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       console.log(`[VIDGEN2-CALLBACK] No task_id found in callback. Full body keys:`, Object.keys(rawBody), 'data keys:', Object.keys(data));
       return res.json({ received: true });
     }
+
+    // Lookup user_id from vidgen2_tasks
+    let userId = null;
+    try {
+      const taskRow = await pool.query(`SELECT user_id FROM vidgen2_tasks WHERE task_id = $1 LIMIT 1`, [taskId]);
+      if (taskRow.rows.length > 0) userId = taskRow.rows[0].user_id;
+    } catch (e) {
+      console.error(`[VIDGEN2-CALLBACK] DB lookup error:`, e.message);
+    }
     
     const status = data.state || data.status;
     
@@ -7231,7 +7240,7 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       if (videoUrl) {
         try {
           await pool.query(
-            `UPDATE video_tasks SET status = 'completed', video_url = $1, completed_at = NOW() WHERE task_id = $2`,
+            `UPDATE vidgen2_tasks SET status = 'completed', video_url = $1, completed_at = NOW() WHERE task_id = $2`,
             [videoUrl, taskId]
           );
         } catch (dbErr) {
@@ -7243,13 +7252,15 @@ app.post('/api/vidgen2/callback', async (req, res) => {
         serverBgPolls.delete(taskId);
         console.log(`[VIDGEN2-CALLBACK] Removed task ${taskId} from bg polling`);
       }
-      
-      broadcastToAll({
-        type: 'video_completed',
-        taskId: taskId,
-        videoUrl: videoUrl,
-        source: 'vidgen2'
-      });
+
+      if (userId) {
+        sendSSEToUser(userId, {
+          type: 'vidgen2_completed',
+          taskId: taskId,
+          videoUrl: videoUrl,
+          source: 'vidgen2'
+        });
+      }
       
     } else if (status === 'failed') {
       const error = data.error || 'Generation failed';
@@ -7257,7 +7268,7 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       
       try {
         await pool.query(
-          `UPDATE video_tasks SET status = 'failed', completed_at = NOW() WHERE task_id = $1`,
+          `UPDATE vidgen2_tasks SET status = 'failed', completed_at = NOW() WHERE task_id = $1`,
           [taskId]
         );
       } catch (dbErr) {
@@ -7267,13 +7278,15 @@ app.post('/api/vidgen2/callback', async (req, res) => {
       if (serverBgPolls.has(taskId)) {
         serverBgPolls.delete(taskId);
       }
-      
-      broadcastToAll({
-        type: 'video_failed',
-        taskId: taskId,
-        error: error,
-        source: 'vidgen2'
-      });
+
+      if (userId) {
+        sendSSEToUser(userId, {
+          type: 'vidgen2_failed',
+          taskId: taskId,
+          error: error,
+          source: 'vidgen2'
+        });
+      }
     }
     
     res.json({ received: true });
