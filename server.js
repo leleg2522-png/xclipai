@@ -7125,16 +7125,20 @@ app.get('/api/vidgen2/tasks/:taskId', async (req, res) => {
         
         const rawData = statusResponse.data;
         const data = rawData.data || rawData;
-        const status = data.status;
+        const status = data.state || data.status;
         
-        if (status === 'completed') {
+        if (status === 'completed' || status === 'success') {
           let videoUrl = null;
           if (data.videos && data.videos.length > 0) {
             videoUrl = data.videos[0];
+          } else if (data.resultUrls && data.resultUrls.length > 0) {
+            videoUrl = data.resultUrls[0];
           } else if (data.video_url) {
             videoUrl = data.video_url;
           } else if (data.url) {
             videoUrl = data.url;
+          } else if (data.thumbnailUrl) {
+            videoUrl = data.thumbnailUrl;
           }
           
           if (videoUrl) {
