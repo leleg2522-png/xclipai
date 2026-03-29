@@ -7641,6 +7641,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           console.log(`[VIDGEN4] Sora image uploaded: ${imageUrl}`);
         }
         requestBody.image_urls = [imageUrl];
+        const soraConsistency = '[CHARACTER LOCK] Maintain 100% identical character appearance from reference image: same face, same clothes, same hair, same accessories in every frame. Do NOT alter character appearance. ';
+        requestBody.prompt = soraConsistency + requestBody.prompt;
+        requestBody.negative_prompt = 'different clothes, outfit change, different face, different person, inconsistent appearance, changing appearance';
       }
     } else if (config.type === 'veo') {
       // Veo 3.1 Fast - official API: resolution, generation_type, image_urls (start/end frame), enable_gif
@@ -7685,8 +7688,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           requestBody.image_urls = [refUrl];
           requestBody.generation_type = 'reference';
           
-          const consistencyBoost = 'Maintain exact character appearance, facial features, clothing, hair style and color from the reference image throughout the entire video. Keep the character identical to the reference. ';
+          const consistencyBoost = '[STRICT CHARACTER LOCK] The character in this video MUST be 100% identical to the reference image in every single frame. Do NOT change, modify, or alter any of the following: exact face shape, eyes, nose, mouth, skin tone, exact hairstyle and hair color, exact clothing outfit including colors/patterns/accessories, body proportions. The character must look like the SAME PERSON wearing the SAME CLOTHES throughout the entire video with zero variation. Any deviation from the reference image is strictly forbidden. ';
           requestBody.prompt = consistencyBoost + requestBody.prompt;
+          requestBody.negative_prompt = 'different clothes, outfit change, wardrobe change, different hairstyle, different hair color, different face, different person, inconsistent appearance, changing appearance, morphing, transformation';
         }
       }
     } else if (config.type === 'grok') {
