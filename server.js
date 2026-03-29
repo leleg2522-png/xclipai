@@ -7004,9 +7004,12 @@ app.post('/api/vidgen2/generate', async (req, res) => {
     
     console.log(`[VIDGEN2] ApiModels response:`, JSON.stringify(response.data));
     
-    const taskId = response.data?.data?.[0]?.task_id ||
+    const taskId = response.data?.data?.taskId ||
+                   response.data?.data?.[0]?.task_id ||
+                   response.data?.data?.[0]?.taskId ||
                    response.data?.data?.task_id || 
                    response.data?.data?.id ||
+                   response.data?.taskId ||
                    response.data?.task_id || 
                    response.data?.id;
     
