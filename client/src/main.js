@@ -286,7 +286,7 @@ const state = {
     sourceImage: null,
     sourceImage2: null,
     prompt: '',
-    selectedModel: 'seedream-4.5',
+    selectedModel: 'nanobanana2',
     aspectRatio: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -3902,28 +3902,16 @@ function getModelIcon(iconType) {
 
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasQuality: true, qualities: ['basic', 'high'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'] },
-    { id: 'flux-2-flex', name: 'FLUX.2 Flex', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
-    { id: 'flux-2-pro', name: 'FLUX.2 Pro', icon: 'flux', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] },
-    { id: 'google-nano-banana', name: 'Nano Banana', icon: 'google', supportsI2I: true, maxRefs: 2, sizes: ['1:1', '9:16', '16:9', '3:4', '4:3', '3:2', '2:3', '5:4', '4:5', '21:9'] },
-    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['1K', '2K', '4K'], hasGoogleSearch: true, hasOutputFormat: true, outputFormats: ['png', 'jpg'], maxRefs: 14, sizes: ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'] },
-    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'PRO', hasResolution: true, resolutions: ['1K', '2K', '4K'], hasGoogleSearch: true, hasOutputFormat: true, outputFormats: ['png', 'jpg'], maxRefs: 14, sizes: ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '1:4', '4:1', '1:8', '8:1'] },
-    { id: 'seedream-api', name: 'Seedream API', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['Square', 'Square HD', '3:4', '2:3', '9:16', '4:3', '3:2', '16:9', '21:9'] },
-    { id: 'gpt-image-1.5', name: '4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxRefs: 2, sizes: ['1:1', '3:2', '2:3'] },
-    { id: 'flux-1-kontext', name: 'Flux.1 Kontext', icon: 'flux', supportsI2I: true, badge: 'NEW', hasVariant: true, variants: [{id:'pro',name:'Pro'},{id:'max',name:'Max'}], maxRefs: 1, sizes: ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16'] },
-    { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: false, badge: 'NEW', hasN: true, hasVariant: true, variants: [{id:'fast',name:'Fast'},{id:'ultra',name:'Ultra'},{id:'standard',name:'Standard'}], sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'ideogram-v3', name: 'Ideogram V3', icon: 'ideogram', supportsI2I: true, badge: 'NEW', hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'GENERAL', 'REALISTIC', 'DESIGN'], maxRefs: 1, sizes: ['Square', 'Square HD', '3:4', '9:16', '4:3', '16:9'] },
-    { id: 'ideogram-character', name: 'Ideogram Character', icon: 'ideogram', supportsI2I: true, hasRenderingSpeed: true, renderingSpeeds: ['TURBO', 'BALANCED', 'QUALITY'], hasStyle: true, styles: ['AUTO', 'REALISTIC', 'FICTION'], hasN: true, maxRefs: 1, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
-    { id: 'qwen-image', name: 'Qwen Image Edit', icon: 'alibaba', supportsI2I: true, hasAcceleration: true, accelerations: ['none', 'regular', 'high'], maxRefs: 1, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'] },
-    { id: 'z-image', name: 'Z-Image', icon: 'tongyi', supportsI2I: false, badge: 'NEW', sizes: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
-    { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: true, badge: 'NEW', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
-    { id: 'grok-imagine-pro', name: 'Grok Imagine Pro', icon: 'xai', supportsI2I: true, badge: 'PRO', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'nanobanana2', name: 'Nanobanana 2', icon: 'google', supportsI2I: true, badge: 'POPULAR', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2-lite', name: 'Nanobanana 2 Lite', icon: 'google', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'seedream-5.0', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['2K', '3K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'grok-4.2-image', name: 'Grok 4.2 Image', icon: 'xai', supportsI2I: true, badge: 'NEW', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
-    { id: 'kling-omni-image', name: 'Kling Omni-Image', icon: 'openai', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'nanobanana2', name: 'Nanobanana 2 AM', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'seedream-5.0', name: 'Seedream 5.0 Lite AM', icon: 'bytedance', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'seedream-4.5-doubao', name: 'Seedream 4.5 Doubao', icon: 'bytedance', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'grok-imagine-pro', name: 'Grok Imagine Pro', icon: 'xai', supportsI2I: true, badge: 'PRO', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'kling-omni-image', name: 'Kling Omni-Image', icon: 'openai', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'kling-omni-image-qn', name: 'Kling Omni-Image QN', icon: 'openai', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'p-image', name: 'P-Image', icon: 'flux', supportsI2I: false, badge: 'FAST', sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
     { id: 'p-image-edit', name: 'P-Image Edit', icon: 'flux', supportsI2I: true, badge: 'FAST', maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] }
   ];
@@ -9553,26 +9541,16 @@ function attachXImageEventListeners() {
         // Auto-select compatible model when switching to image-to-image
         if (newMode === 'image-to-image') {
           var ximageModels = [
-            { id: 'seedream-4.5', supportsI2I: true },
-            { id: 'flux-2-flex', supportsI2I: true },
-            { id: 'flux-2-pro', supportsI2I: true },
-            { id: 'google-nano-banana', supportsI2I: true },
-            { id: 'seedream-api', supportsI2I: true },
-            { id: 'gpt-image-1.5', supportsI2I: true },
-            { id: 'flux-1-kontext', supportsI2I: true },
-            { id: 'imagen-4', supportsI2I: false },
-            { id: 'ideogram-v3', supportsI2I: true },
-            { id: 'ideogram-character', supportsI2I: true },
-            { id: 'qwen-image', supportsI2I: true },
-            { id: 'z-image', supportsI2I: false },
-            { id: 'grok-imagine', supportsI2I: true },
-            { id: 'grok-imagine-pro', supportsI2I: true },
-            { id: 'grok-4.2-image', supportsI2I: true },
-            { id: 'kling-omni-image', supportsI2I: true },
             { id: 'nanobanana2', supportsI2I: true },
             { id: 'nanobanana2-beta', supportsI2I: true },
+            { id: 'nanobanana2-lite', supportsI2I: true },
             { id: 'seedream-5.0', supportsI2I: true },
-            { id: 'seedream-4.5-doubao', supportsI2I: true },
+            { id: 'seedream-4.5', supportsI2I: true },
+            { id: 'grok-4.2-image', supportsI2I: true },
+            { id: 'grok-imagine', supportsI2I: true },
+            { id: 'grok-imagine-pro', supportsI2I: true },
+            { id: 'kling-omni-image', supportsI2I: true },
+            { id: 'kling-omni-image-qn', supportsI2I: true },
             { id: 'p-image', supportsI2I: false },
             { id: 'p-image-edit', supportsI2I: true }
           ];
@@ -9592,7 +9570,7 @@ function attachXImageEventListeners() {
       var modelCard = e.target.closest('[data-ximage-model]');
       if (modelCard && state.currentPage === 'ximage' && !modelCard.classList.contains('disabled')) {
         var newModelId = modelCard.dataset.ximageModel;
-        var modelsWithMultiRef = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'nano-banana-pro'];
+        var modelsWithMultiRef = ['nanobanana2', 'nanobanana2-beta', 'seedream-5.0', 'seedream-4.5', 'kling-omni-image', 'p-image-edit'];
         if (!modelsWithMultiRef.includes(newModelId)) {
           state.ximage.sourceImage2 = null;
         }
@@ -9837,7 +9815,7 @@ async function generateXImage() {
   }
   
   // Validate model compatibility with mode
-  var modelsNotSupportingI2I = ['imagen-4', 'z-image'];
+  var modelsNotSupportingI2I = ['p-image'];
   if (state.ximage.mode === 'image-to-image' && modelsNotSupportingI2I.includes(state.ximage.selectedModel)) {
     alert('Model ini tidak mendukung mode Image-to-Image. Pilih model lain.');
     return;
@@ -9866,7 +9844,7 @@ async function generateXImage() {
     
     if (state.ximage.mode === 'image-to-image' && state.ximage.sourceImage) {
       requestBody.image = state.ximage.sourceImage.data;
-      var multiRefModels = ['gpt-image-1.5', 'flux-2-flex', 'flux-2-pro', 'google-nano-banana', 'nano-banana-2', 'nano-banana-pro', 'seedream-4.5', 'seedream-api'];
+      var multiRefModels = ['nanobanana2', 'nanobanana2-beta', 'seedream-5.0', 'seedream-4.5', 'kling-omni-image', 'p-image-edit'];
       if (state.ximage.sourceImage2 && multiRefModels.includes(state.ximage.selectedModel)) {
         requestBody.image2 = state.ximage.sourceImage2.data;
       }

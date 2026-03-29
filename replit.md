@@ -15,40 +15,25 @@ The application is built on a Node.js Express.js server, combining frontend and 
 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
-- **X Image (kie.ai Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. Migrated from Poyo.ai to kie.ai. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
-  - 14 AI models via kie.ai APIs:
-    - seedream-4.5: Seedream 4.5 (ByteDance) via Market API, supports I2I, quality (basic/high)
-    - flux-2-flex: FLUX.2 Flex (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
-    - flux-2-pro: FLUX.2 Pro (Black Forest Labs) via Market API, supports I2I, 1K/2K resolution
-    - google-nano-banana: Nano Banana (Google) via Market API, supports I2I
-    - nano-banana-2: Nano Banana 2 (Google Gemini 3.1 Flash) via Market API, supports I2I (image_input array, up to 14 refs), resolution (1K/2K/4K), google_search toggle, output_format (png/jpg), extreme aspect ratios (1:8, 8:1, 1:4, 4:1)
-    - nano-banana-pro: Nano Banana Pro (Google Gemini 3 Pro) via Market API, supports I2I (image_input array, up to 14 refs), resolution (1K/2K/4K), google_search toggle, output_format (png/jpg), extreme aspect ratios
-    - seedream-api: Seedream API/V4 (ByteDance) via Market API, supports I2I, named sizes, 1K/2K/4K resolution
-    - gpt-image-1.5: 4o Image (OpenAI) via 4o-image API, supports I2I, N variants
-    - flux-1-kontext: Flux.1 Kontext (Black Forest Labs) via Flux Kontext API, supports I2I, variant (pro/max)
-    - imagen-4: Imagen 4 (Google) via Market API, text-only, N images, variant (fast/ultra/standard → google/imagen4-fast/ultra/imagen4)
-    - ideogram-v3: Ideogram V3 (Ideogram) via Market API, supports I2I, named sizes, rendering_speed (TURBO/BALANCED/QUALITY), style (AUTO/GENERAL/REALISTIC/DESIGN)
-    - ideogram-character: Ideogram Character (Ideogram) via Market API, supports I2I via image_url, N images, rendering_speed, style (AUTO/REALISTIC/FICTION)
-    - qwen-image: Qwen Image Edit (Alibaba) via Market API, supports I2I via image_url, acceleration (none/regular/high)
-    - z-image: Z-Image (Tongyi-MAI) via Market API, text-only
-    - grok-imagine: Grok Imagine (xAI) via ApiModels, supports I2I
-    - grok-imagine-pro: Grok Imagine Pro (xAI) via ApiModels, supports I2I
-    - grok-4.2-image: Grok 4.2 Image (xAI) via ApiModels, supports I2I
-    - kling-omni-image: Kling Omni-Image (Kuaishou) via ApiModels, supports I2I, resolution 1K/2K
-    - nanobanana2: Nanobanana 2 AM (Google) via ApiModels, supports I2I, resolution 1K/2K/4K
-    - nanobanana2-beta: Nanobanana 2 Beta (Google) via ApiModels, supports I2I, resolution 1K/2K/4K
-    - seedream-5.0: Seedream 5.0 Lite AM (ByteDance) via ApiModels, supports I2I
-    - seedream-4.5-doubao: Seedream 4.5 Doubao (ByteDance) via ApiModels, supports I2I
-    - p-image: P-Image (Pruna AI) via ApiModels sync endpoint, text-only, sub-1s
-    - p-image-edit: P-Image Edit (Pruna AI) via ApiModels edit endpoint, supports I2I, sub-1s
-  - Four API paths:
-    - 4o-image: POST https://api.kie.ai/api/v1/gpt4o-image/generate, poll /record-info?taskId=
-    - Market: POST https://api.kie.ai/api/v1/jobs/createTask, poll /jobs/recordInfo?taskId=
-    - Flux Kontext: POST https://api.kie.ai/api/v1/flux/kontext/generate, poll /flux/kontext/record-info?taskId=
-    - ApiModels: POST https://apimodels.app/api/v1/images/generations (async), /generations-sync (P-Image), /edit (P-Image-Edit)
-  - Market API size formats: aspect_ratio (ratio string), image_size (ratio string), or named sizes (square/portrait_4_3/landscape_16_9 etc.)
-  - Base64 images converted to public URLs via local file storage for kie.ai I2I
-  - Background polling types: kie-4o-image, kie-market, kie-flux-kontext, apimodels-image
+- **X Image (ApiModels Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. All models route through ApiModels.app. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
+  - 12 AI models via ApiModels.app (verified active March 2026):
+    - nanobanana2: Nanobanana 2 (Google Gemini 3.1 Flash) - text-to-image & I2I, resolution 1K/2K/4K
+    - nanobanana2-beta: Nanobanana 2 Beta (Google) - budget text-to-image & I2I, resolution 1K/2K/4K
+    - nanobanana2-lite: Nanobanana 2 Lite (Google) - budget image editing, resolution 1K/2K/4K
+    - seedream-5.0: Seedream 5.0 Lite (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/3K
+    - seedream-4.5: Seedream 4.5 (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/4K
+    - grok-4.2-image: Grok 4.2 Image (xAI) - text-to-image & I2I with mask inpainting
+    - grok-imagine: Grok Imagine (xAI) - text-to-image & I2I
+    - grok-imagine-pro: Grok Imagine Pro (xAI) - higher quality text-to-image & I2I
+    - kling-omni-image: Kling Omni-Image (Kling) - text-to-image & I2I, resolution 1K/2K
+    - kling-omni-image-qn: Kling Omni-Image QN (Kling Stable-QN) - budget, text-to-image & I2I, resolution 1K/2K
+    - p-image: P-Image (Pruna AI) - text-only, sub-1s generation
+    - p-image-edit: P-Image Edit (Pruna AI) - image editing, sub-1s
+  - API paths (all via ApiModels.app):
+    - Async: POST https://apimodels.app/api/v1/images/generations
+    - Sync (P-Image): POST https://apimodels.app/api/v1/images/generations-sync
+    - Edit (P-Image-Edit): POST https://apimodels.app/api/v1/images/edit
+  - Background polling type: apimodels-image
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
