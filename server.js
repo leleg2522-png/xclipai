@@ -7641,9 +7641,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           console.log(`[VIDGEN4] Sora image uploaded: ${imageUrl}`);
         }
         requestBody.image_urls = [imageUrl];
-        const soraConsistency = '[CHARACTER LOCK] Maintain 100% identical character appearance from reference image: same face, same clothes, same hair, same accessories in every frame. Do NOT alter character appearance. ';
+        const soraConsistency = '[CHARACTER LOCK] Reproduce the person from the reference image with pixel-perfect accuracy. Preserve exact clothing: same fabric texture, same pattern, same decorative elements (bows, buttons, embroidery, prints), same colors, same fit and silhouette. Preserve exact face, hair, accessories, glasses, jewelry. Zero deviation allowed. ';
         requestBody.prompt = soraConsistency + requestBody.prompt;
-        requestBody.negative_prompt = 'different clothes, outfit change, different face, different person, inconsistent appearance, changing appearance';
+        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing details, missing decorations, different buttons, different collar, wardrobe change, costume change, different face, different person, inconsistent appearance';
       }
     } else if (config.type === 'veo') {
       // Veo 3.1 Fast - official API: resolution, generation_type, image_urls (start/end frame), enable_gif
@@ -7674,6 +7674,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         if (frameUrls.length > 0) {
           requestBody.image_urls = frameUrls;
           requestBody.generation_type = 'frame';
+          const frameConsistency = '[EXACT FRAME PRESERVATION] Animate starting from the exact first frame provided. The person\'s clothing must remain pixel-identical throughout: preserve exact fabric texture, pattern details, decorative elements (bows, ribbons, buttons, embroidery), colors, and fit. Do not simplify, alter, or reinterpret any clothing detail. ';
+          requestBody.prompt = frameConsistency + requestBody.prompt;
+          requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing decorative details, missing bows, missing buttons, wardrobe change, costume change, morphing clothes';
         }
       } else if (generationType === 'reference') {
         // Reference image mode - enhance prompt for character consistency
@@ -7688,9 +7691,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           requestBody.image_urls = [refUrl];
           requestBody.generation_type = 'reference';
           
-          const consistencyBoost = '[STRICT CHARACTER LOCK] The character in this video MUST be 100% identical to the reference image in every single frame. Do NOT change, modify, or alter any of the following: exact face shape, eyes, nose, mouth, skin tone, exact hairstyle and hair color, exact clothing outfit including colors/patterns/accessories, body proportions. The character must look like the SAME PERSON wearing the SAME CLOTHES throughout the entire video with zero variation. Any deviation from the reference image is strictly forbidden. ';
+          const consistencyBoost = '[STRICT VISUAL CLONE] Clone the exact person from the reference image with forensic-level accuracy. CLOTHING LOCK: Reproduce the exact same garment — same fabric weave/texture, same color shade, same pattern, same decorative elements (bows, ribbons, lace, buttons, embroidery, appliqués, pleats, ruffles), same collar style, same sleeve style, same fit/silhouette. Do NOT simplify, stylize, or reinterpret any clothing detail. APPEARANCE LOCK: Same face, same glasses, same hairstyle, same hair color, same skin tone, same jewelry/accessories. Every frame must show the identical outfit with zero variation. ';
           requestBody.prompt = consistencyBoost + requestBody.prompt;
-          requestBody.negative_prompt = 'different clothes, outfit change, wardrobe change, different hairstyle, different hair color, different face, different person, inconsistent appearance, changing appearance, morphing, transformation';
+          requestBody.negative_prompt = 'different clothes, outfit change, wardrobe change, different fabric, different texture, different pattern, simplified pattern, abstract pattern, plain fabric replacing detailed fabric, missing decorative details, missing bows, missing ribbons, missing buttons, missing embroidery, different collar, different sleeves, costume change, different hairstyle, different hair color, different face, different person, inconsistent appearance, morphing, transformation';
         }
       }
     } else if (config.type === 'grok') {
@@ -7707,6 +7710,9 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           console.log(`[VIDGEN4] Grok reference image uploaded: ${refUrl}`);
         }
         requestBody.image_urls = [refUrl];
+        const grokConsistency = '[CHARACTER LOCK] Reproduce the exact person from the reference image. Preserve exact clothing: same fabric texture, same pattern, same decorative elements (bows, ribbons, buttons, embroidery), same colors, same fit. Preserve exact face, glasses, hairstyle, accessories. Do not simplify or alter any clothing detail. ';
+        requestBody.prompt = grokConsistency + requestBody.prompt;
+        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing decorative details, missing bows, missing buttons, wardrobe change, costume change, different face, different person';
       }
     }
     

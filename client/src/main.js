@@ -8089,7 +8089,7 @@ function renderVidgen4Page() {
                     <span>🖼️ Reference</span>
                   </button>
                 </div>
-                <p class="setting-hint">${state.vidgen4.generationType === 'frame' ? 'Upload start frame dan end frame untuk mengontrol awal & akhir video' : 'Upload gambar referensi untuk gaya video (max 3)'}</p>
+                <p class="setting-hint">${state.vidgen4.generationType === 'frame' ? '💡 Start/End Frame menjaga detail pakaian & penampilan lebih akurat dari gambar asli' : '⚠️ Mode Reference bisa mengubah detail pakaian. Gunakan Start/End Frame untuk konsistensi maksimal'}</p>
               </div>
 
               ${state.vidgen4.generationType === 'frame' ? `
