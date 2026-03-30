@@ -8940,16 +8940,17 @@ app.delete('/api/vidgen3/videos/all', async (req, res) => {
 
 // X Image model configuration
 const XIMAGE_MODELS = {
+  'gemini-3-pro-image': { name: 'Gemini 3 Pro Image', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'gemini-3-pro-image', i2iModel: 'gemini-3-pro-image' },
+  'gemini-3-pro-image-lite': { name: 'Gemini 3 Pro Lite', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'gemini-3-pro-image-lite', i2iModel: 'gemini-3-pro-image-lite' },
+  'gemini-2.5-flash-image': { name: 'Gemini 2.5 Flash', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'gemini-2.5-flash-image', i2iModel: 'gemini-2.5-flash-image' },
   'nanobanana2': { name: 'Nanobanana 2', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana2', i2iModel: 'nanobanana2' },
   'nanobanana2-beta': { name: 'Nanobanana 2 Beta', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-2-beta', i2iModel: 'nanobanana-2-beta' },
-  'nanobanana2-lite': { name: 'Nanobanana 2 Lite', provider: 'Google', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'nanobanana-2-lite', i2iModel: 'nanobanana-2-lite' },
   'seedream-5.0': { name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'doubao-seedream-5-0-260128', i2iModel: 'doubao-seedream-5-0-260128' },
   'seedream-4.5': { name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'doubao-seedream-4-5-251128', i2iModel: 'doubao-seedream-4-5-251128' },
   'grok-4.2-image': { name: 'Grok 4.2 Image', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-4.2-image', i2iModel: 'grok-4.2-image' },
   'grok-imagine': { name: 'Grok Imagine', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image', i2iModel: 'grok-imagine-image' },
-  'grok-imagine-pro': { name: 'Grok Imagine Pro', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-image-pro', i2iModel: 'grok-imagine-image-pro' },
+  'grok-imagine-pro': { name: 'Grok Imagine Pro', provider: 'xAI', supportsI2I: true, apiType: 'apimodels', apiModel: 'grok-imagine-pro', i2iModel: 'grok-imagine-pro' },
   'kling-omni-image': { name: 'Kling Omni-Image', provider: 'Kling', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'kling-image-o1', i2iModel: 'kling-image-o1' },
-  'kling-omni-image-qn': { name: 'Kling Omni-Image QN', provider: 'Kling', supportsI2I: true, supportsQuality: true, apiType: 'apimodels', apiModel: 'qn-kling-image-o1', i2iModel: 'qn-kling-image-o1' },
   'p-image': { name: 'P-Image', provider: 'Pruna AI', supportsI2I: false, apiType: 'apimodels-sync', apiModel: 'p-image' },
   'p-image-edit': { name: 'P-Image Edit', provider: 'Pruna AI', supportsI2I: true, apiType: 'apimodels-edit', apiModel: 'p-image-edit', i2iModel: 'p-image-edit' },
 };

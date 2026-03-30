@@ -293,7 +293,7 @@ const state = {
     sourceImage: null,
     sourceImage2: null,
     prompt: '',
-    selectedModel: 'nanobanana2',
+    selectedModel: 'gemini-3-pro-image-lite',
     aspectRatio: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -3944,16 +3944,17 @@ function getModelIcon(iconType) {
 
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'nanobanana2', name: 'Nanobanana 2', icon: 'google', supportsI2I: true, badge: 'POPULAR', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'nanobanana2-lite', name: 'Nanobanana 2 Lite', icon: 'google', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'seedream-5.0', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasResolution: true, resolutions: ['2K', '3K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro', icon: 'google', supportsI2I: true, badge: 'BEST', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'gemini-3-pro-image-lite', name: 'Gemini 3 Pro Lite', icon: 'google', supportsI2I: true, badge: 'POPULAR', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2', name: 'Nanobanana 2', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
+    { id: 'seedream-5.0', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['2K', '3K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'seedream-4.5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, hasResolution: true, resolutions: ['2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'grok-4.2-image', name: 'Grok 4.2 Image', icon: 'xai', supportsI2I: true, badge: 'NEW', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
+    { id: 'grok-4.2-image', name: 'Grok 4.2 Image', icon: 'xai', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
     { id: 'grok-imagine', name: 'Grok Imagine', icon: 'xai', supportsI2I: true, maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
     { id: 'grok-imagine-pro', name: 'Grok Imagine Pro', icon: 'xai', supportsI2I: true, badge: 'PRO', maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
     { id: 'kling-omni-image', name: 'Kling Omni-Image', icon: 'openai', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'kling-omni-image-qn', name: 'Kling Omni-Image QN', icon: 'openai', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 1, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'p-image', name: 'P-Image', icon: 'flux', supportsI2I: false, badge: 'FAST', sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] },
     { id: 'p-image-edit', name: 'P-Image Edit', icon: 'flux', supportsI2I: true, badge: 'FAST', maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16'] }
   ];
