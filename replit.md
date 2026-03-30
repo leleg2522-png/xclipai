@@ -161,6 +161,14 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Workflow**: `npm start` runs server.js
 - **Deployment**: Configured for autoscale deployment
 
+## Security Fixes Applied (March 2026)
+- **Vidgen4/Vidgen2 Proxy & Download Auth**: Added API key validation + ownership verification + URL domain allowlist to `/api/vidgen4/proxy-video`, `/api/vidgen4/download`, `/api/vidgen2/proxy-video`, `/api/vidgen2/download`. Only the video owner can access/download their own videos.
+- **Download Proxy Hardened**: `/api/download-video` now requires session auth + HTTPS-only URL domain allowlist (prevents SSRF attacks).
+- **Open Redirect Fixed**: Proxy-video endpoints now validate URL hostname against allowed CDN domains before redirecting.
+- **localStorage Per-User Isolation**: All localStorage keys (pending tasks, user inputs, API keys) are now prefixed with user ID via `getUserStorageKey()`. Prevents data leaking between users sharing the same browser.
+- **Logout State Cleanup**: `handleLogout()` now clears all sensitive state including customApiKey, generatedVideos, tasks, and room manager API keys for all features (vidgen2/3/4, ximage/2/3, motion, voiceover).
+- **Upload Security Headers**: Added `X-Content-Type-Options: nosniff` to `/uploads` static route. Files use UUID filenames and auto-cleanup after 1 hour.
+
 ## Known Fixes Applied
 - **Loading Stuck Issue**: Changed `client/src/main.js` script tag from `type="module"` to `defer`. ES module loading caused silent failures in some environments (Railway, mobile), resulting in the page stuck at "Loading Xclip..." indefinitely.
 - **X-Frame-Options Removed**: Removed `X-Frame-Options: SAMEORIGIN` header from server.js that was blocking the Replit preview iframe.

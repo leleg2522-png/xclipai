@@ -35,6 +35,11 @@ async function refreshSubscriptionSilent() {
   }
 }
 
+function getUserStorageKey(base) {
+  var uid = state.auth && state.auth.user ? state.auth.user.id : '';
+  return uid ? base + '_u' + uid : base;
+}
+
 function savePendingTasks() {
   try {
     const pending = {};
@@ -55,10 +60,11 @@ function savePendingTasks() {
     Object.values(pending).forEach(tasks => tasks.forEach(t => activeIds.add(t.taskId)));
     _activePolls.forEach(id => { if (!activeIds.has(id)) _activePolls.delete(id); });
     
+    var storageKey = getUserStorageKey('xclip_pending_tasks');
     if (Object.keys(pending).length > 0) {
-      localStorage.setItem('xclip_pending_tasks', JSON.stringify(pending));
+      localStorage.setItem(storageKey, JSON.stringify(pending));
     } else {
-      localStorage.removeItem('xclip_pending_tasks');
+      localStorage.removeItem(storageKey);
     }
   } catch (e) {}
 }
@@ -67,7 +73,8 @@ const _activePolls = new Set();
 
 function recoverPendingTasks() {
   try {
-    const saved = localStorage.getItem('xclip_pending_tasks');
+    var storageKey = getUserStorageKey('xclip_pending_tasks');
+    const saved = localStorage.getItem(storageKey);
     if (!saved) return;
     const pending = JSON.parse(saved);
     let recovered = false;
@@ -491,14 +498,14 @@ function saveUserInputs(section) {
     }
   });
   try {
-    localStorage.setItem('xclip_inputs_' + section, JSON.stringify(data));
+    localStorage.setItem(getUserStorageKey('xclip_inputs_' + section), JSON.stringify(data));
   } catch (e) {}
 }
 
 function restoreAllUserInputs() {
   Object.keys(PERSIST_KEYS).forEach(section => {
     try {
-      const saved = localStorage.getItem('xclip_inputs_' + section);
+      const saved = localStorage.getItem(getUserStorageKey('xclip_inputs_' + section));
       if (saved && state[section]) {
         const data = JSON.parse(saved);
         PERSIST_KEYS[section].forEach(k => {
@@ -663,6 +670,7 @@ async function checkAuth() {
     state.auth.isLoading = false;
     
     if (data.user) {
+      restoreAllUserInputs();
       // Load essential data first, then others in background
       // Use .finally() so other fetches run even if subscription fails
       fetchSubscriptionStatus().finally(() => {
@@ -919,6 +927,7 @@ async function handleLogin(email, password) {
     if (data.success) {
       state.auth.user = data.user;
       state.auth.showModal = false;
+      restoreAllUserInputs();
       showToast(`Selamat datang, ${data.user.username}!`, 'success');
       
       // Load all data in parallel for faster performance
@@ -958,6 +967,7 @@ async function handleRegister(username, email, password) {
     if (data.success) {
       state.auth.user = data.user;
       state.auth.showModal = false;
+      restoreAllUserInputs();
       showToast(`Akun berhasil dibuat! Selamat datang, ${data.user.username}!`, 'success');
       
       // Load all data in parallel for faster performance
@@ -1015,6 +1025,38 @@ async function handleLogout() {
     state.sceneStudio.batchProgress = { current: 0, total: 0, batchId: null };
     state.sceneStudio.history = [];
     state.sceneStudio._historyLoaded = false;
+    state.vidgen2.customApiKey = '';
+    state.vidgen2.generatedVideos = [];
+    state.vidgen2.tasks = [];
+    state.vidgen2._historyLoaded = false;
+    state.vidgen3.customApiKey = '';
+    state.vidgen3.generatedVideos = [];
+    state.vidgen3.tasks = [];
+    state.vidgen4.customApiKey = '';
+    state.vidgen4.generatedVideos = [];
+    state.vidgen4.tasks = [];
+    state.vidgen4._historyLoaded = false;
+    state.ximage.customApiKey = '';
+    state.ximage.generatedImages = [];
+    state.ximage.tasks = [];
+    state.ximage2.customApiKey = '';
+    state.ximage2.generatedImages = [];
+    state.ximage2.tasks = [];
+    state.ximage3.customApiKey = '';
+    state.ximage3.generatedImages = [];
+    state.ximage3.tasks = [];
+    state.motion.generatedVideos = [];
+    state.motion.tasks = [];
+    state.voiceover.customApiKey = '';
+    state.voiceover.history = [];
+    state.vidgen2RoomManager.xclipApiKey = '';
+    state.vidgen3RoomManager.xclipApiKey = '';
+    state.vidgen4RoomManager.xclipApiKey = '';
+    state.ximageRoomManager.xclipApiKey = '';
+    state.ximage2RoomManager.xclipApiKey = '';
+    state.ximage3RoomManager.xclipApiKey = '';
+    state.motionRoomManager.xclipApiKey = '';
+    state.voiceoverRoomManager.xclipApiKey = '';
     state.currentPage = 'video';
     
     // Clear countdown timer
@@ -7528,7 +7570,8 @@ function renderVidgen2Tasks() {
 
 function getVidgen2ProxyUrl(originalUrl) {
   if (!originalUrl) return '';
-  return API_URL + '/api/vidgen2/proxy-video?url=' + encodeURIComponent(originalUrl);
+  var key = state.vidgen2.customApiKey || '';
+  return API_URL + '/api/vidgen2/proxy-video?url=' + encodeURIComponent(originalUrl) + (key ? '&key=' + encodeURIComponent(key) : '');
 }
 
 function renderVidgen2Videos() {
@@ -8445,7 +8488,8 @@ function renderVidgen4Tasks() {
 
 function getVidgen4ProxyUrl(originalUrl) {
   if (!originalUrl) return '';
-  return API_URL + '/api/vidgen4/proxy-video?url=' + encodeURIComponent(originalUrl);
+  var key = state.vidgen4.customApiKey || '';
+  return API_URL + '/api/vidgen4/proxy-video?url=' + encodeURIComponent(originalUrl) + (key ? '&key=' + encodeURIComponent(key) : '');
 }
 
 function renderVidgen4Videos() {

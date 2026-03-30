@@ -517,6 +517,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   acceptRanges: true,
   setHeaders: (res) => {
     res.set('Accept-Ranges', 'bytes');
+    res.set('X-Content-Type-Options', 'nosniff');
   }
 }));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
@@ -4930,10 +4931,24 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
 
 // Proxy download endpoint for iOS (streams video through server with proper headers)
 app.get('/api/download-video', async (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Login diperlukan' });
+  }
+
   const { url, filename } = req.query;
   
   if (!url) {
     return res.status(400).json({ error: 'URL diperlukan' });
+  }
+
+  const downloadAllowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'apimodels.app', 'cdn.apimodels.app', 'poyo.ai', 'cdn.poyo.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media', 'freepik.com', 'cdn.freepik.com', 'elevenlabs.io', 'api.elevenlabs.io'];
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'https:' || !downloadAllowedDomains.some(d => parsedUrl.hostname === d || parsedUrl.hostname.endsWith('.' + d))) {
+      return res.status(400).json({ error: 'URL tidak diizinkan' });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'URL tidak valid' });
   }
   
   let streamClosed = false;
@@ -7332,9 +7347,36 @@ app.get('/api/vidgen2/history', async (req, res) => {
 
 app.get('/api/vidgen2/proxy-video', async (req, res) => {
   try {
+    const xclipApiKey = req.headers['x-xclip-key'] || req.query.key;
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+
     const videoUrl = req.query.url;
     if (!videoUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
+    }
+
+    const allowedDomains = ['apimodels.app', 'cdn.apimodels.app', 'poyo.ai', 'cdn.poyo.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
+    try {
+      const parsed = new URL(videoUrl);
+      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
+        return res.status(400).json({ error: 'URL video tidak diizinkan' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'URL video tidak valid' });
+    }
+
+    const ownerCheck = await pool.query(
+      'SELECT task_id FROM vidgen2_tasks WHERE user_id = $1 AND video_url = $2 LIMIT 1',
+      [keyInfo.user_id, videoUrl]
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Video bukan milik Anda' });
     }
     
     const response = await axios.get(videoUrl, {
@@ -7359,9 +7401,36 @@ app.get('/api/vidgen2/proxy-video', async (req, res) => {
 
 app.get('/api/vidgen2/download', async (req, res) => {
   try {
+    const xclipApiKey = req.headers['x-xclip-key'] || req.query.key;
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+
     const videoUrl = req.query.url;
     if (!videoUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
+    }
+
+    const allowedDomains = ['apimodels.app', 'cdn.apimodels.app', 'poyo.ai', 'cdn.poyo.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
+    try {
+      const parsed = new URL(videoUrl);
+      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
+        return res.status(400).json({ error: 'URL video tidak diizinkan' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'URL video tidak valid' });
+    }
+
+    const ownerCheck = await pool.query(
+      'SELECT task_id FROM vidgen2_tasks WHERE user_id = $1 AND video_url = $2 LIMIT 1',
+      [keyInfo.user_id, videoUrl]
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Video bukan milik Anda' });
     }
     
     const response = await axios.get(videoUrl, {
@@ -7954,15 +8023,39 @@ app.get('/api/vidgen4/history', async (req, res) => {
 
 app.get('/api/vidgen4/proxy-video', async (req, res) => {
   try {
+    const xclipApiKey = req.headers['x-xclip-key'] || req.query.key;
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+
     const videoUrl = req.query.url;
     if (!videoUrl || videoUrl === 'null' || videoUrl === 'undefined') {
       return res.status(400).json({ error: 'URL video tidak valid' });
     }
+
+    const allowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
+    try {
+      const parsed = new URL(videoUrl);
+      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
+        return res.status(400).json({ error: 'URL video tidak diizinkan' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'URL video tidak valid' });
+    }
+
+    const ownerCheck = await pool.query(
+      'SELECT task_id FROM vidgen4_tasks WHERE user_id = $1 AND video_url = $2 LIMIT 1',
+      [keyInfo.user_id, videoUrl]
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Video bukan milik Anda' });
+    }
     
-    console.log(`[VIDGEN4-PROXY] Streaming URL: ${videoUrl}`);
-    
-    // Redirect browser directly to CDN — fastest, no double-hop through server
-    console.log(`[VIDGEN4-PROXY] Redirecting to CDN: ${videoUrl.substring(0, 80)}`);
+    console.log(`[VIDGEN4-PROXY] Redirecting to CDN for user ${keyInfo.user_id}: ${videoUrl.substring(0, 80)}`);
     return res.redirect(302, videoUrl);
   } catch (error) {
     console.error(`[VIDGEN4-PROXY] ERROR: ${error.message}`);
@@ -7974,9 +8067,36 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
 
 app.get('/api/vidgen4/download', async (req, res) => {
   try {
+    const xclipApiKey = req.headers['x-xclip-key'] || req.query.key;
+    if (!xclipApiKey) {
+      return res.status(401).json({ error: 'Xclip API key diperlukan' });
+    }
+    const keyInfo = await validateXclipApiKey(xclipApiKey);
+    if (!keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid' });
+    }
+
     const videoUrl = req.query.url;
     if (!videoUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
+    }
+
+    const allowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
+    try {
+      const parsed = new URL(videoUrl);
+      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
+        return res.status(400).json({ error: 'URL video tidak diizinkan' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'URL video tidak valid' });
+    }
+
+    const ownerCheck = await pool.query(
+      'SELECT task_id FROM vidgen4_tasks WHERE user_id = $1 AND video_url = $2 LIMIT 1',
+      [keyInfo.user_id, videoUrl]
+    );
+    if (ownerCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Video bukan milik Anda' });
     }
     
     const response = await axios.get(videoUrl, {
