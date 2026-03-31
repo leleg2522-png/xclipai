@@ -11533,10 +11533,16 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                   `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
                   { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
                 );
-                const sData = statusResp.data?.data || statusResp.data;
+                const rawResp = statusResp.data;
+                const sData = rawResp?.data || rawResp;
                 const sStatus = sData?.state || sData?.status;
+                const progress = sData?.progress;
+                if (attempt % 12 === 0) {
+                  console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}, progress=${progress}, raw=${JSON.stringify(rawResp).substring(0, 300)}`);
+                }
                 if (sStatus === 'completed' || sStatus === 'success') {
-                  videoUrl = sData?.videos?.[0] || sData?.resultUrls?.[0] || sData?.video_url || sData?.url;
+                  videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url;
+                  console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
                   break;
                 }
                 if (sStatus === 'failed' || sStatus === 'error') {
@@ -11703,21 +11709,31 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         );
 
         let videoUrl = null;
-        for (let attempt = 0; attempt < 120; attempt++) {
+        for (let attempt = 0; attempt < 360; attempt++) {
           await new Promise(r => setTimeout(r, 5000));
-          const statusResp = await axios.get(
-            `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
-            { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-          );
-          const sData = statusResp.data?.data || statusResp.data;
-          const sStatus = sData?.state || sData?.status;
-          if (sStatus === 'completed' || sStatus === 'success') {
-            videoUrl = sData?.videos?.[0] || sData?.resultUrls?.[0] || sData?.video_url || sData?.url;
-            break;
+          try {
+            const statusResp = await axios.get(
+              `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+              { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+            );
+            const rawResp = statusResp.data;
+            const sData = rawResp?.data || rawResp;
+            const sStatus = sData?.state || sData?.status;
+            if (attempt % 12 === 0) {
+              console.log(`[AUTOMATION] Retry scene ${sceneIndex} poll #${attempt}: state=${sStatus}, progress=${sData?.progress}, raw=${JSON.stringify(rawResp).substring(0, 300)}`);
+            }
+            if (sStatus === 'completed' || sStatus === 'success') {
+              videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url;
+              console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
+              break;
+            }
+            if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
+          } catch (pollErr) {
+            if (pollErr.message.includes('Failed') || pollErr.message.includes('failed')) throw pollErr;
+            console.log(`[AUTOMATION] Retry poll error (retry): ${pollErr.message}`);
           }
-          if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
         }
-        if (!videoUrl) throw new Error('Timed out');
+        if (!videoUrl) throw new Error('Video generation timed out after 30 minutes');
 
         await pool.query(
           `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
