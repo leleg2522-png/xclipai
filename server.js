@@ -11526,7 +11526,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
             );
 
             let videoUrl = null;
-            for (let attempt = 0; attempt < 120; attempt++) {
+            for (let attempt = 0; attempt < 360; attempt++) {
               await new Promise(r => setTimeout(r, 5000));
               try {
                 const statusResp = await axios.get(
@@ -11548,7 +11548,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               }
             }
 
-            if (!videoUrl) throw new Error('Video generation timed out after 10 minutes');
+            if (!videoUrl) throw new Error('Video generation timed out after 30 minutes');
 
             await pool.query(
               `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
