@@ -6462,75 +6462,54 @@ function renderAutomationPage() {
 
   var html = '<div class="container">';
   html += '<div class="hero">';
-  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Automated Content</div>';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Auto Create</div>';
   html += '<h1 class="gradient-title">Automation</h1>';
-  html += '<p class="hero-subtitle">Buat konten video otomatis dari niche/topik. AI generate script, lalu produce video per scene.</p>';
+  html += '<p class="hero-subtitle">Ketik topik, AI buatkan video otomatis.</p>';
   html += '</div>';
 
   html += '<div class="section-card">';
-  html += '<h3 class="section-title">Buat Project Baru</h3>';
   html += '<div class="auto-create-form">';
-  html += '<div class="form-group"><label>Niche / Topik</label>';
-  html += '<input type="text" class="form-input" id="autoNiche" placeholder="Contoh: tips memasak, fakta sains, motivasi harian..." value="' + escapeHtml(state.automation.newProject.niche || '') + '"/></div>';
-
-  html += '<div class="form-row">';
-  html += '<div class="form-group"><label>Format</label>';
-  html += '<select class="form-input" id="autoFormat">';
-  html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts (9:16)</option>';
-  html += '<option value="landscape"' + (state.automation.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape (16:9)</option>';
-  html += '</select></div>';
-
-  html += '<div class="form-group"><label>Video Model</label>';
-  html += '<select class="form-input" id="autoVideoModel">';
-  html += '<option value="veo-3.1-fast"' + (state.automation.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast (4K)</option>';
-  html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1 (4K)</option>';
-  html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 (10s Audio+Video)</option>';
-  html += '</select></div>';
-
-  html += '<div class="form-group"><label>Jumlah Scene</label>';
-  html += '<select class="form-input" id="autoSceneCount">';
+  html += '<input type="text" class="form-input auto-niche-input" id="autoNiche" placeholder="Ketik topik video... contoh: tips memasak, fakta unik, motivasi" value="' + escapeHtml(state.automation.newProject.niche || '') + '"/>';
+  html += '<div class="auto-settings-row">';
+  html += '<select class="form-input auto-select" id="autoFormat">';
+  html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts</option>';
+  html += '<option value="landscape"' + (state.automation.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
+  html += '</select>';
+  html += '<select class="form-input auto-select" id="autoVideoModel">';
+  html += '<option value="veo-3.1-fast"' + (state.automation.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
+  html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1</option>';
+  html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 Audio</option>';
+  html += '</select>';
+  html += '<select class="form-input auto-select" id="autoSceneCount">';
   for (var sc = 2; sc <= 8; sc++) {
-    html += '<option value="' + sc + '"' + (state.automation.newProject.sceneCount === sc ? ' selected' : '') + '>' + sc + ' scenes</option>';
+    html += '<option value="' + sc + '"' + (state.automation.newProject.sceneCount === sc ? ' selected' : '') + '>' + sc + ' scene</option>';
   }
-  html += '</select></div>';
-
-  html += '<div class="form-group"><label>Bahasa</label>';
-  html += '<select class="form-input" id="autoLanguage">';
-  html += '<option value="id"' + (state.automation.newProject.language === 'id' ? ' selected' : '') + '>Bahasa Indonesia</option>';
-  html += '<option value="en"' + (state.automation.newProject.language === 'en' ? ' selected' : '') + '>English</option>';
-  html += '</select></div>';
-  html += '</div>';
-
-  html += '<button class="btn-primary auto-create-btn" id="autoCreateBtn"' + (state.automation.isCreating ? ' disabled' : '') + '>';
-  html += state.automation.isCreating ? '<span class="spinner"></span> Membuat...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Buat Project';
+  html += '</select>';
+  html += '<select class="form-input auto-select" id="autoLanguage">';
+  html += '<option value="id"' + (state.automation.newProject.language === 'id' ? ' selected' : '') + '>ID</option>';
+  html += '<option value="en"' + (state.automation.newProject.language === 'en' ? ' selected' : '') + '>EN</option>';
+  html += '</select>';
+  html += '<button class="btn-primary auto-go-btn" id="autoCreateBtn"' + (state.automation.isCreating ? ' disabled' : '') + '>';
+  html += state.automation.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
   html += '</button>';
+  html += '</div>';
   html += '</div></div>';
 
-  html += '<div class="section-card">';
-  html += '<h3 class="section-title">Projects (' + state.automation.projects.length + ')</h3>';
   if (state.automation.isLoading) {
-    html += '<div class="loading-state"><span class="spinner"></span> Memuat projects...</div>';
-  } else if (state.automation.projects.length === 0) {
-    html += '<div class="empty-state"><p>Belum ada project. Buat project baru di atas.</p></div>';
-  } else {
+    html += '<div class="loading-state"><span class="spinner"></span> Memuat...</div>';
+  } else if (state.automation.projects.length > 0) {
     html += '<div class="auto-project-list">';
     state.automation.projects.forEach(function(p) {
       html += '<div class="auto-project-card" data-auto-project="' + p.project_id + '">';
-      html += '<div class="auto-project-header">';
+      html += '<div class="auto-project-left">';
       html += '<div class="auto-project-title">' + escapeHtml(p.title || p.niche) + '</div>';
+      html += '<div class="auto-project-sub">' + (p.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + p.scene_count + ' scene &middot; ' + new Date(p.created_at).toLocaleDateString() + '</div>';
+      html += '</div>';
       html += getAutomationStatusBadge(p.status);
-      html += '</div>';
-      html += '<div class="auto-project-meta">';
-      html += '<span>' + (p.format === 'shorts' ? 'Shorts' : 'Landscape') + '</span>';
-      html += '<span>' + p.scene_count + ' scenes</span>';
-      html += '<span>' + p.video_model + '</span>';
-      html += '<span>' + new Date(p.created_at).toLocaleDateString() + '</span>';
-      html += '</div>';
       html += '</div>';
     });
     html += '</div>';
   }
-  html += '</div>';
   html += '</div>';
   return html;
 }
@@ -6540,105 +6519,99 @@ function renderAutomationDetailPage() {
   var scenes = state.automation.currentScenes;
 
   var html = '<div class="container">';
-  html += '<div class="auto-detail-header">';
-  html += '<button class="btn-secondary auto-back-btn" id="autoBackBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg> Back</button>';
-  html += '<div class="auto-detail-title-wrap">';
-  html += '<h2>' + escapeHtml(project.title || project.niche) + '</h2>';
+  html += '<div class="auto-detail-top">';
+  html += '<button class="auto-back-link" id="autoBackBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>';
+  html += '<div class="auto-detail-top-info">';
+  html += '<h2 class="auto-detail-name">' + escapeHtml(project.title || project.niche) + '</h2>';
+  html += '<span class="auto-detail-sub">' + (project.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + escapeHtml(project.video_model) + ' &middot; ' + (project.language === 'id' ? 'ID' : 'EN') + '</span>';
+  html += '</div>';
+  html += '<div class="auto-detail-top-actions">';
   html += getAutomationStatusBadge(project.status);
-  html += '</div>';
   html += '<button class="btn-danger-sm" id="autoDeleteBtn" data-project-id="' + project.project_id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
-  html += '</div>';
-
-  html += '<div class="auto-detail-info">';
-  html += '<div class="info-chip">Niche: ' + escapeHtml(project.niche) + '</div>';
-  html += '<div class="info-chip">' + (project.format === 'shorts' ? 'Shorts 9:16' : 'Landscape 16:9') + '</div>';
-  html += '<div class="info-chip">Model: ' + project.video_model + '</div>';
-  html += '<div class="info-chip">Lang: ' + (project.language === 'id' ? 'Indonesia' : 'English') + '</div>';
-  html += '</div>';
+  html += '</div></div>';
 
   if (project.status === 'draft' || project.status === 'script_failed') {
-    html += '<div class="section-card auto-action-card">';
-    html += '<h3>Step 1: Generate Script</h3>';
-    html += '<p>AI akan membuat script video dengan ' + project.scene_count + ' scene berdasarkan topik "' + escapeHtml(project.niche) + '".</p>';
+    html += '<div class="section-card auto-action-simple">';
     if (project.status === 'script_failed' && project.error_message) {
       html += '<div class="error-box">' + escapeHtml(project.error_message) + '</div>';
     }
+    html += '<p>AI akan generate script ' + project.scene_count + ' scene untuk topik ini.</p>';
     html += '<button class="btn-primary" id="autoGenScriptBtn" data-project-id="' + project.project_id + '"' + (state.automation.isGeneratingScript ? ' disabled' : '') + '>';
-    html += state.automation.isGeneratingScript ? '<span class="spinner"></span> Generating Script...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Generate Script';
+    html += state.automation.isGeneratingScript ? '<span class="spinner"></span> Generating...' : 'Generate Script';
     html += '</button>';
     html += '</div>';
   }
 
   if (project.status === 'generating_script') {
-    html += '<div class="section-card auto-action-card">';
-    html += '<div class="processing-indicator"><span class="spinner"></span> AI sedang generate script...</div>';
+    html += '<div class="section-card auto-action-simple">';
+    html += '<div class="processing-indicator"><span class="spinner"></span> AI sedang menulis script...</div>';
     html += '</div>';
   }
 
   if (scenes.length > 0) {
-    html += '<div class="section-card">';
-    html += '<h3 class="section-title">Scenes (' + scenes.length + ')</h3>';
-
     var completedCount = scenes.filter(function(s) { return s.status === 'completed'; }).length;
     var failedCount = scenes.filter(function(s) { return s.status === 'failed'; }).length;
     var processingCount = scenes.filter(function(s) { return s.status === 'generating_video'; }).length;
+
     if (project.status === 'producing' || project.status === 'completed' || project.status === 'production_failed') {
+      html += '<div class="auto-progress-wrap">';
       html += '<div class="auto-progress-bar"><div class="auto-progress-fill" style="width: ' + (scenes.length > 0 ? (completedCount / scenes.length * 100) : 0) + '%"></div></div>';
-      html += '<div class="auto-progress-text">' + completedCount + '/' + scenes.length + ' completed' + (failedCount > 0 ? ', ' + failedCount + ' failed' : '') + (processingCount > 0 ? ', ' + processingCount + ' in progress' : '') + '</div>';
+      html += '<span class="auto-progress-label">' + completedCount + '/' + scenes.length;
+      if (failedCount > 0) html += ' &middot; ' + failedCount + ' gagal';
+      if (processingCount > 0) html += ' &middot; ' + processingCount + ' proses';
+      html += '</span></div>';
     }
 
-    scenes.forEach(function(scene) {
-      html += '<div class="auto-scene-card scene-status-' + scene.status + '">';
-      html += '<div class="auto-scene-header">';
-      html += '<span class="auto-scene-num">Scene ' + (scene.scene_index + 1) + '</span>';
-      html += getAutomationStatusBadge(scene.status);
-      html += '</div>';
-      html += '<div class="auto-scene-content">';
-      if (scene.narration) {
-        html += '<div class="auto-scene-field"><label>Narration</label>';
-        if (project.status === 'script_ready') {
-          html += '<textarea class="form-input auto-scene-narration" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2">' + escapeHtml(scene.narration) + '</textarea>';
-        } else {
-          html += '<p>' + escapeHtml(scene.narration) + '</p>';
-        }
-        html += '</div>';
-      }
-      if (scene.visual_prompt) {
-        html += '<div class="auto-scene-field"><label>Visual Prompt</label>';
-        if (project.status === 'script_ready') {
-          html += '<textarea class="form-input auto-scene-visual" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2">' + escapeHtml(scene.visual_prompt) + '</textarea>';
-        } else {
-          html += '<p>' + escapeHtml(scene.visual_prompt) + '</p>';
-        }
-        html += '</div>';
-      }
-      if (scene.video_url) {
-        html += '<div class="auto-scene-video"><video src="' + scene.video_url + '" controls preload="metadata"></video></div>';
-      }
-      if (scene.status === 'failed') {
-        html += '<div class="error-box">' + escapeHtml(scene.error_message || 'Generation failed') + '</div>';
-        html += '<button class="btn-secondary btn-sm auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '">Retry Scene</button>';
-      }
-      html += '</div></div>';
-    });
-    html += '</div>';
-
     if (project.status === 'script_ready') {
-      html += '<div class="section-card auto-action-card">';
-      html += '<h3>Step 2: Start Production</h3>';
-      html += '<p>Mulai generate video untuk semua scenes. Ini akan memakan waktu beberapa menit per scene.</p>';
+      html += '<div class="auto-start-bar">';
+      html += '<span>Script siap. Review lalu mulai produksi.</span>';
       html += '<button class="btn-primary" id="autoStartProductionBtn" data-project-id="' + project.project_id + '"' + (state.automation.isProducing ? ' disabled' : '') + '>';
-      html += state.automation.isProducing ? '<span class="spinner"></span> Memulai...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Production';
-      html += '</button>';
-      html += '</div>';
+      html += state.automation.isProducing ? '<span class="spinner"></span>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+      html += '</button></div>';
     }
 
     if (project.status === 'production_failed') {
-      html += '<div class="section-card auto-action-card">';
-      html += '<p>Beberapa scene gagal. Kamu bisa retry scene yang gagal atau mulai ulang produksi.</p>';
-      html += '<button class="btn-primary" id="autoStartProductionBtn" data-project-id="' + project.project_id + '">Restart Production</button>';
+      html += '<div class="auto-start-bar">';
+      html += '<span>Ada scene gagal. Retry atau restart.</span>';
+      html += '<button class="btn-primary" id="autoStartProductionBtn" data-project-id="' + project.project_id + '">Restart</button>';
       html += '</div>';
     }
+
+    html += '<div class="auto-scenes-list">';
+    scenes.forEach(function(scene) {
+      html += '<div class="auto-scene-item scene-status-' + scene.status + '">';
+      html += '<div class="auto-scene-top">';
+      html += '<span class="auto-scene-num">Scene ' + (scene.scene_index + 1) + '</span>';
+      html += getAutomationStatusBadge(scene.status);
+      if (scene.status === 'failed') {
+        html += '<button class="auto-retry-link auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '">Retry</button>';
+      }
+      html += '</div>';
+
+      if (scene.video_url) {
+        html += '<div class="auto-scene-video"><video src="' + scene.video_url + '" controls preload="metadata"></video></div>';
+      }
+
+      if (scene.narration) {
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-ta auto-scene-narration" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Narration">' + escapeHtml(scene.narration) + '</textarea>';
+        } else {
+          html += '<p class="auto-scene-text"><strong>Narasi:</strong> ' + escapeHtml(scene.narration) + '</p>';
+        }
+      }
+      if (scene.visual_prompt) {
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-ta auto-scene-visual" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Visual prompt">' + escapeHtml(scene.visual_prompt) + '</textarea>';
+        } else {
+          html += '<p class="auto-scene-text auto-scene-vp"><strong>Visual:</strong> ' + escapeHtml(scene.visual_prompt) + '</p>';
+        }
+      }
+      if (scene.status === 'failed' && scene.error_message) {
+        html += '<div class="error-box">' + escapeHtml(scene.error_message) + '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
   }
 
   html += '</div>';
