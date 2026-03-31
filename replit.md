@@ -142,7 +142,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Database tables: automation_projects, automation_scenes
   - API endpoints: CRUD projects, generate-script, start production, update-scene, retry-scene
   - Languages: Bahasa Indonesia, English
-  - SSE events: automation_update, automation_scene_update
+  - SSE events: automation_update, automation_scene_update, youtube_upload_start, youtube_upload_progress, youtube_upload_complete
+  - **YouTube Auto-Upload**: OAuth2 integration to upload completed scene videos directly to YouTube. Requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET env vars. Tokens stored in `youtube_tokens` DB table. OAuth popup flow with channel name display. Upload form with title, description, tags, privacy setting. Real-time SSE progress updates per scene upload.
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.

@@ -13,6 +13,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const { google } = require('googleapis');
 const https = require('https');
 require('dotenv').config();
 
@@ -11607,6 +11608,247 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
   }
 });
 
+// ============ YOUTUBE INTEGRATION ============
+
+function getYouTubeOAuth2Client() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  const redirectUri = process.env.NODE_ENV === 'production'
+    ? `https://${process.env.REPL_SLUG || ''}.${process.env.REPL_OWNER || ''}.repl.co/api/youtube/callback`
+    : `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}/api/youtube/callback`;
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+app.get('/api/youtube/status', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    const configured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+    const tokenResult = await pool.query(
+      `SELECT channel_name, channel_id FROM youtube_tokens WHERE user_id = $1`,
+      [req.session.userId]
+    );
+    const connected = tokenResult.rows.length > 0;
+    res.json({
+      configured,
+      connected,
+      channelName: connected ? tokenResult.rows[0].channel_name : null,
+      channelId: connected ? tokenResult.rows[0].channel_id : null
+    });
+  } catch (error) {
+    console.error('[YOUTUBE] Status error:', error.message);
+    res.status(500).json({ error: 'Failed to check YouTube status' });
+  }
+});
+
+app.get('/api/youtube/auth', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const oauth2Client = getYouTubeOAuth2Client();
+  if (!oauth2Client) return res.status(500).json({ error: 'Google OAuth belum di-setup. Set GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET.' });
+  const nonce = require('crypto').randomBytes(32).toString('hex');
+  req.session.youtubeOAuthState = nonce;
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: [
+      'https://www.googleapis.com/auth/youtube.upload',
+      'https://www.googleapis.com/auth/youtube.readonly'
+    ],
+    state: nonce
+  });
+  res.json({ authUrl });
+});
+
+function escapeHtmlServer(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+app.get('/api/youtube/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (!code || !state) return res.status(400).send('Missing code or state');
+  if (!req.session.userId || !req.session.youtubeOAuthState || req.session.youtubeOAuthState !== state) {
+    return res.status(403).send('Invalid or expired OAuth state. Please try connecting again.');
+  }
+  delete req.session.youtubeOAuthState;
+  const userId = req.session.userId;
+
+  const oauth2Client = getYouTubeOAuth2Client();
+  if (!oauth2Client) return res.status(500).send('OAuth not configured');
+
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+
+    let channelName = 'YouTube Channel';
+    let channelId = '';
+    try {
+      const yt = google.youtube({ version: 'v3', auth: oauth2Client });
+      const channelResp = await yt.channels.list({ part: 'snippet', mine: true });
+      if (channelResp.data.items && channelResp.data.items.length > 0) {
+        channelName = channelResp.data.items[0].snippet.title;
+        channelId = channelResp.data.items[0].id;
+      }
+    } catch (e) {
+      console.error('[YOUTUBE] Channel fetch error:', e.message);
+    }
+
+    await pool.query(`
+      INSERT INTO youtube_tokens (user_id, access_token, refresh_token, expiry_date, channel_name, channel_id, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        access_token = $2, refresh_token = COALESCE($3, youtube_tokens.refresh_token),
+        expiry_date = $4, channel_name = $5, channel_id = $6, updated_at = NOW()
+    `, [userId, tokens.access_token, tokens.refresh_token, tokens.expiry_date, channelName, channelId]);
+
+    res.send(`<html><body style="background:#0a0a0f;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+      <div style="text-align:center"><h2 style="color:#4ade80">YouTube Connected!</h2><p>Channel: ${escapeHtmlServer(channelName)}</p><p>Kamu bisa tutup tab ini.</p>
+      <script>setTimeout(()=>{window.close()},2000)</script></div></body></html>`);
+  } catch (error) {
+    console.error('[YOUTUBE] Callback error:', error.message);
+    res.status(500).send(`<html><body style="background:#0a0a0f;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+      <div style="text-align:center"><h2 style="color:#f87171">Gagal Connect</h2><p>Terjadi kesalahan saat menghubungkan YouTube. Silakan coba lagi.</p></div></body></html>`);
+  }
+});
+
+app.delete('/api/youtube/disconnect', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    await pool.query(`DELETE FROM youtube_tokens WHERE user_id = $1`, [req.session.userId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to disconnect' });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/upload-youtube', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  const { title, description, tags, privacy } = req.body;
+
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+
+    const scenesResult = await pool.query(
+      `SELECT * FROM automation_scenes WHERE project_id = $1 AND status = 'completed' AND video_url IS NOT NULL ORDER BY scene_index ASC`,
+      [projectId]
+    );
+    if (scenesResult.rows.length === 0) return res.status(400).json({ error: 'Tidak ada video scene yang selesai' });
+
+    const tokenResult = await pool.query(
+      `SELECT * FROM youtube_tokens WHERE user_id = $1`, [req.session.userId]
+    );
+    if (tokenResult.rows.length === 0) return res.status(400).json({ error: 'YouTube belum terkoneksi. Connect dulu.' });
+
+    const oauth2Client = getYouTubeOAuth2Client();
+    if (!oauth2Client) return res.status(500).json({ error: 'Google OAuth belum di-setup' });
+
+    const tokenData = tokenResult.rows[0];
+    oauth2Client.setCredentials({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expiry_date: parseInt(tokenData.expiry_date)
+    });
+
+    oauth2Client.on('tokens', async (newTokens) => {
+      try {
+        await pool.query(
+          `UPDATE youtube_tokens SET access_token = $2, expiry_date = $3, updated_at = NOW() WHERE user_id = $1`,
+          [req.session.userId, newTokens.access_token, newTokens.expiry_date]
+        );
+      } catch (e) { console.error('[YOUTUBE] Token refresh save error:', e.message); }
+    });
+
+    res.json({ success: true, message: 'Upload dimulai', totalScenes: scenesResult.rows.length });
+
+    sendSSEToUser(req.session.userId, { type: 'youtube_upload_start', projectId, totalScenes: scenesResult.rows.length });
+
+    (async () => {
+      const yt = google.youtube({ version: 'v3', auth: oauth2Client });
+      let uploaded = 0;
+      let failed = 0;
+
+      for (const scene of scenesResult.rows) {
+        try {
+          sendSSEToUser(req.session.userId, {
+            type: 'youtube_upload_progress', projectId,
+            sceneIndex: scene.scene_index, status: 'uploading',
+            uploaded, total: scenesResult.rows.length
+          });
+
+          const videoStream = await new Promise((resolve, reject) => {
+            const url = new URL(scene.video_url);
+            const proto = url.protocol === 'https:' ? require('https') : require('http');
+            proto.get(scene.video_url, (response) => {
+              if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                const proto2 = response.headers.location.startsWith('https') ? require('https') : require('http');
+                proto2.get(response.headers.location, resolve).on('error', reject);
+              } else {
+                resolve(response);
+              }
+            }).on('error', reject);
+          });
+
+          const sceneTitle = title
+            ? (scenesResult.rows.length > 1 ? `${title} - Part ${scene.scene_index + 1}` : title)
+            : `${project.title || project.niche} - Scene ${scene.scene_index + 1}`;
+
+          const sceneDesc = description || `Generated by Xclip AI Automation\nNiche: ${project.niche}\n\n${scene.narration || ''}`;
+
+          const uploadResponse = await yt.videos.insert({
+            part: 'snippet,status',
+            requestBody: {
+              snippet: {
+                title: sceneTitle.substring(0, 100),
+                description: sceneDesc.substring(0, 5000),
+                tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [project.niche],
+                categoryId: '22'
+              },
+              status: {
+                privacyStatus: privacy || 'private',
+                selfDeclaredMadeForKids: false
+              }
+            },
+            media: {
+              body: videoStream
+            }
+          });
+
+          uploaded++;
+          console.log(`[YOUTUBE] Uploaded scene ${scene.scene_index} -> ${uploadResponse.data.id}`);
+          sendSSEToUser(req.session.userId, {
+            type: 'youtube_upload_progress', projectId,
+            sceneIndex: scene.scene_index, status: 'uploaded',
+            videoId: uploadResponse.data.id,
+            uploaded, total: scenesResult.rows.length
+          });
+        } catch (err) {
+          failed++;
+          console.error(`[YOUTUBE] Upload scene ${scene.scene_index} failed:`, err.message);
+          sendSSEToUser(req.session.userId, {
+            type: 'youtube_upload_progress', projectId,
+            sceneIndex: scene.scene_index, status: 'failed',
+            error: err.message, uploaded, total: scenesResult.rows.length
+          });
+        }
+      }
+
+      sendSSEToUser(req.session.userId, {
+        type: 'youtube_upload_complete', projectId,
+        uploaded, failed, total: scenesResult.rows.length
+      });
+    })();
+  } catch (error) {
+    console.error('[YOUTUBE] Upload error:', error.message);
+    res.status(500).json({ error: 'Gagal upload ke YouTube: ' + error.message });
+  }
+});
+
 // ============ SCENE STUDIO (Simple Batch Image Generation) ============
 
 const SCENE_STUDIO_MODELS = { ...XIMAGE2_MODELS };
@@ -12599,6 +12841,22 @@ async function initDatabase() {
       )
     `);
     console.log('Automation tables created');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS youtube_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        access_token TEXT,
+        refresh_token TEXT,
+        expiry_date BIGINT,
+        channel_name VARCHAR(255),
+        channel_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id)
+      )
+    `);
+    console.log('YouTube tokens table created');
 
     console.log('[DB] Database initialized successfully');
     

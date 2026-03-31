@@ -393,7 +393,14 @@ const state = {
       language: 'id'
     },
     view: 'list',
-    _loaded: false
+    _loaded: false,
+    youtube: {
+      configured: false,
+      connected: false,
+      channelName: null,
+      isUploading: false,
+      uploadProgress: null
+    }
   },
   sceneStudio: {
     prompts: [''],
@@ -6322,6 +6329,87 @@ async function loadAutomationProjectDetail(projectId) {
     showToast('Gagal memuat detail project', 'error');
   }
   render();
+  checkYouTubeStatus().then(function() { render(); });
+}
+
+async function checkYouTubeStatus() {
+  try {
+    var resp = await fetch(API_URL + '/api/youtube/status', { credentials: 'include' });
+    var data = await resp.json();
+    state.automation.youtube.configured = data.configured;
+    state.automation.youtube.connected = data.connected;
+    state.automation.youtube.channelName = data.channelName;
+  } catch (e) {}
+}
+
+async function connectYouTube() {
+  try {
+    var resp = await fetch(API_URL + '/api/youtube/auth', { credentials: 'include' });
+    var data = await resp.json();
+    if (data.authUrl) {
+      var popup = window.open(data.authUrl, 'youtube_auth', 'width=500,height=600');
+      if (!popup || popup.closed) {
+        showToast('Popup diblokir browser. Izinkan popup untuk connect YouTube.', 'error');
+        return;
+      }
+      var checker = setInterval(function() {
+        if (popup.closed) {
+          clearInterval(checker);
+          checkYouTubeStatus().then(function() { render(); });
+        }
+      }, 1000);
+      setTimeout(function() { clearInterval(checker); }, 300000);
+    } else if (data.error) {
+      showToast(data.error, 'error');
+    }
+  } catch (e) {
+    showToast('Gagal connect YouTube', 'error');
+  }
+}
+
+async function disconnectYouTube() {
+  try {
+    await fetch(API_URL + '/api/youtube/disconnect', { method: 'DELETE', credentials: 'include' });
+    state.automation.youtube.connected = false;
+    state.automation.youtube.channelName = null;
+    showToast('YouTube disconnected', 'success');
+    render();
+  } catch (e) {}
+}
+
+async function uploadToYouTube(projectId) {
+  var titleInput = document.getElementById('ytTitle');
+  var descInput = document.getElementById('ytDesc');
+  var tagsInput = document.getElementById('ytTags');
+  var privacySelect = document.getElementById('ytPrivacy');
+
+  state.automation.youtube.isUploading = true;
+  state.automation.youtube.uploadProgress = { uploaded: 0, total: 0, status: 'starting' };
+  render();
+
+  try {
+    var resp = await fetch(API_URL + '/api/automation/projects/' + projectId + '/upload-youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        title: titleInput ? titleInput.value : '',
+        description: descInput ? descInput.value : '',
+        tags: tagsInput ? tagsInput.value : '',
+        privacy: privacySelect ? privacySelect.value : 'private'
+      })
+    });
+    var data = await resp.json();
+    if (!data.success) {
+      showToast(data.error || 'Upload gagal', 'error');
+      state.automation.youtube.isUploading = false;
+      render();
+    }
+  } catch (e) {
+    showToast('Gagal upload ke YouTube', 'error');
+    state.automation.youtube.isUploading = false;
+    render();
+  }
 }
 
 async function createAutomationProject() {
@@ -6614,6 +6702,37 @@ function renderAutomationDetailPage() {
     html += '</div>';
   }
 
+  var hasCompleted = scenes.some(function(s) { return s.status === 'completed' && s.video_url; });
+  if (hasCompleted && (project.status === 'completed' || project.status === 'production_failed')) {
+    var yt = state.automation.youtube;
+    html += '<div class="section-card yt-upload-section">';
+    html += '<div class="yt-header"><svg width="20" height="20" viewBox="0 0 24 24" fill="#f00"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg> <span>Upload ke YouTube</span></div>';
+
+    if (!yt.configured) {
+      html += '<p class="yt-note">Setup GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET dulu untuk menggunakan fitur ini.</p>';
+    } else if (!yt.connected) {
+      html += '<button class="btn-secondary yt-connect-btn" id="ytConnectBtn">Connect YouTube</button>';
+    } else {
+      html += '<div class="yt-connected-info"><span>Connected: ' + escapeHtml(yt.channelName || 'YouTube') + '</span><button class="yt-disconnect" id="ytDisconnectBtn">Disconnect</button></div>';
+
+      if (yt.isUploading) {
+        var prog = yt.uploadProgress || {};
+        html += '<div class="processing-indicator"><span class="spinner"></span> Uploading ' + (prog.uploaded || 0) + '/' + (prog.total || '?') + '...</div>';
+      } else {
+        html += '<div class="yt-form">';
+        html += '<input type="text" class="form-input" id="ytTitle" placeholder="Judul video" value="' + escapeHtml(project.title || project.niche || '') + '"/>';
+        html += '<textarea class="form-input" id="ytDesc" rows="2" placeholder="Deskripsi (opsional)">' + escapeHtml(project.niche || '') + '</textarea>';
+        html += '<div class="yt-form-row">';
+        html += '<input type="text" class="form-input" id="ytTags" placeholder="Tags (pisah koma)"/>';
+        html += '<select class="form-input" id="ytPrivacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select>';
+        html += '</div>';
+        html += '<button class="btn-primary" id="ytUploadBtn" data-project-id="' + project.project_id + '">Upload ke YouTube</button>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+  }
+
   html += '</div>';
   return html;
 }
@@ -6703,6 +6822,21 @@ function attachAutomationListeners() {
   if (nicheInput) {
     nicheInput.addEventListener('input', function() {
       state.automation.newProject.niche = nicheInput.value;
+    });
+  }
+
+  var ytConnectBtn = document.getElementById('ytConnectBtn');
+  if (ytConnectBtn) {
+    ytConnectBtn.addEventListener('click', connectYouTube);
+  }
+  var ytDisconnectBtn = document.getElementById('ytDisconnectBtn');
+  if (ytDisconnectBtn) {
+    ytDisconnectBtn.addEventListener('click', disconnectYouTube);
+  }
+  var ytUploadBtn = document.getElementById('ytUploadBtn');
+  if (ytUploadBtn) {
+    ytUploadBtn.addEventListener('click', function() {
+      uploadToYouTube(ytUploadBtn.getAttribute('data-project-id'));
     });
   }
 }
@@ -13137,6 +13271,35 @@ function handleSSEEvent(data) {
           if (data.videoUrl) sceneToUpdate.video_url = data.videoUrl;
           if (data.error) sceneToUpdate.error_message = data.error;
         }
+        render(true);
+      }
+      break;
+
+    case 'youtube_upload_start':
+      if (data.projectId) {
+        state.automation.youtube.isUploading = true;
+        state.automation.youtube.uploadProgress = { uploaded: 0, total: data.totalScenes, status: 'uploading' };
+        render(true);
+      }
+      break;
+
+    case 'youtube_upload_progress':
+      if (data.projectId) {
+        state.automation.youtube.uploadProgress = { uploaded: data.uploaded, total: data.total, status: data.status };
+        if (data.status === 'uploaded') {
+          showToast('Scene ' + (data.sceneIndex + 1) + ' uploaded!', 'success');
+        } else if (data.status === 'failed') {
+          showToast('Scene ' + (data.sceneIndex + 1) + ' gagal upload', 'error');
+        }
+        render(true);
+      }
+      break;
+
+    case 'youtube_upload_complete':
+      if (data.projectId) {
+        state.automation.youtube.isUploading = false;
+        state.automation.youtube.uploadProgress = null;
+        showToast('Upload selesai! ' + data.uploaded + ' video uploaded' + (data.failed > 0 ? ', ' + data.failed + ' gagal' : ''), data.failed > 0 ? 'warning' : 'success');
         render(true);
       }
       break;
