@@ -293,7 +293,7 @@ const state = {
     sourceImage: null,
     sourceImage2: null,
     prompt: '',
-    selectedModel: 'gemini-3-pro-image-lite',
+    selectedModel: 'gemini-2.5-flash-image',
     aspectRatio: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -3984,8 +3984,6 @@ function getModelIcon(iconType) {
 
 function renderXImagePage() {
   var ximageModels = [
-    { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro', icon: 'google', supportsI2I: true, badge: 'BEST', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
-    { id: 'gemini-3-pro-image-lite', name: 'Gemini 3 Pro Lite', icon: 'google', supportsI2I: true, badge: 'POPULAR', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'nanobanana2', name: 'Nanobanana 2', icon: 'google', supportsI2I: true, hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
     { id: 'nanobanana2-beta', name: 'Nanobanana 2 Beta', icon: 'google', supportsI2I: true, badge: 'BUDGET', hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 2, sizes: ['1:1', '2:3', '3:2', '16:9', '9:16', '3:4', '4:3'] },
