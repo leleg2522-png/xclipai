@@ -377,6 +377,24 @@ const state = {
     maskImage: null,
     cooldownEnd: 0
   },
+  automation: {
+    projects: [],
+    currentProject: null,
+    currentScenes: [],
+    isLoading: false,
+    isCreating: false,
+    isGeneratingScript: false,
+    isProducing: false,
+    newProject: {
+      niche: '',
+      format: 'shorts',
+      videoModel: 'veo-3.1-fast',
+      sceneCount: 3,
+      language: 'id'
+    },
+    view: 'list',
+    _loaded: false
+  },
   sceneStudio: {
     prompts: [''],
     characterDesc: '',
@@ -2911,6 +2929,20 @@ function renderNavMenu() {
       </svg>
       Vidgen4
     </button>
+    <button class="nav-btn ${state.currentPage === 'automation' ? 'active' : ''}" data-page="automation">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2v4"/>
+        <path d="M12 18v4"/>
+        <path d="M4.93 4.93l2.83 2.83"/>
+        <path d="M16.24 16.24l2.83 2.83"/>
+        <path d="M2 12h4"/>
+        <path d="M18 12h4"/>
+        <path d="M4.93 19.07l2.83-2.83"/>
+        <path d="M16.24 7.76l2.83-2.83"/>
+        <circle cx="12" cy="12" r="4"/>
+      </svg>
+      Automation
+    </button>
     <button class="nav-btn ${state.currentPage === 'sceneStudio' ? 'active' : ''}" data-page="sceneStudio">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -3013,6 +3045,7 @@ function renderMainContent() {
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'voiceover' ? renderVoiceoverPage() :
       state.currentPage === 'admin' ? '' :
+      state.currentPage === 'automation' ? renderAutomationPage() :
       state.currentPage === 'sceneStudio' ? renderSceneStudioPage() :
       state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
   `;
@@ -6256,6 +6289,451 @@ async function generateSceneStudioBatch() {
   render();
 }
 
+// ============ AUTOMATION PAGE ============
+
+async function loadAutomationProjects() {
+  if (state.automation.isLoading) return;
+  state.automation.isLoading = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects', { credentials: 'include' });
+    var data = await response.json();
+    state.automation.projects = data.projects || [];
+    state.automation._loaded = true;
+  } catch (err) {
+    console.error('Load automation projects error:', err);
+    showToast('Gagal memuat projects', 'error');
+  }
+  state.automation.isLoading = false;
+  render();
+}
+
+async function loadAutomationProjectDetail(projectId) {
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId, { credentials: 'include' });
+    var data = await response.json();
+    if (data.project) {
+      state.automation.currentProject = data.project;
+      state.automation.currentScenes = data.scenes || [];
+      state.automation.view = 'detail';
+    }
+  } catch (err) {
+    console.error('Load project detail error:', err);
+    showToast('Gagal memuat detail project', 'error');
+  }
+  render();
+}
+
+async function createAutomationProject() {
+  var np = state.automation.newProject;
+  if (!np.niche.trim()) { showToast('Niche/topik wajib diisi', 'error'); return; }
+  state.automation.isCreating = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, sceneCount: np.sceneCount, language: np.language })
+    });
+    var data = await response.json();
+    if (data.projectId) {
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'veo-3.1-fast', sceneCount: 3, language: 'id' };
+      showToast('Project dibuat!', 'success');
+      await loadAutomationProjects();
+      loadAutomationProjectDetail(data.projectId);
+    } else {
+      showToast(data.error || 'Gagal membuat project', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal membuat project: ' + err.message, 'error');
+  }
+  state.automation.isCreating = false;
+  render();
+}
+
+async function generateAutomationScript(projectId) {
+  state.automation.isGeneratingScript = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId + '/generate-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    var data = await response.json();
+    if (data.success) {
+      showToast('Script berhasil di-generate! ' + data.sceneCount + ' scenes', 'success');
+      await loadAutomationProjectDetail(projectId);
+    } else {
+      showToast(data.error || 'Gagal generate script', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal generate script: ' + err.message, 'error');
+  }
+  state.automation.isGeneratingScript = false;
+  render();
+}
+
+async function startAutomationProduction(projectId) {
+  state.automation.isProducing = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId + '/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    var data = await response.json();
+    if (data.success) {
+      showToast('Produksi dimulai! ' + data.sceneCount + ' scenes', 'success');
+      await loadAutomationProjectDetail(projectId);
+    } else {
+      showToast(data.error || 'Gagal memulai produksi', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal memulai produksi: ' + err.message, 'error');
+  }
+  state.automation.isProducing = false;
+  render();
+}
+
+async function retryAutomationScene(projectId, sceneIndex) {
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId + '/retry-scene', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sceneIndex: sceneIndex })
+    });
+    var data = await response.json();
+    if (data.success) {
+      showToast('Retrying scene ' + (sceneIndex + 1) + '...', 'info');
+    } else {
+      showToast(data.error || 'Gagal retry scene', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal retry: ' + err.message, 'error');
+  }
+}
+
+async function deleteAutomationProject(projectId) {
+  if (!confirm('Hapus project ini?')) return;
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    var data = await response.json();
+    if (data.success) {
+      showToast('Project dihapus', 'success');
+      state.automation.view = 'list';
+      state.automation.currentProject = null;
+      state.automation.currentScenes = [];
+      await loadAutomationProjects();
+    }
+  } catch (err) {
+    showToast('Gagal menghapus: ' + err.message, 'error');
+  }
+}
+
+function getAutomationStatusBadge(status) {
+  var map = {
+    'draft': { label: 'Draft', cls: 'badge-draft' },
+    'generating_script': { label: 'Generating Script...', cls: 'badge-processing' },
+    'script_ready': { label: 'Script Ready', cls: 'badge-ready' },
+    'script_failed': { label: 'Script Failed', cls: 'badge-failed' },
+    'producing': { label: 'Producing...', cls: 'badge-processing' },
+    'completed': { label: 'Completed', cls: 'badge-completed' },
+    'production_failed': { label: 'Production Failed', cls: 'badge-failed' }
+  };
+  var info = map[status] || { label: status, cls: 'badge-draft' };
+  return '<span class="auto-badge ' + info.cls + '">' + info.label + '</span>';
+}
+
+function renderAutomationPage() {
+  if (!state.automation._loaded && !state.automation.isLoading) {
+    loadAutomationProjects();
+  }
+
+  if (state.automation.view === 'detail' && state.automation.currentProject) {
+    return renderAutomationDetailPage();
+  }
+
+  var html = '<div class="container">';
+  html += '<div class="hero">';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Automated Content</div>';
+  html += '<h1 class="gradient-title">Automation</h1>';
+  html += '<p class="hero-subtitle">Buat konten video otomatis dari niche/topik. AI generate script, lalu produce video per scene.</p>';
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Buat Project Baru</h3>';
+  html += '<div class="auto-create-form">';
+  html += '<div class="form-group"><label>Niche / Topik</label>';
+  html += '<input type="text" class="form-input" id="autoNiche" placeholder="Contoh: tips memasak, fakta sains, motivasi harian..." value="' + escapeHtml(state.automation.newProject.niche || '') + '"/></div>';
+
+  html += '<div class="form-row">';
+  html += '<div class="form-group"><label>Format</label>';
+  html += '<select class="form-input" id="autoFormat">';
+  html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts (9:16)</option>';
+  html += '<option value="landscape"' + (state.automation.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape (16:9)</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label>Video Model</label>';
+  html += '<select class="form-input" id="autoVideoModel">';
+  html += '<option value="veo-3.1-fast"' + (state.automation.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast (4K)</option>';
+  html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1 (4K)</option>';
+  html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 (10s Audio+Video)</option>';
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label>Jumlah Scene</label>';
+  html += '<select class="form-input" id="autoSceneCount">';
+  for (var sc = 2; sc <= 8; sc++) {
+    html += '<option value="' + sc + '"' + (state.automation.newProject.sceneCount === sc ? ' selected' : '') + '>' + sc + ' scenes</option>';
+  }
+  html += '</select></div>';
+
+  html += '<div class="form-group"><label>Bahasa</label>';
+  html += '<select class="form-input" id="autoLanguage">';
+  html += '<option value="id"' + (state.automation.newProject.language === 'id' ? ' selected' : '') + '>Bahasa Indonesia</option>';
+  html += '<option value="en"' + (state.automation.newProject.language === 'en' ? ' selected' : '') + '>English</option>';
+  html += '</select></div>';
+  html += '</div>';
+
+  html += '<button class="btn-primary auto-create-btn" id="autoCreateBtn"' + (state.automation.isCreating ? ' disabled' : '') + '>';
+  html += state.automation.isCreating ? '<span class="spinner"></span> Membuat...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Buat Project';
+  html += '</button>';
+  html += '</div></div>';
+
+  html += '<div class="section-card">';
+  html += '<h3 class="section-title">Projects (' + state.automation.projects.length + ')</h3>';
+  if (state.automation.isLoading) {
+    html += '<div class="loading-state"><span class="spinner"></span> Memuat projects...</div>';
+  } else if (state.automation.projects.length === 0) {
+    html += '<div class="empty-state"><p>Belum ada project. Buat project baru di atas.</p></div>';
+  } else {
+    html += '<div class="auto-project-list">';
+    state.automation.projects.forEach(function(p) {
+      html += '<div class="auto-project-card" data-auto-project="' + p.project_id + '">';
+      html += '<div class="auto-project-header">';
+      html += '<div class="auto-project-title">' + escapeHtml(p.title || p.niche) + '</div>';
+      html += getAutomationStatusBadge(p.status);
+      html += '</div>';
+      html += '<div class="auto-project-meta">';
+      html += '<span>' + (p.format === 'shorts' ? 'Shorts' : 'Landscape') + '</span>';
+      html += '<span>' + p.scene_count + ' scenes</span>';
+      html += '<span>' + p.video_model + '</span>';
+      html += '<span>' + new Date(p.created_at).toLocaleDateString() + '</span>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderAutomationDetailPage() {
+  var project = state.automation.currentProject;
+  var scenes = state.automation.currentScenes;
+
+  var html = '<div class="container">';
+  html += '<div class="auto-detail-header">';
+  html += '<button class="btn-secondary auto-back-btn" id="autoBackBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg> Back</button>';
+  html += '<div class="auto-detail-title-wrap">';
+  html += '<h2>' + escapeHtml(project.title || project.niche) + '</h2>';
+  html += getAutomationStatusBadge(project.status);
+  html += '</div>';
+  html += '<button class="btn-danger-sm" id="autoDeleteBtn" data-project-id="' + project.project_id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+  html += '</div>';
+
+  html += '<div class="auto-detail-info">';
+  html += '<div class="info-chip">Niche: ' + escapeHtml(project.niche) + '</div>';
+  html += '<div class="info-chip">' + (project.format === 'shorts' ? 'Shorts 9:16' : 'Landscape 16:9') + '</div>';
+  html += '<div class="info-chip">Model: ' + project.video_model + '</div>';
+  html += '<div class="info-chip">Lang: ' + (project.language === 'id' ? 'Indonesia' : 'English') + '</div>';
+  html += '</div>';
+
+  if (project.status === 'draft' || project.status === 'script_failed') {
+    html += '<div class="section-card auto-action-card">';
+    html += '<h3>Step 1: Generate Script</h3>';
+    html += '<p>AI akan membuat script video dengan ' + project.scene_count + ' scene berdasarkan topik "' + escapeHtml(project.niche) + '".</p>';
+    if (project.status === 'script_failed' && project.error_message) {
+      html += '<div class="error-box">' + escapeHtml(project.error_message) + '</div>';
+    }
+    html += '<button class="btn-primary" id="autoGenScriptBtn" data-project-id="' + project.project_id + '"' + (state.automation.isGeneratingScript ? ' disabled' : '') + '>';
+    html += state.automation.isGeneratingScript ? '<span class="spinner"></span> Generating Script...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Generate Script';
+    html += '</button>';
+    html += '</div>';
+  }
+
+  if (project.status === 'generating_script') {
+    html += '<div class="section-card auto-action-card">';
+    html += '<div class="processing-indicator"><span class="spinner"></span> AI sedang generate script...</div>';
+    html += '</div>';
+  }
+
+  if (scenes.length > 0) {
+    html += '<div class="section-card">';
+    html += '<h3 class="section-title">Scenes (' + scenes.length + ')</h3>';
+
+    var completedCount = scenes.filter(function(s) { return s.status === 'completed'; }).length;
+    var failedCount = scenes.filter(function(s) { return s.status === 'failed'; }).length;
+    var processingCount = scenes.filter(function(s) { return s.status === 'generating_video'; }).length;
+    if (project.status === 'producing' || project.status === 'completed' || project.status === 'production_failed') {
+      html += '<div class="auto-progress-bar"><div class="auto-progress-fill" style="width: ' + (scenes.length > 0 ? (completedCount / scenes.length * 100) : 0) + '%"></div></div>';
+      html += '<div class="auto-progress-text">' + completedCount + '/' + scenes.length + ' completed' + (failedCount > 0 ? ', ' + failedCount + ' failed' : '') + (processingCount > 0 ? ', ' + processingCount + ' in progress' : '') + '</div>';
+    }
+
+    scenes.forEach(function(scene) {
+      html += '<div class="auto-scene-card scene-status-' + scene.status + '">';
+      html += '<div class="auto-scene-header">';
+      html += '<span class="auto-scene-num">Scene ' + (scene.scene_index + 1) + '</span>';
+      html += getAutomationStatusBadge(scene.status);
+      html += '</div>';
+      html += '<div class="auto-scene-content">';
+      if (scene.narration) {
+        html += '<div class="auto-scene-field"><label>Narration</label>';
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-narration" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2">' + escapeHtml(scene.narration) + '</textarea>';
+        } else {
+          html += '<p>' + escapeHtml(scene.narration) + '</p>';
+        }
+        html += '</div>';
+      }
+      if (scene.visual_prompt) {
+        html += '<div class="auto-scene-field"><label>Visual Prompt</label>';
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-visual" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2">' + escapeHtml(scene.visual_prompt) + '</textarea>';
+        } else {
+          html += '<p>' + escapeHtml(scene.visual_prompt) + '</p>';
+        }
+        html += '</div>';
+      }
+      if (scene.video_url) {
+        html += '<div class="auto-scene-video"><video src="' + scene.video_url + '" controls preload="metadata"></video></div>';
+      }
+      if (scene.status === 'failed') {
+        html += '<div class="error-box">' + escapeHtml(scene.error_message || 'Generation failed') + '</div>';
+        html += '<button class="btn-secondary btn-sm auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '">Retry Scene</button>';
+      }
+      html += '</div></div>';
+    });
+    html += '</div>';
+
+    if (project.status === 'script_ready') {
+      html += '<div class="section-card auto-action-card">';
+      html += '<h3>Step 2: Start Production</h3>';
+      html += '<p>Mulai generate video untuk semua scenes. Ini akan memakan waktu beberapa menit per scene.</p>';
+      html += '<button class="btn-primary" id="autoStartProductionBtn" data-project-id="' + project.project_id + '"' + (state.automation.isProducing ? ' disabled' : '') + '>';
+      html += state.automation.isProducing ? '<span class="spinner"></span> Memulai...' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Production';
+      html += '</button>';
+      html += '</div>';
+    }
+
+    if (project.status === 'production_failed') {
+      html += '<div class="section-card auto-action-card">';
+      html += '<p>Beberapa scene gagal. Kamu bisa retry scene yang gagal atau mulai ulang produksi.</p>';
+      html += '<button class="btn-primary" id="autoStartProductionBtn" data-project-id="' + project.project_id + '">Restart Production</button>';
+      html += '</div>';
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function attachAutomationListeners() {
+  var createBtn = document.getElementById('autoCreateBtn');
+  if (createBtn) {
+    createBtn.addEventListener('click', function() {
+      var nicheInput = document.getElementById('autoNiche');
+      var formatSelect = document.getElementById('autoFormat');
+      var modelSelect = document.getElementById('autoVideoModel');
+      var sceneSelect = document.getElementById('autoSceneCount');
+      var langSelect = document.getElementById('autoLanguage');
+      if (nicheInput) state.automation.newProject.niche = nicheInput.value;
+      if (formatSelect) state.automation.newProject.format = formatSelect.value;
+      if (modelSelect) state.automation.newProject.videoModel = modelSelect.value;
+      if (sceneSelect) state.automation.newProject.sceneCount = parseInt(sceneSelect.value);
+      if (langSelect) state.automation.newProject.language = langSelect.value;
+      createAutomationProject();
+    });
+  }
+
+  document.querySelectorAll('[data-auto-project]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      loadAutomationProjectDetail(el.getAttribute('data-auto-project'));
+    });
+  });
+
+  var backBtn = document.getElementById('autoBackBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', function() {
+      state.automation.view = 'list';
+      state.automation.currentProject = null;
+      state.automation.currentScenes = [];
+      loadAutomationProjects();
+    });
+  }
+
+  var genScriptBtn = document.getElementById('autoGenScriptBtn');
+  if (genScriptBtn) {
+    genScriptBtn.addEventListener('click', function() {
+      generateAutomationScript(genScriptBtn.getAttribute('data-project-id'));
+    });
+  }
+
+  var startProdBtn = document.getElementById('autoStartProductionBtn');
+  if (startProdBtn) {
+    startProdBtn.addEventListener('click', function() {
+      startAutomationProduction(startProdBtn.getAttribute('data-project-id'));
+    });
+  }
+
+  var deleteBtn = document.getElementById('autoDeleteBtn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', function() {
+      deleteAutomationProject(deleteBtn.getAttribute('data-project-id'));
+    });
+  }
+
+  document.querySelectorAll('.auto-retry-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      retryAutomationScene(btn.getAttribute('data-project'), parseInt(btn.getAttribute('data-scene')));
+    });
+  });
+
+  document.querySelectorAll('.auto-scene-narration, .auto-scene-visual').forEach(function(ta) {
+    ta.addEventListener('change', function() {
+      var proj = ta.getAttribute('data-project');
+      var idx = parseInt(ta.getAttribute('data-scene'));
+      var isNarration = ta.classList.contains('auto-scene-narration');
+      var body = { sceneIndex: idx };
+      if (isNarration) body.narration = ta.value;
+      else body.visualPrompt = ta.value;
+      fetch(API_URL + '/api/automation/projects/' + proj + '/update-scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.success) showToast('Scene updated', 'success');
+      }).catch(function() {});
+    });
+  });
+
+  var nicheInput = document.getElementById('autoNiche');
+  if (nicheInput) {
+    nicheInput.addEventListener('input', function() {
+      state.automation.newProject.niche = nicheInput.value;
+    });
+  }
+}
+
 function renderSceneStudioPage() {
   if (!state.auth.user) {
     return `<div class="page-container"><div class="feature-section">
@@ -6942,6 +7420,8 @@ function attachEventListeners() {
     attachMotionEventListeners();
   } else if (state.currentPage === 'voiceover') {
     attachVoiceoverEventListeners();
+  } else if (state.currentPage === 'automation') {
+    attachAutomationListeners();
   } else if (state.currentPage === 'sceneStudio') {
     attachSceneStudioEventListeners();
   }
@@ -12653,6 +13133,36 @@ function handleSSEEvent(data) {
             state.sceneStudio.batchResults = data.results;
           }
           loadSceneStudioHistory();
+        }
+        render(true);
+      }
+      break;
+
+    case 'automation_update':
+      if (data.projectId) {
+        if (state.automation.currentProject && state.automation.currentProject.project_id === data.projectId) {
+          state.automation.currentProject.status = data.status;
+          if (data.status === 'completed' || data.status === 'production_failed' || data.status === 'script_ready' || data.status === 'script_failed') {
+            loadAutomationProjectDetail(data.projectId);
+          }
+        }
+        var projInList = state.automation.projects.find(function(p) { return p.project_id === data.projectId; });
+        if (projInList) projInList.status = data.status;
+        if (data.status === 'completed') showToast('Automation project selesai!', 'success');
+        if (data.status === 'production_failed') showToast('Automation project gagal', 'error');
+        if (data.status === 'script_ready') showToast('Script berhasil di-generate!', 'success');
+        if (data.status === 'script_failed') showToast('Gagal generate script', 'error');
+        render(true);
+      }
+      break;
+
+    case 'automation_scene_update':
+      if (data.projectId && state.automation.currentProject && state.automation.currentProject.project_id === data.projectId) {
+        var sceneToUpdate = state.automation.currentScenes.find(function(s) { return s.scene_index === data.sceneIndex; });
+        if (sceneToUpdate) {
+          sceneToUpdate.status = data.status;
+          if (data.videoUrl) sceneToUpdate.video_url = data.videoUrl;
+          if (data.error) sceneToUpdate.error_message = data.error;
         }
         render(true);
       }

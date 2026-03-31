@@ -11095,6 +11095,517 @@ app.get('/api/ximage/download', async (req, res) => {
   }
 });
 
+// ============ AUTOMATION (Fully Automated Content Creation) ============
+
+app.get('/api/automation/projects', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    const result = await pool.query(
+      `SELECT project_id, title, niche, format, video_model, scene_count, language, status, error_message, created_at, updated_at, completed_at
+       FROM automation_projects WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [req.session.userId]
+    );
+    res.json({ projects: result.rows });
+  } catch (error) {
+    console.error('[AUTOMATION] List projects error:', error.message);
+    res.status(500).json({ error: 'Gagal memuat projects' });
+  }
+});
+
+app.get('/api/automation/projects/:projectId', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    const project = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [req.params.projectId, req.session.userId]
+    );
+    if (project.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const scenes = await pool.query(
+      `SELECT * FROM automation_scenes WHERE project_id = $1 ORDER BY scene_index ASC`,
+      [req.params.projectId]
+    );
+    res.json({ project: project.rows[0], scenes: scenes.rows });
+  } catch (error) {
+    console.error('[AUTOMATION] Get project error:', error.message);
+    res.status(500).json({ error: 'Gagal memuat project' });
+  }
+});
+
+app.delete('/api/automation/projects/:projectId', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    const result = await pool.query(
+      `DELETE FROM automation_projects WHERE project_id = $1 AND user_id = $2 RETURNING id`,
+      [req.params.projectId, req.session.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[AUTOMATION] Delete project error:', error.message);
+    res.status(500).json({ error: 'Gagal menghapus project' });
+  }
+});
+
+app.post('/api/automation/projects', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { niche, format, videoModel, sceneCount, language } = req.body;
+  if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
+  const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  const validFormats = ['shorts', 'landscape'];
+  const validModels = ['grok-video-3-10s', 'veo-3.1-fast', 'veo-3.1'];
+  const fmt = validFormats.includes(format) ? format : 'shorts';
+  const model = validModels.includes(videoModel) ? videoModel : 'veo-3.1-fast';
+  const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 8);
+  const lang = language || 'id';
+  try {
+    await pool.query(
+      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, scene_count, language, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft')`,
+      [req.session.userId, projectId, niche.trim(), fmt, model, scenes, lang]
+    );
+    res.json({ projectId, message: 'Project created' });
+  } catch (error) {
+    console.error('[AUTOMATION] Create project error:', error.message);
+    res.status(500).json({ error: 'Gagal membuat project' });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/generate-script', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+    if (project.status !== 'draft' && project.status !== 'script_failed') {
+      return res.status(400).json({ error: 'Project sudah dalam proses atau selesai' });
+    }
+    await pool.query(
+      `UPDATE automation_projects SET status = 'generating_script', updated_at = NOW() WHERE project_id = $1`,
+      [projectId]
+    );
+    sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'generating_script' });
+
+    const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
+    const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
+    const systemPrompt = `You are a professional content creator and scriptwriter. Create engaging video scripts for social media.
+Always respond with valid JSON only, no markdown formatting.`;
+    const userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
+The script must have exactly ${project.scene_count} scenes.
+Language: ${langName}
+
+Return ONLY valid JSON with this structure:
+{
+  "title": "catchy video title",
+  "scenes": [
+    {
+      "narration": "voiceover text for this scene (${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'})",
+      "visual_prompt": "detailed visual description for AI video generation, cinematic, high quality, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
+    }
+  ]
+}
+
+Rules:
+- Each scene narration should be concise and engaging
+- Visual prompts should be detailed, cinematic descriptions suitable for AI video generation
+- Visual prompts must be in English regardless of narration language
+- Make the content viral-worthy and attention-grabbing
+- The visual_prompt should describe the scene visually, not repeat the narration`;
+
+    if (!process.env.OPENROUTER_API_KEY) {
+      await pool.query(
+        `UPDATE automation_projects SET status = 'script_failed', error_message = 'OpenRouter API key not configured', updated_at = NOW() WHERE project_id = $1`,
+        [projectId]
+      );
+      return res.status(500).json({ error: 'AI Chat API key not configured' });
+    }
+
+    const chatResponse = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.8
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000
+      }
+    );
+
+    const aiContent = chatResponse.data.choices[0].message.content;
+    let scriptData;
+    try {
+      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON found in AI response');
+      scriptData = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('[AUTOMATION] Script parse error:', parseErr.message, 'Raw:', aiContent.substring(0, 500));
+      await pool.query(
+        `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+        [projectId, 'Failed to parse AI script: ' + parseErr.message]
+      );
+      sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
+      return res.status(500).json({ error: 'Gagal parsing script dari AI' });
+    }
+
+    if (!scriptData.scenes || !Array.isArray(scriptData.scenes) || scriptData.scenes.length === 0) {
+      await pool.query(
+        `UPDATE automation_projects SET status = 'script_failed', error_message = 'AI returned no scenes', updated_at = NOW() WHERE project_id = $1`,
+        [projectId]
+      );
+      return res.status(500).json({ error: 'AI tidak menghasilkan scenes' });
+    }
+
+    const targetCount = project.scene_count;
+    if (scriptData.scenes.length > targetCount) {
+      scriptData.scenes = scriptData.scenes.slice(0, targetCount);
+    }
+
+    await pool.query(
+      `UPDATE automation_projects SET title = $2, script = $3, status = 'script_ready', updated_at = NOW() WHERE project_id = $1`,
+      [projectId, scriptData.title || project.niche, JSON.stringify(scriptData)]
+    );
+
+    await pool.query(`DELETE FROM automation_scenes WHERE project_id = $1`, [projectId]);
+    for (let i = 0; i < scriptData.scenes.length; i++) {
+      const scene = scriptData.scenes[i];
+      await pool.query(
+        `INSERT INTO automation_scenes (project_id, scene_index, narration, visual_prompt, status)
+         VALUES ($1, $2, $3, $4, 'pending')`,
+        [projectId, i, scene.narration || '', scene.visual_prompt || '']
+      );
+    }
+
+    sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_ready' });
+    res.json({ success: true, title: scriptData.title, sceneCount: scriptData.scenes.length });
+  } catch (error) {
+    console.error('[AUTOMATION] Generate script error:', error.response?.data || error.message);
+    await pool.query(
+      `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+      [projectId, error.message]
+    ).catch(() => {});
+    sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
+    res.status(500).json({ error: 'Gagal generate script: ' + error.message });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/update-scene', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  const { sceneIndex, narration, visualPrompt } = req.body;
+  try {
+    const projCheck = await pool.query(
+      `SELECT status FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projCheck.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    if (projCheck.rows[0].status !== 'script_ready') {
+      return res.status(400).json({ error: 'Script belum ready atau sudah dalam proses' });
+    }
+    const updateFields = [];
+    const updateValues = [projectId, sceneIndex];
+    let paramIdx = 3;
+    if (narration !== undefined) { updateFields.push(`narration = $${paramIdx}`); updateValues.push(narration); paramIdx++; }
+    if (visualPrompt !== undefined) { updateFields.push(`visual_prompt = $${paramIdx}`); updateValues.push(visualPrompt); paramIdx++; }
+    if (updateFields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+    updateFields.push('updated_at = NOW()');
+    const updateResult = await pool.query(
+      `UPDATE automation_scenes SET ${updateFields.join(', ')} WHERE project_id = $1 AND scene_index = $2`,
+      updateValues
+    );
+    if (updateResult.rowCount === 0) return res.status(404).json({ error: 'Scene not found' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[AUTOMATION] Update scene error:', error.message);
+    res.status(500).json({ error: 'Gagal update scene' });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/start', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+    if (project.status !== 'script_ready' && project.status !== 'production_failed') {
+      return res.status(400).json({ error: 'Script harus ready sebelum mulai produksi' });
+    }
+
+    const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
+    if (!apimodelsKey) {
+      return res.status(500).json({ error: 'Video generation API key tidak tersedia' });
+    }
+
+    const lockResult = await pool.query(
+      `UPDATE automation_projects SET status = 'producing', error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND status IN ('script_ready', 'production_failed') RETURNING project_id`,
+      [projectId]
+    );
+    if (lockResult.rowCount === 0) {
+      return res.status(409).json({ error: 'Production sudah berjalan' });
+    }
+    sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'producing' });
+
+    const scenes = await pool.query(
+      `SELECT * FROM automation_scenes WHERE project_id = $1 ORDER BY scene_index ASC`,
+      [projectId]
+    );
+
+    const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
+    const modelConfig = {
+      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
+      'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
+    };
+    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast'];
+
+    res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
+
+    (async () => {
+      try {
+        for (const scene of scenes.rows) {
+          if (scene.status === 'completed' && scene.video_url) continue;
+
+          await pool.query(
+            `UPDATE automation_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+            [projectId, scene.scene_index]
+          );
+          sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
+
+          try {
+            const videoBody = {
+              model: vidModel.apiModel,
+              prompt: scene.visual_prompt,
+              aspect_ratio: aspectRatio,
+              duration: vidModel.duration
+            };
+            console.log(`[AUTOMATION] Generating video for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(videoBody));
+            const videoResponse = await axios.post(
+              'https://apimodels.app/api/v1/video/generations',
+              videoBody,
+              {
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
+                timeout: 60000
+              }
+            );
+
+            const videoData = videoResponse.data?.data || videoResponse.data;
+            const taskId = videoData?.taskId || videoData?.task_id;
+            if (!taskId) {
+              throw new Error('No task ID returned from video API: ' + JSON.stringify(videoResponse.data));
+            }
+
+            await pool.query(
+              `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index, taskId]
+            );
+
+            let videoUrl = null;
+            for (let attempt = 0; attempt < 120; attempt++) {
+              await new Promise(r => setTimeout(r, 5000));
+              try {
+                const statusResp = await axios.get(
+                  `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+                  { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+                );
+                const sData = statusResp.data?.data || statusResp.data;
+                const sStatus = sData?.state || sData?.status;
+                if (sStatus === 'completed' || sStatus === 'success') {
+                  videoUrl = sData?.videos?.[0] || sData?.resultUrls?.[0] || sData?.video_url || sData?.url;
+                  break;
+                }
+                if (sStatus === 'failed' || sStatus === 'error') {
+                  throw new Error(sData?.failMsg || sData?.error || 'Video generation failed');
+                }
+              } catch (pollErr) {
+                if (pollErr.message.includes('failed') || pollErr.message.includes('Video generation')) throw pollErr;
+                console.log(`[AUTOMATION] Poll error (retry): ${pollErr.message}`);
+              }
+            }
+
+            if (!videoUrl) throw new Error('Video generation timed out after 10 minutes');
+
+            await pool.query(
+              `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index, videoUrl]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
+            console.log(`[AUTOMATION] Scene ${scene.scene_index} completed: ${videoUrl}`);
+
+          } catch (sceneErr) {
+            console.error(`[AUTOMATION] Scene ${scene.scene_index} failed:`, sceneErr.message);
+            await pool.query(
+              `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index, sceneErr.message]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: sceneErr.message });
+          }
+        }
+
+        const completedScenes = await pool.query(
+          `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed, COUNT(*) FILTER (WHERE status = 'failed') as failed
+           FROM automation_scenes WHERE project_id = $1`,
+          [projectId]
+        );
+        const stats = completedScenes.rows[0];
+        const allDone = parseInt(stats.completed) + parseInt(stats.failed) === parseInt(stats.total);
+
+        if (allDone) {
+          if (parseInt(stats.failed) === parseInt(stats.total)) {
+            await pool.query(
+              `UPDATE automation_projects SET status = 'production_failed', error_message = 'Semua scene gagal', updated_at = NOW() WHERE project_id = $1`,
+              [projectId]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'production_failed' });
+          } else {
+            await pool.query(
+              `UPDATE automation_projects SET status = 'completed', updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+              [projectId]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+          }
+        }
+      } catch (pipelineErr) {
+        console.error(`[AUTOMATION] Pipeline error for ${projectId}:`, pipelineErr.message);
+        await pool.query(
+          `UPDATE automation_projects SET status = 'production_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+          [projectId, pipelineErr.message]
+        ).catch(() => {});
+        sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'production_failed' });
+      }
+    })();
+
+  } catch (error) {
+    console.error('[AUTOMATION] Start production error:', error.message);
+    res.status(500).json({ error: 'Gagal memulai produksi' });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  const { sceneIndex } = req.body;
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+
+    const sceneResult = await pool.query(
+      `SELECT * FROM automation_scenes WHERE project_id = $1 AND scene_index = $2`,
+      [projectId, sceneIndex]
+    );
+    if (sceneResult.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
+    const scene = sceneResult.rows[0];
+    if (scene.status !== 'failed') return res.status(400).json({ error: 'Hanya scene yang gagal bisa di-retry' });
+
+    const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
+    if (!apimodelsKey) return res.status(500).json({ error: 'Video API key tidak tersedia' });
+
+    await pool.query(
+      `UPDATE automation_scenes SET status = 'generating_video', error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+      [projectId, sceneIndex]
+    );
+    if (project.status === 'production_failed' || project.status === 'completed') {
+      await pool.query(
+        `UPDATE automation_projects SET status = 'producing', error_message = NULL, updated_at = NOW() WHERE project_id = $1`,
+        [projectId]
+      );
+    }
+    sendSSEToUser(req.session.userId, { type: 'automation_scene_update', projectId, sceneIndex, status: 'generating_video' });
+    res.json({ success: true, message: 'Retrying scene...' });
+
+    const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
+    const modelConfig = {
+      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
+      'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
+    };
+    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast'];
+
+    (async () => {
+      try {
+        const videoBody = { model: vidModel.apiModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio, duration: vidModel.duration };
+        const videoResponse = await axios.post(
+          'https://apimodels.app/api/v1/video/generations',
+          videoBody,
+          { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+        );
+        const videoData = videoResponse.data?.data || videoResponse.data;
+        const taskId = videoData?.taskId || videoData?.task_id;
+        if (!taskId) throw new Error('No task ID returned');
+
+        await pool.query(
+          `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+          [projectId, sceneIndex, taskId]
+        );
+
+        let videoUrl = null;
+        for (let attempt = 0; attempt < 120; attempt++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const statusResp = await axios.get(
+            `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+            { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+          );
+          const sData = statusResp.data?.data || statusResp.data;
+          const sStatus = sData?.state || sData?.status;
+          if (sStatus === 'completed' || sStatus === 'success') {
+            videoUrl = sData?.videos?.[0] || sData?.resultUrls?.[0] || sData?.video_url || sData?.url;
+            break;
+          }
+          if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
+        }
+        if (!videoUrl) throw new Error('Timed out');
+
+        await pool.query(
+          `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+          [projectId, sceneIndex, videoUrl]
+        );
+        sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex, status: 'completed', videoUrl });
+
+        const stats = await pool.query(
+          `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed, COUNT(*) FILTER (WHERE status = 'failed') as failed
+           FROM automation_scenes WHERE project_id = $1`, [projectId]
+        );
+        const s = stats.rows[0];
+        if (parseInt(s.completed) + parseInt(s.failed) === parseInt(s.total)) {
+          const finalStatus = parseInt(s.failed) === 0 ? 'completed' : (parseInt(s.completed) > 0 ? 'completed' : 'production_failed');
+          await pool.query(
+            `UPDATE automation_projects SET status = $2, updated_at = NOW(), completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END WHERE project_id = $1`,
+            [projectId, finalStatus]
+          );
+          sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: finalStatus });
+        }
+      } catch (err) {
+        console.error(`[AUTOMATION] Retry scene ${sceneIndex} failed:`, err.message);
+        await pool.query(
+          `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+          [projectId, sceneIndex, err.message]
+        ).catch(() => {});
+        sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex, status: 'failed', error: err.message });
+      }
+    })();
+  } catch (error) {
+    console.error('[AUTOMATION] Retry scene error:', error.message);
+    res.status(500).json({ error: 'Gagal retry scene' });
+  }
+});
+
 // ============ SCENE STUDIO (Simple Batch Image Generation) ============
 
 const SCENE_STUDIO_MODELS = { ...XIMAGE2_MODELS };
@@ -12046,6 +12557,47 @@ async function initDatabase() {
       )
     `);
     console.log('Scene Studio tables created');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS automation_projects (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        project_id VARCHAR(255) UNIQUE,
+        title VARCHAR(500),
+        niche VARCHAR(500) NOT NULL,
+        format VARCHAR(20) DEFAULT 'shorts',
+        video_model VARCHAR(100) DEFAULT 'veo-3.1-fast',
+        scene_count INTEGER DEFAULT 3,
+        language VARCHAR(50) DEFAULT 'id',
+        status VARCHAR(50) DEFAULT 'draft',
+        script TEXT,
+        final_video_url TEXT,
+        error_message TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS automation_scenes (
+        id SERIAL PRIMARY KEY,
+        project_id VARCHAR(255) REFERENCES automation_projects(project_id) ON DELETE CASCADE,
+        scene_index INTEGER NOT NULL,
+        narration TEXT,
+        visual_prompt TEXT,
+        video_task_id VARCHAR(255),
+        video_url TEXT,
+        audio_url TEXT,
+        status VARCHAR(50) DEFAULT 'pending',
+        error_message TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Automation tables created');
 
     console.log('[DB] Database initialized successfully');
     

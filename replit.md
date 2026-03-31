@@ -16,17 +16,18 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
 - **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
 - **X Image (ApiModels Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. All models route through ApiModels.app. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
-  - 12 AI models via ApiModels.app (verified active March 2026):
+  - 13 AI models via ApiModels.app (verified active March 2026):
+    - gemini-3-pro-image: Gemini 3 Pro Image (Google) - highest quality, 99% success rate, resolution 1K/2K/4K
+    - gemini-3-pro-image-lite: Gemini 3 Pro Lite (Google) - 97% success rate, resolution 1K/2K/4K
+    - gemini-2.5-flash-image: Gemini 2.5 Flash (Google) - fast generation, resolution 1K/2K/4K
     - nanobanana2: Nanobanana 2 (Google Gemini 3.1 Flash) - text-to-image & I2I, resolution 1K/2K/4K
-    - nanobanana2-beta: Nanobanana 2 Beta (Google) - budget text-to-image & I2I, resolution 1K/2K/4K
-    - nanobanana2-lite: Nanobanana 2 Lite (Google) - budget image editing, resolution 1K/2K/4K
+    - nanobanana2-beta: Nanobanana 2 Beta (Google) - budget, resolution 1K/2K/4K
     - seedream-5.0: Seedream 5.0 Lite (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/3K
     - seedream-4.5: Seedream 4.5 (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/4K
-    - grok-4.2-image: Grok 4.2 Image (xAI) - text-to-image & I2I with mask inpainting
+    - grok-4.2-image: Grok 4.2 Image (xAI) - text-to-image & I2I
     - grok-imagine: Grok Imagine (xAI) - text-to-image & I2I
     - grok-imagine-pro: Grok Imagine Pro (xAI) - higher quality text-to-image & I2I
     - kling-omni-image: Kling Omni-Image (Kling) - text-to-image & I2I, resolution 1K/2K
-    - kling-omni-image-qn: Kling Omni-Image QN (Kling Stable-QN) - budget, text-to-image & I2I, resolution 1K/2K
     - p-image: P-Image (Pruna AI) - text-only, sub-1s generation
     - p-image-edit: P-Image Edit (Pruna AI) - image editing, sub-1s
   - API paths (all via ApiModels.app):
@@ -130,6 +131,18 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Database table: scene_studio_batches (stores prompts, results as JSONB)
   - Reuses XIMAGE2_ROOM{N}_KEY_{1-3} keys or APIMART_API_KEY fallback
   - API: POST /api/scene-studio/generate (batch), GET /api/scene-studio/history, DELETE /api/scene-studio/history/:id
+- **Automation (Automated Content Creation)**: Fully automated video content pipeline. User provides a niche/topic, AI generates a video script, then produces video for each scene. Supports Shorts (9:16) and Landscape (16:9) formats. Features include:
+  - Step 1: Create project (niche, format, video model, scene count, language)
+  - Step 2: AI generates script via OpenRouter (GPT-4o-mini) with narration + visual prompts per scene
+  - Step 3: User can review/edit script scenes before production
+  - Step 4: Start production - generates video for each scene via ApiModels.app video API
+  - Video models: Veo 3.1 Fast (4K, 8s), Veo 3.1 (4K, 8s), Grok 3 (720P, 10s with audio)
+  - Real-time SSE updates for project and scene status changes
+  - Scene retry for failed scenes
+  - Database tables: automation_projects, automation_scenes
+  - API endpoints: CRUD projects, generate-script, start production, update-scene, retry-scene
+  - Languages: Bahasa Indonesia, English
+  - SSE events: automation_update, automation_scene_update
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
