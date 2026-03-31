@@ -11215,18 +11215,19 @@ Rules:
 - Make the content viral-worthy and attention-grabbing
 - The visual_prompt should describe the scene visually, not repeat the narration`;
 
-    if (!process.env.OPENROUTER_API_KEY) {
+    const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
+    if (!apimodelsKey) {
       await pool.query(
-        `UPDATE automation_projects SET status = 'script_failed', error_message = 'OpenRouter API key not configured', updated_at = NOW() WHERE project_id = $1`,
+        `UPDATE automation_projects SET status = 'script_failed', error_message = 'ApiModels API key not configured', updated_at = NOW() WHERE project_id = $1`,
         [projectId]
       );
-      return res.status(500).json({ error: 'AI Chat API key not configured' });
+      return res.status(500).json({ error: 'ApiModels API key not configured' });
     }
 
     const chatResponse = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
+      'https://apimodels.app/api/v1/chat/completions',
       {
-        model: 'openai/gpt-4o-mini',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -11235,7 +11236,7 @@ Rules:
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${apimodelsKey}`,
           'Content-Type': 'application/json'
         },
         timeout: 60000

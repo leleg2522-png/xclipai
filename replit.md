@@ -133,7 +133,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - API: POST /api/scene-studio/generate (batch), GET /api/scene-studio/history, DELETE /api/scene-studio/history/:id
 - **Automation (Automated Content Creation)**: Fully automated video content pipeline. User provides a niche/topic, AI generates a video script, then produces video for each scene. Supports Shorts (9:16) and Landscape (16:9) formats. Features include:
   - Step 1: Create project (niche, format, video model, scene count, language)
-  - Step 2: AI generates script via OpenRouter (GPT-4o-mini) with narration + visual prompts per scene
+  - Step 2: AI generates script via ApiModels.app (GPT-4o-mini) with narration + visual prompts per scene
   - Step 3: User can review/edit script scenes before production
   - Step 4: Start production - generates video for each scene via ApiModels.app video API
   - Video models: Veo 3.1 Fast (4K, 8s), Veo 3.1 (4K, 8s), Grok 3 (720P, 10s with audio)
