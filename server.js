@@ -11226,49 +11226,50 @@ Rules:
     }
 
     const chatModels = [
-      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gpt-5', key: apimodelsKey },
-      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gpt-4.1', key: apimodelsKey },
-      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gemini-2.5-flash', key: apimodelsKey }
+      'claude-haiku-4-5-20251001',
+      'claude-sonnet-4-5-20250929',
+      'claude-sonnet-4-20250514'
     ];
 
-    let chatResponse = null;
+    let aiContent = null;
     let lastChatErr = null;
-    for (const chatModel of chatModels) {
+    for (const model of chatModels) {
       try {
-        console.log(`[AUTOMATION] Trying chat model: ${chatModel.model} at ${chatModel.url}`);
-        chatResponse = await axios.post(
-          chatModel.url,
+        console.log(`[AUTOMATION] Trying chat model: ${model} at https://apimodels.app/api/v1/messages`);
+        const chatResponse = await axios.post(
+          'https://apimodels.app/api/v1/messages',
           {
-            model: chatModel.model,
+            model: model,
+            max_tokens: 4096,
+            system: systemPrompt,
             messages: [
-              { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
             temperature: 0.8
           },
           {
             headers: {
-              'Authorization': `Bearer ${chatModel.key}`,
+              'Authorization': `Bearer ${apimodelsKey}`,
               'Content-Type': 'application/json'
             },
             timeout: 120000
           }
         );
-        if (chatResponse.data?.choices?.[0]?.message?.content) {
-          console.log(`[AUTOMATION] Chat success with model: ${chatModel.model}`);
+        const textBlock = chatResponse.data?.content?.find(b => b.type === 'text');
+        if (textBlock?.text) {
+          aiContent = textBlock.text;
+          console.log(`[AUTOMATION] Chat success with model: ${model}`);
           break;
         }
-        console.log(`[AUTOMATION] Model ${chatModel.model} returned empty content, trying next...`);
-        chatResponse = null;
+        console.log(`[AUTOMATION] Model ${model} returned empty content, trying next...`);
       } catch (chatErr) {
         lastChatErr = chatErr;
         const errMsg = chatErr.response?.data?.error?.message || chatErr.response?.data?.message || chatErr.message;
-        console.error(`[AUTOMATION] Chat model ${chatModel.model} failed:`, errMsg);
-        chatResponse = null;
+        console.error(`[AUTOMATION] Chat model ${model} failed:`, errMsg);
       }
     }
 
-    if (!chatResponse || !chatResponse.data?.choices?.[0]?.message?.content) {
+    if (!aiContent) {
       const errMsg = lastChatErr?.response?.data?.error?.message || lastChatErr?.message || 'All chat models failed';
       await pool.query(
         `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
@@ -11277,8 +11278,6 @@ Rules:
       sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
       return res.status(500).json({ error: 'Gagal generate script: ' + errMsg });
     }
-
-    const aiContent = chatResponse.data.choices[0].message.content;
     let scriptData;
     try {
       const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
