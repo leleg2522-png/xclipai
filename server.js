@@ -11228,8 +11228,8 @@ Rules:
     const chatModels = [
       { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-5', key: apimodelsKey },
       { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-4.1', key: apimodelsKey },
-      { url: 'https://openrouter.ai/api/v1/chat/completions', model: 'google/gemini-2.5-flash-preview', key: process.env.OPENROUTER_API_KEY }
-    ].filter(m => m.key);
+      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gemini-2.5-flash', key: apimodelsKey }
+    ];
 
     let chatResponse = null;
     let lastChatErr = null;
