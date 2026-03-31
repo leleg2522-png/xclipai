@@ -11572,7 +11572,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
             let videoUrl = null;
             let pollErrors = 0;
-            for (let attempt = 0; attempt < 600; attempt++) {
+            for (let attempt = 0; attempt < 720; attempt++) {
               await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
               try {
                 const statusResp = await axios.get(
@@ -11605,7 +11605,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               }
             }
 
-            if (!videoUrl) throw new Error('Video generation timed out after 40 minutes');
+            if (!videoUrl) throw new Error('Video generation timed out after 1 hour');
 
             await pool.query(
               `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -11763,7 +11763,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
 
         let videoUrl = null;
         let pollErrors = 0;
-        for (let attempt = 0; attempt < 600; attempt++) {
+        for (let attempt = 0; attempt < 720; attempt++) {
           await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
           try {
             const statusResp = await axios.get(
@@ -11792,7 +11792,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             if (pollErrors > 10) throw new Error('Too many consecutive poll errors: ' + pollErr.message);
           }
         }
-        if (!videoUrl) throw new Error('Video generation timed out after 40 minutes');
+        if (!videoUrl) throw new Error('Video generation timed out after 1 hour');
 
         await pool.query(
           `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
