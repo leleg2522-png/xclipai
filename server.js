@@ -521,7 +521,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     res.set('X-Content-Type-Options', 'nosniff');
   }
 }));
-app.use('/processed', express.static(path.join(__dirname, 'processed')));
+const processedDir = path.join(__dirname, 'processed');
+if (!fs.existsSync(processedDir)) {
+  fs.mkdirSync(processedDir, { recursive: true });
+}
+app.use('/processed', express.static(processedDir));
 
 // Handle common HTTP errors gracefully
 app.use((err, req, res, next) => {
@@ -12098,20 +12102,48 @@ function downloadFileToPath(url, destPath) {
 
 function concatVideosFFmpeg(inputPaths, outputPath) {
   return new Promise((resolve, reject) => {
+    const fs = require('fs');
+    const outDir = require('path').dirname(outputPath);
+    if (!fs.existsSync(outDir)) {
+      fs.mkdirSync(outDir, { recursive: true });
+      console.log(`[FFMPEG] Created output directory: ${outDir}`);
+    }
     const listContent = inputPaths.map(p => `file '${p}'`).join('\n');
     const listPath = outputPath + '.txt';
-    require('fs').writeFileSync(listPath, listContent);
+    fs.writeFileSync(listPath, listContent);
+    console.log(`[FFMPEG] Concat list:\n${listContent}`);
+    console.log(`[FFMPEG] Output: ${outputPath}`);
+    for (const p of inputPaths) {
+      try {
+        const stat = fs.statSync(p);
+        console.log(`[FFMPEG] Input file ${p}: ${stat.size} bytes`);
+      } catch (e) {
+        console.error(`[FFMPEG] Input file ${p} not found!`);
+      }
+    }
     ffmpeg()
       .input(listPath)
       .inputOptions(['-f', 'concat', '-safe', '0'])
-      .outputOptions(['-c', 'copy'])
+      .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y'])
       .output(outputPath)
+      .on('start', (cmd) => {
+        console.log(`[FFMPEG] Command: ${cmd}`);
+      })
+      .on('progress', (progress) => {
+        if (progress.percent) console.log(`[FFMPEG] Progress: ${Math.round(progress.percent)}%`);
+      })
       .on('end', () => {
-        try { require('fs').unlinkSync(listPath); } catch (e) {}
+        try { fs.unlinkSync(listPath); } catch (e) {}
+        try {
+          const outStat = fs.statSync(outputPath);
+          console.log(`[FFMPEG] Done! Output: ${outStat.size} bytes`);
+        } catch (e) {}
         resolve(outputPath);
       })
-      .on('error', (err) => {
-        try { require('fs').unlinkSync(listPath); } catch (e) {}
+      .on('error', (err, stdout, stderr) => {
+        console.error(`[FFMPEG] Error: ${err.message}`);
+        if (stderr) console.error(`[FFMPEG] Stderr: ${stderr}`);
+        try { fs.unlinkSync(listPath); } catch (e) {}
         reject(err);
       })
       .run();
