@@ -11721,6 +11721,55 @@ app.delete('/api/youtube/disconnect', async (req, res) => {
   }
 });
 
+function downloadFileToPath(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const proto = url.startsWith('https') ? require('https') : require('http');
+    const doDownload = (downloadUrl) => {
+      proto.get(downloadUrl, (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          const proto2 = response.headers.location.startsWith('https') ? require('https') : require('http');
+          proto2.get(response.headers.location, (r2) => {
+            const ws = require('fs').createWriteStream(destPath);
+            r2.pipe(ws);
+            ws.on('finish', () => resolve(destPath));
+            ws.on('error', reject);
+          }).on('error', reject);
+        } else if (response.statusCode >= 200 && response.statusCode < 300) {
+          const ws = require('fs').createWriteStream(destPath);
+          response.pipe(ws);
+          ws.on('finish', () => resolve(destPath));
+          ws.on('error', reject);
+        } else {
+          reject(new Error(`Download failed: HTTP ${response.statusCode}`));
+        }
+      }).on('error', reject);
+    };
+    doDownload(url);
+  });
+}
+
+function concatVideosFFmpeg(inputPaths, outputPath) {
+  return new Promise((resolve, reject) => {
+    const listContent = inputPaths.map(p => `file '${p}'`).join('\n');
+    const listPath = outputPath + '.txt';
+    require('fs').writeFileSync(listPath, listContent);
+    ffmpeg()
+      .input(listPath)
+      .inputOptions(['-f', 'concat', '-safe', '0'])
+      .outputOptions(['-c', 'copy'])
+      .output(outputPath)
+      .on('end', () => {
+        try { require('fs').unlinkSync(listPath); } catch (e) {}
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        try { require('fs').unlinkSync(listPath); } catch (e) {}
+        reject(err);
+      })
+      .run();
+  });
+}
+
 app.post('/api/automation/projects/:projectId/upload-youtube', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
@@ -11764,84 +11813,121 @@ app.post('/api/automation/projects/:projectId/upload-youtube', async (req, res) 
       } catch (e) { console.error('[YOUTUBE] Token refresh save error:', e.message); }
     });
 
-    res.json({ success: true, message: 'Upload dimulai', totalScenes: scenesResult.rows.length });
+    const userId = req.session.userId;
+    res.json({ success: true, message: 'Upload dimulai' });
 
-    sendSSEToUser(req.session.userId, { type: 'youtube_upload_start', projectId, totalScenes: scenesResult.rows.length });
+    sendSSEToUser(userId, { type: 'youtube_upload_start', projectId, totalScenes: scenesResult.rows.length });
 
     (async () => {
-      const yt = google.youtube({ version: 'v3', auth: oauth2Client });
-      let uploaded = 0;
-      let failed = 0;
+      const fs = require('fs');
+      const tmpDir = require('os').tmpdir();
+      const jobId = `yt_${projectId}_${Date.now()}`;
+      const downloadedFiles = [];
 
-      for (const scene of scenesResult.rows) {
-        try {
-          sendSSEToUser(req.session.userId, {
-            type: 'youtube_upload_progress', projectId,
-            sceneIndex: scene.scene_index, status: 'uploading',
-            uploaded, total: scenesResult.rows.length
+      try {
+        sendSSEToUser(userId, { type: 'youtube_upload_progress', projectId, step: 'downloading', message: 'Downloading scene videos...' });
+
+        for (let i = 0; i < scenesResult.rows.length; i++) {
+          const scene = scenesResult.rows[i];
+          const ext = scene.video_url.includes('.webm') ? '.webm' : '.mp4';
+          const destPath = require('path').join(tmpDir, `${jobId}_scene${i}${ext}`);
+          await downloadFileToPath(scene.video_url, destPath);
+          downloadedFiles.push(destPath);
+          console.log(`[YOUTUBE] Downloaded scene ${i} -> ${destPath}`);
+        }
+
+        sendSSEToUser(userId, { type: 'youtube_upload_progress', projectId, step: 'merging', message: 'Menggabungkan video...' });
+
+        const outputPath = require('path').join(tmpDir, `${jobId}_merged.mp4`);
+
+        let needsReencode = false;
+        const formats = new Set();
+        for (const f of downloadedFiles) {
+          const ext = require('path').extname(f).toLowerCase();
+          formats.add(ext);
+        }
+        needsReencode = formats.size > 1;
+
+        let mergedPath;
+        if (needsReencode) {
+          mergedPath = await new Promise((resolve, reject) => {
+            let cmd = ffmpeg();
+            downloadedFiles.forEach(f => { cmd = cmd.input(f); });
+            const filterParts = downloadedFiles.map((_, i) => `[${i}:v:0][${i}:a:0]`).join('');
+            cmd
+              .complexFilter([`${filterParts}concat=n=${downloadedFiles.length}:v=1:a=1[outv][outa]`], ['outv', 'outa'])
+              .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac', '-b:a', '128k'])
+              .output(outputPath)
+              .on('end', () => resolve(outputPath))
+              .on('error', (err) => {
+                const fallbackPath = outputPath.replace('.mp4', '_fallback.mp4');
+                let cmd2 = ffmpeg();
+                downloadedFiles.forEach(f => { cmd2 = cmd2.input(f); });
+                const fp2 = downloadedFiles.map((_, i) => `[${i}:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[v${i}]`).join(';');
+                const fp3 = downloadedFiles.map((_, i) => `[v${i}][${i}:a:0]`).join('');
+                cmd2
+                  .complexFilter([`${fp2};${fp3}concat=n=${downloadedFiles.length}:v=1:a=1[outv][outa]`], ['outv', 'outa'])
+                  .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-c:a', 'aac'])
+                  .output(fallbackPath)
+                  .on('end', () => resolve(fallbackPath))
+                  .on('error', reject)
+                  .run();
+              })
+              .run();
           });
+        } else {
+          mergedPath = await concatVideosFFmpeg(downloadedFiles, outputPath);
+        }
 
-          const videoStream = await new Promise((resolve, reject) => {
-            const url = new URL(scene.video_url);
-            const proto = url.protocol === 'https:' ? require('https') : require('http');
-            proto.get(scene.video_url, (response) => {
-              if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                const proto2 = response.headers.location.startsWith('https') ? require('https') : require('http');
-                proto2.get(response.headers.location, resolve).on('error', reject);
-              } else {
-                resolve(response);
-              }
-            }).on('error', reject);
-          });
+        console.log(`[YOUTUBE] Merged video -> ${mergedPath}`);
+        sendSSEToUser(userId, { type: 'youtube_upload_progress', projectId, step: 'uploading', message: 'Uploading ke YouTube...' });
 
-          const sceneTitle = title
-            ? (scenesResult.rows.length > 1 ? `${title} - Part ${scene.scene_index + 1}` : title)
-            : `${project.title || project.niche} - Scene ${scene.scene_index + 1}`;
+        const yt = google.youtube({ version: 'v3', auth: oauth2Client });
+        const videoTitle = title || project.title || project.niche || 'Untitled';
 
-          const sceneDesc = description || `Generated by Xclip AI Automation\nNiche: ${project.niche}\n\n${scene.narration || ''}`;
+        const allNarrations = scenesResult.rows.map((s, i) => `Scene ${i + 1}: ${s.narration || ''}`).join('\n');
+        const videoDesc = description || `Generated by Xclip AI Automation\nNiche: ${project.niche}\n\n${allNarrations}`;
 
-          const uploadResponse = await yt.videos.insert({
-            part: 'snippet,status',
-            requestBody: {
-              snippet: {
-                title: sceneTitle.substring(0, 100),
-                description: sceneDesc.substring(0, 5000),
-                tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [project.niche],
-                categoryId: '22'
-              },
-              status: {
-                privacyStatus: privacy || 'private',
-                selfDeclaredMadeForKids: false
-              }
+        const uploadResponse = await yt.videos.insert({
+          part: 'snippet,status',
+          requestBody: {
+            snippet: {
+              title: videoTitle.substring(0, 100),
+              description: videoDesc.substring(0, 5000),
+              tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [project.niche],
+              categoryId: '22'
             },
-            media: {
-              body: videoStream
+            status: {
+              privacyStatus: privacy || 'private',
+              selfDeclaredMadeForKids: false
             }
-          });
+          },
+          media: {
+            body: fs.createReadStream(mergedPath)
+          }
+        });
 
-          uploaded++;
-          console.log(`[YOUTUBE] Uploaded scene ${scene.scene_index} -> ${uploadResponse.data.id}`);
-          sendSSEToUser(req.session.userId, {
-            type: 'youtube_upload_progress', projectId,
-            sceneIndex: scene.scene_index, status: 'uploaded',
-            videoId: uploadResponse.data.id,
-            uploaded, total: scenesResult.rows.length
-          });
-        } catch (err) {
-          failed++;
-          console.error(`[YOUTUBE] Upload scene ${scene.scene_index} failed:`, err.message);
-          sendSSEToUser(req.session.userId, {
-            type: 'youtube_upload_progress', projectId,
-            sceneIndex: scene.scene_index, status: 'failed',
-            error: err.message, uploaded, total: scenesResult.rows.length
-          });
+        console.log(`[YOUTUBE] Uploaded merged video -> ${uploadResponse.data.id}`);
+
+        sendSSEToUser(userId, {
+          type: 'youtube_upload_complete', projectId,
+          videoId: uploadResponse.data.id,
+          videoUrl: `https://youtu.be/${uploadResponse.data.id}`,
+          success: true
+        });
+
+        try { fs.unlinkSync(mergedPath); } catch (e) {}
+      } catch (err) {
+        console.error('[YOUTUBE] Upload pipeline error:', err.message);
+        sendSSEToUser(userId, {
+          type: 'youtube_upload_complete', projectId,
+          success: false, error: err.message
+        });
+      } finally {
+        for (const f of downloadedFiles) {
+          try { require('fs').unlinkSync(f); } catch (e) {}
         }
       }
-
-      sendSSEToUser(req.session.userId, {
-        type: 'youtube_upload_complete', projectId,
-        uploaded, failed, total: scenesResult.rows.length
-      });
     })();
   } catch (error) {
     console.error('[YOUTUBE] Upload error:', error.message);

@@ -6717,8 +6717,11 @@ function renderAutomationDetailPage() {
 
       if (yt.isUploading) {
         var prog = yt.uploadProgress || {};
-        html += '<div class="processing-indicator"><span class="spinner"></span> Uploading ' + (prog.uploaded || 0) + '/' + (prog.total || '?') + '...</div>';
-      } else {
+        html += '<div class="processing-indicator"><span class="spinner"></span> ' + escapeHtml(prog.message || 'Processing...') + '</div>';
+      } else if (yt.lastVideoUrl) {
+        html += '<div class="yt-success-box"><span>Video berhasil diupload!</span> <a href="' + escapeHtml(yt.lastVideoUrl) + '" target="_blank" class="yt-video-link">Lihat di YouTube</a></div>';
+      }
+      if (!yt.isUploading) {
         html += '<div class="yt-form">';
         html += '<input type="text" class="form-input" id="ytTitle" placeholder="Judul video" value="' + escapeHtml(project.title || project.niche || '') + '"/>';
         html += '<textarea class="form-input" id="ytDesc" rows="2" placeholder="Deskripsi (opsional)">' + escapeHtml(project.niche || '') + '</textarea>';
@@ -13278,19 +13281,14 @@ function handleSSEEvent(data) {
     case 'youtube_upload_start':
       if (data.projectId) {
         state.automation.youtube.isUploading = true;
-        state.automation.youtube.uploadProgress = { uploaded: 0, total: data.totalScenes, status: 'uploading' };
+        state.automation.youtube.uploadProgress = { step: 'starting', message: 'Memulai...' };
         render(true);
       }
       break;
 
     case 'youtube_upload_progress':
       if (data.projectId) {
-        state.automation.youtube.uploadProgress = { uploaded: data.uploaded, total: data.total, status: data.status };
-        if (data.status === 'uploaded') {
-          showToast('Scene ' + (data.sceneIndex + 1) + ' uploaded!', 'success');
-        } else if (data.status === 'failed') {
-          showToast('Scene ' + (data.sceneIndex + 1) + ' gagal upload', 'error');
-        }
+        state.automation.youtube.uploadProgress = { step: data.step, message: data.message };
         render(true);
       }
       break;
@@ -13299,7 +13297,12 @@ function handleSSEEvent(data) {
       if (data.projectId) {
         state.automation.youtube.isUploading = false;
         state.automation.youtube.uploadProgress = null;
-        showToast('Upload selesai! ' + data.uploaded + ' video uploaded' + (data.failed > 0 ? ', ' + data.failed + ' gagal' : ''), data.failed > 0 ? 'warning' : 'success');
+        if (data.success) {
+          state.automation.youtube.lastVideoUrl = data.videoUrl;
+          showToast('Upload berhasil! Video sudah di YouTube', 'success');
+        } else {
+          showToast('Upload gagal: ' + (data.error || 'Unknown error'), 'error');
+        }
         render(true);
       }
       break;
