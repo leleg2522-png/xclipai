@@ -11401,11 +11401,13 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
     const modelConfig = {
+      'grok-video-3': { apiModel: 'grok-video-3', duration: 5 },
       'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
+      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5 },
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
     };
-    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast'];
+    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
@@ -11651,11 +11653,13 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
 
     const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
     const modelConfig = {
+      'grok-video-3': { apiModel: 'grok-video-3', duration: 5 },
       'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
+      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5 },
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
     };
-    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast'];
+    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
     const imageModel = project.image_model || 'gemini-2.5-flash-image';
 
     (async () => {

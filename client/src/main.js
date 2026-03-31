@@ -388,7 +388,7 @@ const state = {
     newProject: {
       niche: '',
       format: 'shorts',
-      videoModel: 'veo-3.1-fast',
+      videoModel: 'veo-3.1-fast-5s',
       sceneCount: 3,
       language: 'id'
     },
@@ -6424,7 +6424,7 @@ async function createAutomationProject() {
     });
     var data = await response.json();
     if (data.projectId) {
-      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'veo-3.1-fast', sceneCount: 3, language: 'id' };
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'veo-3.1-fast-5s', sceneCount: 3, language: 'id' };
       showToast('Project dibuat!', 'success');
       await loadAutomationProjects();
       loadAutomationProjectDetail(data.projectId);
@@ -6565,9 +6565,11 @@ function renderAutomationPage() {
   html += '<option value="landscape"' + (state.automation.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoVideoModel">';
-  html += '<option value="veo-3.1-fast"' + (state.automation.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
-  html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1</option>';
-  html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 Audio</option>';
+  html += '<option value="veo-3.1-fast-5s"' + (state.automation.newProject.videoModel === 'veo-3.1-fast-5s' ? ' selected' : '') + '>Veo 3.1 Fast 5s</option>';
+  html += '<option value="veo-3.1-fast"' + (state.automation.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast 8s</option>';
+  html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1 8s</option>';
+  html += '<option value="grok-video-3"' + (state.automation.newProject.videoModel === 'grok-video-3' ? ' selected' : '') + '>Grok 3 5s</option>';
+  html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 10s Audio</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoSceneCount">';
   for (var sc = 2; sc <= 8; sc++) {
