@@ -11227,7 +11227,7 @@ Rules:
     const chatResponse = await axios.post(
       'https://apimodels.app/api/v1/chat/completions',
       {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
