@@ -11226,9 +11226,9 @@ Rules:
     }
 
     const chatModels = [
-      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-5', key: apimodelsKey },
-      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-4.1', key: apimodelsKey },
-      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gemini-2.5-flash', key: apimodelsKey }
+      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gpt-5', key: apimodelsKey },
+      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gpt-4.1', key: apimodelsKey },
+      { url: 'https://apimodels.app/api/v1/chat/completions', model: 'gemini-2.5-flash', key: apimodelsKey }
     ];
 
     let chatResponse = null;
