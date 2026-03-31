@@ -11225,24 +11225,48 @@ Rules:
       return res.status(500).json({ error: 'ApiModels API key not configured' });
     }
 
-    const chatResponse = await axios.post(
-      'https://api.apimodels.app/v1/chat/completions',
-      {
-        model: 'gpt-5',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.8
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${apimodelsKey}`,
-          'Content-Type': 'application/json'
+    let chatResponse;
+    try {
+      chatResponse = await axios.post(
+        'https://api.apimodels.app/v1/chat/completions',
+        {
+          model: 'gpt-5',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.8
         },
-        timeout: 60000
-      }
-    );
+        {
+          headers: {
+            'Authorization': `Bearer ${apimodelsKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        }
+      );
+    } catch (chatErr) {
+      const errMsg = chatErr.response?.data?.error?.message || chatErr.response?.data?.message || chatErr.message;
+      console.error('[AUTOMATION] Chat API error:', errMsg, 'Status:', chatErr.response?.status);
+      await pool.query(
+        `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+        [projectId, 'Chat API error: ' + errMsg]
+      );
+      sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
+      return res.status(500).json({ error: 'Gagal generate script: ' + errMsg });
+    }
+
+    console.log('[AUTOMATION] Chat response status:', chatResponse.status);
+    if (!chatResponse.data?.choices?.[0]?.message?.content) {
+      const rawResp = JSON.stringify(chatResponse.data).substring(0, 500);
+      console.error('[AUTOMATION] Unexpected chat response:', rawResp);
+      await pool.query(
+        `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+        [projectId, 'Unexpected API response format']
+      );
+      sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
+      return res.status(500).json({ error: 'Response API tidak sesuai format' });
+    }
 
     const aiContent = chatResponse.data.choices[0].message.content;
     let scriptData;
