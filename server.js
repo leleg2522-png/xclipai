@@ -11557,11 +11557,13 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               }
             );
 
+            console.log(`[AUTOMATION] Video create response: ${JSON.stringify(videoResponse.data).substring(0, 500)}`);
             const videoData = videoResponse.data?.data || videoResponse.data;
-            const taskId = videoData?.taskId || videoData?.task_id;
+            const taskId = videoData?.taskId || videoData?.task_id || videoData?.id;
             if (!taskId) {
               throw new Error('No task ID returned from video API: ' + JSON.stringify(videoResponse.data));
             }
+            console.log(`[AUTOMATION] Video task ID: ${taskId}`);
 
             await pool.query(
               `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -11569,8 +11571,9 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
             );
 
             let videoUrl = null;
-            for (let attempt = 0; attempt < 360; attempt++) {
-              await new Promise(r => setTimeout(r, 5000));
+            let pollErrors = 0;
+            for (let attempt = 0; attempt < 600; attempt++) {
+              await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
               try {
                 const statusResp = await axios.get(
                   `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
@@ -11579,25 +11582,30 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                 const rawResp = statusResp.data;
                 const sData = rawResp?.data || rawResp;
                 const sStatus = sData?.state || sData?.status;
-                const progress = sData?.progress;
-                if (attempt % 12 === 0) {
-                  console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}, progress=${progress}, raw=${JSON.stringify(rawResp).substring(0, 300)}`);
-                }
-                if (sStatus === 'completed' || sStatus === 'success') {
-                  videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url;
-                  console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
+                console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
+
+                if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
+                  videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url || sData?.output?.video;
+                  if (!videoUrl) {
+                    console.log(`[AUTOMATION] Scene ${scene.scene_index} status=${sStatus} but no URL found! Full response: ${JSON.stringify(rawResp).substring(0, 500)}`);
+                  } else {
+                    console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
+                  }
                   break;
                 }
                 if (sStatus === 'failed' || sStatus === 'error') {
                   throw new Error(sData?.failMsg || sData?.error || 'Video generation failed');
                 }
+                pollErrors = 0;
               } catch (pollErr) {
                 if (pollErr.message.includes('failed') || pollErr.message.includes('Video generation')) throw pollErr;
-                console.log(`[AUTOMATION] Poll error (retry): ${pollErr.message}`);
+                pollErrors++;
+                console.log(`[AUTOMATION] Poll error #${pollErrors}: ${pollErr.message}`);
+                if (pollErrors > 10) throw new Error('Too many consecutive poll errors: ' + pollErr.message);
               }
             }
 
-            if (!videoUrl) throw new Error('Video generation timed out after 30 minutes');
+            if (!videoUrl) throw new Error('Video generation timed out after 40 minutes');
 
             await pool.query(
               `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -11754,8 +11762,9 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         );
 
         let videoUrl = null;
-        for (let attempt = 0; attempt < 360; attempt++) {
-          await new Promise(r => setTimeout(r, 5000));
+        let pollErrors = 0;
+        for (let attempt = 0; attempt < 600; attempt++) {
+          await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
           try {
             const statusResp = await axios.get(
               `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
@@ -11764,21 +11773,26 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             const rawResp = statusResp.data;
             const sData = rawResp?.data || rawResp;
             const sStatus = sData?.state || sData?.status;
-            if (attempt % 12 === 0) {
-              console.log(`[AUTOMATION] Retry scene ${sceneIndex} poll #${attempt}: state=${sStatus}, progress=${sData?.progress}, raw=${JSON.stringify(rawResp).substring(0, 300)}`);
-            }
-            if (sStatus === 'completed' || sStatus === 'success') {
-              videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url;
-              console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
+            console.log(`[AUTOMATION] Retry scene ${sceneIndex} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
+            if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
+              videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url || sData?.output?.video;
+              if (!videoUrl) {
+                console.log(`[AUTOMATION] Retry scene ${sceneIndex} status=${sStatus} but no URL! Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
+              } else {
+                console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
+              }
               break;
             }
             if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
+            pollErrors = 0;
           } catch (pollErr) {
             if (pollErr.message.includes('Failed') || pollErr.message.includes('failed')) throw pollErr;
-            console.log(`[AUTOMATION] Retry poll error (retry): ${pollErr.message}`);
+            pollErrors++;
+            console.log(`[AUTOMATION] Retry poll error #${pollErrors}: ${pollErr.message}`);
+            if (pollErrors > 10) throw new Error('Too many consecutive poll errors: ' + pollErr.message);
           }
         }
-        if (!videoUrl) throw new Error('Video generation timed out after 30 minutes');
+        if (!videoUrl) throw new Error('Video generation timed out after 40 minutes');
 
         await pool.query(
           `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
