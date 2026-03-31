@@ -11193,7 +11193,7 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const systemPrompt = `You are a professional content creator and scriptwriter. Create engaging video scripts for social media.
-Always respond with valid JSON only, no markdown formatting.`;
+You MUST maintain strict character consistency across ALL scenes. Always respond with valid JSON only, no markdown formatting.`;
     const userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 The script must have exactly ${project.scene_count} scenes.
 Language: ${langName}
@@ -11201,20 +11201,24 @@ Language: ${langName}
 Return ONLY valid JSON with this structure:
 {
   "title": "catchy video title",
+  "character_description": "Detailed, fixed description of the main character(s) that will appear in EVERY scene. Include: exact appearance (hair color, style, length), skin tone, eye color, body type, clothing (exact colors and style), accessories. This description must be specific enough to recreate the SAME character consistently. Example: 'A young girl with long straight black hair, brown eyes, light skin, wearing a red hoodie with white stripes, blue jeans, and white sneakers'",
   "scenes": [
     {
       "narration": "voiceover text for this scene (${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'})",
-      "visual_prompt": "detailed visual description for AI video generation, cinematic, high quality, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
+      "visual_prompt": "detailed visual description for AI video generation. MUST start with the exact character_description, then describe the action, setting, camera angle, lighting. ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
     }
   ]
 }
 
 Rules:
+- CRITICAL: Define character_description ONCE, then COPY the EXACT same character appearance description at the START of every visual_prompt. This ensures the AI generates the SAME character in every scene.
+- If the video features animated/cartoon characters, describe their exact design: art style (chibi, anime, 3D pixar, etc), exact colors, proportions, features
 - Each scene narration should be concise and engaging
-- Visual prompts should be detailed, cinematic descriptions suitable for AI video generation
+- Visual prompts should be detailed, cinematic descriptions suitable for AI image and video generation
 - Visual prompts must be in English regardless of narration language
 - Make the content viral-worthy and attention-grabbing
-- The visual_prompt should describe the scene visually, not repeat the narration`;
+- The visual_prompt should describe the scene visually, not repeat the narration
+- Every visual_prompt MUST contain the character description verbatim as the first part`;
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
     if (!apimodelsKey) {
@@ -11304,6 +11308,17 @@ Rules:
     const targetCount = project.scene_count;
     if (scriptData.scenes.length > targetCount) {
       scriptData.scenes = scriptData.scenes.slice(0, targetCount);
+    }
+
+    const charDesc = scriptData.character_description || '';
+    if (charDesc) {
+      console.log(`[AUTOMATION] Character description: ${charDesc.substring(0, 200)}`);
+      for (let i = 0; i < scriptData.scenes.length; i++) {
+        const vp = scriptData.scenes[i].visual_prompt || '';
+        if (!vp.toLowerCase().includes(charDesc.substring(0, 30).toLowerCase())) {
+          scriptData.scenes[i].visual_prompt = charDesc + '. ' + vp;
+        }
+      }
     }
 
     await pool.query(
