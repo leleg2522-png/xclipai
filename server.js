@@ -11667,15 +11667,17 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                   console.log(`[AUTOMATION] Downloaded scene ${s.scene_index}: ${destPath}`);
                 }
 
-                const outputPath = require('path').join(tmpDir, `auto_${projectId}_merged.mp4`);
-                const mergedPath = await concatVideosFFmpeg(downloadedFiles, outputPath);
-                console.log(`[AUTOMATION] Merged video: ${mergedPath}`);
+                const mergedFilename = `auto_${projectId}_merged_${Date.now()}.mp4`;
+                const outputPath = require('path').join(__dirname, 'processed', mergedFilename);
+                await concatVideosFFmpeg(downloadedFiles, outputPath);
+                const mergedUrl = `/processed/${mergedFilename}`;
+                console.log(`[AUTOMATION] Merged video: ${mergedUrl}`);
 
                 await pool.query(
                   `UPDATE automation_projects SET status = 'completed', final_video_url = $2, updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
-                  [projectId, mergedPath]
+                  [projectId, mergedUrl]
                 );
-                sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed', merged: true });
+                sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
                 for (const f of downloadedFiles) {
                   try { require('fs').unlinkSync(f); } catch (e) {}
@@ -11710,6 +11712,67 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
   } catch (error) {
     console.error('[AUTOMATION] Start production error:', error.message);
     res.status(500).json({ error: 'Gagal memulai produksi' });
+  }
+});
+
+app.post('/api/automation/projects/:projectId/merge', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+
+    const scenesResult = await pool.query(
+      `SELECT * FROM automation_scenes WHERE project_id = $1 AND video_url IS NOT NULL ORDER BY scene_index`,
+      [projectId]
+    );
+    if (scenesResult.rows.length === 0) return res.status(400).json({ error: 'Tidak ada scene dengan video untuk digabung' });
+
+    await pool.query(
+      `UPDATE automation_projects SET status = 'merging', updated_at = NOW() WHERE project_id = $1`,
+      [projectId]
+    );
+    sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'merging' });
+    res.json({ success: true, message: 'Merging videos...' });
+
+    (async () => {
+      try {
+        const downloadedFiles = [];
+        const tmpDir = require('os').tmpdir();
+        for (const s of scenesResult.rows) {
+          const destPath = require('path').join(tmpDir, `auto_${projectId}_scene_${s.scene_index}.mp4`);
+          await downloadFileToPath(s.video_url, destPath);
+          downloadedFiles.push(destPath);
+        }
+        const mergedFilename = `auto_${projectId}_merged_${Date.now()}.mp4`;
+        const outputPath = require('path').join(__dirname, 'processed', mergedFilename);
+        await concatVideosFFmpeg(downloadedFiles, outputPath);
+        const mergedUrl = `/processed/${mergedFilename}`;
+        console.log(`[AUTOMATION] Manual merge: ${mergedUrl}`);
+        await pool.query(
+          `UPDATE automation_projects SET status = 'completed', final_video_url = $2, updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+          [projectId, mergedUrl]
+        );
+        sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
+        for (const f of downloadedFiles) {
+          try { require('fs').unlinkSync(f); } catch (e) {}
+        }
+      } catch (err) {
+        console.error(`[AUTOMATION] Manual merge failed:`, err.message);
+        await pool.query(
+          `UPDATE automation_projects SET status = 'completed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+          [projectId, 'Merge failed: ' + err.message]
+        );
+        sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+      }
+    })();
+  } catch (error) {
+    console.error('[AUTOMATION] Merge error:', error.message);
+    res.status(500).json({ error: 'Gagal merge video' });
   }
 });
 

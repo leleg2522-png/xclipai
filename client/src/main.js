@@ -6503,6 +6503,24 @@ async function retryAutomationScene(projectId, sceneIndex, retryMode) {
   }
 }
 
+async function mergeAutomationVideos(projectId) {
+  try {
+    var response = await fetch(API_URL + '/api/automation/projects/' + projectId + '/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
+    });
+    var data = await response.json();
+    if (data.success) {
+      showToast('Menggabungkan video...', 'info');
+    } else {
+      showToast(data.error || 'Gagal merge', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal merge: ' + err.message, 'error');
+  }
+}
+
 async function deleteAutomationProject(projectId) {
   if (!confirm('Hapus project ini?')) return;
   try {
@@ -6714,6 +6732,24 @@ function renderAutomationDetailPage() {
     html += '</div>';
   }
 
+  var allScenesCompleted = scenes.length > 0 && scenes.every(function(s) { return s.status === 'completed' && s.video_url; });
+  var hasMultipleVideos = scenes.filter(function(s) { return s.video_url; }).length > 1;
+  if (hasMultipleVideos && (project.status === 'completed' || project.status === 'production_failed') && !project.final_video_url) {
+    html += '<div class="section-card" style="text-align:center;padding:16px;">';
+    html += '<button class="btn-primary auto-merge-btn" data-project-id="' + project.project_id + '">Gabungkan Semua Video</button>';
+    html += '</div>';
+  }
+  if (project.final_video_url) {
+    html += '<div class="section-card">';
+    html += '<h3 style="margin-bottom:8px;">Video Final</h3>';
+    html += '<video src="' + escapeHtml(project.final_video_url) + '" controls style="width:100%;max-height:400px;border-radius:8px;"></video>';
+    html += '<div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">';
+    html += '<a href="' + escapeHtml(project.final_video_url) + '" download class="btn-secondary" style="text-decoration:none;">Download</a>';
+    html += '<button class="btn-secondary auto-merge-btn" data-project-id="' + project.project_id + '">Re-merge</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+
   var hasCompleted = scenes.some(function(s) { return s.status === 'completed' && s.video_url; });
   if (hasCompleted && (project.status === 'completed' || project.status === 'production_failed')) {
     var yt = state.automation.youtube;
@@ -6799,6 +6835,12 @@ function attachAutomationListeners() {
       startAutomationProduction(startProdBtn.getAttribute('data-project-id'));
     });
   }
+
+  document.querySelectorAll('.auto-merge-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      mergeAutomationVideos(btn.getAttribute('data-project-id'));
+    });
+  });
 
   var deleteBtn = document.getElementById('autoDeleteBtn');
   if (deleteBtn) {
