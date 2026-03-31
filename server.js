@@ -11211,14 +11211,16 @@ Return ONLY valid JSON with this structure:
 }
 
 Rules:
-- CRITICAL: Define character_description ONCE, then COPY the EXACT same character appearance description at the START of every visual_prompt. This ensures the AI generates the SAME character in every scene.
-- If the video features animated/cartoon characters, describe their exact design: art style (chibi, anime, 3D pixar, etc), exact colors, proportions, features
+- CRITICAL: Define character_description ONCE with EXTREME specificity. Include: exact number of characters (e.g. "3 characters"), each character's name/label, exact appearance (species/type, colors, clothing, accessories, distinguishing features)
+- Example character_description: "3 chibi characters in 3D Pixar style: (1) Luna - a pink bunny girl with long floppy ears, sparkling purple eyes, wearing a yellow star-print dress and silver tiara, (2) Max - an orange tabby cat boy with big green eyes, wearing a blue striped hoodie and red sneakers, (3) Koko - a small green frog with round golden eyes, wearing a tiny purple top hat and bow tie"
+- COPY the EXACT character_description verbatim at the START of every visual_prompt, then add the scene action/setting after it
+- Keep the SAME number of characters in every scene - never add or remove characters
+- If the video features animated/cartoon characters, describe their exact design: art style, exact colors, proportions, features
 - Each scene narration should be concise and engaging
 - Visual prompts should be detailed, cinematic descriptions suitable for AI image and video generation
 - Visual prompts must be in English regardless of narration language
 - Make the content viral-worthy and attention-grabbing
-- The visual_prompt should describe the scene visually, not repeat the narration
-- Every visual_prompt MUST contain the character description verbatim as the first part`;
+- The visual_prompt should describe the scene visually, not repeat the narration`;
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
     if (!apimodelsKey) {
@@ -11430,8 +11432,12 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     (async () => {
       try {
+        let referenceImageUrl = null;
         for (const scene of scenes.rows) {
-          if (scene.status === 'completed' && scene.video_url) continue;
+          if (scene.status === 'completed' && scene.video_url) {
+            if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
+            continue;
+          }
 
           if (!scene.image_url) {
             await pool.query(
@@ -11441,20 +11447,38 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
             sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_image' });
 
             try {
-              const imgBody = {
-                model: imageModel,
-                prompt: scene.visual_prompt,
-                aspect_ratio: aspectRatio
-              };
-              console.log(`[AUTOMATION] Generating image for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(imgBody));
-              const imgResponse = await axios.post(
-                'https://apimodels.app/api/v1/images/generations',
-                imgBody,
-                {
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
-                  timeout: 60000
-                }
-              );
+              let imgResponse;
+              if (referenceImageUrl && scene.scene_index > 0) {
+                const editBody = {
+                  prompt: `Using the exact same characters from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions as image 1.`,
+                  images: [referenceImageUrl],
+                  aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
+                };
+                console.log(`[AUTOMATION] Generating image (with ref) for ${projectId} scene ${scene.scene_index}`);
+                imgResponse = await axios.post(
+                  'https://apimodels.app/api/v1/images/edit',
+                  editBody,
+                  {
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
+                    timeout: 60000
+                  }
+                );
+              } else {
+                const imgBody = {
+                  model: imageModel,
+                  prompt: scene.visual_prompt,
+                  aspect_ratio: aspectRatio
+                };
+                console.log(`[AUTOMATION] Generating image for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(imgBody));
+                imgResponse = await axios.post(
+                  'https://apimodels.app/api/v1/images/generations',
+                  imgBody,
+                  {
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
+                    timeout: 60000
+                  }
+                );
+              }
 
               const imgData = imgResponse.data?.data || imgResponse.data;
               const imgTaskId = imgData?.taskId || imgData?.task_id;
@@ -11488,6 +11512,8 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               }
 
               if (!imageUrl) throw new Error('Image generation failed or timed out');
+
+              if (!referenceImageUrl) referenceImageUrl = imageUrl;
 
               await pool.query(
                 `UPDATE automation_scenes SET image_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
