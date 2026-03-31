@@ -6484,13 +6484,13 @@ async function startAutomationProduction(projectId) {
   render();
 }
 
-async function retryAutomationScene(projectId, sceneIndex) {
+async function retryAutomationScene(projectId, sceneIndex, retryMode) {
   try {
     var response = await fetch(API_URL + '/api/automation/projects/' + projectId + '/retry-scene', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ sceneIndex: sceneIndex })
+      body: JSON.stringify({ sceneIndex: sceneIndex, retryMode: retryMode || 'video' })
     });
     var data = await response.json();
     if (data.success) {
@@ -6533,8 +6533,10 @@ function getAutomationStatusBadge(status) {
     'generating_image': { label: 'Generating Image...', cls: 'badge-processing' },
     'image_ready': { label: 'Image Ready', cls: 'badge-ready' },
     'generating_video': { label: 'Generating Video...', cls: 'badge-processing' },
+    'merging': { label: 'Merging Videos...', cls: 'badge-processing' },
     'completed': { label: 'Completed', cls: 'badge-completed' },
-    'production_failed': { label: 'Production Failed', cls: 'badge-failed' }
+    'production_failed': { label: 'Production Failed', cls: 'badge-failed' },
+    'failed': { label: 'Failed', cls: 'badge-failed' }
   };
   var info = map[status] || { label: status, cls: 'badge-draft' };
   return '<span class="auto-badge ' + info.cls + '">' + info.label + '</span>';
@@ -6675,7 +6677,11 @@ function renderAutomationDetailPage() {
       html += '<span class="auto-scene-num">Scene ' + (scene.scene_index + 1) + '</span>';
       html += getAutomationStatusBadge(scene.status);
       if (scene.status === 'failed') {
-        html += '<button class="auto-retry-link auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '">Retry</button>';
+        html += '<button class="auto-retry-link auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="video">Retry</button>';
+      }
+      if (scene.status === 'completed') {
+        html += '<button class="auto-retry-link auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="video" title="Retry video saja">Retry Video</button>';
+        html += '<button class="auto-retry-link auto-retry-btn" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="full" title="Retry image + video">Retry All</button>';
       }
       html += '</div>';
 
@@ -6804,7 +6810,7 @@ function attachAutomationListeners() {
   document.querySelectorAll('.auto-retry-btn').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
-      retryAutomationScene(btn.getAttribute('data-project'), parseInt(btn.getAttribute('data-scene')));
+      retryAutomationScene(btn.getAttribute('data-project'), parseInt(btn.getAttribute('data-scene')), btn.getAttribute('data-mode') || 'video');
     });
   });
 

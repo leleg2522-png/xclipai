@@ -11645,12 +11645,56 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               [projectId]
             );
             sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'production_failed' });
-          } else {
-            await pool.query(
-              `UPDATE automation_projects SET status = 'completed', updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+          } else if (parseInt(stats.completed) > 0) {
+            const completedScenesData = await pool.query(
+              `SELECT * FROM automation_scenes WHERE project_id = $1 AND status = 'completed' AND video_url IS NOT NULL ORDER BY scene_index ASC`,
               [projectId]
             );
-            sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+
+            if (completedScenesData.rows.length > 1) {
+              try {
+                console.log(`[AUTOMATION] Merging ${completedScenesData.rows.length} scene videos...`);
+                await pool.query(`UPDATE automation_projects SET status = 'merging', updated_at = NOW() WHERE project_id = $1`, [projectId]);
+                sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'merging' });
+
+                const downloadedFiles = [];
+                const tmpDir = require('os').tmpdir();
+                for (const s of completedScenesData.rows) {
+                  const ext = s.video_url.includes('.mp4') ? '.mp4' : '.mp4';
+                  const destPath = require('path').join(tmpDir, `auto_${projectId}_scene_${s.scene_index}${ext}`);
+                  await downloadFileToPath(s.video_url, destPath);
+                  downloadedFiles.push(destPath);
+                  console.log(`[AUTOMATION] Downloaded scene ${s.scene_index}: ${destPath}`);
+                }
+
+                const outputPath = require('path').join(tmpDir, `auto_${projectId}_merged.mp4`);
+                const mergedPath = await concatVideosFFmpeg(downloadedFiles, outputPath);
+                console.log(`[AUTOMATION] Merged video: ${mergedPath}`);
+
+                await pool.query(
+                  `UPDATE automation_projects SET status = 'completed', final_video_url = $2, updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+                  [projectId, mergedPath]
+                );
+                sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed', merged: true });
+
+                for (const f of downloadedFiles) {
+                  try { require('fs').unlinkSync(f); } catch (e) {}
+                }
+              } catch (mergeErr) {
+                console.error(`[AUTOMATION] Merge failed:`, mergeErr.message);
+                await pool.query(
+                  `UPDATE automation_projects SET status = 'completed', error_message = $2, updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+                  [projectId, 'Merge failed: ' + mergeErr.message]
+                );
+                sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+              }
+            } else {
+              await pool.query(
+                `UPDATE automation_projects SET status = 'completed', updated_at = NOW(), completed_at = NOW() WHERE project_id = $1`,
+                [projectId]
+              );
+              sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+            }
           }
         }
       } catch (pipelineErr) {
@@ -11672,7 +11716,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
-  const { sceneIndex } = req.body;
+  const { sceneIndex, retryMode } = req.body;
   try {
     const projResult = await pool.query(
       `SELECT * FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
@@ -11687,16 +11731,25 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     );
     if (sceneResult.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
     const scene = sceneResult.rows[0];
-    if (scene.status !== 'failed') return res.status(400).json({ error: 'Hanya scene yang gagal bisa di-retry' });
+    if (scene.status !== 'failed' && scene.status !== 'completed') return res.status(400).json({ error: 'Scene harus failed atau completed untuk di-retry' });
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
     if (!apimodelsKey) return res.status(500).json({ error: 'Video API key tidak tersedia' });
 
-    const retryInitStatus = scene.image_url ? 'generating_video' : 'generating_image';
-    await pool.query(
-      `UPDATE automation_scenes SET status = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-      [projectId, sceneIndex, retryInitStatus]
-    );
+    const retryFull = retryMode === 'full' || !scene.image_url;
+    const retryInitStatus = retryFull ? 'generating_image' : 'generating_video';
+    if (retryFull) {
+      await pool.query(
+        `UPDATE automation_scenes SET status = $3, error_message = NULL, image_url = NULL, image_task_id = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus]
+      );
+      scene.image_url = null;
+    } else {
+      await pool.query(
+        `UPDATE automation_scenes SET status = $3, error_message = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus]
+      );
+    }
     if (project.status === 'production_failed' || project.status === 'completed') {
       await pool.query(
         `UPDATE automation_projects SET status = 'producing', error_message = NULL, updated_at = NOW() WHERE project_id = $1`,
