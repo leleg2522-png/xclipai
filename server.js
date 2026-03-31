@@ -11216,19 +11216,19 @@ Rules:
 - Make the content viral-worthy and attention-grabbing
 - The visual_prompt should describe the scene visually, not repeat the narration`;
 
-    const openrouterKey = process.env.OPENROUTER_API_KEY;
-    if (!openrouterKey) {
+    const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
+    if (!apimodelsKey) {
       await pool.query(
-        `UPDATE automation_projects SET status = 'script_failed', error_message = 'OpenRouter API key not configured', updated_at = NOW() WHERE project_id = $1`,
+        `UPDATE automation_projects SET status = 'script_failed', error_message = 'ApiModels API key not configured', updated_at = NOW() WHERE project_id = $1`,
         [projectId]
       );
-      return res.status(500).json({ error: 'OpenRouter API key not configured' });
+      return res.status(500).json({ error: 'ApiModels API key not configured' });
     }
 
     const chatResponse = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
+      'https://api.apimodels.app/v1/chat/completions',
       {
-        model: 'google/gemini-2.5-flash-preview',
+        model: 'gpt-5',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -11237,7 +11237,7 @@ Rules:
       },
       {
         headers: {
-          'Authorization': `Bearer ${openrouterKey}`,
+          'Authorization': `Bearer ${apimodelsKey}`,
           'Content-Type': 'application/json'
         },
         timeout: 60000
@@ -11376,10 +11376,86 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
+    const imageModel = project.image_model || 'gemini-2.5-flash-image';
+
     (async () => {
       try {
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) continue;
+
+          if (!scene.image_url) {
+            await pool.query(
+              `UPDATE automation_scenes SET status = 'generating_image', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_image' });
+
+            try {
+              const imgBody = {
+                model: imageModel,
+                prompt: scene.visual_prompt,
+                aspect_ratio: aspectRatio
+              };
+              console.log(`[AUTOMATION] Generating image for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(imgBody));
+              const imgResponse = await axios.post(
+                'https://apimodels.app/api/v1/images/generations',
+                imgBody,
+                {
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
+                  timeout: 60000
+                }
+              );
+
+              const imgData = imgResponse.data?.data || imgResponse.data;
+              const imgTaskId = imgData?.taskId || imgData?.task_id;
+
+              let imageUrl = imgData?.url || imgData?.resultUrls?.[0];
+              if (!imageUrl && imgTaskId) {
+                await pool.query(
+                  `UPDATE automation_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, imgTaskId]
+                );
+                for (let attempt = 0; attempt < 60; attempt++) {
+                  await new Promise(r => setTimeout(r, 5000));
+                  try {
+                    const pollResp = await axios.get(
+                      `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
+                      { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+                    );
+                    const pData = pollResp.data?.data || pollResp.data;
+                    const pStatus = pData?.state || pData?.status;
+                    if (pStatus === 'completed' || pStatus === 'success') {
+                      imageUrl = pData?.url || pData?.resultUrls?.[0] || pData?.image_url;
+                      break;
+                    }
+                    if (pStatus === 'failed' || pStatus === 'error') {
+                      throw new Error(pData?.failMsg || pData?.error || 'Image generation failed');
+                    }
+                  } catch (pollErr) {
+                    if (pollErr.message.includes('failed') || pollErr.message.includes('Image generation')) throw pollErr;
+                  }
+                }
+              }
+
+              if (!imageUrl) throw new Error('Image generation failed or timed out');
+
+              await pool.query(
+                `UPDATE automation_scenes SET image_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                [projectId, scene.scene_index, imageUrl]
+              );
+              scene.image_url = imageUrl;
+              sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'image_ready', imageUrl });
+              console.log(`[AUTOMATION] Scene ${scene.scene_index} image ready: ${imageUrl}`);
+            } catch (imgErr) {
+              console.error(`[AUTOMATION] Scene ${scene.scene_index} image failed:`, imgErr.message);
+              await pool.query(
+                `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                [projectId, scene.scene_index, 'Image: ' + imgErr.message]
+              );
+              sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: imgErr.message });
+              continue;
+            }
+          }
 
           await pool.query(
             `UPDATE automation_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -11392,9 +11468,10 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               model: vidModel.apiModel,
               prompt: scene.visual_prompt,
               aspect_ratio: aspectRatio,
-              duration: vidModel.duration
+              duration: vidModel.duration,
+              images: [scene.image_url]
             };
-            console.log(`[AUTOMATION] Generating video for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(videoBody));
+            console.log(`[AUTOMATION] Generating video (i2v) for ${projectId} scene ${scene.scene_index}:`, JSON.stringify({ ...videoBody, images: ['[IMAGE]'] }));
             const videoResponse = await axios.post(
               'https://apimodels.app/api/v1/video/generations',
               videoBody,
@@ -11448,10 +11525,10 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
             console.log(`[AUTOMATION] Scene ${scene.scene_index} completed: ${videoUrl}`);
 
           } catch (sceneErr) {
-            console.error(`[AUTOMATION] Scene ${scene.scene_index} failed:`, sceneErr.message);
+            console.error(`[AUTOMATION] Scene ${scene.scene_index} video failed:`, sceneErr.message);
             await pool.query(
               `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, sceneErr.message]
+              [projectId, scene.scene_index, 'Video: ' + sceneErr.message]
             );
             sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: sceneErr.message });
           }
@@ -11519,9 +11596,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
     if (!apimodelsKey) return res.status(500).json({ error: 'Video API key tidak tersedia' });
 
+    const retryInitStatus = scene.image_url ? 'generating_video' : 'generating_image';
     await pool.query(
-      `UPDATE automation_scenes SET status = 'generating_video', error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-      [projectId, sceneIndex]
+      `UPDATE automation_scenes SET status = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+      [projectId, sceneIndex, retryInitStatus]
     );
     if (project.status === 'production_failed' || project.status === 'completed') {
       await pool.query(
@@ -11529,7 +11607,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         [projectId]
       );
     }
-    sendSSEToUser(req.session.userId, { type: 'automation_scene_update', projectId, sceneIndex, status: 'generating_video' });
+    sendSSEToUser(req.session.userId, { type: 'automation_scene_update', projectId, sceneIndex, status: retryInitStatus });
     res.json({ success: true, message: 'Retrying scene...' });
 
     const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
@@ -11539,13 +11617,47 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast'];
+    const imageModel = project.image_model || 'gemini-2.5-flash-image';
 
     (async () => {
       try {
-        const videoBody = { model: vidModel.apiModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio, duration: vidModel.duration };
+        let sceneImageUrl = scene.image_url;
+
+        if (!sceneImageUrl) {
+          const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio };
+          const imgResponse = await axios.post(
+            'https://apimodels.app/api/v1/images/generations', imgBody,
+            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+          );
+          const imgData = imgResponse.data?.data || imgResponse.data;
+          const imgTaskId = imgData?.taskId || imgData?.task_id;
+          sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
+
+          if (!sceneImageUrl && imgTaskId) {
+            for (let a = 0; a < 60; a++) {
+              await new Promise(r => setTimeout(r, 5000));
+              const pr = await axios.get(
+                `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
+                { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+              );
+              const pd = pr.data?.data || pr.data;
+              const ps = pd?.state || pd?.status;
+              if (ps === 'completed' || ps === 'success') { sceneImageUrl = pd?.url || pd?.resultUrls?.[0]; break; }
+              if (ps === 'failed' || ps === 'error') throw new Error(pd?.failMsg || 'Image failed');
+            }
+          }
+          if (!sceneImageUrl) throw new Error('Image generation failed');
+
+          await pool.query(
+            `UPDATE automation_scenes SET image_url = $3, status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+            [projectId, sceneIndex, sceneImageUrl]
+          );
+          sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex, status: 'generating_video', imageUrl: sceneImageUrl });
+        }
+
+        const videoBody = { model: vidModel.apiModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio, duration: vidModel.duration, images: [sceneImageUrl] };
         const videoResponse = await axios.post(
-          'https://apimodels.app/api/v1/video/generations',
-          videoBody,
+          'https://apimodels.app/api/v1/video/generations', videoBody,
           { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
         );
         const videoData = videoResponse.data?.data || videoResponse.data;
@@ -12916,6 +13028,8 @@ async function initDatabase() {
         scene_index INTEGER NOT NULL,
         narration TEXT,
         visual_prompt TEXT,
+        image_url TEXT,
+        image_task_id VARCHAR(255),
         video_task_id VARCHAR(255),
         video_url TEXT,
         audio_url TEXT,
@@ -12927,6 +13041,10 @@ async function initDatabase() {
       )
     `);
     console.log('Automation tables created');
+    try {
+      await pool.query(`ALTER TABLE automation_scenes ADD COLUMN IF NOT EXISTS image_url TEXT`);
+      await pool.query(`ALTER TABLE automation_scenes ADD COLUMN IF NOT EXISTS image_task_id VARCHAR(255)`);
+    } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS youtube_tokens (

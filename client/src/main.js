@@ -6530,6 +6530,9 @@ function getAutomationStatusBadge(status) {
     'script_ready': { label: 'Script Ready', cls: 'badge-ready' },
     'script_failed': { label: 'Script Failed', cls: 'badge-failed' },
     'producing': { label: 'Producing...', cls: 'badge-processing' },
+    'generating_image': { label: 'Generating Image...', cls: 'badge-processing' },
+    'image_ready': { label: 'Image Ready', cls: 'badge-ready' },
+    'generating_video': { label: 'Generating Video...', cls: 'badge-processing' },
     'completed': { label: 'Completed', cls: 'badge-completed' },
     'production_failed': { label: 'Production Failed', cls: 'badge-failed' }
   };
@@ -6674,6 +6677,9 @@ function renderAutomationDetailPage() {
       }
       html += '</div>';
 
+      if (scene.image_url && !scene.video_url) {
+        html += '<div class="auto-scene-image"><img src="' + escapeHtml(scene.image_url) + '" alt="Scene ' + (scene.scene_index + 1) + '"/></div>';
+      }
       if (scene.video_url) {
         html += '<div class="auto-scene-video"><video src="' + scene.video_url + '" controls preload="metadata"></video></div>';
       }
@@ -13269,6 +13275,7 @@ function handleSSEEvent(data) {
         var sceneToUpdate = state.automation.currentScenes.find(function(s) { return s.scene_index === data.sceneIndex; });
         if (sceneToUpdate) {
           sceneToUpdate.status = data.status;
+          if (data.imageUrl) sceneToUpdate.image_url = data.imageUrl;
           if (data.videoUrl) sceneToUpdate.video_url = data.videoUrl;
           if (data.error) sceneToUpdate.error_message = data.error;
         }
