@@ -11585,12 +11585,18 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                 console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
 
                 if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
-                  videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url || sData?.output?.video;
-                  if (!videoUrl) {
-                    console.log(`[AUTOMATION] Scene ${scene.scene_index} status=${sStatus} but no URL found! Full response: ${JSON.stringify(rawResp).substring(0, 500)}`);
-                  } else {
-                    console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
+                  const allUrls = sData?.resultUrls || sData?.videos || [];
+                  videoUrl = allUrls[0] || sData?.video_url || sData?.url || sData?.output?.video || sData?.video || sData?.result;
+                  if (!videoUrl && typeof rawResp === 'object') {
+                    const rawStr = JSON.stringify(rawResp);
+                    const urlMatch = rawStr.match(/https?:\/\/[^\s"',}]+\.mp4[^\s"',}]*/);
+                    if (urlMatch) videoUrl = urlMatch[0];
                   }
+                  if (!videoUrl) {
+                    console.log(`[AUTOMATION] Scene ${scene.scene_index} status=${sStatus} but no URL yet, keep polling. Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
+                    continue;
+                  }
+                  console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
                   break;
                 }
                 if (sStatus === 'failed' || sStatus === 'error') {
@@ -11775,12 +11781,18 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             const sStatus = sData?.state || sData?.status;
             console.log(`[AUTOMATION] Retry scene ${sceneIndex} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
             if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
-              videoUrl = sData?.resultUrls?.[0] || sData?.videos?.[0] || sData?.video_url || sData?.url || sData?.output?.video;
-              if (!videoUrl) {
-                console.log(`[AUTOMATION] Retry scene ${sceneIndex} status=${sStatus} but no URL! Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
-              } else {
-                console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
+              const allUrls = sData?.resultUrls || sData?.videos || [];
+              videoUrl = allUrls[0] || sData?.video_url || sData?.url || sData?.output?.video || sData?.video || sData?.result;
+              if (!videoUrl && typeof rawResp === 'object') {
+                const rawStr = JSON.stringify(rawResp);
+                const urlMatch = rawStr.match(/https?:\/\/[^\s"',}]+\.mp4[^\s"',}]*/);
+                if (urlMatch) videoUrl = urlMatch[0];
               }
+              if (!videoUrl) {
+                console.log(`[AUTOMATION] Retry scene ${sceneIndex} status=${sStatus} but no URL yet, keep polling. Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
+                continue;
+              }
+              console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
               break;
             }
             if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
