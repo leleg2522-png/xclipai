@@ -11225,47 +11225,57 @@ Rules:
       return res.status(500).json({ error: 'ApiModels API key not configured' });
     }
 
-    let chatResponse;
-    try {
-      chatResponse = await axios.post(
-        'https://api.apimodels.app/v1/chat/completions',
-        {
-          model: 'gpt-5',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.8
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${apimodelsKey}`,
-            'Content-Type': 'application/json'
+    const chatModels = [
+      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-5', key: apimodelsKey },
+      { url: 'https://api.apimodels.app/v1/chat/completions', model: 'gpt-4.1', key: apimodelsKey },
+      { url: 'https://openrouter.ai/api/v1/chat/completions', model: 'google/gemini-2.5-flash-preview', key: process.env.OPENROUTER_API_KEY }
+    ].filter(m => m.key);
+
+    let chatResponse = null;
+    let lastChatErr = null;
+    for (const chatModel of chatModels) {
+      try {
+        console.log(`[AUTOMATION] Trying chat model: ${chatModel.model} at ${chatModel.url}`);
+        chatResponse = await axios.post(
+          chatModel.url,
+          {
+            model: chatModel.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.8
           },
-          timeout: 120000
+          {
+            headers: {
+              'Authorization': `Bearer ${chatModel.key}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 120000
+          }
+        );
+        if (chatResponse.data?.choices?.[0]?.message?.content) {
+          console.log(`[AUTOMATION] Chat success with model: ${chatModel.model}`);
+          break;
         }
-      );
-    } catch (chatErr) {
-      const errMsg = chatErr.response?.data?.error?.message || chatErr.response?.data?.message || chatErr.message;
-      console.error('[AUTOMATION] Chat API error:', errMsg, 'Status:', chatErr.response?.status);
+        console.log(`[AUTOMATION] Model ${chatModel.model} returned empty content, trying next...`);
+        chatResponse = null;
+      } catch (chatErr) {
+        lastChatErr = chatErr;
+        const errMsg = chatErr.response?.data?.error?.message || chatErr.response?.data?.message || chatErr.message;
+        console.error(`[AUTOMATION] Chat model ${chatModel.model} failed:`, errMsg);
+        chatResponse = null;
+      }
+    }
+
+    if (!chatResponse || !chatResponse.data?.choices?.[0]?.message?.content) {
+      const errMsg = lastChatErr?.response?.data?.error?.message || lastChatErr?.message || 'All chat models failed';
       await pool.query(
         `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
         [projectId, 'Chat API error: ' + errMsg]
       );
       sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
       return res.status(500).json({ error: 'Gagal generate script: ' + errMsg });
-    }
-
-    console.log('[AUTOMATION] Chat response status:', chatResponse.status);
-    if (!chatResponse.data?.choices?.[0]?.message?.content) {
-      const rawResp = JSON.stringify(chatResponse.data).substring(0, 500);
-      console.error('[AUTOMATION] Unexpected chat response:', rawResp);
-      await pool.query(
-        `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
-        [projectId, 'Unexpected API response format']
-      );
-      sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
-      return res.status(500).json({ error: 'Response API tidak sesuai format' });
     }
 
     const aiContent = chatResponse.data.choices[0].message.content;
