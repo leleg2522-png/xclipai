@@ -11298,7 +11298,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   const freepikModels = {
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
-    'kling-v3': { endpoint: '/v1/ai/image-to-video/kling-v3', api: 'kling-ai' }
+    'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -11312,6 +11312,12 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       image: imageUrl, prompt: prompt || '', duration: '5',
       aspect_ratio: mappedAspect, negative_prompt: 'blurry, low quality, distorted',
       cfg_scale: 0.5, generate_audio: true
+    };
+  } else if (config.api === 'kling-v3') {
+    requestBody = {
+      image_url: imageUrl, prompt: prompt || '', duration: '5',
+      aspect_ratio: aspectRatio || '16:9', cfg_scale: 0.5,
+      negative_prompt: 'blurry, low quality, distorted'
     };
   } else {
     requestBody = {
