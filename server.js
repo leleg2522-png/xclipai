@@ -12252,7 +12252,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         if (parseInt(s.completed) + parseInt(s.failed) === parseInt(s.total)) {
           const finalStatus = parseInt(s.failed) === 0 ? 'completed' : (parseInt(s.completed) > 0 ? 'completed' : 'production_failed');
           await pool.query(
-            `UPDATE automation_projects SET status = $2, updated_at = NOW(), completed_at = CASE WHEN $2 = 'completed' THEN NOW() ELSE completed_at END WHERE project_id = $1`,
+            `UPDATE automation_projects SET status = $2::varchar, updated_at = NOW(), completed_at = CASE WHEN $2::varchar = 'completed' THEN NOW() ELSE completed_at END WHERE project_id = $1`,
             [projectId, finalStatus]
           );
           sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: finalStatus });
