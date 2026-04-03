@@ -5911,6 +5911,82 @@ app.post('/api/admin/rooms/:id/test-droplet', requireAdmin, async (req, res) => 
   }
 });
 
+// ============ ADMIN: FREEPIK KEY POOL ============
+
+app.get('/api/admin/key-pool', requireAdmin, async (req, res) => {
+  try {
+    const keys = await pool.query(
+      `SELECT kp.*, u.username as assigned_username FROM freepik_key_pool kp LEFT JOIN users u ON kp.assigned_user_id = u.id ORDER BY kp.status, kp.id`
+    );
+    const stats = await getKeyPoolStats();
+    res.json({ keys: keys.rows, stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/key-pool', requireAdmin, async (req, res) => {
+  try {
+    const { keys: rawKeys } = req.body;
+    if (!rawKeys) return res.status(400).json({ error: 'Keys required' });
+    const keyList = rawKeys.split(/[\n,]/).map(k => k.trim()).filter(Boolean);
+    let added = 0, skipped = 0;
+    for (const key of keyList) {
+      try {
+        const result = await pool.query(
+          `INSERT INTO freepik_key_pool (api_key) VALUES ($1) ON CONFLICT (api_key) DO NOTHING RETURNING id`, [key]
+        );
+        if (result.rowCount > 0) added++; else skipped++;
+      } catch (e) { skipped++; }
+    }
+    res.json({ success: true, added, skipped, total: keyList.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/key-pool/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM freepik_key_pool WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/key-pool/:id/reset', requireAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL WHERE id = $1`, [req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/key-pool/reset-all-exhausted', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL WHERE status = 'exhausted' RETURNING id`
+    );
+    res.json({ success: true, count: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/key-pool/unassign-all', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL WHERE status = 'assigned' RETURNING id`
+    );
+    res.json({ success: true, count: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== ROOM MANAGER API ====================
 
 app.get('/api/admin/ddos/blocked', requireAdmin, (req, res) => {
@@ -11100,6 +11176,298 @@ app.get('/api/ximage/download', async (req, res) => {
   }
 });
 
+// ============ FREEPIK KEY POOL SYSTEM ============
+
+const KEYS_PER_USER_PER_FEATURE = 5;
+const KEY_EXHAUSTED_RESET_HOURS = 24;
+
+async function assignKeysToUser(userId, feature, count = KEYS_PER_USER_PER_FEATURE) {
+  const existing = await pool.query(
+    `SELECT * FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = $2 AND status = 'assigned' ORDER BY id`,
+    [userId, feature]
+  );
+  if (existing.rows.length >= count) {
+    return existing.rows;
+  }
+  const needed = count - existing.rows.length;
+  const available = await pool.query(
+    `SELECT * FROM freepik_key_pool WHERE status = 'available' ORDER BY usage_count ASC, created_at ASC LIMIT $1`,
+    [needed]
+  );
+  for (const key of available.rows) {
+    await pool.query(
+      `UPDATE freepik_key_pool SET status = 'assigned', feature = $2, assigned_user_id = $3, assigned_at = NOW() WHERE id = $1`,
+      [key.id, feature, userId]
+    );
+  }
+  const result = await pool.query(
+    `SELECT * FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = $2 AND status = 'assigned' ORDER BY id`,
+    [userId, feature]
+  );
+  console.log(`[KEY-POOL] User ${userId} assigned ${result.rows.length} keys for ${feature} (needed ${needed}, got ${available.rows.length} from pool)`);
+  return result.rows;
+}
+
+async function getActiveKeyForUser(userId, feature, excludeKeys = []) {
+  const keys = await pool.query(
+    `SELECT * FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = $2 AND status = 'assigned' ORDER BY usage_count ASC, last_used_at ASC NULLS FIRST`,
+    [userId, feature]
+  );
+  for (const key of keys.rows) {
+    if (!excludeKeys.includes(key.api_key)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+async function markKeyExhausted(keyId, errorMsg) {
+  await pool.query(
+    `UPDATE freepik_key_pool SET status = 'exhausted', exhausted_at = NOW(), error_message = $2 WHERE id = $1`,
+    [keyId, errorMsg || 'Credit exhausted (402)']
+  );
+  console.log(`[KEY-POOL] Key ${keyId} marked exhausted: ${errorMsg || '402'}`);
+}
+
+async function replaceExhaustedKey(userId, feature) {
+  const available = await pool.query(
+    `SELECT * FROM freepik_key_pool WHERE status = 'available' ORDER BY usage_count ASC, created_at ASC LIMIT 1`
+  );
+  if (available.rows.length === 0) {
+    console.log(`[KEY-POOL] No available keys in pool to replace for user ${userId} feature ${feature}`);
+    return null;
+  }
+  const newKey = available.rows[0];
+  await pool.query(
+    `UPDATE freepik_key_pool SET status = 'assigned', feature = $2, assigned_user_id = $3, assigned_at = NOW() WHERE id = $1`,
+    [newKey.id, feature, userId]
+  );
+  console.log(`[KEY-POOL] Replaced exhausted key for user ${userId}: new key ${newKey.id} (${newKey.api_key.substring(0, 8)}...)`);
+  return newKey;
+}
+
+async function recordKeyUsage(keyId) {
+  await pool.query(
+    `UPDATE freepik_key_pool SET usage_count = usage_count + 1, last_used_at = NOW() WHERE id = $1`,
+    [keyId]
+  );
+}
+
+async function resetExpiredKeys() {
+  const result = await pool.query(
+    `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL 
+     WHERE status = 'exhausted' AND exhausted_at < NOW() - INTERVAL '${KEY_EXHAUSTED_RESET_HOURS} hours' RETURNING id`
+  );
+  if (result.rowCount > 0) {
+    console.log(`[KEY-POOL] Reset ${result.rowCount} exhausted keys back to available`);
+  }
+  return result.rowCount;
+}
+
+async function unassignInactiveKeys() {
+  const result = await pool.query(
+    `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL
+     WHERE status = 'assigned' AND (
+       (last_used_at IS NOT NULL AND last_used_at < NOW() - INTERVAL '48 hours')
+       OR (last_used_at IS NULL AND assigned_at < NOW() - INTERVAL '48 hours')
+     ) RETURNING id`
+  );
+  if (result.rowCount > 0) {
+    console.log(`[KEY-POOL] Unassigned ${result.rowCount} inactive keys (no use in 48h)`);
+  }
+  return result.rowCount;
+}
+
+async function getKeyPoolStats() {
+  const stats = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      COUNT(*) FILTER (WHERE status = 'available') as available,
+      COUNT(*) FILTER (WHERE status = 'assigned') as assigned,
+      COUNT(*) FILTER (WHERE status = 'exhausted') as exhausted
+    FROM freepik_key_pool
+  `);
+  const byFeature = await pool.query(`
+    SELECT feature, COUNT(*) as count FROM freepik_key_pool 
+    WHERE status = 'assigned' AND feature IS NOT NULL GROUP BY feature
+  `);
+  return { ...stats.rows[0], byFeature: byFeature.rows };
+}
+
+async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature) {
+  const freepikModels = {
+    'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
+    'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
+    'kling-v3': { endpoint: '/v1/ai/image-to-video/kling-v3', api: 'kling-ai' }
+  };
+  const config = freepikModels[model];
+  if (!config) throw new Error(`Unknown Freepik model: ${model}`);
+
+  const aspectMap = { '9:16': 'social_story_9_16', '16:9': 'widescreen_16_9', '1:1': 'square_1_1' };
+  const mappedAspect = aspectMap[aspectRatio] || 'widescreen_16_9';
+
+  let requestBody = {};
+  if (config.api === 'kling26') {
+    requestBody = {
+      image: imageUrl, prompt: prompt || '', duration: '5',
+      aspect_ratio: mappedAspect, negative_prompt: 'blurry, low quality, distorted',
+      cfg_scale: 0.5, generate_audio: true
+    };
+  } else {
+    requestBody = {
+      image: imageUrl, prompt: prompt || '', duration: '5',
+      aspect_ratio: mappedAspect, cfg_scale: 0.6
+    };
+  }
+
+  const userKeys = await assignKeysToUser(userId, feature);
+  if (userKeys.length === 0) {
+    return { success: false, fallback: true, error: 'No Freepik keys available' };
+  }
+
+  const triedKeys = [];
+  for (let attempt = 0; attempt < userKeys.length + 3; attempt++) {
+    const keyRecord = await getActiveKeyForUser(userId, feature, triedKeys);
+    if (!keyRecord) {
+      const replacement = await replaceExhaustedKey(userId, feature);
+      if (!replacement) {
+        return { success: false, fallback: true, error: 'All Freepik keys exhausted' };
+      }
+      continue;
+    }
+
+    try {
+      console.log(`[KEY-POOL] Trying key ${keyRecord.id} (${keyRecord.api_key.substring(0, 8)}...) for ${feature}`);
+      const response = await axios.post(
+        `https://api.freepik.com${config.endpoint}`,
+        requestBody,
+        {
+          headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': keyRecord.api_key },
+          timeout: 60000
+        }
+      );
+      await recordKeyUsage(keyRecord.id);
+      const taskData = response.data?.data || response.data;
+      const taskId = taskData?.id || taskData?.task_id || taskData?.taskId;
+      if (!taskId) throw new Error('No task ID returned: ' + JSON.stringify(response.data).substring(0, 300));
+
+      console.log(`[KEY-POOL] Freepik video task created: ${taskId} with key ${keyRecord.id}`);
+      return { success: true, taskId, keyRecord, endpoint: config.endpoint };
+    } catch (err) {
+      const httpStatus = err.response?.status;
+      console.log(`[KEY-POOL] Key ${keyRecord.id} failed: HTTP ${httpStatus} - ${err.message}`);
+      
+      if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403) {
+        triedKeys.push(keyRecord.api_key);
+        await markKeyExhausted(keyRecord.id, `HTTP ${httpStatus}: ${err.response?.data?.message || err.message}`);
+        await replaceExhaustedKey(userId, feature);
+        continue;
+      }
+      throw err;
+    }
+  }
+  return { success: false, fallback: true, error: 'All keys exhausted after retries' };
+}
+
+async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
+  const pollEndpoint = endpoint.replace(/-pro$|-std$/, '');
+  for (let attempt = 0; attempt < 720; attempt++) {
+    await new Promise(r => setTimeout(r, attempt < 60 ? 5000 : 8000));
+    try {
+      const resp = await axios.get(
+        `https://api.freepik.com${pollEndpoint}/${taskId}`,
+        { headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': apiKey }, timeout: 30000 }
+      );
+      const data = resp.data?.data || resp.data;
+      const status = (data?.status || '').toUpperCase();
+      
+      if (attempt % 10 === 0) console.log(`[KEY-POOL] Poll #${attempt}: task=${taskId}, status=${status}`);
+
+      if (status === 'COMPLETED') {
+        const videoUrl = (data.generated && data.generated.length > 0 ? data.generated[0] : null)
+          || data.video?.url || data.result?.url || data.url;
+        if (videoUrl) return { status: 'completed', url: videoUrl };
+      }
+      if (status === 'FAILED') {
+        const errMsg = data.error_message || data.error || data.message || 'Generation failed';
+        return { status: 'failed', error: errMsg };
+      }
+    } catch (pollErr) {
+      if (attempt > 600) return { status: 'failed', error: 'Polling timeout: ' + pollErr.message };
+    }
+  }
+  return { status: 'failed', error: 'Polling timed out after 1 hour' };
+}
+
+setInterval(() => {
+  resetExpiredKeys().catch(e => console.error('[KEY-POOL] Reset error:', e.message));
+  unassignInactiveKeys().catch(e => console.error('[KEY-POOL] Unassign error:', e.message));
+}, 3600000);
+
+async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride) {
+  const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
+  const videoBody = {
+    model: vidModel.apiModel,
+    prompt: scene.visual_prompt,
+    aspect_ratio: aspectRatio,
+    duration: vidModel.duration,
+    images: [scene.image_url]
+  };
+  console.log(`[AUTOMATION] Generating ApiModels video for ${projectId} scene ${scene.scene_index}:`, JSON.stringify({ ...videoBody, images: ['[IMAGE]'] }));
+  const videoResponse = await axios.post(
+    'https://apimodels.app/api/v1/video/generations', videoBody,
+    { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+  );
+  const videoData = videoResponse.data?.data || videoResponse.data;
+  const taskId = videoData?.taskId || videoData?.task_id || videoData?.id;
+  if (!taskId) throw new Error('No task ID: ' + JSON.stringify(videoResponse.data));
+  console.log(`[AUTOMATION] ApiModels task ID: ${taskId}`);
+
+  await pool.query(
+    `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+    [projectId, scene.scene_index, taskId]
+  );
+
+  let videoUrl = null;
+  let pollErrors = 0;
+  for (let attempt = 0; attempt < 720; attempt++) {
+    await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
+    try {
+      const statusResp = await axios.get(
+        `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
+        { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+      );
+      const rawResp = statusResp.data;
+      const sData = rawResp?.data || rawResp;
+      const sStatus = sData?.state || sData?.status;
+      if (attempt % 10 === 0) console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}`);
+
+      if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
+        const allUrls = sData?.resultUrls || sData?.videos || [];
+        videoUrl = allUrls[0] || sData?.video_url || sData?.url || sData?.output?.video || sData?.video || sData?.result;
+        if (!videoUrl && typeof rawResp === 'object') {
+          const rawStr = JSON.stringify(rawResp);
+          const urlMatch = rawStr.match(/https?:\/\/[^\s"',}]+\.mp4[^\s"',}]*/);
+          if (urlMatch) videoUrl = urlMatch[0];
+        }
+        if (!videoUrl) { continue; }
+        console.log(`[AUTOMATION] Scene ${scene.scene_index} ApiModels completed: ${videoUrl}`);
+        break;
+      }
+      if (sStatus === 'failed' || sStatus === 'error') {
+        throw new Error(sData?.failMsg || sData?.error || 'Video generation failed');
+      }
+      pollErrors = 0;
+    } catch (pollErr) {
+      if (pollErr.message.includes('failed') || pollErr.message.includes('Video generation')) throw pollErr;
+      pollErrors++;
+      if (pollErrors > 10) throw new Error('Too many poll errors: ' + pollErr.message);
+    }
+  }
+  if (!videoUrl) throw new Error('Video generation timed out');
+  return videoUrl;
+}
+
 // ============ AUTOMATION (Fully Automated Content Creation) ============
 
 app.get('/api/automation/projects', async (req, res) => {
@@ -11157,7 +11525,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['grok-video-3-10s', 'veo-3.1-fast', 'veo-3.1'];
+  const validModels = ['grok-video-3', 'grok-video-3-10s', 'veo-3.1-fast-5s', 'veo-3.1-fast', 'veo-3.1', 'kling-v2.6-pro', 'kling-v3'];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'veo-3.1-fast';
   const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 8);
@@ -11422,13 +11790,16 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
     const modelConfig = {
-      'grok-video-3': { apiModel: 'grok-video-3', duration: 5 },
-      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
-      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5 },
-      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
-      'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
+      'grok-video-3': { apiModel: 'grok-video-3', duration: 5, provider: 'apimodels' },
+      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10, provider: 'apimodels' },
+      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5, provider: 'apimodels' },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
+      'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
+      'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
+    const isFreepik = vidModel.provider === 'freepik';
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
@@ -11544,78 +11915,35 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
           sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
 
           try {
-            const videoBody = {
-              model: vidModel.apiModel,
-              prompt: scene.visual_prompt,
-              aspect_ratio: aspectRatio,
-              duration: vidModel.duration,
-              images: [scene.image_url]
-            };
-            console.log(`[AUTOMATION] Generating video (i2v) for ${projectId} scene ${scene.scene_index}:`, JSON.stringify({ ...videoBody, images: ['[IMAGE]'] }));
-            const videoResponse = await axios.post(
-              'https://apimodels.app/api/v1/video/generations',
-              videoBody,
-              {
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
-                timeout: 60000
-              }
-            );
-
-            console.log(`[AUTOMATION] Video create response: ${JSON.stringify(videoResponse.data).substring(0, 500)}`);
-            const videoData = videoResponse.data?.data || videoResponse.data;
-            const taskId = videoData?.taskId || videoData?.task_id || videoData?.id;
-            if (!taskId) {
-              throw new Error('No task ID returned from video API: ' + JSON.stringify(videoResponse.data));
-            }
-            console.log(`[AUTOMATION] Video task ID: ${taskId}`);
-
-            await pool.query(
-              `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, taskId]
-            );
-
             let videoUrl = null;
-            let pollErrors = 0;
-            for (let attempt = 0; attempt < 720; attempt++) {
-              await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
-              try {
-                const statusResp = await axios.get(
-                  `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
-                  { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-                );
-                const rawResp = statusResp.data;
-                const sData = rawResp?.data || rawResp;
-                const sStatus = sData?.state || sData?.status;
-                console.log(`[AUTOMATION] Scene ${scene.scene_index} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
 
-                if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
-                  const allUrls = sData?.resultUrls || sData?.videos || [];
-                  videoUrl = allUrls[0] || sData?.video_url || sData?.url || sData?.output?.video || sData?.video || sData?.result;
-                  if (!videoUrl && typeof rawResp === 'object') {
-                    const rawStr = JSON.stringify(rawResp);
-                    const urlMatch = rawStr.match(/https?:\/\/[^\s"',}]+\.mp4[^\s"',}]*/);
-                    if (urlMatch) videoUrl = urlMatch[0];
-                  }
-                  if (!videoUrl) {
-                    console.log(`[AUTOMATION] Scene ${scene.scene_index} status=${sStatus} but no URL yet, keep polling. Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
-                    continue;
-                  }
-                  console.log(`[AUTOMATION] Scene ${scene.scene_index} video completed: ${videoUrl}`);
-                  break;
+            if (isFreepik) {
+              console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}`);
+              const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation');
+
+              if (fpResult.success) {
+                await pool.query(
+                  `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, fpResult.taskId]
+                );
+                const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint);
+                if (pollResult.status === 'completed') {
+                  videoUrl = pollResult.url;
+                } else {
+                  throw new Error(pollResult.error || 'Freepik video failed');
                 }
-                if (sStatus === 'failed' || sStatus === 'error') {
-                  throw new Error(sData?.failMsg || sData?.error || 'Video generation failed');
-                }
-                pollErrors = 0;
-              } catch (pollErr) {
-                if (pollErr.message.includes('failed') || pollErr.message.includes('Video generation')) throw pollErr;
-                pollErrors++;
-                console.log(`[AUTOMATION] Poll error #${pollErrors}: ${pollErr.message}`);
-                if (pollErrors > 10) throw new Error('Too many consecutive poll errors: ' + pollErr.message);
+              } else if (fpResult.fallback) {
+                console.log(`[AUTOMATION] Freepik keys exhausted, falling back to ApiModels for scene ${scene.scene_index}`);
+                const fallbackResult = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey);
+                videoUrl = fallbackResult;
+              } else {
+                throw new Error(fpResult.error || 'Freepik generation failed');
               }
+            } else {
+              videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
             }
 
-            if (!videoUrl) throw new Error('Video generation timed out after 1 hour');
+            if (!videoUrl) throw new Error('Video generation failed - no URL');
 
             await pool.query(
               `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -11828,13 +12156,16 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
 
     const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
     const modelConfig = {
-      'grok-video-3': { apiModel: 'grok-video-3', duration: 5 },
-      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10 },
-      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5 },
-      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8 },
-      'veo-3.1': { apiModel: 'veo-3.1', duration: 8 }
+      'grok-video-3': { apiModel: 'grok-video-3', duration: 5, provider: 'apimodels' },
+      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10, provider: 'apimodels' },
+      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5, provider: 'apimodels' },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
+      'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
+      'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
+    const isFreepik = vidModel.provider === 'freepik';
     const imageModel = project.image_model || 'gemini-2.5-flash-image';
 
     (async () => {
@@ -11873,58 +12204,33 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex, status: 'generating_video', imageUrl: sceneImageUrl });
         }
 
-        const videoBody = { model: vidModel.apiModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio, duration: vidModel.duration, images: [sceneImageUrl] };
-        const videoResponse = await axios.post(
-          'https://apimodels.app/api/v1/video/generations', videoBody,
-          { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
-        );
-        const videoData = videoResponse.data?.data || videoResponse.data;
-        const taskId = videoData?.taskId || videoData?.task_id;
-        if (!taskId) throw new Error('No task ID returned');
-
-        await pool.query(
-          `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-          [projectId, sceneIndex, taskId]
-        );
-
         let videoUrl = null;
-        let pollErrors = 0;
-        for (let attempt = 0; attempt < 720; attempt++) {
-          await new Promise(r => setTimeout(r, attempt < 60 ? 3000 : 5000));
-          try {
-            const statusResp = await axios.get(
-              `https://apimodels.app/api/v1/video/generations?task_id=${encodeURIComponent(taskId)}`,
-              { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+        if (isFreepik) {
+          console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
+          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation');
+          if (fpResult.success) {
+            await pool.query(
+              `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, sceneIndex, fpResult.taskId]
             );
-            const rawResp = statusResp.data;
-            const sData = rawResp?.data || rawResp;
-            const sStatus = sData?.state || sData?.status;
-            console.log(`[AUTOMATION] Retry scene ${sceneIndex} poll #${attempt}: state=${sStatus}, progress=${sData?.progress || 'N/A'}, keys=${Object.keys(sData || {}).join(',')}`);
-            if (sStatus === 'completed' || sStatus === 'success' || sStatus === 'done') {
-              const allUrls = sData?.resultUrls || sData?.videos || [];
-              videoUrl = allUrls[0] || sData?.video_url || sData?.url || sData?.output?.video || sData?.video || sData?.result;
-              if (!videoUrl && typeof rawResp === 'object') {
-                const rawStr = JSON.stringify(rawResp);
-                const urlMatch = rawStr.match(/https?:\/\/[^\s"',}]+\.mp4[^\s"',}]*/);
-                if (urlMatch) videoUrl = urlMatch[0];
-              }
-              if (!videoUrl) {
-                console.log(`[AUTOMATION] Retry scene ${sceneIndex} status=${sStatus} but no URL yet, keep polling. Full: ${JSON.stringify(rawResp).substring(0, 500)}`);
-                continue;
-              }
-              console.log(`[AUTOMATION] Retry scene ${sceneIndex} video completed: ${videoUrl}`);
-              break;
+            const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint);
+            if (pollResult.status === 'completed') {
+              videoUrl = pollResult.url;
+            } else {
+              throw new Error(pollResult.error || 'Freepik video failed');
             }
-            if (sStatus === 'failed' || sStatus === 'error') throw new Error(sData?.failMsg || 'Failed');
-            pollErrors = 0;
-          } catch (pollErr) {
-            if (pollErr.message.includes('Failed') || pollErr.message.includes('failed')) throw pollErr;
-            pollErrors++;
-            console.log(`[AUTOMATION] Retry poll error #${pollErrors}: ${pollErr.message}`);
-            if (pollErrors > 10) throw new Error('Too many consecutive poll errors: ' + pollErr.message);
+          } else if (fpResult.fallback) {
+            console.log(`[AUTOMATION] Retry: Freepik keys exhausted, falling back to ApiModels`);
+            const retryScene = { ...scene, image_url: sceneImageUrl };
+            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey);
+          } else {
+            throw new Error(fpResult.error || 'Freepik generation failed');
           }
+        } else {
+          const retryScene = { ...scene, image_url: sceneImageUrl };
+          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel);
         }
-        if (!videoUrl) throw new Error('Video generation timed out after 1 hour');
+        if (!videoUrl) throw new Error('Video generation failed - no URL');
 
         await pool.query(
           `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -13309,6 +13615,39 @@ async function initDatabase() {
       )
     `);
     console.log('Automation tables created');
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS freepik_key_pool (
+        id SERIAL PRIMARY KEY,
+        api_key VARCHAR(255) NOT NULL UNIQUE,
+        status VARCHAR(20) DEFAULT 'available',
+        feature VARCHAR(20),
+        assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMP,
+        exhausted_at TIMESTAMP,
+        last_used_at TIMESTAMP,
+        usage_count INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    const loadPoolKeys = process.env.FREEPIK_KEY_POOL;
+    if (loadPoolKeys) {
+      const poolKeys = loadPoolKeys.split(',').map(k => k.trim()).filter(Boolean);
+      let addedCount = 0;
+      for (const key of poolKeys) {
+        try {
+          await pool.query(
+            `INSERT INTO freepik_key_pool (api_key) VALUES ($1) ON CONFLICT (api_key) DO NOTHING`,
+            [key]
+          );
+          addedCount++;
+        } catch (e) {}
+      }
+      const totalResult = await pool.query('SELECT COUNT(*) FROM freepik_key_pool');
+      console.log(`[KEY-POOL] Loaded ${poolKeys.length} keys from env, total in pool: ${totalResult.rows[0].count}`);
+    }
+    console.log('Freepik key pool table created');
     try {
       await pool.query(`ALTER TABLE automation_scenes ADD COLUMN IF NOT EXISTS image_url TEXT`);
       await pool.query(`ALTER TABLE automation_scenes ADD COLUMN IF NOT EXISTS image_task_id VARCHAR(255)`);

@@ -135,10 +135,11 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 1: Create project (niche, format, video model, scene count, language)
   - Step 2: AI generates script via ApiModels.app (GPT-5, endpoint: api.apimodels.app) with narration + visual prompts per scene
   - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - generates IMAGE first per scene (ApiModels image API), then generates VIDEO from that image (image-to-video via ApiModels video API)
-  - Video models: Veo 3.1 Fast (4K, 8s), Veo 3.1 (4K, 8s), Grok 3 (720P, 10s with audio)
+  - Step 4: Start production - generates IMAGE first per scene (ApiModels image API), then generates VIDEO from that image (image-to-video via ApiModels video API or Freepik API for Kling models)
+  - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik)
+  - Freepik models use Key Pool system with automatic rotation on exhaustion, fallback to ApiModels if all keys exhausted
   - Real-time SSE updates for project and scene status changes
-  - Scene retry for failed scenes
+  - Scene retry for failed scenes (supports both ApiModels and Freepik paths)
   - Database tables: automation_projects, automation_scenes
   - API endpoints: CRUD projects, generate-script, start production, update-scene, retry-scene
   - Languages: Bahasa Indonesia, English
@@ -148,7 +149,18 @@ The application is built on a Node.js Express.js server, combining frontend and 
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
 - **Subscription System**: A tiered subscription model with feature locking, countdown timers, and manual QRIS payment verification.
-- **Admin Dashboard**: Provides functionalities for managing payments and user subscriptions.
+- **Admin Dashboard**: Provides functionalities for managing payments, user subscriptions, and Freepik Key Pool management.
+- **Freepik Key Pool**: Centralized API key management system for Freepik-powered features. Features include:
+  - DB table `freepik_key_pool` with keys loaded from `FREEPIK_KEY_POOL` env var (comma-separated)
+  - Per-user key assignment: 5 keys per user per feature (automation, vidgen, motion)
+  - Automatic key rotation on 402/429/403 errors (credit exhausted)
+  - Key replacement from pool when active key exhausted
+  - Fallback to ApiModels if all pool keys exhausted
+  - 24-hour automatic reset of exhausted keys
+  - 48-hour automatic unassignment of inactive keys
+  - Admin panel: bulk add keys, view status (available/assigned/exhausted), delete/reset individual keys, reset all exhausted, unassign all
+  - Admin API: GET/POST/DELETE `/api/admin/key-pool`, POST `/api/admin/key-pool/:id/reset`, POST `/api/admin/key-pool/reset-all-exhausted`, POST `/api/admin/key-pool/unassign-all`
+  - Core functions: `assignKeysToUser()`, `getActiveKeyForUser()`, `markKeyExhausted()`, `replaceExhaustedKey()`, `generateVideoWithFreepik()`, `pollFreepikAutomationTask()`
 - **Rate Limiting System** (Video Gen & Motion): Three-layer API protection:
   - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
   - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset

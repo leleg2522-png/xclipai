@@ -459,7 +459,8 @@ const state = {
     filter: 'pending',
     blockedIPs: [],
     blockedLoading: false,
-    activeTab: 'payments'
+    activeTab: 'payments',
+    keyPool: { keys: [], stats: {}, isLoading: false }
   },
   voiceover: {
     text: '',
@@ -2255,6 +2256,74 @@ function renderMyPaymentsModal() {
   `;
 }
 
+async function fetchKeyPool() {
+  try {
+    state.admin.keyPool.isLoading = true;
+    render();
+    var resp = await fetch(API_URL + '/api/admin/key-pool', { credentials: 'include' });
+    var data = await resp.json();
+    state.admin.keyPool.keys = data.keys || [];
+    var keys = state.admin.keyPool.keys;
+    state.admin.keyPool.stats = {
+      total: keys.length,
+      available: keys.filter(function(k) { return k.status === 'available'; }).length,
+      assigned: keys.filter(function(k) { return k.status === 'assigned'; }).length,
+      exhausted: keys.filter(function(k) { return k.status === 'exhausted'; }).length
+    };
+  } catch (e) {
+    console.error('Fetch key pool error:', e);
+    state.admin.keyPool.keys = [];
+  } finally {
+    state.admin.keyPool.isLoading = false;
+    render();
+  }
+}
+
+function renderAdminKeyPool() {
+  var kp = state.admin.keyPool;
+  var statsHtml = '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">' +
+    '<div style="padding:8px 16px;background:#1a1a2e;border-radius:8px;"><b>Total:</b> ' + (kp.stats.total || 0) + '</div>' +
+    '<div style="padding:8px 16px;background:#1a1a2e;border-radius:8px;color:#4ade80;"><b>Available:</b> ' + (kp.stats.available || 0) + '</div>' +
+    '<div style="padding:8px 16px;background:#1a1a2e;border-radius:8px;color:#60a5fa;"><b>Assigned:</b> ' + (kp.stats.assigned || 0) + '</div>' +
+    '<div style="padding:8px 16px;background:#1a1a2e;border-radius:8px;color:#f87171;"><b>Exhausted:</b> ' + (kp.stats.exhausted || 0) + '</div>' +
+    '</div>';
+
+  var addHtml = '<div style="margin-bottom:16px;">' +
+    '<textarea id="kpNewKeys" class="form-input" rows="3" placeholder="Paste Freepik API keys (comma or newline separated)" style="width:100%;margin-bottom:8px;"></textarea>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<button class="btn btn-primary" id="kpAddKeysBtn">Add Keys</button>' +
+    '<button class="btn btn-secondary" id="kpResetAllExhausted">Reset All Exhausted</button>' +
+    '<button class="btn btn-secondary" id="kpUnassignAll" style="background:#ef4444;">Unassign All</button>' +
+    '</div></div>';
+
+  if (kp.isLoading) {
+    return statsHtml + addHtml + '<div class="loading-spinner">Loading...</div>';
+  }
+
+  var listHtml = '<div style="max-height:400px;overflow-y:auto;">';
+  if (kp.keys.length === 0) {
+    listHtml += '<div style="padding:16px;text-align:center;color:#888;">No keys in pool</div>';
+  } else {
+    kp.keys.forEach(function(key) {
+      var maskedKey = key.api_key.substring(0, 8) + '...' + key.api_key.substring(key.api_key.length - 4);
+      var statusColor = key.status === 'available' ? '#4ade80' : key.status === 'assigned' ? '#60a5fa' : '#f87171';
+      listHtml += '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a1a2e;border-radius:6px;margin-bottom:4px;font-size:13px;">' +
+        '<span style="font-family:monospace;flex:1;">' + maskedKey + '</span>' +
+        '<span style="color:' + statusColor + ';min-width:70px;">' + key.status + '</span>' +
+        '<span style="min-width:80px;color:#888;">' + (key.feature || '-') + '</span>' +
+        '<span style="min-width:60px;color:#888;">' + (key.assigned_user_id ? 'User ' + key.assigned_user_id : '-') + '</span>';
+      if (key.status === 'exhausted') {
+        listHtml += '<button class="btn btn-secondary kp-reset-btn" data-id="' + key.id + '" style="padding:2px 8px;font-size:11px;">Reset</button>';
+      }
+      listHtml += '<button class="btn btn-secondary kp-delete-btn" data-id="' + key.id + '" style="padding:2px 8px;font-size:11px;background:#ef4444;">Del</button>';
+      listHtml += '</div>';
+    });
+  }
+  listHtml += '</div>';
+
+  return statsHtml + addHtml + listHtml;
+}
+
 async function fetchBlockedIPs() {
   try {
     state.admin.blockedLoading = true;
@@ -2329,12 +2398,13 @@ function renderAdminPage() {
         <button class="btn btn-secondary" id="backToMainBtn">Kembali</button>
       </div>
       
-      <div class="admin-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
+      <div class="admin-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button class="btn ${tab === 'payments' ? 'btn-primary' : 'btn-secondary'}" id="adminTabPayments">Pembayaran</button>
         <button class="btn ${tab === 'ddos' ? 'btn-primary' : 'btn-secondary'}" id="adminTabDdos">IP Blocked</button>
+        <button class="btn ${tab === 'keypool' ? 'btn-primary' : 'btn-secondary'}" id="adminTabKeypool">Key Pool</button>
       </div>
       
-      ${tab === 'payments' ? renderAdminPayments() : renderAdminDdos()}
+      ${tab === 'payments' ? renderAdminPayments() : tab === 'keypool' ? renderAdminKeyPool() : renderAdminDdos()}
     </div>
   `;
 }
@@ -6590,6 +6660,8 @@ function renderAutomationPage() {
   html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1 8s</option>';
   html += '<option value="grok-video-3"' + (state.automation.newProject.videoModel === 'grok-video-3' ? ' selected' : '') + '>Grok 3 5s</option>';
   html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 10s Audio</option>';
+  html += '<option value="kling-v2.6-pro"' + (state.automation.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro (Freepik)</option>';
+  html += '<option value="kling-v3"' + (state.automation.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3 (Freepik)</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoSceneCount">';
   for (var sc = 2; sc <= 8; sc++) {
@@ -7538,6 +7610,77 @@ function attachEventListeners() {
       fetchBlockedIPs();
     });
   }
+
+  var adminTabKeypool = document.getElementById('adminTabKeypool');
+  if (adminTabKeypool) {
+    adminTabKeypool.addEventListener('click', function() {
+      state.admin.activeTab = 'keypool';
+      fetchKeyPool();
+    });
+  }
+
+  var kpAddBtn = document.getElementById('kpAddKeysBtn');
+  if (kpAddBtn) {
+    kpAddBtn.addEventListener('click', async function() {
+      var ta = document.getElementById('kpNewKeys');
+      if (!ta || !ta.value.trim()) return;
+      try {
+        var resp = await fetch(API_URL + '/api/admin/key-pool', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ keys: ta.value })
+        });
+        var data = await resp.json();
+        if (data.success) {
+          showToast('Added ' + data.added + ' keys, skipped ' + data.skipped, 'success');
+          ta.value = '';
+          fetchKeyPool();
+        } else { showToast(data.error, 'error'); }
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  }
+
+  var kpResetAllBtn = document.getElementById('kpResetAllExhausted');
+  if (kpResetAllBtn) {
+    kpResetAllBtn.addEventListener('click', async function() {
+      try {
+        var resp = await fetch(API_URL + '/api/admin/key-pool/reset-all-exhausted', { method: 'POST', credentials: 'include' });
+        var data = await resp.json();
+        showToast('Reset ' + data.count + ' keys', 'success');
+        fetchKeyPool();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  }
+
+  var kpUnassignAllBtn = document.getElementById('kpUnassignAll');
+  if (kpUnassignAllBtn) {
+    kpUnassignAllBtn.addEventListener('click', async function() {
+      if (!confirm('Unassign semua key dari semua user?')) return;
+      try {
+        var resp = await fetch(API_URL + '/api/admin/key-pool/unassign-all', { method: 'POST', credentials: 'include' });
+        var data = await resp.json();
+        showToast('Unassigned ' + data.count + ' keys', 'success');
+        fetchKeyPool();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  }
+
+  document.querySelectorAll('.kp-delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      try {
+        await fetch(API_URL + '/api/admin/key-pool/' + btn.getAttribute('data-id'), { method: 'DELETE', credentials: 'include' });
+        fetchKeyPool();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  });
+
+  document.querySelectorAll('.kp-reset-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      try {
+        await fetch(API_URL + '/api/admin/key-pool/' + btn.getAttribute('data-id') + '/reset', { method: 'POST', credentials: 'include' });
+        fetchKeyPool();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  });
 
   const refreshBlockedIPs = document.getElementById('refreshBlockedIPs');
   if (refreshBlockedIPs) {
