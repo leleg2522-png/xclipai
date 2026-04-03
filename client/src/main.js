@@ -6660,8 +6660,8 @@ function renderAutomationPage() {
   html += '<option value="veo-3.1"' + (state.automation.newProject.videoModel === 'veo-3.1' ? ' selected' : '') + '>Veo 3.1 8s</option>';
   html += '<option value="grok-video-3"' + (state.automation.newProject.videoModel === 'grok-video-3' ? ' selected' : '') + '>Grok 3 5s</option>';
   html += '<option value="grok-video-3-10s"' + (state.automation.newProject.videoModel === 'grok-video-3-10s' ? ' selected' : '') + '>Grok 3 10s Audio</option>';
-  html += '<option value="kling-v2.6-pro"' + (state.automation.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro (Freepik)</option>';
-  html += '<option value="kling-v3"' + (state.automation.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3 (Freepik)</option>';
+  html += '<option value="kling-v2.6-pro"' + (state.automation.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
+  html += '<option value="kling-v3"' + (state.automation.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoSceneCount">';
   for (var sc = 2; sc <= 8; sc++) {
