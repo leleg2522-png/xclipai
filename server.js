@@ -3710,40 +3710,45 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     const startTime = Date.now();
     
-    // Get all available keys for retry on 429
     const allKeys = [];
-    if (keySource === 'room' && keyInfo.room_id) {
-      const bulkVar = process.env[`ROOM${keyInfo.room_id}_FREEPIK_KEYS`];
-      if (bulkVar) {
-        bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
-          allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_FREEPIK_KEYS[${idx}]` });
-        });
-      } else {
-        const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-        keyNames.forEach((name, idx) => {
-          const key = process.env[name];
-          if (key) allKeys.push({ key, index: idx, name });
-        });
-      }
-    } else if (keySource === 'admin') {
-      for (let r = 1; r <= 5; r++) {
-        const bulkVar = process.env[`ROOM${r}_FREEPIK_KEYS`];
+    const poolKeys = await getPoolKeysForFeature(keyInfo.user_id, 'videogen', 10);
+    if (poolKeys.length > 0) {
+      allKeys.push(...poolKeys);
+      console.log(`[VIDEOGEN] Loaded ${poolKeys.length} keys from pool for user ${keyInfo.user_id}`);
+    } else {
+      if (keySource === 'room' && keyInfo.room_id) {
+        const bulkVar = process.env[`ROOM${keyInfo.room_id}_FREEPIK_KEYS`];
         if (bulkVar) {
           bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
-            allKeys.push({ key, index: allKeys.length, name: `ROOM${r}_FREEPIK_KEYS[${idx}]` });
+            allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_FREEPIK_KEYS[${idx}]` });
           });
         } else {
-          ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-           'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-           'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'].forEach((name, idx) => {
+          const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
+          keyNames.forEach((name, idx) => {
             const key = process.env[name];
             if (key) allKeys.push({ key, index: idx, name });
           });
-          break;
         }
+      } else if (keySource === 'admin') {
+        for (let r = 1; r <= 5; r++) {
+          const bulkVar = process.env[`ROOM${r}_FREEPIK_KEYS`];
+          if (bulkVar) {
+            bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
+              allKeys.push({ key, index: allKeys.length, name: `ROOM${r}_FREEPIK_KEYS[${idx}]` });
+            });
+          } else {
+            ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
+             'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
+             'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'].forEach((name, idx) => {
+              const key = process.env[name];
+              if (key) allKeys.push({ key, index: idx, name });
+            });
+            break;
+          }
+        }
+      } else {
+        allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
       }
-    } else {
-      allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
     }
     
     const availableKeys = filterKeysByDailyQuota(allKeys, 'videogen');
@@ -3758,8 +3763,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
     let finalKeyIndex = usedKeyIndex;
     
     const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
-    const maxKeyAttempts = Math.min(availableKeys.length, 5);
-    const loopDeadline = Date.now() + 30000;
+    let maxKeyAttempts = Math.min(availableKeys.length, 18);
+    const loopDeadline = Date.now() + 60000;
     
     for (let attempt = 0; attempt < maxKeyAttempts; attempt++) {
       if (Date.now() > loopDeadline) {
@@ -3788,14 +3793,36 @@ app.post('/api/videogen/proxy', async (req, res) => {
       } catch (error) {
         lastError = error;
         const status = error.response?.status;
+        const errMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
+        const isTrialExpired = typeof errMsg === 'string' && (errMsg.includes('free trial') || errMsg.includes('limit of the free'));
         
-        if (status === 429) {
-          console.log(`[RETRY] Key ${currentKey.name} hit budget limit (429), trying next key...`);
+        if (status === 429 || status === 402 || isTrialExpired) {
+          console.log(`[RETRY] Key ${currentKey.name} hit limit (${status}), trying next key...`);
+          if (currentKey.isPool && currentKey.poolId) {
+            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP ${status}: ${errMsg}`);
+            if (replacement) {
+              availableKeys.push(replacement);
+              maxKeyAttempts = Math.min(availableKeys.length, maxKeyAttempts + 1);
+            }
+          }
+          continue;
+        } else if (status === 403) {
+          console.log(`[RETRY] Key ${currentKey.name} got 403, trying next key...`);
+          if (currentKey.isPool && currentKey.poolId) {
+            await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP 403: ${errMsg}`);
+          }
           continue;
         } else {
-          console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, error.response?.data?.message || error.message);
+          console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, errMsg);
           break;
         }
+      }
+    }
+    
+    if (successResponse) {
+      const usedKey = availableKeys.find(k => k.index === finalKeyIndex);
+      if (usedKey && usedKey.isPool && usedKey.poolId) {
+        await recordKeyUsage(usedKey.poolId);
       }
     }
     
@@ -4164,13 +4191,24 @@ app.post('/api/motion/generate', async (req, res) => {
       });
     }
     
-    const allMotionKeys = getMotionRoomKeys(selectedRoomId);
-    for (let r = 1; r <= 5; r++) {
-      if (r === selectedRoomId) continue;
-      allMotionKeys.push(...getMotionRoomKeys(r));
+    const allMotionKeys = [];
+    const motionPoolKeys = await getPoolKeysForFeature(keyInfo.user_id, 'motion', 10);
+    if (motionPoolKeys.length > 0) {
+      motionPoolKeys.forEach(pk => {
+        pk.roomId = selectedRoomId;
+      });
+      allMotionKeys.push(...motionPoolKeys);
+      console.log(`[MOTION] Loaded ${motionPoolKeys.length} keys from pool for user ${keyInfo.user_id}`);
+    } else {
+      const roomKeys = getMotionRoomKeys(selectedRoomId);
+      allMotionKeys.push(...roomKeys);
+      for (let r = 1; r <= 5; r++) {
+        if (r === selectedRoomId) continue;
+        allMotionKeys.push(...getMotionRoomKeys(r));
+      }
     }
     
-    console.log(`[MOTION] Available keys: ${allMotionKeys.length} (room ${selectedRoomId} first, then fallback rooms)`);
+    console.log(`[MOTION] Available keys: ${allMotionKeys.length} (${motionPoolKeys.length > 0 ? 'pool' : 'room ' + selectedRoomId + ' + fallback rooms'})`);
     
     if (allMotionKeys.length === 0) {
       return res.status(500).json({ error: `Motion Room ${selectedRoomId} belum dikonfigurasi. Coba room lain atau hubungi admin.` });
@@ -4271,31 +4309,38 @@ app.post('/api/motion/generate', async (req, res) => {
         break;
         
       } catch (error) {
-        markMotionKeyFree(currentKey.name);
+        if (!currentKey.isPool) markMotionKeyFree(currentKey.name);
         lastError = error;
         const status = error.response?.status;
         const rawErrMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
         const errorMsg = typeof rawErrMsg === 'string' ? rawErrMsg : JSON.stringify(rawErrMsg);
-        const isDailyLimit = status === 429 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit');
+        const isDailyLimit = status === 429 || status === 402 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit') || errorMsg.toLowerCase().includes('free trial');
         const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
         
-        if (isFreepikTrialExpired(errorMsg)) {
-          markMotionKeyExpired(currentKey.name);
-          continue;
-        } else if (isDailyLimit) {
-          markMotionKeyRateLimited(currentKey.name);
-          console.log(`[MOTION] Key ${currentKey.name} hit rate limit (${status}), trying next key...`);
+        if (isFreepikTrialExpired(errorMsg) || isDailyLimit) {
+          if (currentKey.isPool && currentKey.poolId) {
+            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'motion', `HTTP ${status}: ${errorMsg}`);
+            if (replacement) {
+              replacement.roomId = selectedRoomId;
+              availableMotionKeys.push(replacement);
+            }
+          } else {
+            if (isFreepikTrialExpired(errorMsg)) markMotionKeyExpired(currentKey.name);
+            else markMotionKeyRateLimited(currentKey.name);
+          }
+          console.log(`[MOTION] Key ${currentKey.name} hit limit (${status}), trying next key...`);
           continue;
         } else if (isNetworkError) {
           console.log(`[MOTION] Key ${currentKey.name} network error: ${errorMsg}, trying next key...`);
           continue;
         } else if (status === 403) {
           const fullErr = JSON.stringify(error.response?.data || {});
-          if (isFreepikTrialExpired(fullErr)) {
+          if (currentKey.isPool && currentKey.poolId) {
+            await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'motion', `HTTP 403: ${errorMsg}`);
+          } else if (isFreepikTrialExpired(fullErr)) {
             markMotionKeyExpired(currentKey.name);
-            continue;
           }
-          console.warn(`[MOTION] Key ${currentKey.name} got 403 (invalid/no access), trying next key... | Detail: ${fullErr}`);
+          console.warn(`[MOTION] Key ${currentKey.name} got 403, trying next key...`);
           continue;
         } else {
           const fullErr = JSON.stringify(error.response?.data || {});
@@ -4314,6 +4359,10 @@ app.post('/api/motion/generate', async (req, res) => {
     console.log(`[MOTION] Freepik response:`, JSON.stringify(successResponse.data));
     
     setUserCooldown(keyInfo.user_id, 'motion');
+    const usedMotionKey = availableMotionKeys.find(k => k.name === usedKeyName);
+    if (usedMotionKey && usedMotionKey.isPool && usedMotionKey.poolId) {
+      await recordKeyUsage(usedMotionKey.poolId);
+    }
     if (usedKeyName) {
       const motionUsageCount = incrementDailyKeyUsage(usedKeyName, 'motion');
       console.log(`[RATE-LIMIT] Motion key ${usedKeyName} daily usage: ${motionUsageCount}/${RATE_LIMIT_CONFIG.motion.dailyQuotaPerKey}`);
@@ -11251,6 +11300,41 @@ async function recordKeyUsage(keyId) {
     `UPDATE freepik_key_pool SET usage_count = usage_count + 1, last_used_at = NOW() WHERE id = $1`,
     [keyId]
   );
+}
+
+async function getPoolKeysForFeature(userId, feature, maxKeys = 10) {
+  try {
+    await assignKeysToUser(userId, feature, maxKeys);
+    const keys = await pool.query(
+      `SELECT * FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = $2 AND status = 'assigned' ORDER BY usage_count ASC, last_used_at ASC NULLS FIRST`,
+      [userId, feature]
+    );
+    return keys.rows.map((row, idx) => ({
+      key: row.api_key,
+      index: idx,
+      name: `POOL_${feature.toUpperCase()}[${row.id}]`,
+      poolId: row.id,
+      isPool: true
+    }));
+  } catch (err) {
+    console.error(`[KEY-POOL] Error loading pool keys for ${feature}:`, err.message);
+    return [];
+  }
+}
+
+async function handlePoolKeyExhausted(poolId, userId, feature, errorMsg) {
+  await markKeyExhausted(poolId, errorMsg);
+  const replacement = await replaceExhaustedKey(userId, feature);
+  if (replacement) {
+    return {
+      key: replacement.api_key,
+      index: 0,
+      name: `POOL_${feature.toUpperCase()}[${replacement.id}]`,
+      poolId: replacement.id,
+      isPool: true
+    };
+  }
+  return null;
 }
 
 async function resetExpiredKeys() {
