@@ -11543,9 +11543,9 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['grok-video-3', 'grok-video-3-10s', 'veo-3.1-fast-5s', 'veo-3.1-fast', 'veo-3.1', 'kling-v2.6-pro', 'kling-v3'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3'];
   const fmt = validFormats.includes(format) ? format : 'shorts';
-  const model = validModels.includes(videoModel) ? videoModel : 'veo-3.1-fast';
+  const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
   const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 8);
   const lang = language || 'id';
   try {
