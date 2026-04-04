@@ -11344,13 +11344,18 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
     try {
       console.log(`[KEY-POOL] Trying key ${keyRecord.id} (${keyRecord.api_key.substring(0, 8)}...) for ${feature}`);
+      const proxy = getNextProxy();
+      if (proxy) await waitForProxySlot(proxy);
+      const axiosConfig = {
+        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': keyRecord.api_key },
+        timeout: 60000
+      };
+      applyProxyToConfig(axiosConfig, proxy);
+      if (proxy) console.log(`[KEY-POOL] Using proxy ${proxy.proxy_address}:${proxy.port} for automation freepik`);
       const response = await axios.post(
         `https://api.freepik.com${config.endpoint}`,
         requestBody,
-        {
-          headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': keyRecord.api_key },
-          timeout: 60000
-        }
+        axiosConfig
       );
       await recordKeyUsage(keyRecord.id);
       const taskData = response.data?.data || response.data;
@@ -11380,9 +11385,16 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
   for (let attempt = 0; attempt < 720; attempt++) {
     await new Promise(r => setTimeout(r, attempt < 60 ? 5000 : 8000));
     try {
+      const proxy = getNextProxy();
+      if (proxy) await waitForProxySlot(proxy);
+      const axiosConfig = {
+        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': apiKey },
+        timeout: 30000
+      };
+      applyProxyToConfig(axiosConfig, proxy);
       const resp = await axios.get(
         `https://api.freepik.com${pollEndpoint}/${taskId}`,
-        { headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': apiKey }, timeout: 30000 }
+        axiosConfig
       );
       const data = resp.data?.data || resp.data;
       const status = (data?.status || '').toUpperCase();
