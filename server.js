@@ -11378,7 +11378,7 @@ async function getKeyPoolStats() {
   return { ...stats.rows[0], byFeature: byFeature.rows };
 }
 
-async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature) {
+async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration) {
   const freepikModels = {
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
@@ -11391,21 +11391,22 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   const mappedAspect = aspectMap[aspectRatio] || 'widescreen_16_9';
 
   let requestBody = {};
+  const dur = String(videoDuration || 5);
   if (config.api === 'kling26') {
     requestBody = {
-      image: imageUrl, prompt: prompt || '', duration: '5',
+      image: imageUrl, prompt: prompt || '', duration: dur,
       aspect_ratio: mappedAspect, negative_prompt: 'blurry, low quality, distorted',
       cfg_scale: 0.5, generate_audio: true
     };
   } else if (config.api === 'kling-v3') {
     requestBody = {
-      image_url: imageUrl, prompt: prompt || '', duration: '5',
+      image_url: imageUrl, prompt: prompt || '', duration: dur,
       aspect_ratio: aspectRatio || '16:9', cfg_scale: 0.5,
       negative_prompt: 'blurry, low quality, distorted'
     };
   } else {
     requestBody = {
-      image: imageUrl, prompt: prompt || '', duration: '5',
+      image: imageUrl, prompt: prompt || '', duration: dur,
       aspect_ratio: mappedAspect, cfg_scale: 0.6
     };
   }
@@ -11623,20 +11624,22 @@ app.delete('/api/automation/projects/:projectId', async (req, res) => {
 
 app.post('/api/automation/projects', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
-  const { niche, format, videoModel, sceneCount, language } = req.body;
+  const { niche, format, videoModel, videoDuration, sceneCount, language } = req.body;
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
   const validModels = ['kling-v2.6-pro', 'kling-v3'];
+  const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
-  const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 8);
+  const duration = validDurations.includes(parseInt(videoDuration)) ? parseInt(videoDuration) : 5;
+  const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 180);
   const lang = language || 'id';
   try {
     await pool.query(
-      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, scene_count, language, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft')`,
-      [req.session.userId, projectId, niche.trim(), fmt, model, scenes, lang]
+      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, scene_count, language, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft')`,
+      [req.session.userId, projectId, niche.trim(), fmt, model, duration, scenes, lang]
     );
     res.json({ projectId, message: 'Project created' });
   } catch (error) {
@@ -11900,7 +11903,10 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
     };
-    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
+    const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
+    if (project.video_duration && [5, 10].includes(project.video_duration)) {
+      vidModel.duration = project.video_duration;
+    }
     const isFreepik = vidModel.provider === 'freepik';
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
@@ -12021,7 +12027,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
             if (isFreepik) {
               console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}`);
-              const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation');
+              const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
 
               if (fpResult.success) {
                 await pool.query(
@@ -12266,7 +12272,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
     };
-    const vidModel = modelConfig[project.video_model] || modelConfig['veo-3.1-fast-5s'];
+    const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
+    if (project.video_duration && [5, 10].includes(project.video_duration)) {
+      vidModel.duration = project.video_duration;
+    }
     const isFreepik = vidModel.provider === 'freepik';
     const imageModel = project.image_model || 'gemini-2.5-flash-image';
 
@@ -12309,7 +12318,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
-          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation');
+          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
           if (fpResult.success) {
             await pool.query(
               `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -13684,6 +13693,7 @@ async function initDatabase() {
         niche VARCHAR(500) NOT NULL,
         format VARCHAR(20) DEFAULT 'shorts',
         video_model VARCHAR(100) DEFAULT 'veo-3.1-fast',
+        video_duration INTEGER DEFAULT 5,
         scene_count INTEGER DEFAULT 3,
         language VARCHAR(50) DEFAULT 'id',
         status VARCHAR(50) DEFAULT 'draft',

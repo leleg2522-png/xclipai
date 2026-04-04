@@ -389,6 +389,7 @@ const state = {
       niche: '',
       format: 'shorts',
       videoModel: 'kling-v2.6-pro',
+      videoDuration: 5,
       sceneCount: 3,
       language: 'id'
     },
@@ -6490,11 +6491,11 @@ async function createAutomationProject() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, sceneCount: np.sceneCount, language: np.language })
+      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language })
     });
     var data = await response.json();
     if (data.projectId) {
-      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', sceneCount: 3, language: 'id' };
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id' };
       showToast('Project dibuat!', 'success');
       await loadAutomationProjects();
       loadAutomationProjectDetail(data.projectId);
@@ -6658,8 +6659,14 @@ function renderAutomationPage() {
   html += '<option value="kling-v2.6-pro"' + (state.automation.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
   html += '<option value="kling-v3"' + (state.automation.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
   html += '</select>';
+  html += '<select class="form-input auto-select" id="autoDuration">';
+  html += '<option value="5"' + (state.automation.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
+  html += '<option value="10"' + (state.automation.newProject.videoDuration === 10 ? ' selected' : '') + '>10 detik</option>';
+  html += '</select>';
   html += '<select class="form-input auto-select" id="autoSceneCount">';
-  for (var sc = 2; sc <= 8; sc++) {
+  var sceneOptions = [2, 3, 4, 5, 6, 7, 8, 10, 15, 20, 30, 40, 50, 60, 80, 100, 120, 150, 180];
+  for (var si = 0; si < sceneOptions.length; si++) {
+    var sc = sceneOptions[si];
     html += '<option value="' + sc + '"' + (state.automation.newProject.sceneCount === sc ? ' selected' : '') + '>' + sc + ' scene</option>';
   }
   html += '</select>';
@@ -6862,11 +6869,13 @@ function attachAutomationListeners() {
       var nicheInput = document.getElementById('autoNiche');
       var formatSelect = document.getElementById('autoFormat');
       var modelSelect = document.getElementById('autoVideoModel');
+      var durationSelect = document.getElementById('autoDuration');
       var sceneSelect = document.getElementById('autoSceneCount');
       var langSelect = document.getElementById('autoLanguage');
       if (nicheInput) state.automation.newProject.niche = nicheInput.value;
       if (formatSelect) state.automation.newProject.format = formatSelect.value;
       if (modelSelect) state.automation.newProject.videoModel = modelSelect.value;
+      if (durationSelect) state.automation.newProject.videoDuration = parseInt(durationSelect.value);
       if (sceneSelect) state.automation.newProject.sceneCount = parseInt(sceneSelect.value);
       if (langSelect) state.automation.newProject.language = langSelect.value;
       createAutomationProject();
