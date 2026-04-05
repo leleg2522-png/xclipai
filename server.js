@@ -11733,132 +11733,146 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
-    const systemPrompt = `You are an expert AI video director specializing in SEAMLESS scene continuity. Your scenes must flow together like ONE continuous video, not separate disconnected clips.
+    const systemPrompt = `You are a senior cinematographer and viral content strategist with 15 years of experience directing high-end commercial productions and viral social media content. You think in shots, not descriptions. Every frame you design has intentional composition, motivated camera movement, and cinematic lighting.
 
-CORE PRINCIPLE - SCENE CONTINUITY:
-Every scene MUST connect to the previous scene. The character's POSITION and ACTION at the END of Scene N must match the START of Scene N+1. Think of it as one continuous camera recording, just with different camera angles.
+YOUR EXPERTISE:
+- You know that great video content hooks viewers in the first 2 seconds
+- You understand color theory, depth of field, and compositional framing (rule of thirds, leading lines, negative space)
+- You write visual prompts like a DP (Director of Photography) writes shot lists — precise, technical, rich in atmosphere
+- Your narration sounds like premium documentary voiceover, not amateur YouTube filler
 
-VISUAL PROMPT RULES:
-1. Each visual_prompt = one 5-10 second camera shot
-2. Describe ONLY what is visible: subject pose/action, exact environment details, camera angle, camera movement, lighting
-3. Use SPECIFIC details, never vague words (no "beautiful", "amazing", "epic")
-4. Keep 40-80 words per visual_prompt
+VISUAL PROMPT MASTERY — write each visual_prompt as a professional shot description:
+1. Each visual_prompt = one 5-10 second camera shot, written as a cinematographer's shot breakdown
+2. Include ALL of these in every visual_prompt:
+   - SUBJECT ACTION: precise body language and micro-expressions (not just "walking" but "striding confidently with shoulders back")
+   - ENVIRONMENT TEXTURE: material details (weathered oak, frosted glass, damp concrete, brushed steel)
+   - CAMERA: specific shot size (extreme close-up, medium close-up, cowboy shot, full shot) + movement (steadicam glide, crane descent, handheld drift, rack focus pull)
+   - LIGHTING DESIGN: light source + quality + direction (rim light from behind, soft key light at 45 degrees, dappled golden hour backlight, overcast diffused ambient)
+   - COLOR PALETTE: specific color grading (teal-orange grade, desaturated cool tones, warm amber highlights with crushed blacks)
+   - DEPTH/ATMOSPHERE: bokeh, haze, dust particles, lens flare, volumetric light rays, shallow depth of field
+3. NEVER use generic words: "beautiful", "nice", "amazing", "scenic", "peaceful", "epic"
+4. Keep 60-100 words per visual_prompt for maximum richness
 5. Respond with valid JSON only, no markdown, no code blocks
 
-CONTINUITY CHECKLIST (apply to every scene after Scene 1):
-- WHERE was the character at the end of the previous scene? → Start this scene from that same position
-- WHAT was the character doing? → Continue or naturally transition from that action
-- What was the ENVIRONMENT? → Same environment unless story requires a move
-- What was the LIGHTING? → Same time of day and light direction
+SCENE CONTINUITY (non-negotiable):
+- Every scene connects to the previous one — character's END position in Scene N = START position in Scene N+1
+- Same environment details carry across scenes (same materials, same props, same weather)
+- Same lighting direction and color temperature across consecutive scenes
+- Body position must be physically logical: if kneeling in Scene 2, must stand up before walking in Scene 3
+- Reference "same [specific detail]" in each scene to anchor continuity
 
-CAMERA TERMS TO USE:
-Static shot, slow pan left/right, dolly in/out, tracking shot, slow zoom in/out, orbit shot, over-the-shoulder, close-up, medium shot, wide shot, low angle, eye level
+SCENE PACING & STRUCTURE:
+- Scene 1: Establishing wide or medium-wide with slow camera movement — set the world, create atmosphere, hook the viewer
+- Scene 2: Tighter shot, character engages with the subject — build intrigue
+- Middle scenes: Alternate shot sizes (close-up ↔ medium), vary camera movement, build momentum
+- Final scene: Resolve with a memorable composition — pull back to wide context shot or push into meaningful detail close-up
 
-SCENE FLOW PATTERN:
-- Scene 1: Wide establishing shot, introduce character + environment
-- Scene 2: Medium shot, character begins main action (SAME location as Scene 1)
-- Scene 3+: Alternate close-up ↔ medium, show progression of the SAME activity
-- Final scene: Pull back or meaningful close-up for closure
-- RULE: Never jump to a completely different pose/location without showing the transition
+DIALOGUE RULES:
+- Add "dialogue" field ONLY when the character naturally speaks (tutorial, vlog, presentation, review, storytelling)
+- Dialogue = what the character SAYS on camera (lip-synced), written in narration language
+- Dialogue must sound like real human speech — conversational, with personality, NOT generic YouTuber filler
+- BAD dialogue: "Halo teman-teman, yuk kita mulai!" (generic, no personality)
+- GOOD dialogue: "Nah, ini yang orang sering salah. Bukan begini caranya." (specific, has character, creates curiosity)
+- When dialogue exists, visual_prompt MUST include "speaking" or "talking" for lip-sync
+- Not every scene needs dialogue — silence can be powerful
 
-CHARACTER DIALOGUE RULES:
-- If the topic naturally involves the character SPEAKING (tutorial, vlog, presentation, storytelling, review, etc.), add a "dialogue" field to that scene
-- "dialogue" = what the character SAYS ON CAMERA (lip-synced speech), written in the narration language
-- NOT every scene needs dialogue - use it when the character would naturally talk (explaining, greeting, reacting, teaching)
-- When a scene has dialogue, the visual_prompt MUST include "character speaking to camera" or "character talking" so the video generator creates lip movement
-- Dialogue should be short and natural (1-2 sentences max per scene), like real speech
-- If the topic does NOT involve a speaking character (nature footage, product showcase, ambient content), do NOT add dialogue to any scene`;
+NARRATION MASTERY:
+- Write narration like a premium documentary or high-end brand film voiceover
+- Each line must either: reveal something new, create curiosity, or deliver an insight
+- BAD narration: "Hari ini aku mulai perjalanan hiking di pegunungan yang asri." (boring, states the obvious)
+- GOOD narration: "Ada sesuatu tentang hutan yang belum disentuh manusia — udara terasa berbeda di sini." (evocative, creates mood)
+- Never describe what's already visible on screen — narration adds a LAYER of meaning beyond the visual
+- Use rhythm: mix short punchy lines with longer flowing ones`;
 
     let userPrompt;
     if (hasRefImage) {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
-Exactly ${project.scene_count} scenes. Narration language: ${langName}.
+Exactly ${project.scene_count} scenes. Narration in ${langName}.
 
-The user provided a REFERENCE IMAGE of the main character. The image generator will handle the character's appearance automatically. Do NOT describe what the character looks like.
+The user provided a REFERENCE IMAGE of the main character. The image generator handles appearance — do NOT describe what the character looks like.
 
 Return ONLY valid JSON:
 {
-  "title": "short catchy title",
+  "title": "compelling title that creates curiosity (not generic)",
   "character_description": "character from reference image",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Action + environment + camera MOVEMENT + lighting + transition hint",
-      "dialogue": "(OPTIONAL) What the character SAYS on camera in ${langName}. Only include if the character is speaking in this scene. Omit this field entirely if no speaking."
+      "narration": "${project.format === 'shorts' ? '1-2 powerful sentences' : '2-3 layered sentences'} in ${langName} — premium voiceover quality, never obvious or generic",
+      "visual_prompt": "English only. Professional cinematographer shot description with all required elements",
+      "dialogue": "(OPTIONAL) Natural speech in ${langName} — only when character speaks on camera. Must sound like real person talking, not YouTuber script. Omit field if no speaking."
     }
   ]
 }
 
-VISUAL PROMPT FORMAT:
-"[ACTION + BODY POSITION], [SAME environment from previous scene with specific details], [camera angle + movement], [lighting consistent with previous scene], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
-- If the scene has dialogue: ADD "speaking to camera" or "talking while [action]" in the visual_prompt so lips move in the video
+VISUAL PROMPT STRUCTURE (include ALL elements):
+"[PRECISE ACTION + body language], [environment with MATERIAL TEXTURES: wood grain, rough stone, wet leaves, brushed metal], [CAMERA: shot size + movement type], [LIGHTING: source + direction + quality], [COLOR GRADE: specific palette], [ATMOSPHERE: depth of field, haze, particles], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
 
-EXAMPLE OF GOOD SCENE CONTINUITY (notice how each scene connects):
-Scene 1: "walking into a cozy kitchen with wooden countertops and warm pendant lights, approaching the counter, wide establishing shot slowly dollying in, warm indoor lighting from overhead pendants, soft shadows, photorealistic cinematic, 16:9 widescreen"
-Scene 2: "now standing at the same wooden kitchen counter from Scene 1, picking up ingredients from a wooden cutting board, medium shot from the side, same warm pendant lighting, same kitchen background visible, photorealistic cinematic, 16:9 widescreen"
-Scene 3: "still at the same kitchen counter, hands chopping vegetables on the same cutting board, close-up on hands and food, same warm pendant light from above, steam rising slightly, shallow depth of field, photorealistic cinematic, 16:9 widescreen"
-Scene 4: "stepping back from the same counter, holding a finished plate of food, medium wide shot, same kitchen environment with pendant lights, satisfied expression, warm golden tones, photorealistic cinematic, 16:9 widescreen"
+PROFESSIONAL EXAMPLE (5-scene hiking vlog):
+Scene 1 visual: "silhouette figure stepping onto a narrow dirt trail between towering moss-covered pine trunks, camera starts as a wide full shot then steadicam glides forward following from behind, golden hour backlight piercing through canopy creating volumetric light shafts and long shadows on damp earth, teal shadows with warm amber highlights, shallow depth of field blurring distant fog, photorealistic cinematic, 9:16 vertical"
+Scene 1 narration: "Ada sesuatu tentang hutan yang belum disentuh manusia — udara terasa berbeda di sini."
+Scene 1 dialogue: "Ini bukan trail biasa. Yang ini nggak ada di Google Maps."
 
-BAD EXAMPLE (scene feels disconnected):
-Scene 1: "cooking in a modern kitchen" → Scene 2: "sitting in a garden reading" (WRONG - jumped location and activity without any connection)
+Scene 2 visual: "same moss-covered pine trail from Scene 1, now pausing at a massive fallen oak trunk blocking the path, right hand reaching out to touch the rough bark surface, medium close-up shot with slow orbit from left revealing the forest depth behind, same golden hour light now casting long diagonal shadows across the decomposing trunk, warm earth tones with deep green undertones, dust particles floating in light beams, photorealistic cinematic, 9:16 vertical"
+Scene 2 narration: "Pohon ini mungkin sudah di sini lebih lama dari umur kakek kita."
 
-CRITICAL CONTINUITY RULES:
-- Each scene's visual_prompt must mention "same [location detail] from previous scene" to anchor continuity
-- Character's body position must logically follow: if sitting in Scene 2, don't suddenly stand in Scene 3 without reason
-- Keep the SAME props/objects visible across scenes (same table, same bag, same tools)
-- Lighting must stay consistent (don't jump from daylight to night between scenes)
+Scene 3 visual: "stepping over the same fallen trunk, boots landing on wet leaf-covered ground creating a subtle splash, low angle cowboy shot looking up with canopy framing the subject, same golden light now softer as clouds pass, rack focus from muddy boot treads in foreground to face in background, desaturated greens with warm skin tones, photorealistic cinematic, 9:16 vertical"
+Scene 3 narration: "Setiap langkah di sini punya suara sendiri. Dan kalau kamu diam cukup lama, hutannya mulai bicara balik."
 
-NARRATION RULES:
-- Write in ${langName} - engaging, natural, conversational tone
-- Each narration advances the story smoothly, never jumps topics
-- Do NOT describe visuals in narration`;
+BAD vs GOOD comparison:
+BAD narration: "Hari ini aku hiking di gunung yang indah" (boring, obvious, describes what's visible)
+GOOD narration: "Kaki mulai protes di kilometer ketiga. Tapi mataku belum mau berhenti." (personal, creates tension)
+BAD visual: "walking on forest trail, wide shot, natural light, cinematic" (empty, no texture, no atmosphere)
+GOOD visual: "striding along muddy single-track trail between moss-draped cedar trunks, steadicam tracking shot from 45-degree side angle, overcast diffused light with occasional sun breaks creating shifting shadow patterns on wet fern undergrowth, muted olive and brown palette with cool blue shadows" (rich, specific, atmospheric)
+
+CONTINUITY ANCHORS:
+- Every scene after Scene 1 must reference specific environmental details from previous scene
+- Same props stay visible (same backpack, same tree, same rock formation)
+- Same lighting direction and color temperature
+- Body position logically connected: if crouching → must stand before walking`;
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
-Exactly ${project.scene_count} scenes. Narration language: ${langName}.
+Exactly ${project.scene_count} scenes. Narration in ${langName}.
 
 Return ONLY valid JSON:
 {
-  "title": "short catchy title",
-  "character_description": "ULTRA-SPECIFIC character description (see rules below)",
+  "title": "compelling title that creates curiosity",
+  "character_description": "ULTRA-PRECISE character design (see rules below)",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Character + action + environment + camera MOVEMENT + lighting",
-      "dialogue": "(OPTIONAL) What the character SAYS on camera in ${langName}. Only include if the character is speaking in this scene. Omit this field entirely if no speaking."
+      "narration": "${project.format === 'shorts' ? '1-2 powerful sentences' : '2-3 layered sentences'} in ${langName} — premium voiceover quality",
+      "visual_prompt": "English only. Full character desc + professional cinematographer shot description",
+      "dialogue": "(OPTIONAL) Natural speech in ${langName} — only when character speaks on camera. Omit field if no speaking."
     }
   ]
 }
 
 CHARACTER DESCRIPTION RULES:
-- Define ALL characters with EXTREME precision in character_description
-- Format: "[number] characters: (1) [Name] - [species/gender], [exact hair: color+style+length], [eye color], [skin tone], [body type], [EXACT clothing with colors], [accessories]. (2) [Name] - ..."
-- Example: "1 character: Aria - young woman, long wavy auburn hair with side bangs, hazel eyes, fair skin with freckles, slim build, wearing a navy blue oversized knit sweater, dark gray skinny jeans, brown leather ankle boots, silver crescent moon pendant necklace"
-- COPY this description VERBATIM at the START of every visual_prompt
+- Format: "[number] characters: (1) [Name] - [gender/age], [exact hair: color+texture+style+length], [eye color+shape], [skin tone], [body type+height], [EXACT clothing with material+color+fit], [accessories with material+color]. (2) [Name] - ..."
+- Example: "1 character: Kira - young woman early 20s, jet black straight hair to mid-back with blunt bangs, dark brown almond-shaped eyes, warm tan skin, athletic medium build, wearing an oversized vintage washed-olive canvas field jacket over a fitted white ribbed tank top, high-waisted black cargo pants with silver button hardware, weathered brown leather hiking boots with red laces, small gold hoop earrings, black digital watch on left wrist"
+- COPY the character_description at the START of every visual_prompt (write "same description" after Scene 1 to save space)
 
-VISUAL PROMPT FORMAT (follow exactly):
-"[FULL CHARACTER_DESCRIPTION], [ACTION: what they are doing], [ENVIRONMENT: specific location], [CAMERA MOVEMENT: how camera moves], [CAMERA ANGLE: shot type], [LIGHTING: light and color grading], [STYLE: art style], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+VISUAL PROMPT STRUCTURE (include ALL elements):
+"[CHARACTER_DESCRIPTION], [PRECISE ACTION + body language], [environment with MATERIAL TEXTURES], [CAMERA: shot size + movement], [LIGHTING: source + direction + quality], [COLOR GRADE: specific palette], [ATMOSPHERE: depth/haze/particles], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
 
-EXAMPLE OF GOOD SCENE CONTINUITY (notice how each scene connects):
-Scene 1: "1 character: Aria - young woman, long wavy auburn hair, hazel eyes, navy sweater, gray jeans, brown boots, moon necklace. She walks slowly along a wooden dock over a calm misty lake, wide establishing shot dollying in, soft golden morning light reflecting off still water, photorealistic cinematic, 16:9 widescreen"
-Scene 2: "1 character: Aria - same description. Now sitting cross-legged on the same wooden dock from Scene 1, opening a worn leather journal, medium shot from the side, same golden morning light, same misty lake visible behind her, photorealistic cinematic, 16:9 widescreen"
-Scene 3: "1 character: Aria - same description. Still sitting on the same dock, looking up from the journal toward the misty lake horizon, close-up from over her shoulder, same soft golden light, journal still in her hands, photorealistic cinematic, 16:9 widescreen"
-Scene 4: "1 character: Aria - same description. Standing up from the same dock, closing the journal and tucking it under her arm, medium wide shot pulling back, same lake environment, warm golden tones, photorealistic cinematic, 16:9 widescreen"
+PROFESSIONAL EXAMPLE (4 scenes):
+character_description: "1 character: Kira - young woman, jet black straight hair with blunt bangs, dark brown almond eyes, warm tan skin, athletic build, olive canvas field jacket over white ribbed tank, black cargo pants, brown leather hiking boots with red laces, gold hoop earrings, black digital watch"
 
-BAD EXAMPLE (disconnected scenes):
-Scene 1: "walking on a dock" → Scene 2: "cooking in a kitchen" (WRONG - jumped location completely)
-Scene 2: "sitting and reading" → Scene 3: "running in a field" (WRONG - impossible transition)
+Scene 1 visual: "1 character: Kira - jet black straight hair with blunt bangs, dark brown almond eyes, tan skin, olive canvas jacket, white tank, black cargo pants, brown boots red laces, gold hoops. Standing at the edge of a weathered wooden observation deck overlooking a misty valley at dawn, hands gripping the damp timber railing, wide full shot with slow steadicam push-in from behind, golden hour backlight creating rim light on hair and jacket shoulders, volumetric morning mist rising from valley below, teal-orange color grade with crushed blacks, photorealistic cinematic, 9:16 vertical"
 
-CRITICAL CONTINUITY RULES:
-- Each scene must mention "same [location detail] from previous scene" to anchor continuity
-- Body position must logically follow: sitting → can't suddenly be running without standing up first
-- Keep SAME props visible across scenes (same journal, same table, same bag)
-- Lighting must stay consistent (don't jump daylight to night)
-- Think: "if I filmed this with one camera, could these scenes happen in sequence?"
+Scene 2 visual: "1 character: Kira - same description. Turning away from the same timber railing on the observation deck, unfolding a creased topographic map, medium close-up with shallow depth of field isolating hands and map against blurred misty valley background, same dawn golden light now hitting the map surface creating warm paper texture, rack focus from map contour lines to her concentrated expression, desaturated earth tones with warm highlights, photorealistic cinematic, 9:16 vertical"
 
-NARRATION RULES:
-- Write in ${langName} - engaging, natural, conversational
-- Advances the story smoothly, never jumps topics
-- Do NOT describe visuals in narration`;
+Scene 3 visual: "1 character: Kira - same description. Stepping off the same observation deck onto a narrow gravel trail descending into the mist, low angle cowboy shot from trail level looking up, same dawn light now partially obscured by tree canopy creating dappled shadow patterns on her jacket, boots crunching on loose gravel, dust particles catching light beams between cedar branches, muted olive and amber palette, photorealistic cinematic, 9:16 vertical"
+
+BAD vs GOOD:
+BAD visual: "girl walking in forest, wide shot, natural light, cinematic" (empty, no detail)
+GOOD visual: "striding along muddy single-track between moss-draped cedar trunks, steadicam tracking from 45-degree side angle, overcast diffused light with sun breaks creating shifting shadows on wet fern undergrowth, muted olive and brown palette with cool blue shadows, shallow depth of field" (rich, specific)
+BAD narration: "Hari ini kita jalan-jalan di alam yang indah" (generic, obvious)
+GOOD narration: "Kaki mulai protes di kilometer ketiga. Tapi pemandangan ini bikin mulut diam." (personal, tension)
+
+CONTINUITY ANCHORS:
+- Every scene after Scene 1 references specific details from previous scene
+- Same props stay visible, same lighting direction, same color temperature
+- Body position logically connected`;
     }
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
