@@ -12095,9 +12095,11 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
           console.log(`[AUTOMATION] Using user reference image: ${referenceImageUrl}`);
         }
         let prevSceneImageUrl = null;
+        let scene1ImageUrl = null;
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
+            if (scene.scene_index === 0 && scene.image_url) scene1ImageUrl = scene.image_url;
             if (scene.image_url) prevSceneImageUrl = scene.image_url;
             continue;
           }
@@ -12114,29 +12116,53 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               const isUserRef = !!project.reference_image_url;
               const isFirstScene = scene.scene_index === 0;
 
-              if (referenceImageUrl) {
+              if (referenceImageUrl || prevSceneImageUrl) {
                 let refPrompt;
-                const refImages = [referenceImageUrl];
+                const refImages = [];
 
-                if (isUserRef && !isFirstScene && prevSceneImageUrl) {
-                  refImages.push(prevSceneImageUrl);
-                  refPrompt = `CRITICAL: Image 1 = CHARACTER REFERENCE. You MUST preserve this person's EXACT face shape, eye shape, nose, lips, jawline, skin tone, hair color, hair style, hair length, body proportions, and clothing. NO changes to the person's appearance allowed. Image 2 = PREVIOUS SCENE for environment/lighting continuity. Generate the next scene: ${scene.visual_prompt}. The person must be IDENTICAL to image 1. The setting, lighting, and color palette must match image 2.`;
-                } else if (isUserRef) {
-                  refPrompt = `CRITICAL: Preserve this person's EXACT face shape, eye shape, nose, lips, jawline, skin tone, hair color, hair style, hair length, body proportions, and clothing. DO NOT alter ANY facial feature or body detail. Generate new scene: ${scene.visual_prompt}. The person must be IDENTICAL to the reference - same face, same hair, same clothes, same skin.`;
+                if (isUserRef) {
+                  refImages.push(referenceImageUrl);
+                  if (!isFirstScene && prevSceneImageUrl) {
+                    refImages.push(prevSceneImageUrl);
+                    if (scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl && scene1ImageUrl !== referenceImageUrl) {
+                      refImages.push(scene1ImageUrl);
+                    }
+                    refPrompt = `You are given reference images for CHARACTER CONSISTENCY.
+Image 1 = CHARACTER IDENTITY (THIS IS THE MOST IMPORTANT). Copy this person's face EXACTLY: same face shape, same eyes, same nose, same mouth, same jawline, same skin tone, same hair color and style, same clothing.
+Image 2 = PREVIOUS SCENE for environment and lighting continuity.
+${refImages.length > 2 ? 'Image 3 = SCENE 1 for overall style consistency.' : ''}
+Generate this new scene: ${scene.visual_prompt}
+ABSOLUTE RULES: The person MUST look like a photograph of the SAME person as Image 1. Do not age, de-age, or alter any facial feature. Same ethnicity, same skin color, same face.`;
+                  } else {
+                    refPrompt = `You are given a CHARACTER REFERENCE IMAGE. This is the person who must appear in the generated image.
+Copy EXACTLY: face shape, eye shape and color, nose shape, mouth shape, jawline, skin tone, hair color, hair style, hair length, body build, clothing style and colors.
+Generate this scene: ${scene.visual_prompt}
+The generated person MUST look like a photograph of the SAME person. Do not change ANY facial feature.`;
+                  }
                 } else if (!isFirstScene && prevSceneImageUrl) {
-                  refImages.length = 0;
                   refImages.push(prevSceneImageUrl);
-                  refPrompt = `Continue from this image. Keep the EXACT SAME character (same face, same hair, same clothing, same body) and SAME environment. The next scene happens immediately after. Generate: ${scene.visual_prompt}. Character appearance must not change at all.`;
+                  if (scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) {
+                    refImages.push(scene1ImageUrl);
+                    refPrompt = `MAINTAIN CHARACTER CONSISTENCY across scenes.
+Image 1 = PREVIOUS SCENE (continue from here).
+Image 2 = SCENE 1 (character anchor - the character must look the same as in this first scene).
+Generate: ${scene.visual_prompt}
+The character must have the EXACT SAME face, hair, clothing, and body as shown in both reference images. Same person, same look, no changes.`;
+                  } else {
+                    refPrompt = `Continue from this image. The character must look EXACTLY the same: same face, same hair, same clothing, same body proportions. Generate the next scene: ${scene.visual_prompt}. No changes to the character's appearance allowed.`;
+                  }
                 } else {
-                  refPrompt = `Using the exact same character (face, hair, clothing, body) and environment from this image, create: ${scene.visual_prompt}. Keep identical character design and proportions.`;
+                  refImages.push(referenceImageUrl);
+                  refPrompt = `Using the exact same character (face, hair, clothing, body) from this image, create: ${scene.visual_prompt}. Character must be identical.`;
                 }
 
                 const editBody = {
                   prompt: refPrompt,
+                  model: imageModel,
                   images: refImages,
                   aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
                 };
-                console.log(`[AUTOMATION] Generating image (with ${refImages.length} ref${refImages.length > 1 ? 's' : ''}) for ${projectId} scene ${scene.scene_index}`);
+                console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
                   'https://apimodels.app/api/v1/images/edit',
                   editBody,
@@ -12151,7 +12177,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                   prompt: scene.visual_prompt,
                   aspect_ratio: aspectRatio
                 };
-                console.log(`[AUTOMATION] Generating image for ${projectId} scene ${scene.scene_index}:`, JSON.stringify(imgBody));
+                console.log(`[AUTOMATION] Generating image (text-to-image, model=${imageModel}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
                   'https://apimodels.app/api/v1/images/generations',
                   imgBody,
@@ -12196,6 +12222,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               if (!imageUrl) throw new Error('Image generation failed or timed out');
 
               prevSceneImageUrl = imageUrl;
+              if (scene.scene_index === 0) scene1ImageUrl = imageUrl;
               if (!referenceImageUrl) referenceImageUrl = imageUrl;
 
               await pool.query(
@@ -12491,19 +12518,50 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
 
         if (!sceneImageUrl) {
           let imgResponse;
-          if (retryRefImage) {
+          const prevSceneRes = await pool.query(
+            `SELECT image_url FROM automation_scenes WHERE project_id = $1 AND scene_index < $2 AND image_url IS NOT NULL ORDER BY scene_index DESC LIMIT 1`,
+            [projectId, sceneIndex]
+          );
+          const retryPrevImage = prevSceneRes.rows[0]?.image_url || null;
+          const scene1Res = await pool.query(
+            `SELECT image_url FROM automation_scenes WHERE project_id = $1 AND scene_index = 0 AND image_url IS NOT NULL`,
+            [projectId]
+          );
+          const retryScene1Image = scene1Res.rows[0]?.image_url || null;
+
+          if (retryRefImage || retryPrevImage) {
+            const refImages = [];
+            let refPrompt;
+            if (retryRefImage) {
+              refImages.push(retryRefImage);
+              if (retryPrevImage) {
+                refImages.push(retryPrevImage);
+                if (retryScene1Image && retryScene1Image !== retryPrevImage && retryScene1Image !== retryRefImage) {
+                  refImages.push(retryScene1Image);
+                }
+                refPrompt = `Image 1 = CHARACTER REFERENCE. Copy this person's face EXACTLY: same face shape, eyes, nose, mouth, jawline, skin tone, hair, clothing. Image 2 = PREVIOUS SCENE for environment continuity. ${refImages.length > 2 ? 'Image 3 = SCENE 1 for style consistency.' : ''} Generate: ${scene.visual_prompt}. Person MUST be IDENTICAL to Image 1.`;
+              } else {
+                refPrompt = `CHARACTER REFERENCE. Copy EXACTLY: face shape, eyes, nose, mouth, jawline, skin tone, hair color/style, clothing. Generate: ${scene.visual_prompt}. Person MUST be IDENTICAL to reference.`;
+              }
+            } else {
+              refImages.push(retryPrevImage);
+              if (retryScene1Image && retryScene1Image !== retryPrevImage) refImages.push(retryScene1Image);
+              refPrompt = `Keep EXACT SAME character (face, hair, clothing, body) from reference images. Generate: ${scene.visual_prompt}. No changes to character appearance.`;
+            }
             const editBody = {
-              prompt: `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`,
-              images: [retryRefImage],
+              prompt: refPrompt,
+              model: imageModel,
+              images: refImages,
               aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
             };
-            console.log(`[AUTOMATION] Retry: Generating image (with user ref) for ${projectId} scene ${sceneIndex}`);
+            console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${sceneIndex}`);
             imgResponse = await axios.post(
               'https://apimodels.app/api/v1/images/edit', editBody,
               { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
             );
           } else {
             const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio };
+            console.log(`[AUTOMATION] Retry: Generating image (text-to-image, model=${imageModel}) for ${projectId} scene ${sceneIndex}`);
             imgResponse = await axios.post(
               'https://apimodels.app/api/v1/images/generations', imgBody,
               { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
