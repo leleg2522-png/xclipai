@@ -6947,6 +6947,9 @@ textarea.form-input {
   letter-spacing: 0.3px;
 }
 .auto-scene-vp { opacity: 0.7; font-size: 12px; }
+.auto-scene-dlg { color: var(--accent); font-style: italic; }
+.auto-scene-dlg strong { color: var(--accent); }
+.auto-scene-dialogue { border-left: 3px solid var(--accent); padding-left: 8px; }
 
 .auto-scene-video {
   margin: 8px 0 4px;

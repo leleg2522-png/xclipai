@@ -6809,6 +6809,12 @@ function renderAutomationDetailPage() {
           html += '<p class="auto-scene-text"><strong>Narasi:</strong> ' + escapeHtml(scene.narration) + '</p>';
         }
       }
+      var sceneDialogue = (scene.metadata && scene.metadata.dialogue) ? scene.metadata.dialogue : '';
+      if (project.status === 'script_ready') {
+        html += '<textarea class="form-input auto-scene-ta auto-scene-dialogue" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Dialog karakter (kosongkan jika tidak bicara)">' + escapeHtml(sceneDialogue) + '</textarea>';
+      } else if (sceneDialogue) {
+        html += '<p class="auto-scene-text auto-scene-dlg"><strong>&#128172; Dialog:</strong> ' + escapeHtml(sceneDialogue) + '</p>';
+      }
       if (scene.visual_prompt) {
         if (project.status === 'script_ready') {
           html += '<textarea class="form-input auto-scene-ta auto-scene-visual" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Visual prompt">' + escapeHtml(scene.visual_prompt) + '</textarea>';
@@ -6978,13 +6984,13 @@ function attachAutomationListeners() {
     });
   });
 
-  document.querySelectorAll('.auto-scene-narration, .auto-scene-visual').forEach(function(ta) {
+  document.querySelectorAll('.auto-scene-narration, .auto-scene-visual, .auto-scene-dialogue').forEach(function(ta) {
     ta.addEventListener('change', function() {
       var proj = ta.getAttribute('data-project');
       var idx = parseInt(ta.getAttribute('data-scene'));
-      var isNarration = ta.classList.contains('auto-scene-narration');
       var body = { sceneIndex: idx };
-      if (isNarration) body.narration = ta.value;
+      if (ta.classList.contains('auto-scene-narration')) body.narration = ta.value;
+      else if (ta.classList.contains('auto-scene-dialogue')) body.dialogue = ta.value;
       else body.visualPrompt = ta.value;
       fetch(API_URL + '/api/automation/projects/' + proj + '/update-scene', {
         method: 'POST',

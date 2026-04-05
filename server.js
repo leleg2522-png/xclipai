@@ -11751,7 +11751,15 @@ SCENE FLOW PATTERN:
 - Scene 2: Medium shot, character begins main action (SAME location as Scene 1)
 - Scene 3+: Alternate close-up ↔ medium, show progression of the SAME activity
 - Final scene: Pull back or meaningful close-up for closure
-- RULE: Never jump to a completely different pose/location without showing the transition`;
+- RULE: Never jump to a completely different pose/location without showing the transition
+
+CHARACTER DIALOGUE RULES:
+- If the topic naturally involves the character SPEAKING (tutorial, vlog, presentation, storytelling, review, etc.), add a "dialogue" field to that scene
+- "dialogue" = what the character SAYS ON CAMERA (lip-synced speech), written in the narration language
+- NOT every scene needs dialogue - use it when the character would naturally talk (explaining, greeting, reacting, teaching)
+- When a scene has dialogue, the visual_prompt MUST include "character speaking to camera" or "character talking" so the video generator creates lip movement
+- Dialogue should be short and natural (1-2 sentences max per scene), like real speech
+- If the topic does NOT involve a speaking character (nature footage, product showcase, ambient content), do NOT add dialogue to any scene`;
 
     let userPrompt;
     if (hasRefImage) {
@@ -11767,13 +11775,15 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Action + environment + camera MOVEMENT + lighting + transition hint"
+      "visual_prompt": "English only. Action + environment + camera MOVEMENT + lighting + transition hint",
+      "dialogue": "(OPTIONAL) What the character SAYS on camera in ${langName}. Only include if the character is speaking in this scene. Omit this field entirely if no speaking."
     }
   ]
 }
 
 VISUAL PROMPT FORMAT:
 "[ACTION + BODY POSITION], [SAME environment from previous scene with specific details], [camera angle + movement], [lighting consistent with previous scene], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
+- If the scene has dialogue: ADD "speaking to camera" or "talking while [action]" in the visual_prompt so lips move in the video
 
 EXAMPLE OF GOOD SCENE CONTINUITY (notice how each scene connects):
 Scene 1: "walking into a cozy kitchen with wooden countertops and warm pendant lights, approaching the counter, wide establishing shot slowly dollying in, warm indoor lighting from overhead pendants, soft shadows, photorealistic cinematic, 16:9 widescreen"
@@ -11805,7 +11815,8 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Character + action + environment + camera MOVEMENT + lighting"
+      "visual_prompt": "English only. Character + action + environment + camera MOVEMENT + lighting",
+      "dialogue": "(OPTIONAL) What the character SAYS on camera in ${langName}. Only include if the character is speaking in this scene. Omit this field entirely if no speaking."
     }
   ]
 }
@@ -11951,10 +11962,17 @@ NARRATION RULES:
     await pool.query(`DELETE FROM automation_scenes WHERE project_id = $1`, [projectId]);
     for (let i = 0; i < scriptData.scenes.length; i++) {
       const scene = scriptData.scenes[i];
+      const sceneDialogue = scene.dialogue || null;
+      let vp = scene.visual_prompt || '';
+      if (sceneDialogue && !vp.toLowerCase().includes('speaking') && !vp.toLowerCase().includes('talking')) {
+        vp = vp.replace(/,\s*(photorealistic|cinematic)/, ', speaking to camera, $1');
+        if (vp === scene.visual_prompt) vp += ', character speaking to camera';
+      }
+      const sceneMeta = sceneDialogue ? JSON.stringify({ dialogue: sceneDialogue }) : '{}';
       await pool.query(
-        `INSERT INTO automation_scenes (project_id, scene_index, narration, visual_prompt, status)
-         VALUES ($1, $2, $3, $4, 'pending')`,
-        [projectId, i, scene.narration || '', scene.visual_prompt || '']
+        `INSERT INTO automation_scenes (project_id, scene_index, narration, visual_prompt, status, metadata)
+         VALUES ($1, $2, $3, $4, 'pending', $5)`,
+        [projectId, i, scene.narration || '', vp, sceneMeta]
       );
     }
 
@@ -11974,7 +11992,7 @@ NARRATION RULES:
 app.post('/api/automation/projects/:projectId/update-scene', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
-  const { sceneIndex, narration, visualPrompt } = req.body;
+  const { sceneIndex, narration, visualPrompt, dialogue } = req.body;
   try {
     const projCheck = await pool.query(
       `SELECT status FROM automation_projects WHERE project_id = $1 AND user_id = $2`,
@@ -11989,6 +12007,11 @@ app.post('/api/automation/projects/:projectId/update-scene', async (req, res) =>
     let paramIdx = 3;
     if (narration !== undefined) { updateFields.push(`narration = $${paramIdx}`); updateValues.push(narration); paramIdx++; }
     if (visualPrompt !== undefined) { updateFields.push(`visual_prompt = $${paramIdx}`); updateValues.push(visualPrompt); paramIdx++; }
+    if (dialogue !== undefined) {
+      updateFields.push(`metadata = jsonb_set(COALESCE(metadata, '{}'), '{dialogue}', $${paramIdx}::jsonb)`);
+      updateValues.push(JSON.stringify(dialogue));
+      paramIdx++;
+    }
     if (updateFields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
     updateFields.push('updated_at = NOW()');
     const updateResult = await pool.query(
