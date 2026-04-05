@@ -11725,32 +11725,33 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
-    const systemPrompt = `You are an expert AI video production director and cinematographer. You create precise, structured visual prompts optimized for AI image-to-video generators.
+    const systemPrompt = `You are an expert AI video director specializing in SEAMLESS scene continuity. Your scenes must flow together like ONE continuous video, not separate disconnected clips.
 
-CRITICAL RULES FOR VISUAL PROMPTS:
-1. Each visual_prompt describes a SINGLE continuous camera shot (5-10 seconds of video)
-2. Write as if directing a cinematographer - describe what the CAMERA SEES and HOW IT MOVES
-3. Always include: subject action, environment, camera movement/angle, lighting, color grading
-4. NEVER use vague words like "beautiful", "amazing", "epic" - use SPECIFIC visual details
-5. NEVER describe sounds, emotions, or narration in visual_prompt - ONLY what is VISIBLE on screen
-6. Keep each visual_prompt between 40-100 words for rich detail
-7. Always respond with valid JSON only, no markdown formatting, no code blocks
+CORE PRINCIPLE - SCENE CONTINUITY:
+Every scene MUST connect to the previous scene. The character's POSITION and ACTION at the END of Scene N must match the START of Scene N+1. Think of it as one continuous camera recording, just with different camera angles.
 
-CAMERA MOVEMENT VOCABULARY (use these terms):
-- Static/locked shot, slow pan left/right, slow tilt up/down
-- Dolly in (camera moves closer), dolly out (camera moves away)
-- Tracking shot (camera follows subject sideways), following shot (camera follows from behind)
-- Slow zoom in, slow zoom out, push in (dramatic zoom)
-- Crane shot up/down, orbit shot (camera circles subject)
-- Over-the-shoulder, POV shot, low angle, high angle, eye level
-- Handheld subtle movement, steadicam smooth movement
+VISUAL PROMPT RULES:
+1. Each visual_prompt = one 5-10 second camera shot
+2. Describe ONLY what is visible: subject pose/action, exact environment details, camera angle, camera movement, lighting
+3. Use SPECIFIC details, never vague words (no "beautiful", "amazing", "epic")
+4. Keep 40-80 words per visual_prompt
+5. Respond with valid JSON only, no markdown, no code blocks
 
-SCENE TRANSITION STRATEGY:
-- Vary camera angles between scenes: if Scene 1 is wide shot, Scene 2 should be medium or close-up
-- Create visual flow: alternate between static and moving camera shots
-- Use camera movement to build tension: start wide/static → progress to closer/dynamic shots
-- End scenes with movement that naturally leads to the next scene (e.g. pan to doorway → next scene inside)
-- Match the energy: calm narration = slow/static camera, exciting narration = dynamic camera movement`;
+CONTINUITY CHECKLIST (apply to every scene after Scene 1):
+- WHERE was the character at the end of the previous scene? → Start this scene from that same position
+- WHAT was the character doing? → Continue or naturally transition from that action
+- What was the ENVIRONMENT? → Same environment unless story requires a move
+- What was the LIGHTING? → Same time of day and light direction
+
+CAMERA TERMS TO USE:
+Static shot, slow pan left/right, dolly in/out, tracking shot, slow zoom in/out, orbit shot, over-the-shoulder, close-up, medium shot, wide shot, low angle, eye level
+
+SCENE FLOW PATTERN:
+- Scene 1: Wide establishing shot, introduce character + environment
+- Scene 2: Medium shot, character begins main action (SAME location as Scene 1)
+- Scene 3+: Alternate close-up ↔ medium, show progression of the SAME activity
+- Final scene: Pull back or meaningful close-up for closure
+- RULE: Never jump to a completely different pose/location without showing the transition`;
 
     let userPrompt;
     if (hasRefImage) {
@@ -11771,34 +11772,28 @@ Return ONLY valid JSON:
   ]
 }
 
-VISUAL PROMPT FORMAT (follow this structure exactly):
-"[ACTION: what the character is doing], [ENVIRONMENT: specific location details], [CAMERA MOVEMENT: how camera moves during this shot], [CAMERA ANGLE: shot type], [LIGHTING: light source and color grading], [STYLE: photorealistic/cinematic], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+VISUAL PROMPT FORMAT:
+"[ACTION + BODY POSITION], [SAME environment from previous scene with specific details], [camera angle + movement], [lighting consistent with previous scene], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
 
-GOOD EXAMPLES (notice camera movement and scene flow):
-Scene 1: "walking slowly through a dense misty pine forest trail, camera starts as wide establishing shot then slowly dollies in to medium shot, early morning golden light filtering through fog between tall trees, muted green and amber color grading, photorealistic cinematic style, 16:9 widescreen"
-Scene 2: "stopping at a clearing, kneeling down to examine wild mushrooms growing on a fallen log, close-up shot with slow orbit around the subject, soft diffused daylight with dappled shadows, shallow depth of field, warm earth tones, 16:9 widescreen"
-Scene 3: "standing up and looking toward a distant mountain peak visible through the trees, medium shot from behind with slow push-in zoom, golden hour backlighting creating silhouette rim light, atmospheric haze in the valley, 16:9 widescreen"
+EXAMPLE OF GOOD SCENE CONTINUITY (notice how each scene connects):
+Scene 1: "walking into a cozy kitchen with wooden countertops and warm pendant lights, approaching the counter, wide establishing shot slowly dollying in, warm indoor lighting from overhead pendants, soft shadows, photorealistic cinematic, 16:9 widescreen"
+Scene 2: "now standing at the same wooden kitchen counter from Scene 1, picking up ingredients from a wooden cutting board, medium shot from the side, same warm pendant lighting, same kitchen background visible, photorealistic cinematic, 16:9 widescreen"
+Scene 3: "still at the same kitchen counter, hands chopping vegetables on the same cutting board, close-up on hands and food, same warm pendant light from above, steam rising slightly, shallow depth of field, photorealistic cinematic, 16:9 widescreen"
+Scene 4: "stepping back from the same counter, holding a finished plate of food, medium wide shot, same kitchen environment with pendant lights, satisfied expression, warm golden tones, photorealistic cinematic, 16:9 widescreen"
 
-BAD EXAMPLE (DO NOT DO THIS):
-"A beautiful scene where the character feels happy in nature" (no camera movement, no specific details, describes emotion)
+BAD EXAMPLE (scene feels disconnected):
+Scene 1: "cooking in a modern kitchen" → Scene 2: "sitting in a garden reading" (WRONG - jumped location and activity without any connection)
 
-SCENE FLOW RULES:
-- Scene 1: Start with WIDE/ESTABLISHING shot to set the world - slow dolly or static
-- Middle scenes: Alternate between MEDIUM and CLOSE-UP shots - use tracking, orbit, or pan movements
-- Final scene: End with a memorable shot - pull back to wide, or dramatic push-in close-up
-- NEVER use the same camera angle/movement in consecutive scenes
-- Each scene's camera movement should feel like a natural continuation of the previous scene
-
-ENVIRONMENT CONSISTENCY:
-- Scene 1 establishes the PRIMARY LOCATION - describe it in rich detail
-- Scenes 2+ must reference the SAME location with consistent details
-- Only change location if the story absolutely requires it
-- Repeat key environmental markers (e.g. "same misty pine forest", "same cozy cabin interior")
+CRITICAL CONTINUITY RULES:
+- Each scene's visual_prompt must mention "same [location detail] from previous scene" to anchor continuity
+- Character's body position must logically follow: if sitting in Scene 2, don't suddenly stand in Scene 3 without reason
+- Keep the SAME props/objects visible across scenes (same table, same bag, same tools)
+- Lighting must stay consistent (don't jump from daylight to night between scenes)
 
 NARRATION RULES:
-- Write narration in ${langName} - engaging, natural, conversational tone
-- Each narration advances the story, never repeats previous scenes
-- Do NOT describe visuals in narration - narration is for storytelling/voiceover only`;
+- Write in ${langName} - engaging, natural, conversational tone
+- Each narration advances the story smoothly, never jumps topics
+- Do NOT describe visuals in narration`;
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration language: ${langName}.
@@ -11824,30 +11819,26 @@ CHARACTER DESCRIPTION RULES:
 VISUAL PROMPT FORMAT (follow exactly):
 "[FULL CHARACTER_DESCRIPTION], [ACTION: what they are doing], [ENVIRONMENT: specific location], [CAMERA MOVEMENT: how camera moves], [CAMERA ANGLE: shot type], [LIGHTING: light and color grading], [STYLE: art style], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
 
-GOOD EXAMPLES (notice camera movement and scene flow):
-Scene 1: "1 character: Aria - young woman, long wavy auburn hair, hazel eyes, navy blue sweater, gray jeans, brown boots, moon necklace. She walks slowly along a wooden dock over a calm misty lake at dawn, camera starts as wide establishing shot then slowly dollies in to medium shot, soft golden morning light reflecting off still water, muted warm color grading, photorealistic cinematic style, 16:9 widescreen"
-Scene 2: "1 character: Aria - same description. She sits cross-legged on the same wooden dock, opens a worn leather journal and begins reading, close-up shot with slow orbit from left to right, soft diffused daylight with gentle lens flare, shallow depth of field blurring the lake behind her, warm amber tones, 16:9 widescreen"
-Scene 3: "1 character: Aria - same description. She looks up from the journal toward the misty lake horizon, camera behind her shoulder with slow push-in zoom toward the mountains, golden hour backlighting creating rim light on her hair, atmospheric fog over the water, cinematic anamorphic style, 16:9 widescreen"
+EXAMPLE OF GOOD SCENE CONTINUITY (notice how each scene connects):
+Scene 1: "1 character: Aria - young woman, long wavy auburn hair, hazel eyes, navy sweater, gray jeans, brown boots, moon necklace. She walks slowly along a wooden dock over a calm misty lake, wide establishing shot dollying in, soft golden morning light reflecting off still water, photorealistic cinematic, 16:9 widescreen"
+Scene 2: "1 character: Aria - same description. Now sitting cross-legged on the same wooden dock from Scene 1, opening a worn leather journal, medium shot from the side, same golden morning light, same misty lake visible behind her, photorealistic cinematic, 16:9 widescreen"
+Scene 3: "1 character: Aria - same description. Still sitting on the same dock, looking up from the journal toward the misty lake horizon, close-up from over her shoulder, same soft golden light, journal still in her hands, photorealistic cinematic, 16:9 widescreen"
+Scene 4: "1 character: Aria - same description. Standing up from the same dock, closing the journal and tucking it under her arm, medium wide shot pulling back, same lake environment, warm golden tones, photorealistic cinematic, 16:9 widescreen"
 
-BAD EXAMPLE (DO NOT DO THIS):
-"A girl sits by a lake and reads a book. The scene is peaceful." (no camera movement, no details, vague)
+BAD EXAMPLE (disconnected scenes):
+Scene 1: "walking on a dock" → Scene 2: "cooking in a kitchen" (WRONG - jumped location completely)
+Scene 2: "sitting and reading" → Scene 3: "running in a field" (WRONG - impossible transition)
 
-SCENE FLOW RULES:
-- Scene 1: WIDE/ESTABLISHING shot to set the world - slow dolly or static
-- Middle scenes: Alternate MEDIUM and CLOSE-UP shots - use tracking, orbit, pan movements
-- Final scene: Memorable closing shot - pull back to wide, or dramatic push-in close-up
-- NEVER use the same camera angle/movement in consecutive scenes
-- Each scene should feel like a natural continuation of the previous
-
-ENVIRONMENT CONSISTENCY:
-- Scene 1 establishes the PRIMARY LOCATION with rich detail
-- Scenes 2+ MUST stay in the same location with consistent details
-- Repeat key location markers (e.g. "same wooden dock over calm lake")
-- Only change location if story requires it
+CRITICAL CONTINUITY RULES:
+- Each scene must mention "same [location detail] from previous scene" to anchor continuity
+- Body position must logically follow: sitting → can't suddenly be running without standing up first
+- Keep SAME props visible across scenes (same journal, same table, same bag)
+- Lighting must stay consistent (don't jump daylight to night)
+- Think: "if I filmed this with one camera, could these scenes happen in sequence?"
 
 NARRATION RULES:
 - Write in ${langName} - engaging, natural, conversational
-- Advances the story, never repeats
+- Advances the story smoothly, never jumps topics
 - Do NOT describe visuals in narration`;
     }
 
@@ -12071,11 +12062,11 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
         if (referenceImageUrl) {
           console.log(`[AUTOMATION] Using user reference image: ${referenceImageUrl}`);
         }
-        let scene1ImageUrl = null;
+        let prevSceneImageUrl = null;
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
-            if (scene.scene_index === 0 && scene.image_url) scene1ImageUrl = scene.image_url;
+            if (scene.image_url) prevSceneImageUrl = scene.image_url;
             continue;
           }
 
@@ -12095,13 +12086,17 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                 let refPrompt;
                 const refImages = [referenceImageUrl];
 
-                if (isUserRef && !isFirstScene && scene1ImageUrl) {
-                  refImages.push(scene1ImageUrl);
-                  refPrompt = `Transform these reference images into a new scene. Image 1 is the CHARACTER REFERENCE - keep the EXACT SAME person (identical face, hair, skin tone, body, clothing). Image 2 is the BACKGROUND/SETTING REFERENCE - maintain the same environment style, color palette, and atmosphere. New scene: ${scene.visual_prompt}. The person must look identical to image 1, and the setting must feel like the same world as image 2.`;
+                if (isUserRef && !isFirstScene && prevSceneImageUrl) {
+                  refImages.push(prevSceneImageUrl);
+                  refPrompt = `Create the next scene in a continuous video sequence. Image 1 is the CHARACTER - keep the EXACT SAME person (identical face, hair, skin, body, clothing). Image 2 is the PREVIOUS SCENE - this new scene must look like it happens IMMEDIATELY AFTER image 2, in the same location with the same lighting and environment. New scene: ${scene.visual_prompt}. The person must be identical to image 1. The environment, lighting, and color grading must match image 2.`;
                 } else if (isUserRef) {
-                  refPrompt = `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`;
+                  refPrompt = `Transform this reference image into a new scene. Keep the EXACT SAME person/character - identical face, hair, skin tone, body shape, clothing. DO NOT change the person's appearance. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`;
+                } else if (!isFirstScene && prevSceneImageUrl) {
+                  refImages.length = 0;
+                  refImages.push(prevSceneImageUrl);
+                  refPrompt = `Create the next scene continuing from this image. Keep the EXACT SAME characters, environment, lighting, and style. The new scene happens IMMEDIATELY AFTER this image. New scene: ${scene.visual_prompt}. Everything must look consistent with the previous frame.`;
                 } else {
-                  refPrompt = `Using the exact same characters and environment style from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, setting atmosphere, and proportions as image 1.`;
+                  refPrompt = `Using the exact same characters and environment from image 1, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions.`;
                 }
 
                 const editBody = {
@@ -12168,7 +12163,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
               if (!imageUrl) throw new Error('Image generation failed or timed out');
 
-              if (scene.scene_index === 0) scene1ImageUrl = imageUrl;
+              prevSceneImageUrl = imageUrl;
               if (!referenceImageUrl) referenceImageUrl = imageUrl;
 
               await pool.query(
