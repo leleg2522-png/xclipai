@@ -11228,7 +11228,7 @@ app.get('/api/ximage/download', async (req, res) => {
 // ============ FREEPIK KEY POOL SYSTEM ============
 
 const KEYS_PER_USER_PER_FEATURE = 5;
-const KEY_EXHAUSTED_RESET_HOURS = 1;
+const KEY_EXHAUSTED_RESET_HOURS = 72;
 
 async function assignKeysToUser(userId, feature, count = KEYS_PER_USER_PER_FEATURE) {
   const existing = await pool.query(
