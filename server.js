@@ -11694,9 +11694,39 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
 
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
+    const hasRefImage = !!project.reference_image_url;
     const systemPrompt = `You are a professional content creator and scriptwriter. Create engaging video scripts for social media.
 You MUST maintain strict character consistency across ALL scenes. Always respond with valid JSON only, no markdown formatting.`;
-    const userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
+
+    let userPrompt;
+    if (hasRefImage) {
+      userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
+The script must have exactly ${project.scene_count} scenes.
+Language: ${langName}
+
+IMPORTANT: The user has provided a REFERENCE IMAGE of the main character/subject. You do NOT need to invent a character description. The AI image generator will use the reference image directly to maintain the character's appearance.
+
+Return ONLY valid JSON with this structure:
+{
+  "title": "catchy video title",
+  "character_description": "the main character from the reference image",
+  "scenes": [
+    {
+      "narration": "voiceover text for this scene (${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'})",
+      "visual_prompt": "Scene action and setting description ONLY. Do NOT describe the character's appearance (hair, face, clothes etc) - the reference image handles that. Just describe: what the character is DOING, WHERE they are, camera angle, lighting, mood. Example: 'walking through a dense misty forest at dawn, medium shot from behind, golden sunlight filtering through trees, cinematic atmosphere'. ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
+    }
+  ]
+}
+
+Rules:
+- DO NOT describe the character's physical appearance in visual_prompt - the reference image will be used for that
+- Only describe: actions, settings, environments, camera angles, lighting, mood, atmosphere
+- Each scene narration should be concise and engaging
+- Visual prompts must be in English regardless of narration language
+- Make the content viral-worthy and attention-grabbing
+- The visual_prompt should describe the scene visually, not repeat the narration`;
+    } else {
+      userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 The script must have exactly ${project.scene_count} scenes.
 Language: ${langName}
 
@@ -11723,6 +11753,7 @@ Rules:
 - Visual prompts must be in English regardless of narration language
 - Make the content viral-worthy and attention-grabbing
 - The visual_prompt should describe the scene visually, not repeat the narration`;
+    }
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
     if (!apimodelsKey) {
@@ -11962,7 +11993,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
               if (referenceImageUrl) {
                 const isUserRef = !!project.reference_image_url;
                 const refPrompt = isUserRef
-                  ? `Using the character/subject from the reference image, create this scene: ${scene.visual_prompt}. The character must look EXACTLY like the reference image - same face, body, clothing, and features. Maintain consistency.`
+                  ? `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`
                   : `Using the exact same characters from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions as image 1.`;
                 const editBody = {
                   prompt: refPrompt,
@@ -12321,7 +12352,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           let imgResponse;
           if (retryRefImage) {
             const editBody = {
-              prompt: `Using the character/subject from the reference image, create this scene: ${scene.visual_prompt}. The character must look EXACTLY like the reference image - same face, body, clothing, and features. Maintain consistency.`,
+              prompt: `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`,
               images: [retryRefImage],
               aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
             };
