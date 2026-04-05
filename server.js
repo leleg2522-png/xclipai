@@ -11228,7 +11228,7 @@ app.get('/api/ximage/download', async (req, res) => {
 // ============ FREEPIK KEY POOL SYSTEM ============
 
 const KEYS_PER_USER_PER_FEATURE = 5;
-const KEY_EXHAUSTED_RESET_HOURS = 24;
+const KEY_EXHAUSTED_RESET_HOURS = 1;
 
 async function assignKeysToUser(userId, feature, count = KEYS_PER_USER_PER_FEATURE) {
   const existing = await pool.query(
@@ -11352,12 +11352,24 @@ async function unassignInactiveKeys() {
   const result = await pool.query(
     `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL
      WHERE status = 'assigned' AND (
-       (last_used_at IS NOT NULL AND last_used_at < NOW() - INTERVAL '48 hours')
-       OR (last_used_at IS NULL AND assigned_at < NOW() - INTERVAL '48 hours')
+       (last_used_at IS NOT NULL AND last_used_at < NOW() - INTERVAL '2 hours')
+       OR (last_used_at IS NULL AND assigned_at < NOW() - INTERVAL '2 hours')
      ) RETURNING id`
   );
   if (result.rowCount > 0) {
-    console.log(`[KEY-POOL] Unassigned ${result.rowCount} inactive keys (no use in 48h)`);
+    console.log(`[KEY-POOL] Unassigned ${result.rowCount} inactive keys (no use in 2h)`);
+  }
+  return result.rowCount;
+}
+
+async function releaseUserFeatureKeys(userId, feature) {
+  const result = await pool.query(
+    `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL 
+     WHERE assigned_user_id = $1 AND feature = $2 AND status = 'assigned' RETURNING id`,
+    [userId, feature]
+  );
+  if (result.rowCount > 0) {
+    console.log(`[KEY-POOL] Released ${result.rowCount} keys from user ${userId} feature ${feature}`);
   }
   return result.rowCount;
 }
@@ -11413,9 +11425,32 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     };
   }
 
-  const userKeys = await assignKeysToUser(userId, feature);
+  let userKeys = await assignKeysToUser(userId, feature);
   if (userKeys.length === 0) {
-    return { success: false, fallback: true, error: 'No Freepik keys available' };
+    console.log(`[KEY-POOL] No keys available, attempting emergency recycle...`);
+    const recycled = await pool.query(
+      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL 
+       WHERE status = 'exhausted' RETURNING id`
+    );
+    if (recycled.rowCount > 0) {
+      console.log(`[KEY-POOL] Emergency recycled ${recycled.rowCount} exhausted keys`);
+      userKeys = await assignKeysToUser(userId, feature);
+    }
+    if (userKeys.length === 0) {
+      const unassigned = await pool.query(
+        `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL
+         WHERE status = 'assigned' AND assigned_user_id != $1 AND (
+           last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '10 minutes'
+         ) RETURNING id`, [userId]
+      );
+      if (unassigned.rowCount > 0) {
+        console.log(`[KEY-POOL] Emergency freed ${unassigned.rowCount} idle keys from other users`);
+        userKeys = await assignKeysToUser(userId, feature);
+      }
+    }
+    if (userKeys.length === 0) {
+      return { success: false, fallback: true, error: 'No Freepik keys available' };
+    }
   }
 
   const triedKeys = [];
@@ -11515,7 +11550,7 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
 setInterval(() => {
   resetExpiredKeys().catch(e => console.error('[KEY-POOL] Reset error:', e.message));
   unassignInactiveKeys().catch(e => console.error('[KEY-POOL] Unassign error:', e.message));
-}, 3600000);
+}, 120000);
 
 async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride) {
   const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
@@ -12228,6 +12263,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                   [projectId, mergedUrl]
                 );
                 sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
+                releaseUserFeatureKeys(project.user_id, 'automation').catch(() => {});
 
                 for (const f of downloadedFiles) {
                   try { require('fs').unlinkSync(f); } catch (e) {}
@@ -12239,6 +12275,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                   [projectId, 'Merge failed: ' + mergeErr.message]
                 );
                 sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+                releaseUserFeatureKeys(project.user_id, 'automation').catch(() => {});
               }
             } else {
               await pool.query(
@@ -12246,6 +12283,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                 [projectId]
               );
               sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'completed' });
+              releaseUserFeatureKeys(project.user_id, 'automation').catch(() => {});
             }
           }
         }
@@ -12256,6 +12294,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
           [projectId, pipelineErr.message]
         ).catch(() => {});
         sendSSEToUser(project.user_id, { type: 'automation_update', projectId, status: 'production_failed' });
+        releaseUserFeatureKeys(project.user_id, 'automation').catch(() => {});
       }
     })();
 
