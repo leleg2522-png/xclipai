@@ -11721,6 +11721,8 @@ Return ONLY valid JSON with this structure:
 Rules:
 - DO NOT describe the character's physical appearance in visual_prompt - the reference image will be used for that
 - Only describe: actions, settings, environments, camera angles, lighting, mood, atmosphere
+- IMPORTANT: Keep the SAME location/setting/environment across all scenes unless the story requires a location change. The background and environment from Scene 1 will be locked as reference for all subsequent scenes to maintain visual consistency
+- If the story stays in one location, describe similar environmental details (same room, same forest, same city) in every scene
 - Each scene narration should be concise and engaging
 - Visual prompts must be in English regardless of narration language
 - Make the content viral-worthy and attention-grabbing
@@ -11975,9 +11977,11 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
         if (referenceImageUrl) {
           console.log(`[AUTOMATION] Using user reference image: ${referenceImageUrl}`);
         }
+        let scene1ImageUrl = null;
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
+            if (scene.scene_index === 0 && scene.image_url) scene1ImageUrl = scene.image_url;
             continue;
           }
 
@@ -11990,17 +11994,28 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
             try {
               let imgResponse;
+              const isUserRef = !!project.reference_image_url;
+              const isFirstScene = scene.scene_index === 0;
+
               if (referenceImageUrl) {
-                const isUserRef = !!project.reference_image_url;
-                const refPrompt = isUserRef
-                  ? `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`
-                  : `Using the exact same characters from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions as image 1.`;
+                let refPrompt;
+                const refImages = [referenceImageUrl];
+
+                if (isUserRef && !isFirstScene && scene1ImageUrl) {
+                  refImages.push(scene1ImageUrl);
+                  refPrompt = `Transform these reference images into a new scene. Image 1 is the CHARACTER REFERENCE - keep the EXACT SAME person (identical face, hair, skin tone, body, clothing). Image 2 is the BACKGROUND/SETTING REFERENCE - maintain the same environment style, color palette, and atmosphere. New scene: ${scene.visual_prompt}. The person must look identical to image 1, and the setting must feel like the same world as image 2.`;
+                } else if (isUserRef) {
+                  refPrompt = `Transform this reference image into a new scene. Keep the EXACT SAME person/character from the image - identical face, hair, skin tone, body shape, and clothing. DO NOT change the person's appearance at all. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`;
+                } else {
+                  refPrompt = `Using the exact same characters and environment style from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, setting atmosphere, and proportions as image 1.`;
+                }
+
                 const editBody = {
                   prompt: refPrompt,
-                  images: [referenceImageUrl],
+                  images: refImages,
                   aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
                 };
-                console.log(`[AUTOMATION] Generating image (with ref) for ${projectId} scene ${scene.scene_index}`);
+                console.log(`[AUTOMATION] Generating image (with ${refImages.length} ref${refImages.length > 1 ? 's' : ''}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
                   'https://apimodels.app/api/v1/images/edit',
                   editBody,
@@ -12059,6 +12074,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
               if (!imageUrl) throw new Error('Image generation failed or timed out');
 
+              if (scene.scene_index === 0) scene1ImageUrl = imageUrl;
               if (!referenceImageUrl) referenceImageUrl = imageUrl;
 
               await pool.query(
