@@ -11427,26 +11427,16 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
   let userKeys = await assignKeysToUser(userId, feature);
   if (userKeys.length === 0) {
-    console.log(`[KEY-POOL] No keys available, attempting emergency recycle...`);
-    const recycled = await pool.query(
-      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL 
-       WHERE status = 'exhausted' RETURNING id`
+    console.log(`[KEY-POOL] No keys available, attempting to free idle keys...`);
+    const unassigned = await pool.query(
+      `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL
+       WHERE status = 'assigned' AND assigned_user_id != $1 AND (
+         last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '10 minutes'
+       ) RETURNING id`, [userId]
     );
-    if (recycled.rowCount > 0) {
-      console.log(`[KEY-POOL] Emergency recycled ${recycled.rowCount} exhausted keys`);
+    if (unassigned.rowCount > 0) {
+      console.log(`[KEY-POOL] Freed ${unassigned.rowCount} idle keys from other users`);
       userKeys = await assignKeysToUser(userId, feature);
-    }
-    if (userKeys.length === 0) {
-      const unassigned = await pool.query(
-        `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL
-         WHERE status = 'assigned' AND assigned_user_id != $1 AND (
-           last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '10 minutes'
-         ) RETURNING id`, [userId]
-      );
-      if (unassigned.rowCount > 0) {
-        console.log(`[KEY-POOL] Emergency freed ${unassigned.rowCount} idle keys from other users`);
-        userKeys = await assignKeysToUser(userId, feature);
-      }
     }
     if (userKeys.length === 0) {
       return { success: false, fallback: true, error: 'No Freepik keys available' };
