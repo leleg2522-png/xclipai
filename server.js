@@ -11454,7 +11454,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   }
 
   const triedKeys = [];
-  for (let attempt = 0; attempt < userKeys.length + 3; attempt++) {
+  for (let attempt = 0; attempt < userKeys.length + 6; attempt++) {
     const keyRecord = await getActiveKeyForUser(userId, feature, triedKeys);
     if (!keyRecord) {
       const replacement = await replaceExhaustedKey(userId, feature);
@@ -11502,6 +11502,11 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
         triedKeys.push(keyRecord.api_key);
         await markKeyExhausted(keyRecord.id, `HTTP ${httpStatus}: ${err.response?.data?.message || err.message}`);
         await replaceExhaustedKey(userId, feature);
+        continue;
+      }
+      if (httpStatus === 502 || httpStatus === 503 || httpStatus === 500) {
+        console.log(`[KEY-POOL] Server error ${httpStatus}, waiting 10s before retry...`);
+        await new Promise(r => setTimeout(r, 10000));
         continue;
       }
       throw err;
