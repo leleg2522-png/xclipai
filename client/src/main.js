@@ -391,7 +391,9 @@ const state = {
       videoModel: 'kling-v2.6-pro',
       videoDuration: 5,
       sceneCount: 3,
-      language: 'id'
+      language: 'id',
+      referenceImage: null,
+      referenceImagePreview: null
     },
     view: 'list',
     _loaded: false,
@@ -6491,11 +6493,11 @@ async function createAutomationProject() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language })
+      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language, referenceImage: np.referenceImage })
     });
     var data = await response.json();
     if (data.projectId) {
-      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id' };
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id', referenceImage: null, referenceImagePreview: null };
       showToast('Project dibuat!', 'success');
       await loadAutomationProjects();
       loadAutomationProjectDetail(data.projectId);
@@ -6650,6 +6652,20 @@ function renderAutomationPage() {
   html += '<div class="section-card">';
   html += '<div class="auto-create-form">';
   html += '<input type="text" class="form-input auto-niche-input" id="autoNiche" placeholder="Ketik topik video... contoh: tips memasak, fakta unik, motivasi" value="' + escapeHtml(state.automation.newProject.niche || '') + '"/>';
+  html += '<div class="auto-ref-image-row">';
+  html += '<input type="file" id="autoRefImage" accept="image/*" style="display:none"/>';
+  if (state.automation.newProject.referenceImagePreview) {
+    html += '<div class="auto-ref-preview" id="autoRefPreviewWrap">';
+    html += '<img src="' + state.automation.newProject.referenceImagePreview + '" class="auto-ref-thumb"/>';
+    html += '<button class="auto-ref-remove" id="autoRefRemove" title="Hapus">&times;</button>';
+    html += '</div>';
+  } else {
+    html += '<button class="btn-secondary auto-ref-btn" id="autoRefBtn">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+    html += ' Gambar Referensi';
+    html += '</button>';
+  }
+  html += '</div>';
   html += '<div class="auto-settings-row">';
   html += '<select class="form-input auto-select" id="autoFormat">';
   html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts</option>';
@@ -6708,7 +6724,9 @@ function renderAutomationDetailPage() {
   html += '<button class="auto-back-link" id="autoBackBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>';
   html += '<div class="auto-detail-top-info">';
   html += '<h2 class="auto-detail-name">' + escapeHtml(project.title || project.niche) + '</h2>';
-  html += '<span class="auto-detail-sub">' + (project.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + escapeHtml(project.video_model) + ' &middot; ' + (project.language === 'id' ? 'ID' : 'EN') + '</span>';
+  var detailSub = (project.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + escapeHtml(project.video_model) + ' &middot; ' + (project.language === 'id' ? 'ID' : 'EN');
+  if (project.reference_image_url) detailSub += ' &middot; <span style="color:var(--accent)">&#128247; Ref Image</span>';
+  html += '<span class="auto-detail-sub">' + detailSub + '</span>';
   html += '</div>';
   html += '<div class="auto-detail-top-actions">';
   html += getAutomationStatusBadge(project.status);
@@ -6879,6 +6897,34 @@ function attachAutomationListeners() {
       if (sceneSelect) state.automation.newProject.sceneCount = parseInt(sceneSelect.value);
       if (langSelect) state.automation.newProject.language = langSelect.value;
       createAutomationProject();
+    });
+  }
+
+  var refBtn = document.getElementById('autoRefBtn');
+  var refInput = document.getElementById('autoRefImage');
+  if (refBtn && refInput) {
+    refBtn.addEventListener('click', function() { refInput.click(); });
+  }
+  if (refInput) {
+    refInput.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { showToast('Ukuran gambar maks 10MB', 'error'); return; }
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        state.automation.newProject.referenceImage = ev.target.result;
+        state.automation.newProject.referenceImagePreview = ev.target.result;
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  var refRemove = document.getElementById('autoRefRemove');
+  if (refRemove) {
+    refRemove.addEventListener('click', function() {
+      state.automation.newProject.referenceImage = null;
+      state.automation.newProject.referenceImagePreview = null;
+      render();
     });
   }
 

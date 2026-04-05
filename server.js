@@ -11634,7 +11634,7 @@ app.delete('/api/automation/projects/:projectId', async (req, res) => {
 
 app.post('/api/automation/projects', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
-  const { niche, format, videoModel, videoDuration, sceneCount, language } = req.body;
+  const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage } = req.body;
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
@@ -11645,11 +11645,26 @@ app.post('/api/automation/projects', async (req, res) => {
   const duration = validDurations.includes(parseInt(videoDuration)) ? parseInt(videoDuration) : 5;
   const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 180);
   const lang = language || 'id';
+
+  let refImageUrl = null;
+  if (referenceImage && referenceImage.startsWith('data:image')) {
+    try {
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+      const saved = await saveBase64ToFile(referenceImage, 'image', baseUrl);
+      refImageUrl = saved.publicUrl;
+      console.log(`[AUTOMATION] Reference image saved: ${refImageUrl}`);
+    } catch (imgErr) {
+      console.error('[AUTOMATION] Failed to save reference image:', imgErr.message);
+    }
+  }
+
   try {
     await pool.query(
-      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, scene_count, language, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft')`,
-      [req.session.userId, projectId, niche.trim(), fmt, model, duration, scenes, lang]
+      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, reference_image_url, scene_count, language, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft')`,
+      [req.session.userId, projectId, niche.trim(), fmt, model, duration, refImageUrl, scenes, lang]
     );
     res.json({ projectId, message: 'Project created' });
   } catch (error) {
@@ -11925,7 +11940,10 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     (async () => {
       try {
-        let referenceImageUrl = null;
+        let referenceImageUrl = project.reference_image_url || null;
+        if (referenceImageUrl) {
+          console.log(`[AUTOMATION] Using user reference image: ${referenceImageUrl}`);
+        }
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
@@ -11941,9 +11959,13 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
             try {
               let imgResponse;
-              if (referenceImageUrl && scene.scene_index > 0) {
+              if (referenceImageUrl) {
+                const isUserRef = !!project.reference_image_url;
+                const refPrompt = isUserRef
+                  ? `Using the character/subject from the reference image, create this scene: ${scene.visual_prompt}. The character must look EXACTLY like the reference image - same face, body, clothing, and features. Maintain consistency.`
+                  : `Using the exact same characters from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions as image 1.`;
                 const editBody = {
-                  prompt: `Using the exact same characters from image 1 as reference, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions as image 1.`,
+                  prompt: refPrompt,
                   images: [referenceImageUrl],
                   aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
                 };
@@ -12293,13 +12315,28 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     (async () => {
       try {
         let sceneImageUrl = scene.image_url;
+        const retryRefImage = project.reference_image_url || null;
 
         if (!sceneImageUrl) {
-          const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio };
-          const imgResponse = await axios.post(
-            'https://apimodels.app/api/v1/images/generations', imgBody,
-            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
-          );
+          let imgResponse;
+          if (retryRefImage) {
+            const editBody = {
+              prompt: `Using the character/subject from the reference image, create this scene: ${scene.visual_prompt}. The character must look EXACTLY like the reference image - same face, body, clothing, and features. Maintain consistency.`,
+              images: [retryRefImage],
+              aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
+            };
+            console.log(`[AUTOMATION] Retry: Generating image (with user ref) for ${projectId} scene ${sceneIndex}`);
+            imgResponse = await axios.post(
+              'https://apimodels.app/api/v1/images/edit', editBody,
+              { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+            );
+          } else {
+            const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio };
+            imgResponse = await axios.post(
+              'https://apimodels.app/api/v1/images/generations', imgBody,
+              { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+            );
+          }
           const imgData = imgResponse.data?.data || imgResponse.data;
           const imgTaskId = imgData?.taskId || imgData?.task_id;
           sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
@@ -13706,6 +13743,7 @@ async function initDatabase() {
         format VARCHAR(20) DEFAULT 'shorts',
         video_model VARCHAR(100) DEFAULT 'veo-3.1-fast',
         video_duration INTEGER DEFAULT 5,
+        reference_image_url TEXT,
         scene_count INTEGER DEFAULT 3,
         language VARCHAR(50) DEFAULT 'id',
         status VARCHAR(50) DEFAULT 'draft',
@@ -13718,6 +13756,9 @@ async function initDatabase() {
         completed_at TIMESTAMP
       )
     `);
+
+    await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS reference_image_url TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS video_duration INTEGER DEFAULT 5`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS automation_scenes (
