@@ -12170,16 +12170,16 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                   refPrompt = `Using the exact same character (face, hair, clothing, body) from this image, create: ${scene.visual_prompt}. Character must be identical.`;
                 }
 
-                const editBody = {
-                  prompt: refPrompt,
+                const genBody = {
                   model: imageModel,
+                  prompt: refPrompt,
                   images: refImages,
                   aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
                 };
                 console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
-                  'https://apimodels.app/api/v1/images/edit',
-                  editBody,
+                  'https://apimodels.app/api/v1/images/generations',
+                  genBody,
                   {
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
                     timeout: 60000
@@ -12562,7 +12562,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
               if (retryScene1Image && retryScene1Image !== retryPrevImage) refImages.push(retryScene1Image);
               refPrompt = `Keep EXACT SAME character (face, hair, clothing, body) from reference images. Generate: ${scene.visual_prompt}. No changes to character appearance.`;
             }
-            const editBody = {
+            const genBody = {
               prompt: refPrompt,
               model: imageModel,
               images: refImages,
@@ -12570,7 +12570,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             };
             console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${sceneIndex}`);
             imgResponse = await axios.post(
-              'https://apimodels.app/api/v1/images/edit', editBody,
+              'https://apimodels.app/api/v1/images/generations', genBody,
               { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
             );
           } else {
