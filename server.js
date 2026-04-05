@@ -12166,17 +12166,18 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                   refPrompt = `Continue from this image. The character must look EXACTLY the same: same face, same hair, same clothing, same body proportions. Generate the next scene: ${scene.visual_prompt}. No changes to the character's appearance allowed.`;
                 }
               } else {
-                refImages.push(referenceImageUrl);
-                refPrompt = `Using the exact same character (face, hair, clothing, body) from this image, create: ${scene.visual_prompt}. Character must be identical.`;
+                refPrompt = scene.visual_prompt;
               }
 
               const genBody = {
                 model: imageModel,
-                prompt: refPrompt,
-                images: refImages,
+                prompt: refImages.length > 0 ? refPrompt : scene.visual_prompt,
                 aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
                 resolution: imageResolution
               };
+              if (refImages.length > 0) {
+                genBody.images = refImages;
+              }
               console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${scene.scene_index}`);
               imgResponse = await axios.post(
                 'https://apimodels.app/api/v1/images/generations',
@@ -12547,16 +12548,17 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             if (retryScene1Image && retryScene1Image !== retryPrevImage) refImages.push(retryScene1Image);
             refPrompt = `Keep EXACT SAME character (face, hair, clothing, body) from reference images. Generate: ${scene.visual_prompt}. No changes to character appearance.`;
           } else {
-            refImages.push(retryScene1Image || retryRefImage);
-            refPrompt = `Using the exact same character (face, hair, clothing, body) from this image, create: ${scene.visual_prompt}. Character must be identical.`;
+            refPrompt = scene.visual_prompt;
           }
           const genBody = {
-            prompt: refPrompt,
+            prompt: refImages.length > 0 ? refPrompt : scene.visual_prompt,
             model: imageModel,
-            images: refImages.filter(Boolean),
             aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
             resolution: imageResolution
           };
+          if (refImages.length > 0) {
+            genBody.images = refImages;
+          }
           console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
           imgResponse = await axios.post(
             'https://apimodels.app/api/v1/images/generations', genBody,
