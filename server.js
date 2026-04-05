@@ -12052,7 +12052,8 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
                 }
               } else if (fpResult.fallback) {
                 console.log(`[AUTOMATION] Freepik keys exhausted, falling back to ApiModels for scene ${scene.scene_index}`);
-                const fallbackResult = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey);
+                const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+                const fallbackResult = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
                 videoUrl = fallbackResult;
               } else {
                 throw new Error(fpResult.error || 'Freepik generation failed');
@@ -12343,7 +12344,8 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           } else if (fpResult.fallback) {
             console.log(`[AUTOMATION] Retry: Freepik keys exhausted, falling back to ApiModels`);
             const retryScene = { ...scene, image_url: sceneImageUrl };
-            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey);
+            const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel);
           } else {
             throw new Error(fpResult.error || 'Freepik generation failed');
           }
