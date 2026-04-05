@@ -11400,9 +11400,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     };
   } else if (config.api === 'kling-v3') {
     requestBody = {
-      image_url: imageUrl, prompt: prompt || '', duration: dur,
+      start_image_url: imageUrl, prompt: prompt || '', duration: dur,
       aspect_ratio: aspectRatio || '16:9', cfg_scale: 0.5,
-      negative_prompt: 'blurry, low quality, distorted'
+      negative_prompt: 'blur, distort, and low quality'
     };
   } else {
     requestBody = {
@@ -11453,6 +11453,10 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       const httpStatus = err.response?.status;
       console.log(`[KEY-POOL] Key ${keyRecord.id} failed: HTTP ${httpStatus} - ${err.message}`);
       
+      if (httpStatus === 400) {
+        console.error(`[KEY-POOL] HTTP 400 Bad Request - Body: ${JSON.stringify(requestBody)} | Response: ${JSON.stringify(err.response?.data)}`);
+        throw err;
+      }
       if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403) {
         triedKeys.push(keyRecord.api_key);
         await markKeyExhausted(keyRecord.id, `HTTP ${httpStatus}: ${err.response?.data?.message || err.message}`);
