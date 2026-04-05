@@ -11725,16 +11725,32 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
-    const systemPrompt = `You are an expert AI video production director. You create precise, structured visual prompts optimized for AI image generators (like Gemini, DALL-E, Midjourney).
+    const systemPrompt = `You are an expert AI video production director and cinematographer. You create precise, structured visual prompts optimized for AI image-to-video generators.
 
 CRITICAL RULES FOR VISUAL PROMPTS:
-1. Each visual_prompt must be a SINGLE, clear scene description - not a story or narration
-2. Write visual prompts as if describing a PHOTOGRAPH or MOVIE STILL - what does the camera see RIGHT NOW?
-3. Always include: subject action, environment/location, camera angle/shot type, lighting, color mood
-4. NEVER use vague words like "beautiful", "amazing", "epic" - use SPECIFIC visual details instead
-5. NEVER describe sounds, emotions, or narration in visual_prompt - ONLY what is VISIBLE
-6. Keep each visual_prompt between 30-80 words - too short = bad quality, too long = confused output
-7. Always respond with valid JSON only, no markdown formatting, no code blocks`;
+1. Each visual_prompt describes a SINGLE continuous camera shot (5-10 seconds of video)
+2. Write as if directing a cinematographer - describe what the CAMERA SEES and HOW IT MOVES
+3. Always include: subject action, environment, camera movement/angle, lighting, color grading
+4. NEVER use vague words like "beautiful", "amazing", "epic" - use SPECIFIC visual details
+5. NEVER describe sounds, emotions, or narration in visual_prompt - ONLY what is VISIBLE on screen
+6. Keep each visual_prompt between 40-100 words for rich detail
+7. Always respond with valid JSON only, no markdown formatting, no code blocks
+
+CAMERA MOVEMENT VOCABULARY (use these terms):
+- Static/locked shot, slow pan left/right, slow tilt up/down
+- Dolly in (camera moves closer), dolly out (camera moves away)
+- Tracking shot (camera follows subject sideways), following shot (camera follows from behind)
+- Slow zoom in, slow zoom out, push in (dramatic zoom)
+- Crane shot up/down, orbit shot (camera circles subject)
+- Over-the-shoulder, POV shot, low angle, high angle, eye level
+- Handheld subtle movement, steadicam smooth movement
+
+SCENE TRANSITION STRATEGY:
+- Vary camera angles between scenes: if Scene 1 is wide shot, Scene 2 should be medium or close-up
+- Create visual flow: alternate between static and moving camera shots
+- Use camera movement to build tension: start wide/static → progress to closer/dynamic shots
+- End scenes with movement that naturally leads to the next scene (e.g. pan to doorway → next scene inside)
+- Match the energy: calm narration = slow/static camera, exciting narration = dynamic camera movement`;
 
     let userPrompt;
     if (hasRefImage) {
@@ -11750,25 +11766,34 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Describe ONLY: action + environment + camera + lighting"
+      "visual_prompt": "English only. Action + environment + camera MOVEMENT + lighting + transition hint"
     }
   ]
 }
 
 VISUAL PROMPT FORMAT (follow this structure exactly):
-"[ACTION: what the character is doing], [ENVIRONMENT: specific location details], [CAMERA: shot type and angle], [LIGHTING: light source and mood], [STYLE: photorealistic/cinematic/etc], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+"[ACTION: what the character is doing], [ENVIRONMENT: specific location details], [CAMERA MOVEMENT: how camera moves during this shot], [CAMERA ANGLE: shot type], [LIGHTING: light source and color grading], [STYLE: photorealistic/cinematic], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
 
-GOOD EXAMPLE:
-"standing at the edge of a misty pine forest cliff, looking out over a valley at sunrise, medium wide shot from slightly below, warm golden hour light with fog rolling through the trees, photorealistic cinematic style, 16:9 widescreen"
+GOOD EXAMPLES (notice camera movement and scene flow):
+Scene 1: "walking slowly through a dense misty pine forest trail, camera starts as wide establishing shot then slowly dollies in to medium shot, early morning golden light filtering through fog between tall trees, muted green and amber color grading, photorealistic cinematic style, 16:9 widescreen"
+Scene 2: "stopping at a clearing, kneeling down to examine wild mushrooms growing on a fallen log, close-up shot with slow orbit around the subject, soft diffused daylight with dappled shadows, shallow depth of field, warm earth tones, 16:9 widescreen"
+Scene 3: "standing up and looking toward a distant mountain peak visible through the trees, medium shot from behind with slow push-in zoom, golden hour backlighting creating silhouette rim light, atmospheric haze in the valley, 16:9 widescreen"
 
 BAD EXAMPLE (DO NOT DO THIS):
-"A beautiful scene where the character feels happy in nature" (too vague, describes emotions, no camera/lighting info)
+"A beautiful scene where the character feels happy in nature" (no camera movement, no specific details, describes emotion)
+
+SCENE FLOW RULES:
+- Scene 1: Start with WIDE/ESTABLISHING shot to set the world - slow dolly or static
+- Middle scenes: Alternate between MEDIUM and CLOSE-UP shots - use tracking, orbit, or pan movements
+- Final scene: End with a memorable shot - pull back to wide, or dramatic push-in close-up
+- NEVER use the same camera angle/movement in consecutive scenes
+- Each scene's camera movement should feel like a natural continuation of the previous scene
 
 ENVIRONMENT CONSISTENCY:
 - Scene 1 establishes the PRIMARY LOCATION - describe it in rich detail
-- Scenes 2+ must reference the SAME location with consistent details (same forest, same room, same city street)
+- Scenes 2+ must reference the SAME location with consistent details
 - Only change location if the story absolutely requires it
-- When in the same location, repeat key environmental markers (e.g. "same misty pine forest", "same cozy cabin interior")
+- Repeat key environmental markers (e.g. "same misty pine forest", "same cozy cabin interior")
 
 NARRATION RULES:
 - Write narration in ${langName} - engaging, natural, conversational tone
@@ -11785,7 +11810,7 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
-      "visual_prompt": "English only. Full scene description starting with character_description"
+      "visual_prompt": "English only. Character + action + environment + camera MOVEMENT + lighting"
     }
   ]
 }
@@ -11797,18 +11822,27 @@ CHARACTER DESCRIPTION RULES:
 - COPY this description VERBATIM at the START of every visual_prompt
 
 VISUAL PROMPT FORMAT (follow exactly):
-"[FULL CHARACTER_DESCRIPTION], [ACTION: what they are doing], [ENVIRONMENT: specific location], [CAMERA: shot type and angle], [LIGHTING: light source and mood], [STYLE: art style], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+"[FULL CHARACTER_DESCRIPTION], [ACTION: what they are doing], [ENVIRONMENT: specific location], [CAMERA MOVEMENT: how camera moves], [CAMERA ANGLE: shot type], [LIGHTING: light and color grading], [STYLE: art style], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
 
-GOOD EXAMPLE:
-"1 character: Aria - young woman, long wavy auburn hair with side bangs, hazel eyes, fair skin, navy blue oversized sweater, gray skinny jeans, brown boots, silver moon necklace. She is sitting cross-legged on a wooden dock over a calm lake, reading a worn leather journal. Medium shot from the side, soft late afternoon golden light reflecting off the water, warm cinematic color grading, photorealistic style, 16:9 widescreen"
+GOOD EXAMPLES (notice camera movement and scene flow):
+Scene 1: "1 character: Aria - young woman, long wavy auburn hair, hazel eyes, navy blue sweater, gray jeans, brown boots, moon necklace. She walks slowly along a wooden dock over a calm misty lake at dawn, camera starts as wide establishing shot then slowly dollies in to medium shot, soft golden morning light reflecting off still water, muted warm color grading, photorealistic cinematic style, 16:9 widescreen"
+Scene 2: "1 character: Aria - same description. She sits cross-legged on the same wooden dock, opens a worn leather journal and begins reading, close-up shot with slow orbit from left to right, soft diffused daylight with gentle lens flare, shallow depth of field blurring the lake behind her, warm amber tones, 16:9 widescreen"
+Scene 3: "1 character: Aria - same description. She looks up from the journal toward the misty lake horizon, camera behind her shoulder with slow push-in zoom toward the mountains, golden hour backlighting creating rim light on her hair, atmospheric fog over the water, cinematic anamorphic style, 16:9 widescreen"
 
 BAD EXAMPLE (DO NOT DO THIS):
-"A girl sits by a lake and reads a book. The scene is peaceful and serene." (no character details, vague, no camera/lighting)
+"A girl sits by a lake and reads a book. The scene is peaceful." (no camera movement, no details, vague)
+
+SCENE FLOW RULES:
+- Scene 1: WIDE/ESTABLISHING shot to set the world - slow dolly or static
+- Middle scenes: Alternate MEDIUM and CLOSE-UP shots - use tracking, orbit, pan movements
+- Final scene: Memorable closing shot - pull back to wide, or dramatic push-in close-up
+- NEVER use the same camera angle/movement in consecutive scenes
+- Each scene should feel like a natural continuation of the previous
 
 ENVIRONMENT CONSISTENCY:
 - Scene 1 establishes the PRIMARY LOCATION with rich detail
-- Scenes 2+ MUST stay in the same location with the same environmental details
-- Repeat key location markers in every scene (e.g. "same wooden dock over calm lake", "same cozy cabin")
+- Scenes 2+ MUST stay in the same location with consistent details
+- Repeat key location markers (e.g. "same wooden dock over calm lake")
 - Only change location if story requires it
 
 NARRATION RULES:
