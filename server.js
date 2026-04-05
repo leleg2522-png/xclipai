@@ -11400,9 +11400,11 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     };
   } else if (config.api === 'kling-v3') {
     requestBody = {
-      start_image_url: imageUrl, prompt: prompt || '', duration: dur,
-      aspect_ratio: aspectRatio || '16:9', cfg_scale: 0.5,
-      negative_prompt: 'blur, distort, and low quality'
+      start_image_url: imageUrl,
+      prompt: prompt || 'cinematic video',
+      duration: dur,
+      aspect_ratio: aspectRatio || '16:9',
+      cfg_scale: 0.5
     };
   } else {
     requestBody = {
