@@ -12175,8 +12175,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
                 resolution: imageResolution
               };
-              if (refImages.length > 0) {
-                genBody.images = refImages;
+              if (refImages.length === 1) {
+                genBody.image_url = refImages[0];
+              } else if (refImages.length > 1) {
+                genBody.image_urls = refImages;
               }
               console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${scene.scene_index}`);
               imgResponse = await axios.post(
@@ -12556,8 +12558,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
             resolution: imageResolution
           };
-          if (refImages.length > 0) {
-            genBody.images = refImages;
+          if (refImages.length === 1) {
+            genBody.image_url = refImages[0];
+          } else if (refImages.length > 1) {
+            genBody.image_urls = refImages;
           }
           console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
           imgResponse = await axios.post(
