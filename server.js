@@ -11695,66 +11695,96 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
-    const systemPrompt = `You are a professional content creator and scriptwriter. Create engaging video scripts for social media.
-You MUST maintain strict character consistency across ALL scenes. Always respond with valid JSON only, no markdown formatting.`;
+    const systemPrompt = `You are an expert AI video production director. You create precise, structured visual prompts optimized for AI image generators (like Gemini, DALL-E, Midjourney).
+
+CRITICAL RULES FOR VISUAL PROMPTS:
+1. Each visual_prompt must be a SINGLE, clear scene description - not a story or narration
+2. Write visual prompts as if describing a PHOTOGRAPH or MOVIE STILL - what does the camera see RIGHT NOW?
+3. Always include: subject action, environment/location, camera angle/shot type, lighting, color mood
+4. NEVER use vague words like "beautiful", "amazing", "epic" - use SPECIFIC visual details instead
+5. NEVER describe sounds, emotions, or narration in visual_prompt - ONLY what is VISIBLE
+6. Keep each visual_prompt between 30-80 words - too short = bad quality, too long = confused output
+7. Always respond with valid JSON only, no markdown formatting, no code blocks`;
 
     let userPrompt;
     if (hasRefImage) {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
-The script must have exactly ${project.scene_count} scenes.
-Language: ${langName}
+Exactly ${project.scene_count} scenes. Narration language: ${langName}.
 
-IMPORTANT: The user has provided a REFERENCE IMAGE of the main character/subject. You do NOT need to invent a character description. The AI image generator will use the reference image directly to maintain the character's appearance.
+The user provided a REFERENCE IMAGE of the main character. The image generator will handle the character's appearance automatically. Do NOT describe what the character looks like.
 
-Return ONLY valid JSON with this structure:
+Return ONLY valid JSON:
 {
-  "title": "catchy video title",
-  "character_description": "the main character from the reference image",
+  "title": "short catchy title",
+  "character_description": "character from reference image",
   "scenes": [
     {
-      "narration": "voiceover text for this scene (${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'})",
-      "visual_prompt": "Scene action and setting description ONLY. Do NOT describe the character's appearance (hair, face, clothes etc) - the reference image handles that. Just describe: what the character is DOING, WHERE they are, camera angle, lighting, mood. Example: 'walking through a dense misty forest at dawn, medium shot from behind, golden sunlight filtering through trees, cinematic atmosphere'. ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
+      "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
+      "visual_prompt": "English only. Describe ONLY: action + environment + camera + lighting"
     }
   ]
 }
 
-Rules:
-- DO NOT describe the character's physical appearance in visual_prompt - the reference image will be used for that
-- Only describe: actions, settings, environments, camera angles, lighting, mood, atmosphere
-- IMPORTANT: Keep the SAME location/setting/environment across all scenes unless the story requires a location change. The background and environment from Scene 1 will be locked as reference for all subsequent scenes to maintain visual consistency
-- If the story stays in one location, describe similar environmental details (same room, same forest, same city) in every scene
-- Each scene narration should be concise and engaging
-- Visual prompts must be in English regardless of narration language
-- Make the content viral-worthy and attention-grabbing
-- The visual_prompt should describe the scene visually, not repeat the narration`;
+VISUAL PROMPT FORMAT (follow this structure exactly):
+"[ACTION: what the character is doing], [ENVIRONMENT: specific location details], [CAMERA: shot type and angle], [LIGHTING: light source and mood], [STYLE: photorealistic/cinematic/etc], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+
+GOOD EXAMPLE:
+"standing at the edge of a misty pine forest cliff, looking out over a valley at sunrise, medium wide shot from slightly below, warm golden hour light with fog rolling through the trees, photorealistic cinematic style, 16:9 widescreen"
+
+BAD EXAMPLE (DO NOT DO THIS):
+"A beautiful scene where the character feels happy in nature" (too vague, describes emotions, no camera/lighting info)
+
+ENVIRONMENT CONSISTENCY:
+- Scene 1 establishes the PRIMARY LOCATION - describe it in rich detail
+- Scenes 2+ must reference the SAME location with consistent details (same forest, same room, same city street)
+- Only change location if the story absolutely requires it
+- When in the same location, repeat key environmental markers (e.g. "same misty pine forest", "same cozy cabin interior")
+
+NARRATION RULES:
+- Write narration in ${langName} - engaging, natural, conversational tone
+- Each narration advances the story, never repeats previous scenes
+- Do NOT describe visuals in narration - narration is for storytelling/voiceover only`;
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
-The script must have exactly ${project.scene_count} scenes.
-Language: ${langName}
+Exactly ${project.scene_count} scenes. Narration language: ${langName}.
 
-Return ONLY valid JSON with this structure:
+Return ONLY valid JSON:
 {
-  "title": "catchy video title",
-  "character_description": "Detailed, fixed description of the main character(s) that will appear in EVERY scene. Include: exact appearance (hair color, style, length), skin tone, eye color, body type, clothing (exact colors and style), accessories. This description must be specific enough to recreate the SAME character consistently. Example: 'A young girl with long straight black hair, brown eyes, light skin, wearing a red hoodie with white stripes, blue jeans, and white sneakers'",
+  "title": "short catchy title",
+  "character_description": "ULTRA-SPECIFIC character description (see rules below)",
   "scenes": [
     {
-      "narration": "voiceover text for this scene (${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'})",
-      "visual_prompt": "detailed visual description for AI video generation. MUST start with the exact character_description, then describe the action, setting, camera angle, lighting. ${project.format === 'shorts' ? '9:16 vertical' : '16:9 landscape'} format"
+      "narration": "${project.format === 'shorts' ? '1-2 short sentences' : '2-3 sentences'} of voiceover in ${langName}",
+      "visual_prompt": "English only. Full scene description starting with character_description"
     }
   ]
 }
 
-Rules:
-- CRITICAL: Define character_description ONCE with EXTREME specificity. Include: exact number of characters (e.g. "3 characters"), each character's name/label, exact appearance (species/type, colors, clothing, accessories, distinguishing features)
-- Example character_description: "3 chibi characters in 3D Pixar style: (1) Luna - a pink bunny girl with long floppy ears, sparkling purple eyes, wearing a yellow star-print dress and silver tiara, (2) Max - an orange tabby cat boy with big green eyes, wearing a blue striped hoodie and red sneakers, (3) Koko - a small green frog with round golden eyes, wearing a tiny purple top hat and bow tie"
-- COPY the EXACT character_description verbatim at the START of every visual_prompt, then add the scene action/setting after it
-- Keep the SAME number of characters in every scene - never add or remove characters
-- If the video features animated/cartoon characters, describe their exact design: art style, exact colors, proportions, features
-- Each scene narration should be concise and engaging
-- Visual prompts should be detailed, cinematic descriptions suitable for AI image and video generation
-- Visual prompts must be in English regardless of narration language
-- Make the content viral-worthy and attention-grabbing
-- The visual_prompt should describe the scene visually, not repeat the narration`;
+CHARACTER DESCRIPTION RULES:
+- Define ALL characters with EXTREME precision in character_description
+- Format: "[number] characters: (1) [Name] - [species/gender], [exact hair: color+style+length], [eye color], [skin tone], [body type], [EXACT clothing with colors], [accessories]. (2) [Name] - ..."
+- Example: "1 character: Aria - young woman, long wavy auburn hair with side bangs, hazel eyes, fair skin with freckles, slim build, wearing a navy blue oversized knit sweater, dark gray skinny jeans, brown leather ankle boots, silver crescent moon pendant necklace"
+- COPY this description VERBATIM at the START of every visual_prompt
+
+VISUAL PROMPT FORMAT (follow exactly):
+"[FULL CHARACTER_DESCRIPTION], [ACTION: what they are doing], [ENVIRONMENT: specific location], [CAMERA: shot type and angle], [LIGHTING: light source and mood], [STYLE: art style], ${project.format === 'shorts' ? '9:16 vertical composition' : '16:9 widescreen cinematic composition'}"
+
+GOOD EXAMPLE:
+"1 character: Aria - young woman, long wavy auburn hair with side bangs, hazel eyes, fair skin, navy blue oversized sweater, gray skinny jeans, brown boots, silver moon necklace. She is sitting cross-legged on a wooden dock over a calm lake, reading a worn leather journal. Medium shot from the side, soft late afternoon golden light reflecting off the water, warm cinematic color grading, photorealistic style, 16:9 widescreen"
+
+BAD EXAMPLE (DO NOT DO THIS):
+"A girl sits by a lake and reads a book. The scene is peaceful and serene." (no character details, vague, no camera/lighting)
+
+ENVIRONMENT CONSISTENCY:
+- Scene 1 establishes the PRIMARY LOCATION with rich detail
+- Scenes 2+ MUST stay in the same location with the same environmental details
+- Repeat key location markers in every scene (e.g. "same wooden dock over calm lake", "same cozy cabin")
+- Only change location if story requires it
+
+NARRATION RULES:
+- Write in ${langName} - engaging, natural, conversational
+- Advances the story, never repeats
+- Do NOT describe visuals in narration`;
     }
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
@@ -11781,12 +11811,12 @@ Rules:
           'https://apimodels.app/api/v1/messages',
           {
             model: model,
-            max_tokens: 4096,
+            max_tokens: 8192,
             system: systemPrompt,
             messages: [
               { role: 'user', content: userPrompt }
             ],
-            temperature: 0.8
+            temperature: 0.6
           },
           {
             headers: {
