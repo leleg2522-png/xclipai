@@ -11404,24 +11404,29 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
   let requestBody = {};
   const dur = String(videoDuration || 5);
+  const characterLockPrompt = prompt
+    ? `${prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation`
+    : 'cinematic video, maintain exact same character appearance throughout';
+  const charNegPrompt = 'different person, face change, face morph, character change, different clothing, outfit change, wardrobe change, body transformation, age change, hair change, blurry, low quality, distorted, deformed face, extra limbs';
+
   if (config.api === 'kling26') {
     requestBody = {
-      image: imageUrl, prompt: prompt || '', duration: dur,
-      aspect_ratio: mappedAspect, negative_prompt: 'blurry, low quality, distorted',
-      cfg_scale: 0.5, generate_audio: true
+      image: imageUrl, prompt: characterLockPrompt, duration: dur,
+      aspect_ratio: mappedAspect, negative_prompt: charNegPrompt,
+      cfg_scale: 0.7, generate_audio: true
     };
   } else if (config.api === 'kling-v3') {
     requestBody = {
       start_image_url: imageUrl,
-      prompt: prompt || 'cinematic video',
+      prompt: characterLockPrompt,
       duration: dur,
       aspect_ratio: aspectRatio || '16:9',
-      cfg_scale: 0.5
+      cfg_scale: 0.7
     };
   } else {
     requestBody = {
-      image: imageUrl, prompt: prompt || '', duration: dur,
-      aspect_ratio: mappedAspect, cfg_scale: 0.6
+      image: imageUrl, prompt: characterLockPrompt, duration: dur,
+      aspect_ratio: mappedAspect, cfg_scale: 0.7
     };
   }
 
@@ -11549,9 +11554,12 @@ setInterval(() => {
 
 async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride) {
   const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
+  const lockedPrompt = scene.visual_prompt
+    ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation`
+    : 'cinematic video';
   const videoBody = {
     model: vidModel.apiModel,
-    prompt: scene.visual_prompt,
+    prompt: lockedPrompt,
     aspect_ratio: aspectRatio,
     duration: vidModel.duration,
     images: [scene.image_url]
@@ -12111,15 +12119,15 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
                 if (isUserRef && !isFirstScene && prevSceneImageUrl) {
                   refImages.push(prevSceneImageUrl);
-                  refPrompt = `Create the next scene in a continuous video sequence. Image 1 is the CHARACTER - keep the EXACT SAME person (identical face, hair, skin, body, clothing). Image 2 is the PREVIOUS SCENE - this new scene must look like it happens IMMEDIATELY AFTER image 2, in the same location with the same lighting and environment. New scene: ${scene.visual_prompt}. The person must be identical to image 1. The environment, lighting, and color grading must match image 2.`;
+                  refPrompt = `CRITICAL: Image 1 = CHARACTER REFERENCE. You MUST preserve this person's EXACT face shape, eye shape, nose, lips, jawline, skin tone, hair color, hair style, hair length, body proportions, and clothing. NO changes to the person's appearance allowed. Image 2 = PREVIOUS SCENE for environment/lighting continuity. Generate the next scene: ${scene.visual_prompt}. The person must be IDENTICAL to image 1. The setting, lighting, and color palette must match image 2.`;
                 } else if (isUserRef) {
-                  refPrompt = `Transform this reference image into a new scene. Keep the EXACT SAME person/character - identical face, hair, skin tone, body shape, clothing. DO NOT change the person's appearance. New scene: ${scene.visual_prompt}. The person must be recognizably the same as in the reference photo.`;
+                  refPrompt = `CRITICAL: Preserve this person's EXACT face shape, eye shape, nose, lips, jawline, skin tone, hair color, hair style, hair length, body proportions, and clothing. DO NOT alter ANY facial feature or body detail. Generate new scene: ${scene.visual_prompt}. The person must be IDENTICAL to the reference - same face, same hair, same clothes, same skin.`;
                 } else if (!isFirstScene && prevSceneImageUrl) {
                   refImages.length = 0;
                   refImages.push(prevSceneImageUrl);
-                  refPrompt = `Create the next scene continuing from this image. Keep the EXACT SAME characters, environment, lighting, and style. The new scene happens IMMEDIATELY AFTER this image. New scene: ${scene.visual_prompt}. Everything must look consistent with the previous frame.`;
+                  refPrompt = `Continue from this image. Keep the EXACT SAME character (same face, same hair, same clothing, same body) and SAME environment. The next scene happens immediately after. Generate: ${scene.visual_prompt}. Character appearance must not change at all.`;
                 } else {
-                  refPrompt = `Using the exact same characters and environment from image 1, create a new scene: ${scene.visual_prompt}. Keep the SAME character design, colors, art style, and proportions.`;
+                  refPrompt = `Using the exact same character (face, hair, clothing, body) and environment from this image, create: ${scene.visual_prompt}. Keep identical character design and proportions.`;
                 }
 
                 const editBody = {
