@@ -12101,6 +12101,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
     const imageModel = project.image_model || 'nanobanana-2-beta';
+    const imageResolution = '4K';
 
     (async () => {
       try {
@@ -12174,9 +12175,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                   model: imageModel,
                   prompt: refPrompt,
                   images: refImages,
-                  aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
+                  aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
+                  resolution: imageResolution
                 };
-                console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${scene.scene_index}`);
+                console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
                   'https://apimodels.app/api/v1/images/generations',
                   genBody,
@@ -12189,9 +12191,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 const imgBody = {
                   model: imageModel,
                   prompt: scene.visual_prompt,
-                  aspect_ratio: aspectRatio
+                  aspect_ratio: aspectRatio,
+                  resolution: imageResolution
                 };
-                console.log(`[AUTOMATION] Generating image (text-to-image, model=${imageModel}) for ${projectId} scene ${scene.scene_index}`);
+                console.log(`[AUTOMATION] Generating image (text-to-image, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${scene.scene_index}`);
                 imgResponse = await axios.post(
                   'https://apimodels.app/api/v1/images/generations',
                   imgBody,
@@ -12524,6 +12527,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     }
     const isFreepik = vidModel.provider === 'freepik';
     const imageModel = project.image_model || 'nanobanana-2-beta';
+    const imageResolution = '4K';
 
     (async () => {
       try {
@@ -12566,16 +12570,17 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
               prompt: refPrompt,
               model: imageModel,
               images: refImages,
-              aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9'
+              aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
+              resolution: imageResolution
             };
-            console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}) for ${projectId} scene ${sceneIndex}`);
+            console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
             imgResponse = await axios.post(
               'https://apimodels.app/api/v1/images/generations', genBody,
               { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
             );
           } else {
-            const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio };
-            console.log(`[AUTOMATION] Retry: Generating image (text-to-image, model=${imageModel}) for ${projectId} scene ${sceneIndex}`);
+            const imgBody = { model: imageModel, prompt: scene.visual_prompt, aspect_ratio: aspectRatio, resolution: imageResolution };
+            console.log(`[AUTOMATION] Retry: Generating image (text-to-image, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
             imgResponse = await axios.post(
               'https://apimodels.app/api/v1/images/generations', imgBody,
               { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
