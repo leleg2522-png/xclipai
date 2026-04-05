@@ -11456,7 +11456,11 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       console.log(`[KEY-POOL] Key ${keyRecord.id} failed: HTTP ${httpStatus} - ${err.message}`);
       
       if (httpStatus === 400) {
-        console.error(`[KEY-POOL] HTTP 400 Bad Request - Body: ${JSON.stringify(requestBody)} | Response: ${JSON.stringify(err.response?.data)}`);
+        console.error(`[KEY-POOL] HTTP 400 Bad Request`);
+        console.error(`[KEY-POOL] Endpoint: ${config.endpoint}`);
+        console.error(`[KEY-POOL] Request Body: ${JSON.stringify(requestBody)}`);
+        console.error(`[KEY-POOL] Response: ${JSON.stringify(err.response?.data)}`);
+        console.error(`[KEY-POOL] Model: ${model}, Duration: ${videoDuration}, Aspect: ${aspectRatio}`);
         throw err;
       }
       if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403) {
