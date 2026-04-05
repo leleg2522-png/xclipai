@@ -11871,8 +11871,9 @@ NARRATION RULES:
     }
 
     const chatModels = [
-      'claude-haiku-4-5-20251001',
       'claude-sonnet-4-5-20250929',
+      'gemini-2.5-pro',
+      'gpt-4.1',
       'claude-sonnet-4-20250514'
     ];
 
@@ -12085,7 +12086,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = project.image_model || 'gemini-2.5-flash-image';
+    const imageModel = project.image_model || 'nanobanana-2-beta';
 
     (async () => {
       try {
@@ -12481,7 +12482,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
-    const imageModel = project.image_model || 'gemini-2.5-flash-image';
+    const imageModel = project.image_model || 'nanobanana-2-beta';
 
     (async () => {
       try {
