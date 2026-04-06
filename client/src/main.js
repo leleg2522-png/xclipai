@@ -6408,7 +6408,6 @@ async function generateSceneStudioBatch() {
 async function loadAdsStudioProjects() {
   if (state.adsStudio.isLoading) return;
   state.adsStudio.isLoading = true;
-  render();
   try {
     var response = await fetch(API_URL + '/api/ads-studio/projects', { credentials: 'include' });
     var data = await response.json();
@@ -6418,7 +6417,24 @@ async function loadAdsStudioProjects() {
   }
   state.adsStudio._loaded = true;
   state.adsStudio.isLoading = false;
-  render();
+  if (state.currentPage === 'adsStudio' && state.adsStudio.view !== 'detail') {
+    var listContainer = document.querySelector('.auto-project-list');
+    if (listContainer) {
+      var listHtml = '';
+      state.adsStudio.projects.forEach(function(p) {
+        listHtml += '<div class="auto-project-card" data-ads-project="' + p.project_id + '">';
+        listHtml += '<div class="auto-project-left">';
+        listHtml += '<div class="auto-project-title">' + escapeHtml(p.title || p.product_name) + '</div>';
+        listHtml += '<div class="auto-project-sub">' + escapeHtml(p.ad_type === 'hard_selling' ? 'Hard Sell' : 'Soft Sell') + ' &middot; ' + (p.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + p.scene_count + ' scene &middot; ' + new Date(p.created_at).toLocaleDateString() + '</div>';
+        listHtml += '</div>';
+        listHtml += getAdsStudioStatusBadge(p.status);
+        listHtml += '</div>';
+      });
+      listContainer.innerHTML = listHtml;
+    } else {
+      render();
+    }
+  }
 }
 
 async function loadAdsStudioProjectDetail(projectId) {
@@ -6435,23 +6451,37 @@ async function loadAdsStudioProjectDetail(projectId) {
 }
 
 async function createAdsStudioProject() {
-  console.log('[ADS-STUDIO] createAdsStudioProject called, state:', JSON.stringify(state.adsStudio.newProject));
-  var productName = state.adsStudio.newProject.productName || (document.getElementById('adsProductName') || {}).value || '';
+  var nameEl = document.getElementById('adsProductName');
+  var descEl = document.getElementById('adsProductDesc');
+  var adTypeEl = document.getElementById('adsAdType');
+  var formatEl = document.getElementById('adsFormat');
+  var modelEl = document.getElementById('adsVideoModel');
+  var durEl = document.getElementById('adsDuration');
+  var sceneEl = document.getElementById('adsSceneCount');
+  var langEl = document.getElementById('adsLanguage');
+  var voEl = document.getElementById('adsVoiceOver');
+  var btn = document.getElementById('adsCreateBtn');
+
+  var productName = (nameEl ? nameEl.value : '') || '';
   productName = productName.trim();
-  console.log('[ADS-STUDIO] productName =', JSON.stringify(productName));
   if (!productName) { alert('Masukkan nama produk!'); return; }
 
-  var productDesc = state.adsStudio.newProject.productDescription || (document.getElementById('adsProductDesc') || {}).value || '';
-  var adType = state.adsStudio.newProject.adType || 'soft_selling';
-  var format = state.adsStudio.newProject.format || 'shorts';
-  var videoModel = state.adsStudio.newProject.videoModel || 'wan-v2.6-pro';
-  var videoDuration = state.adsStudio.newProject.videoDuration || 5;
-  var sceneCount = state.adsStudio.newProject.sceneCount || 4;
-  var language = state.adsStudio.newProject.language || 'id';
-  var voiceOverEnabled = state.adsStudio.newProject.voiceOverEnabled || false;
+  var productDesc = (descEl ? descEl.value : '') || '';
+  var adType = (adTypeEl ? adTypeEl.value : '') || 'soft_selling';
+  var format = (formatEl ? formatEl.value : '') || 'shorts';
+  var videoModel = (modelEl ? modelEl.value : '') || 'wan-v2.6-pro';
+  var videoDuration = (durEl ? parseInt(durEl.value) : 5) || 5;
+  var sceneCount = (sceneEl ? parseInt(sceneEl.value) : 4) || 4;
+  var language = (langEl ? langEl.value : '') || 'id';
+  var voiceOverEnabled = voEl ? voEl.checked : false;
 
-  state.adsStudio.isCreating = true;
-  render();
+  var charImage = state.adsStudio.newProject.characterImage;
+  var prodImage = state.adsStudio.newProject.productImage;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+  }
 
   try {
     var formData = new FormData();
@@ -6465,11 +6495,11 @@ async function createAdsStudioProject() {
     formData.append('language', language);
     formData.append('voiceOverEnabled', String(voiceOverEnabled));
 
-    if (state.adsStudio.newProject.characterImage) {
-      formData.append('characterImage', state.adsStudio.newProject.characterImage);
+    if (charImage) {
+      formData.append('characterImage', charImage);
     }
-    if (state.adsStudio.newProject.productImage) {
-      formData.append('productImage', state.adsStudio.newProject.productImage);
+    if (prodImage) {
+      formData.append('productImage', prodImage);
     }
 
     var response = await fetch(API_URL + '/api/ads-studio/projects', {
@@ -6480,17 +6510,26 @@ async function createAdsStudioProject() {
     var data = await response.json();
     if (data.success) {
       state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.6-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
+      state.adsStudio.isCreating = false;
       state.adsStudio._loaded = false;
-      loadAdsStudioProjects();
+      await loadAdsStudioProjects();
       loadAdsStudioProjectDetail(data.projectId);
     } else {
       alert(data.error || 'Gagal membuat project');
+      state.adsStudio.isCreating = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      }
     }
   } catch (err) {
     alert('Gagal membuat project: ' + err.message);
+    state.adsStudio.isCreating = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    }
   }
-  state.adsStudio.isCreating = false;
-  render();
 }
 
 async function generateAdsStudioScript(projectId) {
@@ -6579,26 +6618,6 @@ async function deleteAdsStudioProject(projectId) {
 }
 
 function _adsCreateClickHandler() {
-  console.log('[ADS-STUDIO] Create button clicked!');
-  var nameEl = document.getElementById('adsProductName');
-  var descEl = document.getElementById('adsProductDesc');
-  var adTypeEl = document.getElementById('adsAdType');
-  var formatEl = document.getElementById('adsFormat');
-  var modelEl = document.getElementById('adsVideoModel');
-  var durEl = document.getElementById('adsDuration');
-  var sceneEl = document.getElementById('adsSceneCount');
-  var langEl = document.getElementById('adsLanguage');
-  var voEl = document.getElementById('adsVoiceOver');
-  if (nameEl) state.adsStudio.newProject.productName = nameEl.value;
-  if (descEl) state.adsStudio.newProject.productDescription = descEl.value;
-  if (adTypeEl) state.adsStudio.newProject.adType = adTypeEl.value;
-  if (formatEl) state.adsStudio.newProject.format = formatEl.value;
-  if (modelEl) state.adsStudio.newProject.videoModel = modelEl.value;
-  if (durEl) state.adsStudio.newProject.videoDuration = parseInt(durEl.value);
-  if (sceneEl) state.adsStudio.newProject.sceneCount = parseInt(sceneEl.value);
-  if (langEl) state.adsStudio.newProject.language = langEl.value;
-  if (voEl) state.adsStudio.newProject.voiceOverEnabled = voEl.checked;
-  console.log('[ADS-STUDIO] State synced:', JSON.stringify(state.adsStudio.newProject));
   createAdsStudioProject();
 }
 window._adsCreateClick = _adsCreateClickHandler;
@@ -7073,10 +7092,10 @@ function renderAdsStudioPage() {
   html += '</div>';
   html += '</div></div>';
 
+  html += '<div class="auto-project-list">';
   if (state.adsStudio.isLoading) {
     html += '<div class="loading-state"><span class="spinner"></span> Memuat...</div>';
   } else if (state.adsStudio.projects.length > 0) {
-    html += '<div class="auto-project-list">';
     state.adsStudio.projects.forEach(function(p) {
       html += '<div class="auto-project-card" data-ads-project="' + p.project_id + '">';
       html += '<div class="auto-project-left">';
@@ -7086,8 +7105,8 @@ function renderAdsStudioPage() {
       html += getAdsStudioStatusBadge(p.status);
       html += '</div>';
     });
-    html += '</div>';
   }
+  html += '</div>';
   html += '</div>';
   return html;
 }
