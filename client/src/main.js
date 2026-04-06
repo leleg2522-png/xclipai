@@ -6579,9 +6579,27 @@ async function deleteAdsStudioProject(projectId) {
 function attachAdsStudioListeners() {
   var createBtn = document.getElementById('adsCreateBtn');
   if (createBtn) {
-    createBtn.addEventListener('click', function() {
-      state.adsStudio.newProject.productName = (document.getElementById('adsProductName') || {}).value || '';
-      state.adsStudio.newProject.productDescription = (document.getElementById('adsProductDesc') || {}).value || '';
+    createBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var nameEl = document.getElementById('adsProductName');
+      var descEl = document.getElementById('adsProductDesc');
+      var adTypeEl = document.getElementById('adsAdType');
+      var formatEl = document.getElementById('adsFormat');
+      var modelEl = document.getElementById('adsVideoModel');
+      var durEl = document.getElementById('adsDuration');
+      var sceneEl = document.getElementById('adsSceneCount');
+      var langEl = document.getElementById('adsLanguage');
+      var voEl = document.getElementById('adsVoiceOver');
+      if (nameEl) state.adsStudio.newProject.productName = nameEl.value;
+      if (descEl) state.adsStudio.newProject.productDescription = descEl.value;
+      if (adTypeEl) state.adsStudio.newProject.adType = adTypeEl.value;
+      if (formatEl) state.adsStudio.newProject.format = formatEl.value;
+      if (modelEl) state.adsStudio.newProject.videoModel = modelEl.value;
+      if (durEl) state.adsStudio.newProject.videoDuration = parseInt(durEl.value);
+      if (sceneEl) state.adsStudio.newProject.sceneCount = parseInt(sceneEl.value);
+      if (langEl) state.adsStudio.newProject.language = langEl.value;
+      if (voEl) state.adsStudio.newProject.voiceOverEnabled = voEl.checked;
       createAdsStudioProject();
     });
   }

@@ -14182,7 +14182,7 @@ async function initDatabase() {
         product_description TEXT,
         ad_type VARCHAR(20) DEFAULT 'soft_selling',
         format VARCHAR(20) DEFAULT 'shorts',
-        video_model VARCHAR(100) DEFAULT 'veo-3.1-fast',
+        video_model VARCHAR(100) DEFAULT 'wan-v2.6-pro',
         video_duration INTEGER DEFAULT 5,
         character_image_url TEXT,
         product_image_url TEXT,
@@ -14339,7 +14339,7 @@ app.post('/api/ads-studio/projects', upload.fields([
     await pool.query(
       `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'veo-3.1-fast', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.6-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
     );
 
     res.json({ success: true, projectId });
