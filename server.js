@@ -11442,9 +11442,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   let requestBody = {};
   const dur = String(videoDuration || 5);
   const characterLockPrompt = prompt
-    ? `${prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation`
-    : 'cinematic video, maintain exact same character appearance throughout';
-  const charNegPrompt = 'different person, face change, face morph, character change, different clothing, outfit change, wardrobe change, body transformation, age change, hair change, blurry, low quality, distorted, deformed face, extra limbs';
+    ? `${prompt}, consistent character appearance, cinematic smooth natural motion`
+    : 'cinematic video with smooth natural motion, consistent character';
+  const charNegPrompt = 'face morph, body transformation, deformed face, extra limbs, blurry, low quality, distorted, glitch, static frozen';
 
   if (config.api === 'kling26') {
     requestBody = {
@@ -11473,7 +11473,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: dur,
       size: wanSize,
       negative_prompt: charNegPrompt,
-      cfg_scale: 0.85,
+      cfg_scale: 0.7,
       enable_prompt_expansion: false,
       shot_type: 'single',
       seed: -1,
