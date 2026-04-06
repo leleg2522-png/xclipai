@@ -3929,7 +3929,25 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     // PRIORITY 1: Use the EXACT key name that was saved when task was created
     if (savedTask.used_key_name) {
-      if (process.env[savedTask.used_key_name]) {
+      const poolMatch = savedTask.used_key_name.match(/^POOL_\w+\[(\d+)\]$/);
+      if (poolMatch) {
+        const poolKeyId = parseInt(poolMatch[1]);
+        const poolKeyResult = await pool.query(
+          `SELECT api_key FROM freepik_key_pool WHERE id = $1`, [poolKeyId]
+        );
+        if (poolKeyResult.rows.length > 0) {
+          freepikApiKey = poolKeyResult.rows[0].api_key;
+          keySource = savedTask.used_key_name;
+        } else {
+          const anyPoolKey = await pool.query(
+            `SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') ORDER BY usage_count ASC LIMIT 1`
+          );
+          if (anyPoolKey.rows.length > 0) {
+            freepikApiKey = anyPoolKey.rows[0].api_key;
+            keySource = savedTask.used_key_name + '_fallback';
+          }
+        }
+      } else if (process.env[savedTask.used_key_name]) {
         freepikApiKey = process.env[savedTask.used_key_name];
         keySource = savedTask.used_key_name;
       } else {
@@ -4527,7 +4545,19 @@ app.get('/api/motion/tasks/:taskId', async (req, res) => {
     let freepikApiKey = null;
     
     if (savedTask.used_key_name && savedTask.used_key_name !== 'personal' && savedTask.used_key_name !== 'global') {
-      freepikApiKey = process.env[savedTask.used_key_name];
+      const motionPoolMatch = savedTask.used_key_name.match(/^POOL_\w+\[(\d+)\]$/);
+      if (motionPoolMatch) {
+        const mpId = parseInt(motionPoolMatch[1]);
+        const mpResult = await pool.query(`SELECT api_key FROM freepik_key_pool WHERE id = $1`, [mpId]);
+        if (mpResult.rows.length > 0) {
+          freepikApiKey = mpResult.rows[0].api_key;
+        } else {
+          const mpFallback = await pool.query(`SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') ORDER BY usage_count ASC LIMIT 1`);
+          if (mpFallback.rows.length > 0) freepikApiKey = mpFallback.rows[0].api_key;
+        }
+      } else {
+        freepikApiKey = process.env[savedTask.used_key_name];
+      }
       console.log(`[MOTION] Using saved key: ${savedTask.used_key_name}, found: ${!!freepikApiKey}`);
     }
     
