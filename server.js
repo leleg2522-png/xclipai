@@ -11473,6 +11473,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: dur,
       size: wanSize,
       negative_prompt: charNegPrompt,
+      cfg_scale: 0.85,
       enable_prompt_expansion: false,
       shot_type: 'single',
       seed: -1,
@@ -12954,6 +12955,34 @@ function concatVideosFFmpeg(inputPaths, outputPath) {
   });
 }
 
+function burnTextOverlayFFmpeg(inputPath, outputPath, textOverlay) {
+  return new Promise((resolve, reject) => {
+    if (!textOverlay || !textOverlay.trim()) {
+      const fs = require('fs');
+      fs.copyFileSync(inputPath, outputPath);
+      return resolve(outputPath);
+    }
+    const safeText = textOverlay.replace(/'/g, "'\\''").replace(/:/g, '\\:').replace(/\\/g, '\\\\');
+    const drawtext = `drawtext=text='${safeText}':fontsize=36:fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-th-60:font=Arial`;
+    console.log(`[FFMPEG-OVERLAY] Burning text: "${textOverlay}" onto ${inputPath}`);
+    ffmpeg(inputPath)
+      .videoFilters(drawtext)
+      .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy', '-y'])
+      .output(outputPath)
+      .on('end', () => {
+        console.log(`[FFMPEG-OVERLAY] Done: ${outputPath}`);
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        console.error(`[FFMPEG-OVERLAY] Error: ${err.message}, falling back to no overlay`);
+        const fs = require('fs');
+        try { fs.copyFileSync(inputPath, outputPath); } catch(e) {}
+        resolve(outputPath);
+      })
+      .run();
+  });
+}
+
 app.post('/api/automation/projects/:projectId/upload-youtube', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
@@ -14372,81 +14401,90 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
     const hasCharImage = !!project.character_image_url;
     const hasProdImage = !!project.product_image_url;
 
-    const systemPrompt = `You are a world-class advertising creative director and cinematographer with 20 years of experience creating viral product ads for top brands. You specialize in creating compelling affiliate marketing content that converts viewers into buyers.
+    const systemPrompt = `You are a world-class advertising creative director specializing in AI video generation. You create prompts optimized for IMAGE-TO-VIDEO AI models (like Wan 2.6) that produce stunning, cinematic product ads.
 
-YOUR EXPERTISE:
-- You know exactly how to position products in frames for maximum desire and conversion
-- You understand the psychology of ${project.ad_type === 'hard_selling' ? 'urgency, scarcity, and direct response marketing' : 'aspirational lifestyle marketing and subtle product integration'}
-- You write visual prompts like a DP (Director of Photography) — precise, technical, rich in atmosphere
-- Your ad scripts drive real sales through emotional connection and clear value proposition
+CRITICAL UNDERSTANDING — IMAGE-TO-VIDEO AI:
+- The AI receives a STILL IMAGE and your PROMPT, then generates a 5-second VIDEO
+- Your visual_prompt must describe MOTION, MOVEMENT, and ANIMATION — NOT static composition
+- The still image already has the composition — your prompt tells the AI WHAT MOVES and HOW
+- Focus on: camera movement, character actions, product interactions, environmental motion
+- BAD prompt: "woman holding product in kitchen with warm lighting" (static, no motion)
+- GOOD prompt: "woman slowly lifts product to eye level examining label, gentle smile forming, camera pushes in smoothly, soft golden light shifts across her face, steam rises from coffee cup on counter, shallow depth of field with bokeh shifting"
 
-AD SCRIPT RULES FOR ${adTypeDesc}:
-${project.ad_type === 'hard_selling' ? `- Scene 1: HOOK — dramatic problem or desire that grabs attention in 2 seconds
-- Middle scenes: Show product solving the problem with clear demonstrations and benefits
-- Include specific product features, pricing cues, or value propositions in narration
-- Final scene: Strong CTA (Call to Action) — "beli sekarang", "link di bio", "promo terbatas"
-- Narration is urgent, benefit-driven, conversion-focused
-- Text overlay should include: product name, key benefit, CTA` : `- Scene 1: HOOK — relatable lifestyle moment or emotional situation
-- Middle scenes: Character naturally using/discovering the product in their daily life
-- Product appears organically — NOT as the focus, but as part of the character's world
-- Final scene: Aspirational moment showing the improved life WITH the product
-- Narration is storytelling-driven, authentic, like a friend sharing a recommendation
-- Text overlay is subtle — product name appears naturally, no aggressive CTA`}
+AD TYPE: ${adTypeDesc}
+${project.ad_type === 'hard_selling' ? `- Scene 1: HOOK — dramatic reveal or attention-grabbing action in first 2 seconds
+- Middle: Product demonstrations with clear benefit-showing movements
+- Final: Strong CTA moment — character confidently presents product to camera
+- Narration: urgent, benefit-driven, conversion-focused` : `- Scene 1: HOOK — relatable lifestyle moment with natural movement
+- Middle: Character naturally discovering/using the product in daily life
+- Final: Aspirational moment showing improved life WITH product
+- Narration: storytelling, authentic, like a friend recommending`}
 
-VISUAL PROMPT MASTERY — write each visual_prompt as a professional shot description:
-1. Each visual_prompt = one 5-10 second camera shot
-2. Include ALL of these:
-   - SUBJECT + PRODUCT INTERACTION: how the character holds, uses, or relates to the product
-   - ENVIRONMENT: realistic setting that matches target market lifestyle
-   - CAMERA: specific shot size + movement
-   - LIGHTING: source + quality + direction
-   - COLOR PALETTE: specific color grading that elevates the product
-   - ATMOSPHERE: depth of field, bokeh, lens effects
-3. Product must be VISIBLE and RECOGNIZABLE in every scene — positioned prominently but naturally
-4. Keep 60-100 words per visual_prompt
-5. Respond with valid JSON only, no markdown, no code blocks
+MOTION-FOCUSED VISUAL PROMPT RULES:
+1. Start with the PRIMARY MOTION: what is the character DOING (verb + action)
+2. Add SECONDARY MOTION: environmental movement (wind, light shifts, particles, steam, reflections)
+3. Specify CAMERA MOVEMENT: slow push-in, gentle pan, tracking shot, static with subtle drift
+4. Describe SPEED/TEMPO: slow-motion, real-time, gradual, sudden
+5. Include MICRO-MOVEMENTS: facial expressions changing, fingers moving, fabric flowing, hair swaying
+6. Add LIGHT DYNAMICS: light shifting, shadows moving, golden hour glow intensifying
+7. Keep prompts 80-120 words — rich in motion verbs
+8. EVERY prompt must have at least 3 different types of motion happening simultaneously
+9. Respond with valid JSON only, no markdown, no code blocks
 
-SCENE CONTINUITY (non-negotiable):
-- Same character appearance across all scenes
-- Same environment details carry across consecutive scenes
-- Product appears consistently — same packaging, same colors, same branding
-- Body position logically connected between scenes
+MOTION VERB VOCABULARY (use these):
+- Character: lifts, turns, glances, reaches, tilts, brushes, slides, presses, opens, reveals, examines, smiles, nods, speaks, talks, explains
+- Camera: pushes in, pulls back, tracks left/right, tilts up/down, orbits, racks focus, drifts
+- Environment: rustles, sways, shifts, drifts, flickers, glistens, sparkles, ripples, flows, floats
 
-TEXT OVERLAY RULES:
-- Each scene gets a short text_overlay (5-15 words max) that appears on screen
-- ${project.ad_type === 'hard_selling' ? 'Include product name, key benefit, price/discount, or CTA' : 'Include subtle product name mention, lifestyle statement, or soft recommendation'}
-- Write text_overlay in ${langName}`;
+CHARACTER SPEAKING (CRITICAL — video AI generates audio):
+- The video model generates audio including speech from the character
+- In EVERY visual_prompt, include the character SPEAKING/TALKING naturally
+- Write exactly what the character says in ${langName} using this format: character speaks saying "[exact dialogue in ${langName}]"
+- The dialogue should match or summarize the narration content
+- Character must have natural lip movement, facial expressions while speaking
+- Example: "woman holds product and speaks to camera saying 'Ini serum favorit aku, kulit langsung glowing dalam seminggu', genuine smile forming, maintaining eye contact"
+- Keep dialogue short (1-2 sentences) and natural/conversational in ${langName}
+
+SCENE CONTINUITY:
+- Same character appearance, clothing, and setting across all scenes
+- Product looks identical in every scene — same colors, packaging, branding
+- Logical action flow between scenes (not random jumps)
+
+TEXT OVERLAY: Each scene gets a short text_overlay (5-15 words) in ${langName}
+- ${project.ad_type === 'hard_selling' ? 'Product name, key benefit, price/discount, or CTA' : 'Subtle product mention, lifestyle statement, soft recommendation'}`;
 
     let userPrompt = `Create a ${formatDesc} PRODUCT AD script for "${project.product_name}".
 ${project.product_description ? `Product details: ${project.product_description}` : ''}
 Ad type: ${adTypeDesc}
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
-${hasCharImage ? 'The user provided a CHARACTER REFERENCE IMAGE. The image generator handles appearance — do NOT describe character looks.' : ''}
-${hasProdImage ? 'The user provided a PRODUCT IMAGE. Describe the product based on this image — include its visual characteristics in every scene.' : ''}
+${hasCharImage ? 'CHARACTER REFERENCE IMAGE provided — the image generator handles appearance, do NOT describe character looks in visual_prompt.' : ''}
+${hasProdImage ? 'PRODUCT IMAGE provided — the image generator has the product reference, focus visual_prompt on MOTION and ACTION with the product.' : ''}
+
+IMPORTANT: Each visual_prompt will be used to animate a STILL IMAGE into a 5-second video.
+The still image is already generated separately — your visual_prompt ONLY controls the MOTION/ANIMATION.
 
 Return ONLY valid JSON:
 {
-  "title": "compelling ad title",
-  "character_description": "${hasCharImage ? 'character from reference image' : 'ULTRA-PRECISE character design matching target market — format: gender/age, exact hair, eyes, skin, clothing with materials and colors'}",
-  "product_visual_description": "precise visual description of the product — shape, color, packaging, branding, size, material",
+  "title": "compelling ad title in ${langName}",
+  "character_description": "${hasCharImage ? 'character from reference image' : 'detailed character: gender, age range, ethnicity, hair style+color, outfit with specific colors and materials'}",
+  "product_visual_description": "precise visual description of ${project.product_name} — shape, color, packaging, branding, size, material",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 sentences' : '2-3 sentences'} in ${langName} — ${project.ad_type === 'hard_selling' ? 'benefit-driven, urgent, conversion-focused' : 'storytelling, authentic, like a friend recommending'}",
-      "text_overlay": "Short text that appears on screen (5-15 words in ${langName})",
-      "visual_prompt": "English only. Professional cinematographer shot description. Product MUST be visible and identifiable in frame. Include all required elements."
+      "narration": "${project.format === 'shorts' ? '1-2 kalimat pendek' : '2-3 kalimat'} in ${langName}",
+      "text_overlay": "5-15 words in ${langName} — will be burned onto the video as subtitle",
+      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words."
     }
   ]
 }
 
-VISUAL PROMPT STRUCTURE:
-"[CHARACTER ACTION with PRODUCT], [environment with material textures], [CAMERA: shot size + movement], [LIGHTING: source + direction], [COLOR GRADE], [ATMOSPHERE], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
+VISUAL PROMPT TEMPLATE (follow this structure):
+"[CHARACTER does ACTION with PRODUCT — use motion verbs: lifts, turns, examines, reaches, slides], [CAMERA: slow push-in / gentle pan / tracking / orbit], [ENVIRONMENT MOTION: wind through hair, light shifting, steam rising, fabric flowing, reflections moving], [MICRO-DETAILS: fingers brushing surface, smile forming, eyes glancing], cinematic photorealistic, ${project.format === 'shorts' ? '9:16 vertical frame' : '16:9 widescreen'}"
 
-PRODUCT PLACEMENT EXAMPLES:
-Scene 1: "holding [product] at eye level while examining the label with curious expression, product packaging clearly visible and in sharp focus..."
-Scene 2: "applying/using [product] with satisfied micro-smile, product branding facing camera at 3/4 angle..."
-Scene 3: "placing [product] on [surface] in foreground while character reacts in background, shallow depth of field with product sharp..."
+EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian dialogue' : 'English dialogue'}):
+Scene 1: "woman picks up serum bottle from marble counter and speaks to camera saying '${langName === 'Bahasa Indonesia' ? 'Aku udah coba banyak serum, tapi ini beda banget' : 'I have tried many serums but this one is different'}', camera pushes in from medium to close-up, golden morning light intensifies through sheer curtain, dust particles drift in sunbeam, genuine curious expression, natural lip movement while speaking"
+Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Teksturnya ringan dan langsung meresap' : 'The texture is light and absorbs instantly'}', droplet catches light with prismatic sparkle, camera orbits slowly right, bokeh shifts in background, satisfied smile forming while explaining"
 
-CONTINUITY: Every scene must reference the same product and character. Same product appearance, same character look.`;
+CONTINUITY: Same character, same product, same setting. Each scene flows logically to the next.`;
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
     if (!apimodelsKey) {
@@ -14836,21 +14874,26 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
             if (completedScenesData.rows.length > 1) {
               try {
-                console.log(`[ADS-STUDIO] Merging ${completedScenesData.rows.length} scene videos...`);
+                console.log(`[ADS-STUDIO] Merging ${completedScenesData.rows.length} scene videos with text overlays...`);
                 await pool.query(`UPDATE ads_studio_projects SET status = 'merging', updated_at = NOW() WHERE project_id = $1`, [projectId]);
                 sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'merging' });
 
                 const downloadedFiles = [];
+                const overlayedFiles = [];
                 const tmpDir = require('os').tmpdir();
                 for (const s of completedScenesData.rows) {
                   const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
                   await downloadFileToPath(s.video_url, destPath);
                   downloadedFiles.push(destPath);
+
+                  const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
+                  await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay || '');
+                  overlayedFiles.push(overlayPath);
                 }
 
                 const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
                 const outputPath = path.join(__dirname, 'processed', mergedFilename);
-                await concatVideosFFmpeg(downloadedFiles, outputPath);
+                await concatVideosFFmpeg(overlayedFiles, outputPath);
                 const mergedUrl = `/processed/${mergedFilename}`;
 
                 await pool.query(
@@ -14859,7 +14902,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 );
                 sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-                for (const f of downloadedFiles) {
+                for (const f of [...downloadedFiles, ...overlayedFiles]) {
                   try { fs.unlinkSync(f); } catch (e) {}
                 }
               } catch (mergeErr) {
@@ -14920,16 +14963,21 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
     (async () => {
       try {
         const downloadedFiles = [];
+        const overlayedFiles = [];
         const tmpDir = require('os').tmpdir();
         for (const s of completedScenes.rows) {
           const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
           await downloadFileToPath(s.video_url, destPath);
           downloadedFiles.push(destPath);
+
+          const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
+          await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay || '');
+          overlayedFiles.push(overlayPath);
         }
 
         const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
         const outputPath = path.join(__dirname, 'processed', mergedFilename);
-        await concatVideosFFmpeg(downloadedFiles, outputPath);
+        await concatVideosFFmpeg(overlayedFiles, outputPath);
         const mergedUrl = `/processed/${mergedFilename}`;
 
         await pool.query(
@@ -14938,7 +14986,7 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
         );
         sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-        for (const f of downloadedFiles) {
+        for (const f of [...downloadedFiles, ...overlayedFiles]) {
           try { fs.unlinkSync(f); } catch (e) {}
         }
       } catch (mergeErr) {
