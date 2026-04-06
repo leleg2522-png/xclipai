@@ -6413,10 +6413,10 @@ async function loadAdsStudioProjects() {
     var response = await fetch(API_URL + '/api/ads-studio/projects', { credentials: 'include' });
     var data = await response.json();
     state.adsStudio.projects = data.projects || [];
-    state.adsStudio._loaded = true;
   } catch (err) {
     console.error('Failed to load ads studio projects:', err);
   }
+  state.adsStudio._loaded = true;
   state.adsStudio.isLoading = false;
   render();
 }
