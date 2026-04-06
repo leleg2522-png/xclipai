@@ -13413,10 +13413,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
   }
 });
 
-// Catch-all route - must be last after all API routes
-app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'index.html'));
-});
+// (catch-all route moved to after all API routes - see below)
 
 async function initDatabase() {
   try {
@@ -14958,6 +14955,11 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
     console.error('[ADS-STUDIO] Merge error:', error.message);
     res.status(500).json({ error: 'Gagal merge video' });
   }
+});
+
+// Catch-all route - MUST be last after all API routes
+app.get('/{*splat}', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'index.html'));
 });
 
 // Start listening IMMEDIATELY so Railway health check passes

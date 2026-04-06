@@ -6431,8 +6431,7 @@ async function loadAdsStudioProjects() {
         listHtml += '</div>';
       });
       listContainer.innerHTML = listHtml;
-    } else {
-      render();
+      attachAdsStudioProjectCardListeners();
     }
   }
 }
@@ -6450,6 +6449,23 @@ async function loadAdsStudioProjectDetail(projectId) {
   }
 }
 
+function showAdsError(msg) {
+  var el = document.getElementById('adsErrorMsg');
+  if (el) {
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(function() { el.style.display = 'none'; }, 8000);
+  }
+}
+
+function resetAdsCreateBtn() {
+  var btn = document.getElementById('adsCreateBtn');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+  }
+}
+
 async function createAdsStudioProject() {
   var nameEl = document.getElementById('adsProductName');
   var descEl = document.getElementById('adsProductDesc');
@@ -6464,7 +6480,10 @@ async function createAdsStudioProject() {
 
   var productName = (nameEl ? nameEl.value : '') || '';
   productName = productName.trim();
-  if (!productName) { alert('Masukkan nama produk!'); return; }
+  if (!productName) {
+    showAdsError('Masukkan nama produk!');
+    return;
+  }
 
   var productDesc = (descEl ? descEl.value : '') || '';
   var adType = (adTypeEl ? adTypeEl.value : '') || 'soft_selling';
@@ -6495,18 +6514,23 @@ async function createAdsStudioProject() {
     formData.append('language', language);
     formData.append('voiceOverEnabled', String(voiceOverEnabled));
 
-    if (charImage) {
-      formData.append('characterImage', charImage);
-    }
-    if (prodImage) {
-      formData.append('productImage', prodImage);
-    }
+    if (charImage) formData.append('characterImage', charImage);
+    if (prodImage) formData.append('productImage', prodImage);
 
     var response = await fetch(API_URL + '/api/ads-studio/projects', {
       method: 'POST',
       credentials: 'include',
       body: formData
     });
+
+    if (!response.ok) {
+      var errText = '';
+      try { var errData = await response.json(); errText = errData.error || ''; } catch(e) { errText = response.statusText; }
+      showAdsError('Error ' + response.status + ': ' + (errText || 'Server error'));
+      resetAdsCreateBtn();
+      return;
+    }
+
     var data = await response.json();
     if (data.success) {
       state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.6-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
@@ -6515,20 +6539,12 @@ async function createAdsStudioProject() {
       await loadAdsStudioProjects();
       loadAdsStudioProjectDetail(data.projectId);
     } else {
-      alert(data.error || 'Gagal membuat project');
-      state.adsStudio.isCreating = false;
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
-      }
+      showAdsError(data.error || 'Gagal membuat project');
+      resetAdsCreateBtn();
     }
   } catch (err) {
-    alert('Gagal membuat project: ' + err.message);
-    state.adsStudio.isCreating = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
-    }
+    showAdsError('Gagal: ' + err.message);
+    resetAdsCreateBtn();
   }
 }
 
@@ -6621,6 +6637,14 @@ function _adsCreateClickHandler() {
   createAdsStudioProject();
 }
 window._adsCreateClick = _adsCreateClickHandler;
+
+function attachAdsStudioProjectCardListeners() {
+  document.querySelectorAll('[data-ads-project]').forEach(function(card) {
+    card.onclick = function() {
+      loadAdsStudioProjectDetail(card.dataset.adsProject);
+    };
+  });
+}
 
 function attachAdsStudioListeners() {
   var createBtn = document.getElementById('adsCreateBtn');
@@ -7090,6 +7114,7 @@ function renderAdsStudioPage() {
   html += state.adsStudio.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
   html += '</button>';
   html += '</div>';
+  html += '<div id="adsErrorMsg" style="display:none;color:#ff6b6b;background:rgba(255,50,50,0.15);padding:10px 14px;border-radius:10px;margin-top:10px;font-size:14px;text-align:center;"></div>';
   html += '</div></div>';
 
   html += '<div class="auto-project-list">';
