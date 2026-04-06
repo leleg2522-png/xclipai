@@ -3648,15 +3648,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
       : aspectRatio === 'social_story_9_16' ? '9:16'
       : aspectRatio === 'widescreen_16_9' ? '16:9'
       : (['1:1', '9:16', '16:9'].includes(aspectRatio) ? aspectRatio : '16:9');
-    const aspectRatioMap = {
-      '1:1': 'square_1_1',
-      '9:16': 'social_story_9_16',
-      '16:9': 'widescreen_16_9',
-      'square_1_1': 'square_1_1',
-      'social_story_9_16': 'social_story_9_16',
-      'widescreen_16_9': 'widescreen_16_9'
-    };
-    const mappedAspectRatio = aspectRatioMap[aspectRatio] || 'widescreen_16_9';
     
     // Get webhook URL for instant notifications
     const webhookUrl = getWebhookUrl();
