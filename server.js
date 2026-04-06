@@ -3146,7 +3146,16 @@ async function pollFreepikVideoTask(taskId, apiKey, model, usedKeyName) {
     if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403 ||
         isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
       const keyName = usedKeyName || (apiKey ? `key_${apiKey.slice(-6)}` : 'unknown');
-      console.log(`[VIDGEN-POLL] Key ${keyName} hit limit (HTTP ${httpStatus}) during poll for ${taskId}, trying fallback key...`);
+      console.log(`[VIDGEN-POLL] ❌ Key ${keyName} DEAD (HTTP ${httpStatus}) during poll for ${taskId} — marking exhausted & trying fallback`);
+
+      const exhaustedKey = await pool.query(
+        `SELECT id FROM freepik_key_pool WHERE api_key = $1 AND status IN ('available', 'assigned')`,
+        [apiKey]
+      );
+      if (exhaustedKey.rows.length > 0) {
+        await markKeyExhausted(exhaustedKey.rows[0].id, `Poll HTTP ${httpStatus}: ${errMsg}`);
+        console.log(`[VIDGEN-POLL] Pool key ${exhaustedKey.rows[0].id} marked exhausted`);
+      }
 
       const fallbackKey = await pool.query(
         `SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') AND api_key != $1 ORDER BY usage_count ASC LIMIT 1`,
@@ -3560,50 +3569,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
       });
     }
     
-    let freepikApiKey = null;
     let usedKeyIndex = null;
-    let keySource = 'none';
-    
-    // PRIORITY 1: User's personal API key (FASTEST - no queue!)
-    const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
-    if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
-      freepikApiKey = userResult.rows[0].freepik_api_key;
-      keySource = 'personal';
-      console.log(`[SPEED] Using user's personal API key - no queue delay!`);
-    }
-    
-    // PRIORITY 2: Room's rotated key if user has subscription (shared pool)
-    if (!freepikApiKey && keyInfo.room_id) {
-      const rotated = getRotatedApiKey(keyInfo, null, keyInfo.user_id);
-      freepikApiKey = rotated.key;
-      usedKeyIndex = rotated.keyIndex;
-      keySource = 'room';
-    }
-    
-    // PRIORITY 3: For admins without subscription, use any available room key
-    if (!freepikApiKey && keyInfo.is_admin) {
-      const roomKeys = ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-                       'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-                       'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'];
-      for (const keyName of roomKeys) {
-        if (process.env[keyName]) {
-          freepikApiKey = process.env[keyName];
-          keySource = 'admin';
-          console.log(`Admin using fallback key: ${keyName}`);
-          break;
-        }
-      }
-    }
-    
-    // PRIORITY 4: Global default key
-    if (!freepikApiKey) {
-      freepikApiKey = process.env.FREEPIK_API_KEY;
-      keySource = 'global';
-    }
-    
-    if (!freepikApiKey) {
-      return res.status(500).json({ error: 'Tidak ada API key yang tersedia. Silakan beli paket langganan.' });
-    }
+    let keySource = 'pool';
     
     const { model, image, prompt, duration, aspectRatio } = req.body;
     
@@ -3782,41 +3749,24 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const poolKeys = await getPoolKeysForFeature(keyInfo.user_id, 'videogen', 10);
     if (poolKeys.length > 0) {
       allKeys.push(...poolKeys);
-      console.log(`[VIDEOGEN] Loaded ${poolKeys.length} keys from pool for user ${keyInfo.user_id}`);
-    } else {
-      if (keySource === 'room' && keyInfo.room_id) {
-        const bulkVar = process.env[`ROOM${keyInfo.room_id}_FREEPIK_KEYS`];
-        if (bulkVar) {
-          bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
-            allKeys.push({ key, index: idx, name: `ROOM${keyInfo.room_id}_FREEPIK_KEYS[${idx}]` });
-          });
-        } else {
-          const keyNames = [keyInfo.key_name_1, keyInfo.key_name_2, keyInfo.key_name_3].filter(k => k);
-          keyNames.forEach((name, idx) => {
-            const key = process.env[name];
-            if (key) allKeys.push({ key, index: idx, name });
-          });
-        }
-      } else if (keySource === 'admin') {
-        for (let r = 1; r <= 5; r++) {
-          const bulkVar = process.env[`ROOM${r}_FREEPIK_KEYS`];
-          if (bulkVar) {
-            bulkVar.split(',').map(k => k.trim()).filter(Boolean).forEach((key, idx) => {
-              allKeys.push({ key, index: allKeys.length, name: `ROOM${r}_FREEPIK_KEYS[${idx}]` });
-            });
-          } else {
-            ['ROOM1_FREEPIK_KEY_1', 'ROOM1_FREEPIK_KEY_2', 'ROOM1_FREEPIK_KEY_3',
-             'ROOM2_FREEPIK_KEY_1', 'ROOM2_FREEPIK_KEY_2', 'ROOM2_FREEPIK_KEY_3',
-             'ROOM3_FREEPIK_KEY_1', 'ROOM3_FREEPIK_KEY_2', 'ROOM3_FREEPIK_KEY_3'].forEach((name, idx) => {
-              const key = process.env[name];
-              if (key) allKeys.push({ key, index: idx, name });
-            });
-            break;
-          }
-        }
-      } else {
-        allKeys.push({ key: freepikApiKey, index: 0, name: keySource });
+      console.log(`[VIDEOGEN] Loaded ${poolKeys.length} keys from KEY POOL for user ${keyInfo.user_id}`);
+    }
+    
+    if (allKeys.length === 0) {
+      const userResult = await pool.query('SELECT freepik_api_key FROM users WHERE id = $1', [keyInfo.user_id]);
+      if (userResult.rows.length > 0 && userResult.rows[0].freepik_api_key) {
+        allKeys.push({ key: userResult.rows[0].freepik_api_key, index: 0, name: 'personal' });
+        keySource = 'personal';
       }
+    }
+
+    if (allKeys.length === 0 && process.env.FREEPIK_API_KEY) {
+      allKeys.push({ key: process.env.FREEPIK_API_KEY, index: 0, name: 'global_fallback' });
+      keySource = 'global';
+    }
+    
+    if (allKeys.length === 0) {
+      return res.status(500).json({ error: 'Tidak ada API key yang tersedia di key pool. Hubungi admin.' });
     }
     
     const availableKeys = filterKeysByDailyQuota(allKeys, 'videogen');
@@ -3864,20 +3814,17 @@ app.post('/api/videogen/proxy', async (req, res) => {
         const errMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
         const isTrialExpired = typeof errMsg === 'string' && (errMsg.includes('free trial') || errMsg.includes('limit of the free'));
         
-        if (status === 429 || status === 402 || isTrialExpired) {
-          console.log(`[RETRY] Key ${currentKey.name} hit limit (${status}), trying next key...`);
+        if (status === 429 || status === 402 || status === 403 || isTrialExpired) {
+          console.log(`[VIDEOGEN] ❌ Key ${currentKey.name} DEAD (HTTP ${status}): ${errMsg} — marking exhausted & switching`);
           if (currentKey.isPool && currentKey.poolId) {
             const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP ${status}: ${errMsg}`);
             if (replacement) {
               availableKeys.push(replacement);
               maxKeyAttempts = Math.min(availableKeys.length, maxKeyAttempts + 1);
+              console.log(`[VIDEOGEN] ✅ Replaced with new pool key ${replacement.name}`);
+            } else {
+              console.log(`[VIDEOGEN] ⚠️ No replacement key available in pool`);
             }
-          }
-          continue;
-        } else if (status === 403) {
-          console.log(`[RETRY] Key ${currentKey.name} got 403, trying next key...`);
-          if (currentKey.isPool && currentKey.poolId) {
-            await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP 403: ${errMsg}`);
           }
           continue;
         } else {
