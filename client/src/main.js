@@ -6435,18 +6435,18 @@ async function loadAdsStudioProjectDetail(projectId) {
 }
 
 async function createAdsStudioProject() {
-  var nameInput = document.getElementById('adsProductName');
-  var descInput = document.getElementById('adsProductDesc');
-  var adTypeSelect = document.getElementById('adsAdType');
-  var formatSelect = document.getElementById('adsFormat');
-  var modelSelect = document.getElementById('adsVideoModel');
-  var durationSelect = document.getElementById('adsDuration');
-  var sceneCountSelect = document.getElementById('adsSceneCount');
-  var langSelect = document.getElementById('adsLanguage');
-  var voCheckbox = document.getElementById('adsVoiceOver');
-
-  var productName = nameInput ? nameInput.value.trim() : '';
+  var productName = state.adsStudio.newProject.productName || (document.getElementById('adsProductName') || {}).value || '';
+  productName = productName.trim();
   if (!productName) { alert('Masukkan nama produk!'); return; }
+
+  var productDesc = state.adsStudio.newProject.productDescription || (document.getElementById('adsProductDesc') || {}).value || '';
+  var adType = state.adsStudio.newProject.adType || 'soft_selling';
+  var format = state.adsStudio.newProject.format || 'shorts';
+  var videoModel = state.adsStudio.newProject.videoModel || 'wan-v2.6-pro';
+  var videoDuration = state.adsStudio.newProject.videoDuration || 5;
+  var sceneCount = state.adsStudio.newProject.sceneCount || 4;
+  var language = state.adsStudio.newProject.language || 'id';
+  var voiceOverEnabled = state.adsStudio.newProject.voiceOverEnabled || false;
 
   state.adsStudio.isCreating = true;
   render();
@@ -6454,14 +6454,14 @@ async function createAdsStudioProject() {
   try {
     var formData = new FormData();
     formData.append('productName', productName);
-    formData.append('productDescription', descInput ? descInput.value.trim() : '');
-    formData.append('adType', adTypeSelect ? adTypeSelect.value : 'soft_selling');
-    formData.append('format', formatSelect ? formatSelect.value : 'shorts');
-    formData.append('videoModel', modelSelect ? modelSelect.value : 'wan-v2.6-pro');
-    formData.append('videoDuration', durationSelect ? durationSelect.value : '5');
-    formData.append('sceneCount', sceneCountSelect ? sceneCountSelect.value : '4');
-    formData.append('language', langSelect ? langSelect.value : 'id');
-    formData.append('voiceOverEnabled', voCheckbox ? voCheckbox.checked : false);
+    formData.append('productDescription', productDesc.trim());
+    formData.append('adType', adType);
+    formData.append('format', format);
+    formData.append('videoModel', videoModel);
+    formData.append('videoDuration', String(videoDuration));
+    formData.append('sceneCount', String(sceneCount));
+    formData.append('language', language);
+    formData.append('voiceOverEnabled', String(voiceOverEnabled));
 
     if (state.adsStudio.newProject.characterImage) {
       formData.append('characterImage', state.adsStudio.newProject.characterImage);
