@@ -405,6 +405,32 @@ const state = {
       uploadProgress: null
     }
   },
+  adsStudio: {
+    projects: [],
+    currentProject: null,
+    currentScenes: [],
+    isLoading: false,
+    isCreating: false,
+    isGeneratingScript: false,
+    isProducing: false,
+    newProject: {
+      productName: '',
+      productDescription: '',
+      adType: 'soft_selling',
+      format: 'shorts',
+      videoModel: 'veo-3.1-fast',
+      videoDuration: 5,
+      sceneCount: 4,
+      language: 'id',
+      voiceOverEnabled: false,
+      characterImage: null,
+      characterImagePreview: null,
+      productImage: null,
+      productImagePreview: null
+    },
+    view: 'list',
+    _loaded: false
+  },
   sceneStudio: {
     prompts: [''],
     characterDesc: '',
@@ -3009,6 +3035,15 @@ function renderNavMenu() {
       </svg>
       Vidgen4
     </button>
+    <button class="nav-btn ${state.currentPage === 'adsStudio' ? 'active' : ''}" data-page="adsStudio">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <path d="M8 21h8"/>
+        <path d="M12 17v4"/>
+        <polygon points="10 7 10 13 15 10 10 7"/>
+      </svg>
+      Ads Studio
+    </button>
     <button class="nav-btn ${state.currentPage === 'automation' ? 'active' : ''}" data-page="automation">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2v4"/>
@@ -3125,6 +3160,7 @@ function renderMainContent() {
       state.currentPage === 'motion' ? renderMotionPage() :
       state.currentPage === 'voiceover' ? renderVoiceoverPage() :
       state.currentPage === 'admin' ? '' :
+      state.currentPage === 'adsStudio' ? renderAdsStudioPage() :
       state.currentPage === 'automation' ? renderAutomationPage() :
       state.currentPage === 'sceneStudio' ? renderSceneStudioPage() :
       state.currentPage === 'chat' ? renderChatPage() : renderVideoPage()}
@@ -6367,6 +6403,280 @@ async function generateSceneStudioBatch() {
   render();
 }
 
+// ============ ADS STUDIO PAGE ============
+
+async function loadAdsStudioProjects() {
+  if (state.adsStudio.isLoading) return;
+  state.adsStudio.isLoading = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/ads-studio/projects', { credentials: 'include' });
+    var data = await response.json();
+    state.adsStudio.projects = data.projects || [];
+    state.adsStudio._loaded = true;
+  } catch (err) {
+    console.error('Failed to load ads studio projects:', err);
+  }
+  state.adsStudio.isLoading = false;
+  render();
+}
+
+async function loadAdsStudioProjectDetail(projectId) {
+  try {
+    var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId, { credentials: 'include' });
+    var data = await response.json();
+    state.adsStudio.currentProject = data.project;
+    state.adsStudio.currentScenes = data.scenes || [];
+    state.adsStudio.view = 'detail';
+    render();
+  } catch (err) {
+    console.error('Failed to load ads studio project:', err);
+  }
+}
+
+async function createAdsStudioProject() {
+  var nameInput = document.getElementById('adsProductName');
+  var descInput = document.getElementById('adsProductDesc');
+  var adTypeSelect = document.getElementById('adsAdType');
+  var formatSelect = document.getElementById('adsFormat');
+  var modelSelect = document.getElementById('adsVideoModel');
+  var durationSelect = document.getElementById('adsDuration');
+  var sceneCountSelect = document.getElementById('adsSceneCount');
+  var langSelect = document.getElementById('adsLanguage');
+  var voCheckbox = document.getElementById('adsVoiceOver');
+
+  var productName = nameInput ? nameInput.value.trim() : '';
+  if (!productName) { alert('Masukkan nama produk!'); return; }
+
+  state.adsStudio.isCreating = true;
+  render();
+
+  try {
+    var formData = new FormData();
+    formData.append('productName', productName);
+    formData.append('productDescription', descInput ? descInput.value.trim() : '');
+    formData.append('adType', adTypeSelect ? adTypeSelect.value : 'soft_selling');
+    formData.append('format', formatSelect ? formatSelect.value : 'shorts');
+    formData.append('videoModel', modelSelect ? modelSelect.value : 'veo-3.1-fast');
+    formData.append('videoDuration', durationSelect ? durationSelect.value : '5');
+    formData.append('sceneCount', sceneCountSelect ? sceneCountSelect.value : '4');
+    formData.append('language', langSelect ? langSelect.value : 'id');
+    formData.append('voiceOverEnabled', voCheckbox ? voCheckbox.checked : false);
+
+    if (state.adsStudio.newProject.characterImage) {
+      formData.append('characterImage', state.adsStudio.newProject.characterImage);
+    }
+    if (state.adsStudio.newProject.productImage) {
+      formData.append('productImage', state.adsStudio.newProject.productImage);
+    }
+
+    var response = await fetch(API_URL + '/api/ads-studio/projects', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData
+    });
+    var data = await response.json();
+    if (data.success) {
+      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'veo-3.1-fast', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
+      state.adsStudio._loaded = false;
+      loadAdsStudioProjects();
+      loadAdsStudioProjectDetail(data.projectId);
+    } else {
+      alert(data.error || 'Gagal membuat project');
+    }
+  } catch (err) {
+    alert('Gagal membuat project: ' + err.message);
+  }
+  state.adsStudio.isCreating = false;
+  render();
+}
+
+async function generateAdsStudioScript(projectId) {
+  state.adsStudio.isGeneratingScript = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/generate-script', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    var data = await response.json();
+    if (!data.success) alert(data.error || 'Gagal generate script');
+  } catch (err) {
+    alert('Gagal generate script: ' + err.message);
+  }
+  state.adsStudio.isGeneratingScript = false;
+  render();
+}
+
+async function startAdsStudioProduction(projectId) {
+  var scenes = state.adsStudio.currentScenes;
+  for (var i = 0; i < scenes.length; i++) {
+    var narrationEl = document.querySelector('.ads-scene-narration[data-scene="' + scenes[i].scene_index + '"]');
+    var overlayEl = document.querySelector('.ads-scene-overlay[data-scene="' + scenes[i].scene_index + '"]');
+    var visualEl = document.querySelector('.ads-scene-visual[data-scene="' + scenes[i].scene_index + '"]');
+    var updates = {};
+    if (narrationEl && narrationEl.value !== scenes[i].narration) updates.narration = narrationEl.value;
+    if (overlayEl && overlayEl.value !== scenes[i].text_overlay) updates.textOverlay = overlayEl.value;
+    if (visualEl && visualEl.value !== scenes[i].visual_prompt) updates.visualPrompt = visualEl.value;
+    if (Object.keys(updates).length > 0) {
+      try {
+        await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/scenes/' + scenes[i].scene_index, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch (e) { console.error('Failed to save scene edit:', e); }
+    }
+  }
+
+  state.adsStudio.isProducing = true;
+  render();
+  try {
+    var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/start', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    var data = await response.json();
+    if (!data.success) alert(data.error || 'Gagal memulai produksi');
+  } catch (err) {
+    alert('Gagal memulai produksi: ' + err.message);
+  }
+  state.adsStudio.isProducing = false;
+  render();
+}
+
+async function mergeAdsStudioProject(projectId) {
+  try {
+    var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/merge', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    var data = await response.json();
+    if (!data.success) alert(data.error || 'Gagal merge');
+  } catch (err) {
+    alert('Gagal merge: ' + err.message);
+  }
+}
+
+async function deleteAdsStudioProject(projectId) {
+  if (!confirm('Hapus project ads ini?')) return;
+  try {
+    await fetch(API_URL + '/api/ads-studio/projects/' + projectId, { method: 'DELETE', credentials: 'include' });
+    state.adsStudio.view = 'list';
+    state.adsStudio.currentProject = null;
+    state.adsStudio.currentScenes = [];
+    state.adsStudio._loaded = false;
+    loadAdsStudioProjects();
+  } catch (err) {
+    alert('Gagal menghapus: ' + err.message);
+  }
+}
+
+function attachAdsStudioListeners() {
+  var createBtn = document.getElementById('adsCreateBtn');
+  if (createBtn) {
+    createBtn.addEventListener('click', function() {
+      state.adsStudio.newProject.productName = (document.getElementById('adsProductName') || {}).value || '';
+      state.adsStudio.newProject.productDescription = (document.getElementById('adsProductDesc') || {}).value || '';
+      createAdsStudioProject();
+    });
+  }
+
+  var charBtn = document.getElementById('adsCharBtn');
+  if (charBtn) charBtn.addEventListener('click', function() { document.getElementById('adsCharImage').click(); });
+  var charInput = document.getElementById('adsCharImage');
+  if (charInput) charInput.addEventListener('change', function(e) {
+    if (e.target.files && e.target.files[0]) {
+      state.adsStudio.newProject.characterImage = e.target.files[0];
+      var reader = new FileReader();
+      reader.onload = function(ev) { state.adsStudio.newProject.characterImagePreview = ev.target.result; render(); };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  });
+  var charRemove = document.getElementById('adsCharRemove');
+  if (charRemove) charRemove.addEventListener('click', function() {
+    state.adsStudio.newProject.characterImage = null;
+    state.adsStudio.newProject.characterImagePreview = null;
+    render();
+  });
+
+  var prodBtn = document.getElementById('adsProdBtn');
+  if (prodBtn) prodBtn.addEventListener('click', function() { document.getElementById('adsProdImage').click(); });
+  var prodInput = document.getElementById('adsProdImage');
+  if (prodInput) prodInput.addEventListener('change', function(e) {
+    if (e.target.files && e.target.files[0]) {
+      state.adsStudio.newProject.productImage = e.target.files[0];
+      var reader = new FileReader();
+      reader.onload = function(ev) { state.adsStudio.newProject.productImagePreview = ev.target.result; render(); };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  });
+  var prodRemove = document.getElementById('adsProdRemove');
+  if (prodRemove) prodRemove.addEventListener('click', function() {
+    state.adsStudio.newProject.productImage = null;
+    state.adsStudio.newProject.productImagePreview = null;
+    render();
+  });
+
+  var adsAdType = document.getElementById('adsAdType');
+  if (adsAdType) adsAdType.addEventListener('change', function() { state.adsStudio.newProject.adType = adsAdType.value; });
+  var adsFormat = document.getElementById('adsFormat');
+  if (adsFormat) adsFormat.addEventListener('change', function() { state.adsStudio.newProject.format = adsFormat.value; });
+  var adsVideoModel = document.getElementById('adsVideoModel');
+  if (adsVideoModel) adsVideoModel.addEventListener('change', function() { state.adsStudio.newProject.videoModel = adsVideoModel.value; });
+  var adsDuration = document.getElementById('adsDuration');
+  if (adsDuration) adsDuration.addEventListener('change', function() { state.adsStudio.newProject.videoDuration = parseInt(adsDuration.value); });
+  var adsSceneCount = document.getElementById('adsSceneCount');
+  if (adsSceneCount) adsSceneCount.addEventListener('change', function() { state.adsStudio.newProject.sceneCount = parseInt(adsSceneCount.value); });
+  var adsLanguage = document.getElementById('adsLanguage');
+  if (adsLanguage) adsLanguage.addEventListener('change', function() { state.adsStudio.newProject.language = adsLanguage.value; });
+  var adsVoiceOver = document.getElementById('adsVoiceOver');
+  if (adsVoiceOver) adsVoiceOver.addEventListener('change', function() { state.adsStudio.newProject.voiceOverEnabled = adsVoiceOver.checked; });
+  var adsProductNameInput = document.getElementById('adsProductName');
+  if (adsProductNameInput) adsProductNameInput.addEventListener('input', function() { state.adsStudio.newProject.productName = adsProductNameInput.value; });
+  var adsProductDescInput = document.getElementById('adsProductDesc');
+  if (adsProductDescInput) adsProductDescInput.addEventListener('input', function() { state.adsStudio.newProject.productDescription = adsProductDescInput.value; });
+
+  var backBtn = document.getElementById('adsBackBtn');
+  if (backBtn) backBtn.addEventListener('click', function() {
+    state.adsStudio.view = 'list';
+    state.adsStudio.currentProject = null;
+    state.adsStudio.currentScenes = [];
+    render();
+  });
+
+  var genScriptBtn = document.getElementById('adsGenScriptBtn');
+  if (genScriptBtn) genScriptBtn.addEventListener('click', function() {
+    generateAdsStudioScript(genScriptBtn.dataset.projectId);
+  });
+
+  var startBtn = document.getElementById('adsStartProductionBtn');
+  if (startBtn) startBtn.addEventListener('click', function() {
+    startAdsStudioProduction(startBtn.dataset.projectId);
+  });
+
+  var deleteBtn = document.getElementById('adsDeleteBtn');
+  if (deleteBtn) deleteBtn.addEventListener('click', function() {
+    deleteAdsStudioProject(deleteBtn.dataset.projectId);
+  });
+
+  document.querySelectorAll('[data-ads-project]').forEach(function(card) {
+    card.addEventListener('click', function() {
+      loadAdsStudioProjectDetail(card.dataset.adsProject);
+    });
+  });
+
+  document.querySelectorAll('.ads-merge-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      mergeAdsStudioProject(btn.dataset.projectId);
+    });
+  });
+}
+
 // ============ AUTOMATION PAGE ============
 
 async function loadAutomationProjects() {
@@ -6631,6 +6941,263 @@ function getAutomationStatusBadge(status) {
   };
   var info = map[status] || { label: status, cls: 'badge-draft' };
   return '<span class="auto-badge ' + info.cls + '">' + info.label + '</span>';
+}
+
+function getAdsStudioStatusBadge(status) {
+  var map = {
+    'draft': { label: 'Draft', cls: 'badge-draft' },
+    'generating_script': { label: 'Generating...', cls: 'badge-processing' },
+    'script_ready': { label: 'Script Ready', cls: 'badge-ready' },
+    'script_failed': { label: 'Script Failed', cls: 'badge-failed' },
+    'producing': { label: 'Producing...', cls: 'badge-processing' },
+    'merging': { label: 'Merging...', cls: 'badge-processing' },
+    'completed': { label: 'Completed', cls: 'badge-completed' },
+    'production_failed': { label: 'Failed', cls: 'badge-failed' }
+  };
+  var info = map[status] || { label: status, cls: 'badge-draft' };
+  return '<span class="auto-badge ' + info.cls + '">' + info.label + '</span>';
+}
+
+function renderAdsStudioPage() {
+  if (!state.adsStudio._loaded && !state.adsStudio.isLoading) {
+    loadAdsStudioProjects();
+  }
+
+  if (state.adsStudio.view === 'detail' && state.adsStudio.currentProject) {
+    return renderAdsStudioDetailPage();
+  }
+
+  var html = '<div class="container">';
+  html += '<div class="hero">';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="10 7 10 13 15 10 10 7"/></svg> Ads Creator</div>';
+  html += '<h1 class="gradient-title">Ads Studio</h1>';
+  html += '<p class="hero-subtitle">Buat iklan produk affiliate otomatis dengan AI.</p>';
+  html += '</div>';
+
+  html += '<div class="section-card">';
+  html += '<div class="ads-create-form">';
+  html += '<input type="text" class="form-input" id="adsProductName" placeholder="Nama produk... contoh: Serum Vitamin C, Sepatu Running Nike" value="' + escapeHtml(state.adsStudio.newProject.productName || '') + '"/>';
+  html += '<textarea class="form-input" id="adsProductDesc" rows="2" placeholder="Deskripsi produk (keunggulan, target market, harga...)">' + escapeHtml(state.adsStudio.newProject.productDescription || '') + '</textarea>';
+
+  html += '<div class="ads-image-row">';
+  html += '<div class="ads-image-upload">';
+  html += '<input type="file" id="adsCharImage" accept="image/*" style="display:none"/>';
+  if (state.adsStudio.newProject.characterImagePreview) {
+    html += '<div class="ads-ref-preview" id="adsCharPreviewWrap">';
+    html += '<img src="' + state.adsStudio.newProject.characterImagePreview + '" class="ads-ref-thumb"/>';
+    html += '<button class="ads-ref-remove" id="adsCharRemove">&times;</button>';
+    html += '</div>';
+  } else {
+    html += '<button class="btn-secondary ads-ref-btn" id="adsCharBtn">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+    html += ' Karakter';
+    html += '</button>';
+  }
+  html += '</div>';
+
+  html += '<div class="ads-image-upload">';
+  html += '<input type="file" id="adsProdImage" accept="image/*" style="display:none"/>';
+  if (state.adsStudio.newProject.productImagePreview) {
+    html += '<div class="ads-ref-preview" id="adsProdPreviewWrap">';
+    html += '<img src="' + state.adsStudio.newProject.productImagePreview + '" class="ads-ref-thumb"/>';
+    html += '<button class="ads-ref-remove" id="adsProdRemove">&times;</button>';
+    html += '</div>';
+  } else {
+    html += '<button class="btn-secondary ads-ref-btn" id="adsProdBtn">';
+    html += '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+    html += ' Produk';
+    html += '</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  html += '<div class="ads-settings-row">';
+  html += '<select class="form-input ads-select" id="adsAdType">';
+  html += '<option value="soft_selling"' + (state.adsStudio.newProject.adType === 'soft_selling' ? ' selected' : '') + '>Soft Selling</option>';
+  html += '<option value="hard_selling"' + (state.adsStudio.newProject.adType === 'hard_selling' ? ' selected' : '') + '>Hard Selling</option>';
+  html += '</select>';
+  html += '<select class="form-input ads-select" id="adsFormat">';
+  html += '<option value="shorts"' + (state.adsStudio.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts</option>';
+  html += '<option value="landscape"' + (state.adsStudio.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
+  html += '</select>';
+  html += '<select class="form-input ads-select" id="adsVideoModel">';
+  html += '<option value="veo-3.1-fast"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
+  html += '<option value="kling-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
+  html += '<option value="kling-v3"' + (state.adsStudio.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
+  html += '</select>';
+  html += '<select class="form-input ads-select" id="adsDuration">';
+  html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
+  html += '<option value="10"' + (state.adsStudio.newProject.videoDuration === 10 ? ' selected' : '') + '>10 detik</option>';
+  html += '</select>';
+  html += '<select class="form-input ads-select" id="adsSceneCount">';
+  var scnOpts = [3, 4, 5, 6];
+  for (var si = 0; si < scnOpts.length; si++) {
+    html += '<option value="' + scnOpts[si] + '"' + (state.adsStudio.newProject.sceneCount === scnOpts[si] ? ' selected' : '') + '>' + scnOpts[si] + ' scene</option>';
+  }
+  html += '</select>';
+  html += '<select class="form-input ads-select" id="adsLanguage">';
+  html += '<option value="id"' + (state.adsStudio.newProject.language === 'id' ? ' selected' : '') + '>ID</option>';
+  html += '<option value="en"' + (state.adsStudio.newProject.language === 'en' ? ' selected' : '') + '>EN</option>';
+  html += '</select>';
+  html += '</div>';
+
+  html += '<div class="ads-settings-row">';
+  html += '<label class="ads-vo-toggle"><input type="checkbox" id="adsVoiceOver"' + (state.adsStudio.newProject.voiceOverEnabled ? ' checked' : '') + '/> Voice Over</label>';
+  html += '<button class="btn-primary ads-go-btn" id="adsCreateBtn"' + (state.adsStudio.isCreating ? ' disabled' : '') + '>';
+  html += state.adsStudio.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+  html += '</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  if (state.adsStudio.isLoading) {
+    html += '<div class="loading-state"><span class="spinner"></span> Memuat...</div>';
+  } else if (state.adsStudio.projects.length > 0) {
+    html += '<div class="auto-project-list">';
+    state.adsStudio.projects.forEach(function(p) {
+      html += '<div class="auto-project-card" data-ads-project="' + p.project_id + '">';
+      html += '<div class="auto-project-left">';
+      html += '<div class="auto-project-title">' + escapeHtml(p.title || p.product_name) + '</div>';
+      html += '<div class="auto-project-sub">' + escapeHtml(p.ad_type === 'hard_selling' ? 'Hard Sell' : 'Soft Sell') + ' &middot; ' + (p.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + p.scene_count + ' scene &middot; ' + new Date(p.created_at).toLocaleDateString() + '</div>';
+      html += '</div>';
+      html += getAdsStudioStatusBadge(p.status);
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderAdsStudioDetailPage() {
+  var project = state.adsStudio.currentProject;
+  var scenes = state.adsStudio.currentScenes;
+
+  var html = '<div class="container">';
+  html += '<div class="auto-detail-top">';
+  html += '<button class="auto-back-link" id="adsBackBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>';
+  html += '<div class="auto-detail-top-info">';
+  html += '<h2 class="auto-detail-name">' + escapeHtml(project.title || project.product_name) + '</h2>';
+  var detailSub = (project.ad_type === 'hard_selling' ? 'Hard Sell' : 'Soft Sell') + ' &middot; ' + (project.format === 'shorts' ? 'Shorts' : 'Landscape') + ' &middot; ' + escapeHtml(project.video_model) + ' &middot; ' + (project.language === 'id' ? 'ID' : 'EN');
+  if (project.voice_over_enabled) detailSub += ' &middot; <span style="color:var(--accent)">&#127908; Voice Over</span>';
+  if (project.character_image_url) detailSub += ' &middot; <span style="color:var(--accent)">&#128100; Karakter</span>';
+  if (project.product_image_url) detailSub += ' &middot; <span style="color:var(--accent)">&#128230; Produk</span>';
+  html += '<span class="auto-detail-sub">' + detailSub + '</span>';
+  html += '</div>';
+  html += '<div class="auto-detail-top-actions">';
+  html += getAdsStudioStatusBadge(project.status);
+  html += '<button class="btn-danger-sm" id="adsDeleteBtn" data-project-id="' + project.project_id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+  html += '</div></div>';
+
+  if (project.status === 'draft' || project.status === 'script_failed') {
+    html += '<div class="section-card auto-action-simple">';
+    if (project.status === 'script_failed' && project.error_message) {
+      html += '<div class="error-box">' + escapeHtml(project.error_message) + '</div>';
+    }
+    html += '<p>AI akan generate script iklan ' + project.scene_count + ' scene untuk produk ini.</p>';
+    html += '<button class="btn-primary" id="adsGenScriptBtn" data-project-id="' + project.project_id + '"' + (state.adsStudio.isGeneratingScript ? ' disabled' : '') + '>';
+    html += state.adsStudio.isGeneratingScript ? '<span class="spinner"></span> Generating...' : 'Generate Script';
+    html += '</button>';
+    html += '</div>';
+  }
+
+  if (project.status === 'generating_script') {
+    html += '<div class="section-card auto-action-simple">';
+    html += '<div class="processing-indicator"><span class="spinner"></span> AI sedang menulis script iklan...</div>';
+    html += '</div>';
+  }
+
+  if (scenes.length > 0) {
+    var completedCount = scenes.filter(function(s) { return s.status === 'completed'; }).length;
+    var failedCount = scenes.filter(function(s) { return s.status === 'failed'; }).length;
+    var processingCount = scenes.filter(function(s) { return s.status === 'generating_video' || s.status === 'generating_image'; }).length;
+
+    if (project.status === 'producing' || project.status === 'completed' || project.status === 'production_failed') {
+      html += '<div class="auto-progress-wrap">';
+      html += '<div class="auto-progress-bar"><div class="auto-progress-fill" style="width: ' + (scenes.length > 0 ? (completedCount / scenes.length * 100) : 0) + '%"></div></div>';
+      html += '<span class="auto-progress-label">' + completedCount + '/' + scenes.length;
+      if (failedCount > 0) html += ' &middot; ' + failedCount + ' gagal';
+      if (processingCount > 0) html += ' &middot; ' + processingCount + ' proses';
+      html += '</span></div>';
+    }
+
+    if (project.status === 'script_ready') {
+      html += '<div class="auto-start-bar">';
+      html += '<span>Script siap. Review lalu mulai produksi.</span>';
+      html += '<button class="btn-primary" id="adsStartProductionBtn" data-project-id="' + project.project_id + '"' + (state.adsStudio.isProducing ? ' disabled' : '') + '>';
+      html += state.adsStudio.isProducing ? '<span class="spinner"></span>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+      html += '</button></div>';
+    }
+
+    if (project.status === 'production_failed') {
+      html += '<div class="auto-start-bar">';
+      html += '<span>Ada scene gagal. Retry produksi.</span>';
+      html += '<button class="btn-primary" id="adsStartProductionBtn" data-project-id="' + project.project_id + '">Restart</button>';
+      html += '</div>';
+    }
+
+    html += '<div class="auto-scenes-list">';
+    scenes.forEach(function(scene) {
+      html += '<div class="auto-scene-item scene-status-' + scene.status + '">';
+      html += '<div class="auto-scene-top">';
+      html += '<span class="auto-scene-num">Scene ' + (scene.scene_index + 1) + '</span>';
+      html += getAdsStudioStatusBadge(scene.status);
+      html += '</div>';
+
+      if (scene.image_url && !scene.video_url) {
+        html += '<div class="auto-scene-image"><img src="' + escapeHtml(scene.image_url) + '" alt="Scene ' + (scene.scene_index + 1) + '"/></div>';
+      }
+      if (scene.video_url) {
+        html += '<div class="auto-scene-video"><video src="' + scene.video_url + '" controls preload="metadata"></video></div>';
+      }
+
+      if (scene.narration) {
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-ta ads-scene-narration" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Narration">' + escapeHtml(scene.narration) + '</textarea>';
+        } else {
+          html += '<p class="auto-scene-text"><strong>Narasi:</strong> ' + escapeHtml(scene.narration) + '</p>';
+        }
+      }
+      if (scene.text_overlay) {
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-ta ads-scene-overlay" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="1" placeholder="Text overlay">' + escapeHtml(scene.text_overlay) + '</textarea>';
+        } else {
+          html += '<p class="auto-scene-text"><strong>&#128196; Overlay:</strong> ' + escapeHtml(scene.text_overlay) + '</p>';
+        }
+      }
+      if (scene.visual_prompt) {
+        if (project.status === 'script_ready') {
+          html += '<textarea class="form-input auto-scene-ta ads-scene-visual" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Visual prompt">' + escapeHtml(scene.visual_prompt) + '</textarea>';
+        } else {
+          html += '<p class="auto-scene-text auto-scene-vp"><strong>Visual:</strong> ' + escapeHtml(scene.visual_prompt) + '</p>';
+        }
+      }
+      if (scene.status === 'failed' && scene.error_message) {
+        html += '<div class="error-box">' + escapeHtml(scene.error_message) + '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  var hasMultipleVideos = scenes.filter(function(s) { return s.video_url; }).length > 1;
+  if (hasMultipleVideos && (project.status === 'completed' || project.status === 'production_failed') && !project.final_video_url) {
+    html += '<div class="section-card" style="text-align:center;padding:16px;">';
+    html += '<button class="btn-primary ads-merge-btn" data-project-id="' + project.project_id + '">Gabungkan Semua Video</button>';
+    html += '</div>';
+  }
+  if (project.final_video_url) {
+    html += '<div class="section-card">';
+    html += '<h3 style="margin-bottom:8px;">Video Iklan Final</h3>';
+    html += '<video src="' + escapeHtml(project.final_video_url) + '" controls style="width:100%;max-height:400px;border-radius:8px;"></video>';
+    html += '<div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">';
+    html += '<a href="' + escapeHtml(project.final_video_url) + '" download class="btn-secondary" style="text-decoration:none;">Download</a>';
+    html += '<button class="btn-secondary ads-merge-btn" data-project-id="' + project.project_id + '">Re-merge</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 function renderAutomationPage() {
@@ -7783,6 +8350,8 @@ function attachEventListeners() {
     attachMotionEventListeners();
   } else if (state.currentPage === 'voiceover') {
     attachVoiceoverEventListeners();
+  } else if (state.currentPage === 'adsStudio') {
+    attachAdsStudioListeners();
   } else if (state.currentPage === 'automation') {
     attachAutomationListeners();
   } else if (state.currentPage === 'sceneStudio') {
@@ -13556,6 +14125,38 @@ function handleSSEEvent(data) {
           showToast('Upload berhasil! Video sudah di YouTube', 'success');
         } else {
           showToast('Upload gagal: ' + (data.error || 'Unknown error'), 'error');
+        }
+        render(true);
+      }
+      break;
+
+    case 'ads_studio_update':
+      if (data.projectId) {
+        if (state.adsStudio.currentProject && state.adsStudio.currentProject.project_id === data.projectId) {
+          state.adsStudio.currentProject.status = data.status;
+          if (data.finalVideoUrl) state.adsStudio.currentProject.final_video_url = data.finalVideoUrl;
+          if (data.status === 'completed' || data.status === 'production_failed' || data.status === 'script_ready' || data.status === 'script_failed') {
+            loadAdsStudioProjectDetail(data.projectId);
+          }
+        }
+        var adsProj = state.adsStudio.projects.find(function(p) { return p.project_id === data.projectId; });
+        if (adsProj) adsProj.status = data.status;
+        if (data.status === 'completed') showToast('Ads project selesai!', 'success');
+        if (data.status === 'production_failed') showToast('Ads project gagal', 'error');
+        if (data.status === 'script_ready') showToast('Ad script berhasil di-generate!', 'success');
+        if (data.status === 'script_failed') showToast('Gagal generate ad script', 'error');
+        render(true);
+      }
+      break;
+
+    case 'ads_studio_scene_update':
+      if (data.projectId && state.adsStudio.currentProject && state.adsStudio.currentProject.project_id === data.projectId) {
+        var adsScene = state.adsStudio.currentScenes.find(function(s) { return s.scene_index === data.sceneIndex; });
+        if (adsScene) {
+          adsScene.status = data.status;
+          if (data.imageUrl) adsScene.image_url = data.imageUrl;
+          if (data.videoUrl) adsScene.video_url = data.videoUrl;
+          if (data.error) adsScene.error_message = data.error;
         }
         render(true);
       }

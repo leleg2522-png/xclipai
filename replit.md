@@ -145,6 +145,19 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Languages: Bahasa Indonesia, English
   - SSE events: automation_update, automation_scene_update, youtube_upload_start, youtube_upload_progress, youtube_upload_complete
   - **YouTube Auto-Upload**: OAuth2 integration to upload completed scene videos directly to YouTube. Requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET env vars. Tokens stored in `youtube_tokens` DB table. OAuth popup flow with channel name display. Upload form with title, description, tags, privacy setting. Real-time SSE progress updates per scene upload.
+- **Ads Studio (AI Affiliate Ad Creator)**: Creates product advertisement videos with AI. User provides product name, description, optional character reference image + product image. AI generates ad script (soft/hard selling) with multiple scenes, then produces scene images and videos. Features include:
+  - Step 1: Create project (product info, ad type soft/hard, format shorts/landscape, video model, duration, scene count, language, voice over toggle)
+  - Step 2: AI generates ad script via ApiModels Claude Sonnet (with Gemini/GPT fallbacks) - narration, text overlay, visual prompt per scene
+  - Step 3: User can review/edit script scenes before production
+  - Step 4: Start production - generates IMAGE per scene (ApiModels nanobanana-2-beta), then generates VIDEO from image (ApiModels or Freepik)
+  - Step 5: Merge all scene videos into final ad video via FFmpeg
+  - Character reference + product image upload support (FormData with multer)
+  - Video models: Veo 3.1 Fast, Kling 2.6 Pro, Kling V3
+  - Real-time SSE updates: ads_studio_update, ads_studio_scene_update
+  - Database tables: ads_studio_projects, ads_studio_scenes
+  - API endpoints: CRUD projects, generate-script, update scene, start production, merge
+  - Languages: Bahasa Indonesia, English
+  - Voice over toggle (UI + DB ready, TTS pipeline not yet implemented)
 - **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
 - **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
 - **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.

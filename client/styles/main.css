@@ -7073,10 +7073,28 @@ textarea.form-input {
 }
 .yt-video-link:hover { text-decoration: underline; }
 
+/* ============ ADS STUDIO ============ */
+.ads-create-form { display: flex; flex-direction: column; gap: 10px; }
+.ads-image-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ads-image-upload { position: relative; }
+.ads-ref-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 8px 14px; border-radius: 8px; }
+.ads-ref-preview { position: relative; display: inline-block; border-radius: 8px; overflow: hidden; border: 2px solid var(--border); }
+.ads-ref-thumb { width: 64px; height: 64px; object-fit: cover; display: block; }
+.ads-ref-remove { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.7); color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.ads-ref-remove:hover { background: var(--error); }
+.ads-settings-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ads-select { min-width: 90px; padding: 8px 10px; font-size: 13px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); }
+.ads-vo-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.ads-vo-toggle input { accent-color: var(--accent); }
+.ads-go-btn { padding: 10px 18px; border-radius: 10px; display: flex; align-items: center; justify-content: center; min-width: 44px; }
+.ads-merge-btn { padding: 10px 20px; font-size: 14px; font-weight: 600; }
+
 @media (max-width: 768px) {
   .auto-settings-row { flex-wrap: wrap; }
   .auto-select { min-width: 70px; }
   .auto-detail-top { flex-wrap: wrap; }
   .auto-start-bar { flex-direction: column; gap: 8px; text-align: center; }
   .yt-form-row { flex-direction: column; }
+  .ads-settings-row { gap: 6px; }
+  .ads-select { min-width: 70px; font-size: 12px; }
 }
