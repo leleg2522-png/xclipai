@@ -3009,18 +3009,63 @@ async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
     const httpStatus = e.response?.status;
     const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
     
-    if (isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
+    if (httpStatus === 402 || httpStatus === 429 ||
+        isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
       const keyName = usedKeyName || (apiKey ? `key_${apiKey.slice(-6)}` : 'unknown');
-      console.log(`[MOTION-EXPIRED] Key ${keyName} free trial habis (detected during poll), blacklisting`);
-      markMotionKeyExpired(keyName);
-      return { status: 'failed', error: 'API key free trial habis' };
+      console.log(`[MOTION-POLL] Key ${keyName} hit limit (HTTP ${httpStatus}) during poll for ${taskId}, trying fallback key...`);
+      if (isFreepikTrialExpired(errMsg)) markMotionKeyExpired(keyName);
+      else markMotionKeyRateLimited(keyName);
+
+      const fallbackKey = await pool.query(
+        `SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') AND api_key != $1 ORDER BY usage_count ASC LIMIT 1`,
+        [apiKey]
+      );
+      if (fallbackKey.rows.length > 0) {
+        try {
+          const retryResp = await makeFreepikRequest('GET', `https://api.freepik.com${primaryEndpoint}`, fallbackKey.rows[0].api_key, null, true, taskId, 'decodo');
+          if (retryResp.data && typeof retryResp.data === 'object') {
+            const taskData = retryResp.data.data || retryResp.data;
+            const retryStatus = taskData.status || '';
+            if (retryStatus === 'COMPLETED' || retryStatus === 'completed') {
+              const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
+                || taskData.video?.url || taskData.result?.url || taskData.url;
+              if (videoUrl) return { status: 'completed', url: videoUrl };
+            }
+            if (retryStatus === 'FAILED' || retryStatus === 'failed') {
+              return { status: 'failed', error: taskData.error_message || taskData.error || 'Generation failed' };
+            }
+            return { status: 'processing' };
+          }
+        } catch (retryErr) {}
+      }
+      return { status: 'processing' };
     }
     if (httpStatus === 403) {
       const respStr = (e.response?.data || '').toString();
       if (respStr.includes('Access Denied') || respStr.includes('edgesuite')) {
         return { status: 'processing' };
       }
-      console.log(`[MOTION] Poll ${taskId} → 403 Forbidden. Relying on webhook.`);
+      const keyName = usedKeyName || (apiKey ? `key_${apiKey.slice(-6)}` : 'unknown');
+      console.log(`[MOTION-POLL] Key ${keyName} got 403 during poll for ${taskId}, trying fallback...`);
+
+      const fallbackKey403 = await pool.query(
+        `SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') AND api_key != $1 ORDER BY usage_count ASC LIMIT 1`,
+        [apiKey]
+      );
+      if (fallbackKey403.rows.length > 0) {
+        try {
+          const retryResp = await makeFreepikRequest('GET', `https://api.freepik.com${primaryEndpoint}`, fallbackKey403.rows[0].api_key, null, true, taskId, 'decodo');
+          if (retryResp.data && typeof retryResp.data === 'object') {
+            const taskData = retryResp.data.data || retryResp.data;
+            const retryStatus = taskData.status || '';
+            if (retryStatus === 'COMPLETED' || retryStatus === 'completed') {
+              const videoUrl = (taskData.generated && taskData.generated.length > 0 ? taskData.generated[0] : null)
+                || taskData.video?.url || taskData.result?.url || taskData.url;
+              if (videoUrl) return { status: 'completed', url: videoUrl };
+            }
+          }
+        } catch (retryErr) {}
+      }
       return { status: 'forbidden' };
     }
     if (httpStatus === 404) {
@@ -3035,7 +3080,7 @@ async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   return { status: 'processing' };
 }
 
-async function pollFreepikVideoTask(taskId, apiKey, model) {
+async function pollFreepikVideoTask(taskId, apiKey, model, usedKeyName) {
   const vidgen3Endpoints = {
     'minimax-live': '/v1/ai/image-to-video/minimax-live',
     'seedance-1.5-pro-1080p': '/v1/ai/video/seedance-1-5-pro-1080p',
@@ -3095,7 +3140,27 @@ async function pollFreepikVideoTask(taskId, apiKey, model) {
     );
     const result = parseResponse(pollResponse.data);
     if (result) return result;
-  } catch (e) {}
+  } catch (e) {
+    const httpStatus = e.response?.status;
+    const errMsg = e.response?.data?.message || e.response?.data?.detail || e.message || '';
+    if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403 ||
+        isFreepikTrialExpired(errMsg) || isFreepikTrialExpired(JSON.stringify(e.response?.data || ''))) {
+      const keyName = usedKeyName || (apiKey ? `key_${apiKey.slice(-6)}` : 'unknown');
+      console.log(`[VIDGEN-POLL] Key ${keyName} hit limit (HTTP ${httpStatus}) during poll for ${taskId}, trying fallback key...`);
+
+      const fallbackKey = await pool.query(
+        `SELECT api_key FROM freepik_key_pool WHERE status IN ('available', 'assigned') AND api_key != $1 ORDER BY usage_count ASC LIMIT 1`,
+        [apiKey]
+      );
+      if (fallbackKey.rows.length > 0) {
+        try {
+          const retryResp = await makeFreepikRequest('GET', `https://api.freepik.com${endpoint}`, fallbackKey.rows[0].api_key, null, true, taskId, 'decodo');
+          const retryResult = parseResponse(retryResp.data);
+          if (retryResult) return retryResult;
+        } catch (retryErr) {}
+      }
+    }
+  }
   return { status: 'processing' };
 }
 
@@ -3141,7 +3206,7 @@ setInterval(async () => {
       } else if (task.apiType === 'freepik-motion') {
         result = await pollFreepikMotionTask(taskId, task.apiKey, task.model, task.usedKeyName);
       } else if (task.apiType === 'freepik-video') {
-        result = await pollFreepikVideoTask(taskId, task.apiKey, task.model);
+        result = await pollFreepikVideoTask(taskId, task.apiKey, task.model, task.usedKeyName);
       }
       
       if (!result) continue;
@@ -11510,15 +11575,18 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   return { success: false, fallback: true, error: 'All keys exhausted after retries' };
 }
 
-async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
+async function pollFreepikAutomationTask(taskId, apiKey, endpoint, userId, feature) {
   const pollEndpoint = endpoint.replace(/-pro$|-std$/, '');
+  let currentApiKey = apiKey;
+  let consecutiveKeyErrors = 0;
+
   for (let attempt = 0; attempt < 720; attempt++) {
     await new Promise(r => setTimeout(r, attempt < 60 ? 5000 : 8000));
     try {
       const proxy = getNextProxy();
       if (proxy) await waitForProxySlot(proxy);
       const axiosConfig = {
-        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': apiKey },
+        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': currentApiKey },
         timeout: 30000
       };
       applyProxyToConfig(axiosConfig, proxy);
@@ -11526,6 +11594,7 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
         `https://api.freepik.com${pollEndpoint}/${taskId}`,
         axiosConfig
       );
+      consecutiveKeyErrors = 0;
       const data = resp.data?.data || resp.data;
       const status = (data?.status || '').toUpperCase();
       
@@ -11541,6 +11610,54 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint) {
         return { status: 'failed', error: errMsg };
       }
     } catch (pollErr) {
+      const httpStatus = pollErr.response?.status;
+      const errMsg = pollErr.response?.data?.message || pollErr.response?.data?.detail || pollErr.message || '';
+
+      if (httpStatus === 402 || httpStatus === 429 || httpStatus === 403 ||
+          (typeof errMsg === 'string' && (errMsg.includes('free trial') || errMsg.includes('limit')))) {
+        consecutiveKeyErrors++;
+        console.log(`[KEY-POOL] Poll key error HTTP ${httpStatus} for task ${taskId}, switching key (error #${consecutiveKeyErrors})...`);
+
+        if (userId && feature) {
+          const exhaustedKey = await pool.query(
+            `SELECT id FROM freepik_key_pool WHERE api_key = $1 AND status = 'assigned' LIMIT 1`, [currentApiKey]
+          );
+          if (exhaustedKey.rows.length > 0) {
+            await markKeyExhausted(exhaustedKey.rows[0].id, `Poll HTTP ${httpStatus}: ${errMsg}`);
+          }
+          const newKey = await getActiveKeyForUser(userId, feature, [currentApiKey]);
+          if (newKey) {
+            console.log(`[KEY-POOL] Poll switched to key ${newKey.id} (${newKey.api_key.substring(0, 8)}...)`);
+            currentApiKey = newKey.api_key;
+            consecutiveKeyErrors = 0;
+            continue;
+          }
+          const replacement = await replaceExhaustedKey(userId, feature);
+          if (replacement) {
+            console.log(`[KEY-POOL] Poll replaced with new key ${replacement.id}`);
+            currentApiKey = replacement.api_key;
+            consecutiveKeyErrors = 0;
+            continue;
+          }
+        }
+
+        const allPoolKeys = await pool.query(
+          `SELECT api_key FROM freepik_key_pool WHERE status = 'available' OR (status = 'assigned' AND api_key != $1) ORDER BY usage_count ASC LIMIT 1`,
+          [currentApiKey]
+        );
+        if (allPoolKeys.rows.length > 0) {
+          currentApiKey = allPoolKeys.rows[0].api_key;
+          console.log(`[KEY-POOL] Poll fallback to any available key`);
+          consecutiveKeyErrors = 0;
+          continue;
+        }
+
+        if (consecutiveKeyErrors >= 3) {
+          return { status: 'failed', error: `All keys exhausted during polling (HTTP ${httpStatus})` };
+        }
+        continue;
+      }
+
       if (attempt > 600) return { status: 'failed', error: 'Polling timeout: ' + pollErr.message };
     }
   }
@@ -12263,7 +12380,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                   `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
                   [projectId, scene.scene_index, fpResult.taskId]
                 );
-                const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint);
+                const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'automation');
                 if (pollResult.status === 'completed') {
                   videoUrl = pollResult.url;
                 } else {
@@ -12603,7 +12720,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
               `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
               [projectId, sceneIndex, fpResult.taskId]
             );
-            const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint);
+            const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'automation');
             if (pollResult.status === 'completed') {
               videoUrl = pollResult.url;
             } else {
