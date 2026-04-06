@@ -152,7 +152,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 4: Start production - generates IMAGE per scene (ApiModels nanobanana-2-beta), then generates VIDEO from image (ApiModels or Freepik)
   - Step 5: Merge all scene videos into final ad video via FFmpeg
   - Character reference + product image upload support (FormData with multer)
-  - Video models: Veo 3.1 Fast, Kling 2.6 Pro, Kling V3
+  - Video models: Wan 2.6 Pro (default, Freepik Key Pool), Kling 2.6 Pro (Freepik Key Pool), Kling V3 (Freepik Key Pool), Veo 3.1 Fast (ApiModels)
   - Real-time SSE updates: ads_studio_update, ads_studio_scene_update
   - Database tables: ads_studio_projects, ads_studio_scenes
   - API endpoints: CRUD projects, generate-script, update scene, start production, merge

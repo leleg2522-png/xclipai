@@ -418,7 +418,7 @@ const state = {
       productDescription: '',
       adType: 'soft_selling',
       format: 'shorts',
-      videoModel: 'veo-3.1-fast',
+      videoModel: 'wan-v2.6-pro',
       videoDuration: 5,
       sceneCount: 4,
       language: 'id',
@@ -6457,7 +6457,7 @@ async function createAdsStudioProject() {
     formData.append('productDescription', descInput ? descInput.value.trim() : '');
     formData.append('adType', adTypeSelect ? adTypeSelect.value : 'soft_selling');
     formData.append('format', formatSelect ? formatSelect.value : 'shorts');
-    formData.append('videoModel', modelSelect ? modelSelect.value : 'veo-3.1-fast');
+    formData.append('videoModel', modelSelect ? modelSelect.value : 'wan-v2.6-pro');
     formData.append('videoDuration', durationSelect ? durationSelect.value : '5');
     formData.append('sceneCount', sceneCountSelect ? sceneCountSelect.value : '4');
     formData.append('language', langSelect ? langSelect.value : 'id');
@@ -6477,7 +6477,7 @@ async function createAdsStudioProject() {
     });
     var data = await response.json();
     if (data.success) {
-      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'veo-3.1-fast', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
+      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.6-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
       state.adsStudio._loaded = false;
       loadAdsStudioProjects();
       loadAdsStudioProjectDetail(data.projectId);
@@ -7021,9 +7021,10 @@ function renderAdsStudioPage() {
   html += '<option value="landscape"' + (state.adsStudio.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsVideoModel">';
-  html += '<option value="veo-3.1-fast"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
+  html += '<option value="wan-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.6-pro' ? ' selected' : '') + '>Wan 2.6 Pro</option>';
   html += '<option value="kling-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
   html += '<option value="kling-v3"' + (state.adsStudio.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
+  html += '<option value="veo-3.1-fast"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
   html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';

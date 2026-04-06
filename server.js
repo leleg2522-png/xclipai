@@ -11423,7 +11423,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   const freepikModels = {
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
-    'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' }
+    'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' },
+    'wan-v2.6-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p', api: 'wan26' },
+    'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -11457,6 +11459,24 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: dur,
       aspect_ratio: rawAR,
       cfg_scale: 0.7
+    };
+  } else if (config.api === 'wan26') {
+    let wanSize;
+    if (model.includes('1080p')) {
+      wanSize = rawAR === '9:16' ? '1080*1920' : '1920*1080';
+    } else {
+      wanSize = rawAR === '9:16' ? '720*1280' : '1280*720';
+    }
+    requestBody = {
+      image: imageUrl,
+      prompt: characterLockPrompt,
+      duration: dur,
+      size: wanSize,
+      negative_prompt: charNegPrompt,
+      enable_prompt_expansion: false,
+      shot_type: 'single',
+      seed: -1,
+      generate_audio: true
     };
   } else {
     requestBody = {
@@ -14619,9 +14639,10 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
-      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
+      'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' }
     };
-    const vidModel = modelConfigMap[project.video_model] || modelConfigMap['veo-3.1-fast'];
+    const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
