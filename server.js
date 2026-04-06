@@ -11428,10 +11428,14 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
 
-  const mappedAspect = aspectRatio === '9:16' ? 'social_story_9_16'
+  const mappedAR = aspectRatio === '9:16' ? 'social_story_9_16'
     : aspectRatio === '16:9' ? 'widescreen_16_9'
     : aspectRatio === '1:1' ? 'square_1_1'
     : (['widescreen_16_9', 'social_story_9_16', 'square_1_1'].includes(aspectRatio) ? aspectRatio : 'widescreen_16_9');
+  const rawAR = aspectRatio === 'social_story_9_16' ? '9:16'
+    : aspectRatio === 'widescreen_16_9' ? '16:9'
+    : aspectRatio === 'square_1_1' ? '1:1'
+    : (['16:9', '9:16', '1:1'].includes(aspectRatio) ? aspectRatio : '16:9');
 
   let requestBody = {};
   const dur = String(videoDuration || 5);
@@ -11443,7 +11447,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   if (config.api === 'kling26') {
     requestBody = {
       image: imageUrl, prompt: characterLockPrompt, duration: dur,
-      aspect_ratio: mappedAspect, negative_prompt: charNegPrompt,
+      aspect_ratio: mappedAR, negative_prompt: charNegPrompt,
       cfg_scale: 0.7, generate_audio: true
     };
   } else if (config.api === 'kling-v3') {
@@ -11451,13 +11455,13 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       start_image_url: imageUrl,
       prompt: characterLockPrompt,
       duration: dur,
-      aspect_ratio: mappedAspect,
+      aspect_ratio: rawAR,
       cfg_scale: 0.7
     };
   } else {
     requestBody = {
       image: imageUrl, prompt: characterLockPrompt, duration: dur,
-      aspect_ratio: mappedAspect, cfg_scale: 0.7
+      aspect_ratio: mappedAR, cfg_scale: 0.7
     };
   }
 
