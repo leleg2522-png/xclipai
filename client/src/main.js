@@ -7021,10 +7021,7 @@ function renderAdsStudioPage() {
   html += '<option value="landscape"' + (state.adsStudio.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsVideoModel">';
-  html += '<option value="wan-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.6-pro' ? ' selected' : '') + '>Wan 2.6 Pro</option>';
-  html += '<option value="kling-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
-  html += '<option value="kling-v3"' + (state.adsStudio.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
-  html += '<option value="veo-3.1-fast"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast' ? ' selected' : '') + '>Veo 3.1 Fast</option>';
+  html += '<option value="wan-v2.6-pro" selected>Wan 2.6 Pro</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
   html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
