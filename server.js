@@ -3677,7 +3677,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const config = modelConfigs[model] || modelConfigs['kling-v2.5-pro'];
     const baseUrl = 'https://api.freepik.com';
     
-    // Map aspect ratio to Freepik format
+    const rawAspectRatio = aspectRatio === 'square_1_1' ? '1:1'
+      : aspectRatio === 'social_story_9_16' ? '9:16'
+      : aspectRatio === 'widescreen_16_9' ? '16:9'
+      : (['1:1', '9:16', '16:9'].includes(aspectRatio) ? aspectRatio : '16:9');
     const aspectRatioMap = {
       '1:1': 'square_1_1',
       '9:16': 'social_story_9_16',
@@ -3699,7 +3702,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio,
+        aspect_ratio: rawAspectRatio,
         negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy',
         cfg_scale: 0.5,
         generate_audio: true
@@ -3709,7 +3712,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio,
+        aspect_ratio: rawAspectRatio,
         cfg_scale: 0.6
       };
     } else if (config.api === 'minimax') {
@@ -3734,7 +3737,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         prompt: prompt || '',
         duration: duration || '5',
         quality: 'high',
-        aspect_ratio: mappedAspectRatio,
+        aspect_ratio: rawAspectRatio,
         negative_prompt: 'blurry, low quality, distorted, ugly, bad anatomy',
         seed: Math.floor(Math.random() * 1000000),
         motion_mode: 'normal',
@@ -3743,9 +3746,9 @@ app.post('/api/videogen/proxy', async (req, res) => {
     } else if (config.api === 'wan26') {
       let wanSize;
       if (model.includes('1080p')) {
-        wanSize = mappedAspectRatio === 'social_story_9_16' ? '1080*1920' : '1920*1080';
+        wanSize = rawAspectRatio === '9:16' ? '1080*1920' : '1920*1080';
       } else {
-        wanSize = mappedAspectRatio === 'social_story_9_16' ? '720*1280' : '1280*720';
+        wanSize = rawAspectRatio === '9:16' ? '720*1280' : '1280*720';
       }
       requestBody = {
         image: imageUrl,
@@ -3763,7 +3766,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         image: imageUrl,
         prompt: prompt || '',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio || 'auto',
+        aspect_ratio: rawAspectRatio,
         seed: Math.floor(Math.random() * 1000000)
       };
     }
@@ -5509,12 +5512,10 @@ app.post('/api/generate-video', async (req, res) => {
     const endpoint = modelEndpoints[model] || 'kling-pro';
     const isMinimax = model.includes('minimax');
     
-    const aspectRatioMap = {
-      '16:9': 'widescreen_16_9',
-      '9:16': 'social_story_9_16',
-      '1:1': 'square_1_1'
-    };
-    const mappedAspectRatio = aspectRatioMap[aspectRatio] || 'widescreen_16_9';
+    const rawAR = aspectRatio === 'widescreen_16_9' ? '16:9'
+      : aspectRatio === 'social_story_9_16' ? '9:16'
+      : aspectRatio === 'square_1_1' ? '1:1'
+      : (['1:1', '9:16', '16:9'].includes(aspectRatio) ? aspectRatio : '16:9');
     
     let requestBody;
     if (isMinimax) {
@@ -5527,7 +5528,7 @@ app.post('/api/generate-video', async (req, res) => {
         image: image,
         prompt: prompt || 'Gentle natural motion',
         duration: duration || '5',
-        aspect_ratio: mappedAspectRatio
+        aspect_ratio: rawAR
       };
     }
     
@@ -11464,8 +11465,10 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
 
-  const aspectMap = { '9:16': 'social_story_9_16', '16:9': 'widescreen_16_9', '1:1': 'square_1_1' };
-  const mappedAspect = aspectMap[aspectRatio] || 'widescreen_16_9';
+  const rawAspect = aspectRatio === 'social_story_9_16' ? '9:16'
+    : aspectRatio === 'widescreen_16_9' ? '16:9'
+    : aspectRatio === 'square_1_1' ? '1:1'
+    : (['1:1', '9:16', '16:9'].includes(aspectRatio) ? aspectRatio : '16:9');
 
   let requestBody = {};
   const dur = String(videoDuration || 5);
@@ -11477,7 +11480,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   if (config.api === 'kling26') {
     requestBody = {
       image: imageUrl, prompt: characterLockPrompt, duration: dur,
-      aspect_ratio: mappedAspect, negative_prompt: charNegPrompt,
+      aspect_ratio: rawAspect, negative_prompt: charNegPrompt,
       cfg_scale: 0.7, generate_audio: true
     };
   } else if (config.api === 'kling-v3') {
@@ -11485,13 +11488,13 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       start_image_url: imageUrl,
       prompt: characterLockPrompt,
       duration: dur,
-      aspect_ratio: aspectRatio || '16:9',
+      aspect_ratio: rawAspect,
       cfg_scale: 0.7
     };
   } else {
     requestBody = {
       image: imageUrl, prompt: characterLockPrompt, duration: dur,
-      aspect_ratio: mappedAspect, cfg_scale: 0.7
+      aspect_ratio: rawAspect, cfg_scale: 0.7
     };
   }
 
