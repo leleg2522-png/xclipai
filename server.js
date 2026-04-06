@@ -3870,7 +3870,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
       );
       console.log(`[SAVED] Task ${taskId} saved with key_name: ${usedKeyName}`);
       
-      startServerBgPoll(taskId, 'freepik-video', freepikApiKey, {
+      const usedApiKey = availableKeys.find(k => k.index === finalKeyIndex)?.key || allKeys[0]?.key;
+      startServerBgPoll(taskId, 'freepik-video', usedApiKey, {
         dbTable: 'video_generation_tasks',
         urlColumn: 'video_url',
         model: model,
