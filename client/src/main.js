@@ -6435,8 +6435,10 @@ async function loadAdsStudioProjectDetail(projectId) {
 }
 
 async function createAdsStudioProject() {
+  console.log('[ADS-STUDIO] createAdsStudioProject called, state:', JSON.stringify(state.adsStudio.newProject));
   var productName = state.adsStudio.newProject.productName || (document.getElementById('adsProductName') || {}).value || '';
   productName = productName.trim();
+  console.log('[ADS-STUDIO] productName =', JSON.stringify(productName));
   if (!productName) { alert('Masukkan nama produk!'); return; }
 
   var productDesc = state.adsStudio.newProject.productDescription || (document.getElementById('adsProductDesc') || {}).value || '';
@@ -6576,32 +6578,38 @@ async function deleteAdsStudioProject(projectId) {
   }
 }
 
+function _adsCreateClickHandler() {
+  console.log('[ADS-STUDIO] Create button clicked!');
+  var nameEl = document.getElementById('adsProductName');
+  var descEl = document.getElementById('adsProductDesc');
+  var adTypeEl = document.getElementById('adsAdType');
+  var formatEl = document.getElementById('adsFormat');
+  var modelEl = document.getElementById('adsVideoModel');
+  var durEl = document.getElementById('adsDuration');
+  var sceneEl = document.getElementById('adsSceneCount');
+  var langEl = document.getElementById('adsLanguage');
+  var voEl = document.getElementById('adsVoiceOver');
+  if (nameEl) state.adsStudio.newProject.productName = nameEl.value;
+  if (descEl) state.adsStudio.newProject.productDescription = descEl.value;
+  if (adTypeEl) state.adsStudio.newProject.adType = adTypeEl.value;
+  if (formatEl) state.adsStudio.newProject.format = formatEl.value;
+  if (modelEl) state.adsStudio.newProject.videoModel = modelEl.value;
+  if (durEl) state.adsStudio.newProject.videoDuration = parseInt(durEl.value);
+  if (sceneEl) state.adsStudio.newProject.sceneCount = parseInt(sceneEl.value);
+  if (langEl) state.adsStudio.newProject.language = langEl.value;
+  if (voEl) state.adsStudio.newProject.voiceOverEnabled = voEl.checked;
+  console.log('[ADS-STUDIO] State synced:', JSON.stringify(state.adsStudio.newProject));
+  createAdsStudioProject();
+}
+window._adsCreateClick = _adsCreateClickHandler;
+
 function attachAdsStudioListeners() {
   var createBtn = document.getElementById('adsCreateBtn');
   if (createBtn) {
-    createBtn.addEventListener('click', function(e) {
+    createBtn.onclick = function(e) {
       e.preventDefault();
-      e.stopPropagation();
-      var nameEl = document.getElementById('adsProductName');
-      var descEl = document.getElementById('adsProductDesc');
-      var adTypeEl = document.getElementById('adsAdType');
-      var formatEl = document.getElementById('adsFormat');
-      var modelEl = document.getElementById('adsVideoModel');
-      var durEl = document.getElementById('adsDuration');
-      var sceneEl = document.getElementById('adsSceneCount');
-      var langEl = document.getElementById('adsLanguage');
-      var voEl = document.getElementById('adsVoiceOver');
-      if (nameEl) state.adsStudio.newProject.productName = nameEl.value;
-      if (descEl) state.adsStudio.newProject.productDescription = descEl.value;
-      if (adTypeEl) state.adsStudio.newProject.adType = adTypeEl.value;
-      if (formatEl) state.adsStudio.newProject.format = formatEl.value;
-      if (modelEl) state.adsStudio.newProject.videoModel = modelEl.value;
-      if (durEl) state.adsStudio.newProject.videoDuration = parseInt(durEl.value);
-      if (sceneEl) state.adsStudio.newProject.sceneCount = parseInt(sceneEl.value);
-      if (langEl) state.adsStudio.newProject.language = langEl.value;
-      if (voEl) state.adsStudio.newProject.voiceOverEnabled = voEl.checked;
-      createAdsStudioProject();
-    });
+      _adsCreateClickHandler();
+    };
   }
 
   var charBtn = document.getElementById('adsCharBtn');
@@ -7059,7 +7067,7 @@ function renderAdsStudioPage() {
 
   html += '<div class="ads-settings-row">';
   html += '<label class="ads-vo-toggle"><input type="checkbox" id="adsVoiceOver"' + (state.adsStudio.newProject.voiceOverEnabled ? ' checked' : '') + '/> Voice Over</label>';
-  html += '<button class="btn-primary ads-go-btn" id="adsCreateBtn"' + (state.adsStudio.isCreating ? ' disabled' : '') + '>';
+  html += '<button class="btn-primary ads-go-btn" id="adsCreateBtn" type="button" onclick="window._adsCreateClick && window._adsCreateClick()"' + (state.adsStudio.isCreating ? ' disabled' : '') + '>';
   html += state.adsStudio.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
   html += '</button>';
   html += '</div>';
