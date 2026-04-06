@@ -3569,7 +3569,6 @@ app.post('/api/videogen/proxy', async (req, res) => {
       });
     }
     
-    let usedKeyIndex = null;
     let keySource = 'pool';
     
     const { model, image, prompt, duration, aspectRatio } = req.body;
@@ -3771,7 +3770,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     let lastError = null;
     let successResponse = null;
-    let finalKeyIndex = usedKeyIndex;
+    let successKey = null;
     
     const { proxy: pendingProxy, pendingId } = await getOrAssignProxyForPendingTask();
     let maxKeyAttempts = Math.min(availableKeys.length, 18);
@@ -3779,11 +3778,11 @@ app.post('/api/videogen/proxy', async (req, res) => {
     
     for (let attempt = 0; attempt < maxKeyAttempts; attempt++) {
       if (Date.now() > loopDeadline) {
-        console.warn(`[VIDEOGEN] Key rotation time budget exceeded (30s), stopping after ${attempt} attempts`);
+        console.warn(`[VIDEOGEN] Key rotation time budget exceeded (60s), stopping after ${attempt} attempts`);
         break;
       }
       const currentKey = availableKeys[attempt];
-      console.log(`[TIMING] Attempt ${attempt + 1}/${availableKeys.length} - Using key: ${currentKey.name} | Model: ${model}`);
+      console.log(`[VIDEOGEN] Attempt ${attempt + 1}/${maxKeyAttempts} - Key: ${currentKey.name} | Model: ${model}`);
       
       try {
         const response = await makeFreepikRequest(
@@ -3797,8 +3796,8 @@ app.post('/api/videogen/proxy', async (req, res) => {
         );
         
         successResponse = { data: response.data };
-        finalKeyIndex = currentKey.index;
-        console.log(`[SUCCESS] Key ${currentKey.name} worked!`);
+        successKey = currentKey;
+        console.log(`[VIDEOGEN] ✅ Key ${currentKey.name} worked!`);
         break;
         
       } catch (error) {
@@ -3808,7 +3807,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
         const isTrialExpired = typeof errMsg === 'string' && (errMsg.includes('free trial') || errMsg.includes('limit of the free'));
         
         if (status === 429 || status === 402 || status === 403 || isTrialExpired) {
-          console.log(`[VIDEOGEN] ❌ Key ${currentKey.name} DEAD (HTTP ${status}): ${errMsg} — marking exhausted & switching`);
+          console.log(`[VIDEOGEN] ❌ Key ${currentKey.name} DEAD (HTTP ${status}): ${errMsg}`);
           if (currentKey.isPool && currentKey.poolId) {
             const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP ${status}: ${errMsg}`);
             if (replacement) {
@@ -3821,25 +3820,22 @@ app.post('/api/videogen/proxy', async (req, res) => {
           }
           continue;
         } else {
-          console.error(`[ERROR] Key ${currentKey.name} failed with status ${status}:`, errMsg);
+          console.error(`[VIDEOGEN] Key ${currentKey.name} failed (HTTP ${status}):`, errMsg);
           break;
         }
       }
     }
     
-    if (successResponse) {
-      const usedKey = availableKeys.find(k => k.index === finalKeyIndex);
-      if (usedKey && usedKey.isPool && usedKey.poolId) {
-        await recordKeyUsage(usedKey.poolId);
-      }
-    }
-    
-    if (!successResponse) {
+    if (!successResponse || !successKey) {
       if (pendingId) releaseProxyForTask(pendingId);
-      console.error('All API keys exhausted or failed');
-      console.error('Last error:', JSON.stringify(lastError?.response?.data, null, 2) || lastError?.message);
+      console.error('[VIDEOGEN] All API keys exhausted or failed');
+      console.error('[VIDEOGEN] Last error:', JSON.stringify(lastError?.response?.data, null, 2) || lastError?.message);
       const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.response?.data?.error || lastError?.message;
       return res.status(500).json({ error: 'Semua API key sudah mencapai limit bulanan. ' + errorMsg });
+    }
+    
+    if (successKey.isPool && successKey.poolId) {
+      await recordKeyUsage(successKey.poolId);
     }
     
     const taskId = successResponse.data.data?.task_id || successResponse.data.task_id;
@@ -3847,13 +3843,10 @@ app.post('/api/videogen/proxy', async (req, res) => {
     const createLatency = Date.now() - startTime;
     
     setUserCooldown(keyInfo.user_id, 'videogen');
-    const usedKeyForQuota = availableKeys.find(k => k.index === finalKeyIndex);
-    if (usedKeyForQuota) {
-      const newCount = incrementDailyKeyUsage(usedKeyForQuota.name, 'videogen');
-      console.log(`[RATE-LIMIT] Video Gen key ${usedKeyForQuota.name} daily usage: ${newCount}/${RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey}`);
-    }
+    const newCount = incrementDailyKeyUsage(successKey.name, 'videogen');
+    console.log(`[VIDEOGEN] Key ${successKey.name} daily usage: ${newCount}/${RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey}`);
     
-    console.log(`[TIMING] Task ${taskId} created in ${createLatency}ms at ${requestTime} | Model: ${model}`);
+    console.log(`[VIDEOGEN] Task ${taskId} created in ${createLatency}ms | Model: ${model} | Key: ${successKey.name}`);
     
     if (taskId && pendingId) {
       promoteProxyToTask(pendingId, taskId);
@@ -3861,17 +3854,14 @@ app.post('/api/videogen/proxy', async (req, res) => {
       releaseProxyForTask(pendingId);
     }
     
-    const usedKeyName = availableKeys.find(k => k.index === finalKeyIndex)?.name || keySource;
-    
     if (taskId) {
       await pool.query(
         'INSERT INTO video_generation_tasks (xclip_api_key_id, user_id, room_id, task_id, model, key_index, used_key_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, finalKeyIndex, usedKeyName]
+        [keyInfo.id, keyInfo.user_id, keyInfo.room_id, taskId, model, successKey.index, successKey.name]
       );
-      console.log(`[SAVED] Task ${taskId} saved with key_name: ${usedKeyName}`);
+      console.log(`[VIDEOGEN] Task ${taskId} saved with key: ${successKey.name}`);
       
-      const usedApiKey = availableKeys.find(k => k.index === finalKeyIndex)?.key || allKeys[0]?.key;
-      startServerBgPoll(taskId, 'freepik-video', usedApiKey, {
+      startServerBgPoll(taskId, 'freepik-video', successKey.key, {
         dbTable: 'video_generation_tasks',
         urlColumn: 'video_url',
         model: model,
