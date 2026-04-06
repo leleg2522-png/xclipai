@@ -181,11 +181,11 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - bcrypt (for password hashing)
 
 ## Replit Environment Setup
-- **Runtime**: Node.js 20
-- **Database**: PostgreSQL Railway (via DATABASE_PUBLIC_URL secret)
-- **Port**: 5000 (Express server serves both API and static frontend)
-- **Workflow**: `npm start` runs server.js
-- **Deployment**: Configured for autoscale deployment
+- **Runtime**: Node.js 18 (nodejs-18 nix module)
+- **Database**: Replit built-in PostgreSQL (DATABASE_URL env var); server also accepts DATABASE_PUBLIC_URL for Railway/external
+- **Port**: 5000 (Express server serves both API and static frontend on 0.0.0.0:5000)
+- **Workflow**: `npm start` runs `node server.js`
+- **Deployment**: Configured for autoscale deployment (`node server.js`)
 
 ## Security Fixes Applied (March 2026)
 - **Vidgen4/Vidgen2 Proxy & Download Auth**: Added API key validation + ownership verification + URL domain allowlist to `/api/vidgen4/proxy-video`, `/api/vidgen4/download`, `/api/vidgen2/proxy-video`, `/api/vidgen2/download`. Only the video owner can access/download their own videos.
