@@ -182,7 +182,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
 
 ## Replit Environment Setup
 - **Runtime**: Node.js 18 (nodejs-18 nix module)
-- **Database**: Replit built-in PostgreSQL (DATABASE_URL env var); server also accepts DATABASE_PUBLIC_URL for Railway/external
+- **Database**: Railway PostgreSQL (via DATABASE_PUBLIC_URL secret); fallback to Replit built-in PostgreSQL (DATABASE_URL)
 - **Port**: 5000 (Express server serves both API and static frontend on 0.0.0.0:5000)
 - **Workflow**: `npm start` runs `node server.js`
 - **Deployment**: Configured for autoscale deployment (`node server.js`)
