@@ -11633,7 +11633,7 @@ async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKe
   console.log(`[AUTOMATION] Generating ApiModels video for ${projectId} scene ${scene.scene_index}:`, JSON.stringify({ ...videoBody, images: ['[IMAGE]'] }));
   const videoResponse = await axios.post(
     'https://apimodels.app/api/v1/video/generations', videoBody,
-    { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+    { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
   );
   const videoData = videoResponse.data?.data || videoResponse.data;
   const taskId = videoData?.taskId || videoData?.task_id || videoData?.id;
@@ -12632,14 +12632,14 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
           imgResponse = await axios.post(
             'https://apimodels.app/api/v1/images/generations', genBody,
-            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
+            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
           );
           const imgData = imgResponse.data?.data || imgResponse.data;
           const imgTaskId = imgData?.taskId || imgData?.task_id;
           sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
 
           if (!sceneImageUrl && imgTaskId) {
-            for (let a = 0; a < 60; a++) {
+            for (let a = 0; a < 120; a++) {
               await new Promise(r => setTimeout(r, 5000));
               const pr = await axios.get(
                 `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
@@ -14714,40 +14714,51 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               else if (refImages.length > 1) genBody.image_urls = refImages;
 
               console.log(`[ADS-STUDIO] Generating image (${refImages.length} refs) for ${projectId} scene ${scene.scene_index}`);
-              const imgResponse = await axios.post(
-                'https://apimodels.app/api/v1/images/generations',
-                genBody,
-                { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 60000 }
-              );
 
-              const imgData = imgResponse.data?.data || imgResponse.data;
-              const imgTaskId = imgData?.taskId || imgData?.task_id;
-              let imageUrl = imgData?.url || imgData?.resultUrls?.[0];
+              let imageUrl = null;
+              for (let imgRetry = 0; imgRetry < 3 && !imageUrl; imgRetry++) {
+                try {
+                  if (imgRetry > 0) console.log(`[ADS-STUDIO] Image retry #${imgRetry} for scene ${scene.scene_index}`);
+                  const imgResponse = await axios.post(
+                    'https://apimodels.app/api/v1/images/generations',
+                    genBody,
+                    { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
+                  );
 
-              if (!imageUrl && imgTaskId) {
-                await pool.query(
-                  `UPDATE ads_studio_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                  [projectId, scene.scene_index, imgTaskId]
-                );
-                for (let attempt = 0; attempt < 60; attempt++) {
-                  await new Promise(r => setTimeout(r, 5000));
-                  try {
-                    const pollResp = await axios.get(
-                      `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
-                      { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+                  const imgData = imgResponse.data?.data || imgResponse.data;
+                  const imgTaskId = imgData?.taskId || imgData?.task_id;
+                  imageUrl = imgData?.url || imgData?.resultUrls?.[0];
+
+                  if (!imageUrl && imgTaskId) {
+                    await pool.query(
+                      `UPDATE ads_studio_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                      [projectId, scene.scene_index, imgTaskId]
                     );
-                    const pData = pollResp.data?.data || pollResp.data;
-                    const pStatus = pData?.state || pData?.status;
-                    if (pStatus === 'completed' || pStatus === 'success') {
-                      imageUrl = pData?.url || pData?.resultUrls?.[0] || pData?.image_url;
-                      break;
+                    for (let attempt = 0; attempt < 120; attempt++) {
+                      await new Promise(r => setTimeout(r, 5000));
+                      try {
+                        const pollResp = await axios.get(
+                          `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
+                          { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+                        );
+                        const pData = pollResp.data?.data || pollResp.data;
+                        const pStatus = pData?.state || pData?.status;
+                        if (pStatus === 'completed' || pStatus === 'success') {
+                          imageUrl = pData?.url || pData?.resultUrls?.[0] || pData?.image_url;
+                          break;
+                        }
+                        if (pStatus === 'failed' || pStatus === 'error') {
+                          throw new Error(pData?.failMsg || pData?.error || 'Image generation failed');
+                        }
+                      } catch (pollErr) {
+                        if (pollErr.message.includes('failed') || pollErr.message.includes('Image generation')) throw pollErr;
+                      }
                     }
-                    if (pStatus === 'failed' || pStatus === 'error') {
-                      throw new Error(pData?.failMsg || pData?.error || 'Image generation failed');
-                    }
-                  } catch (pollErr) {
-                    if (pollErr.message.includes('failed') || pollErr.message.includes('Image generation')) throw pollErr;
                   }
+                } catch (retryErr) {
+                  console.error(`[ADS-STUDIO] Image attempt ${imgRetry + 1}/3 failed: ${retryErr.message}`);
+                  if (imgRetry === 2) throw retryErr;
+                  await new Promise(r => setTimeout(r, 3000));
                 }
               }
 
