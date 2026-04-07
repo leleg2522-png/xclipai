@@ -11489,8 +11489,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: parseInt(dur),
       resolution: wanRes,
       negative_prompt: charNegPrompt,
-      enable_prompt_expansion: false,
-      seed: -1
+      enable_prompt_expansion: false
     };
   } else {
     requestBody = {
