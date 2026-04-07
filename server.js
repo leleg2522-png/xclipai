@@ -11426,8 +11426,8 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' },
     'wan-v2.6-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p', api: 'wan26' },
     'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' },
-    'wan-v2.7-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-7-1080p', api: 'wan26' },
-    'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-7-720p', api: 'wan26' }
+    'wan-v2.7-1080p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' },
+    'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -11480,6 +11480,17 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       shot_type: 'single',
       seed: -1,
       generate_audio: true
+    };
+  } else if (config.api === 'wan27') {
+    const wanRes = model.includes('1080p') ? '1080P' : '720P';
+    requestBody = {
+      start_image_url: imageUrl,
+      prompt: characterLockPrompt,
+      duration: parseInt(dur),
+      resolution: wanRes,
+      negative_prompt: charNegPrompt,
+      enable_prompt_expansion: false,
+      seed: -1
     };
   } else {
     requestBody = {
