@@ -11555,9 +11555,18 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint, userId, featu
   const pollEndpoint = endpoint.replace(/-pro$|-std$/, '');
   let currentApiKey = apiKey;
   let consecutiveKeyErrors = 0;
+  const startTime = Date.now();
+  const maxPollTimeMs = 15 * 60 * 1000;
+  let lastStatusChange = Date.now();
+  let lastStatus = '';
 
   for (let attempt = 0; attempt < 720; attempt++) {
-    await new Promise(r => setTimeout(r, attempt < 60 ? 5000 : 8000));
+    if (Date.now() - startTime > maxPollTimeMs) {
+      console.log(`[KEY-POOL] Poll timeout after ${Math.round((Date.now() - startTime) / 1000)}s for task ${taskId}`);
+      return { status: 'failed', error: 'Video generation timed out (15 min). Will retry.' };
+    }
+
+    await new Promise(r => setTimeout(r, attempt < 30 ? 5000 : attempt < 90 ? 8000 : 10000));
     try {
       const proxy = getNextProxy();
       if (proxy) await waitForProxySlot(proxy);
@@ -11573,13 +11582,27 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint, userId, featu
       consecutiveKeyErrors = 0;
       const data = resp.data?.data || resp.data;
       const status = (data?.status || '').toUpperCase();
-      
-      if (attempt % 10 === 0) console.log(`[KEY-POOL] Poll #${attempt}: task=${taskId}, status=${status}`);
+
+      if (status !== lastStatus) {
+        console.log(`[KEY-POOL] Poll #${attempt}: task=${taskId}, status=${status} (changed from ${lastStatus || 'start'}) [${Math.round((Date.now() - startTime) / 1000)}s elapsed]`);
+        lastStatus = status;
+        lastStatusChange = Date.now();
+      } else if (attempt % 10 === 0) {
+        console.log(`[KEY-POOL] Poll #${attempt}: task=${taskId}, status=${status} [${Math.round((Date.now() - startTime) / 1000)}s elapsed]`);
+      }
+
+      if (Date.now() - lastStatusChange > 10 * 60 * 1000 && status !== 'COMPLETED') {
+        console.log(`[KEY-POOL] Status stuck at "${status}" for 10 min, timing out task ${taskId}`);
+        return { status: 'failed', error: `Video stuck in ${status} for 10 min. Will retry.` };
+      }
 
       if (status === 'COMPLETED') {
         const videoUrl = (data.generated && data.generated.length > 0 ? data.generated[0] : null)
           || data.video?.url || data.result?.url || data.url;
-        if (videoUrl) return { status: 'completed', url: videoUrl };
+        if (videoUrl) {
+          console.log(`[KEY-POOL] Task ${taskId} completed in ${Math.round((Date.now() - startTime) / 1000)}s`);
+          return { status: 'completed', url: videoUrl };
+        }
       }
       if (status === 'FAILED') {
         const errMsg = data.error_message || data.error || data.message || 'Generation failed';
