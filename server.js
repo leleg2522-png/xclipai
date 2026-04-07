@@ -8142,16 +8142,6 @@ app.get('/api/vidgen4/proxy-video', async (req, res) => {
       return res.status(400).json({ error: 'URL video tidak valid' });
     }
 
-    const allowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
-    try {
-      const parsed = new URL(videoUrl);
-      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
-        return res.status(400).json({ error: 'URL video tidak diizinkan' });
-      }
-    } catch (e) {
-      return res.status(400).json({ error: 'URL video tidak valid' });
-    }
-
     const ownerCheck = await pool.query(
       'SELECT task_id FROM vidgen4_tasks WHERE user_id = $1 AND video_url = $2 LIMIT 1',
       [keyInfo.user_id, videoUrl]
@@ -8184,16 +8174,6 @@ app.get('/api/vidgen4/download', async (req, res) => {
     const videoUrl = req.query.url;
     if (!videoUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
-    }
-
-    const allowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media'];
-    try {
-      const parsed = new URL(videoUrl);
-      if (!allowedDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) {
-        return res.status(400).json({ error: 'URL video tidak diizinkan' });
-      }
-    } catch (e) {
-      return res.status(400).json({ error: 'URL video tidak valid' });
     }
 
     const ownerCheck = await pool.query(

@@ -9983,14 +9983,14 @@ function renderVidgen4Videos() {
   
   let html = '<div class="video-grid">';
   state.vidgen4.generatedVideos.forEach(video => {
-    var proxyUrl = video.url || '';
+    const proxyUrl = video.url ? `${API_URL}/api/vidgen4/proxy-video?url=${encodeURIComponent(video.url)}&key=${encodeURIComponent(state.vidgen4.customApiKey)}` : '';
     html += '<div class="video-result-card" style="position:relative;" data-vidgen4-id="' + (video.id || '') + '">';
     if (!video.url) {
       html += '<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:24px;text-align:center;color:#ef4444;font-size:13px;">URL video tidak tersedia</div>';
     } else {
-      html += '<video controls playsinline preload="metadata" class="result-video" ';
+      html += '<video controls playsinline preload="auto" class="result-video" ';
       html += 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
-      html += '<source src="' + proxyUrl + '">';
+      html += '<source src="' + proxyUrl + '" type="video/mp4">';
       html += '</video>';
       html += '<div style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:24px;text-align:center;flex-direction:column;gap:8px;align-items:center;">';
       html += '<span style="font-size:24px;">⚠️</span>';
