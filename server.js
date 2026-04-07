@@ -14542,6 +14542,12 @@ SCENE CONTINUITY:
 - Product looks identical in every scene — same colors, packaging, branding
 - Logical action flow between scenes (not random jumps)
 
+ABSOLUTELY NO TEXT IN VISUALS:
+- visual_prompt must NEVER include any text, titles, captions, subtitles, watermarks, logos, or written words
+- Do NOT describe any on-screen text, floating text, text overlay, or typography in visual_prompt
+- The video should be PURELY VISUAL — all messaging is conveyed through narration audio only
+- If you want to convey a message, put it in the narration field, NOT in the visual_prompt
+
 `;
 
     let userPrompt = `Create a ${formatDesc} PRODUCT AD script for "${project.product_name}".
@@ -14562,7 +14568,7 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 kalimat pendek' : '2-3 kalimat'} in ${langName} — casual, natural, like talking to a friend",
-      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words."
+      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
     }
   ]
 }
@@ -14821,14 +14827,15 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 if (productRefUrl) { refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE (this product must appear in the scene)`); imgIdx++; }
                 if (scene.scene_index > 0 && prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE for continuity`); imgIdx++; }
                 if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = SCENE 1 for overall style consistency`); }
-                refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes.`;
+                refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.`;
               } else {
-                refPrompt = scene.visual_prompt;
+                refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.';
               }
 
               const genBody = {
                 model: imageModel,
                 prompt: refPrompt,
+                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text',
                 aspect_ratio: aspectRatio,
                 resolution: imageResolution
               };
@@ -15183,14 +15190,15 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
 
           let refPrompt;
           if (refImages.length > 0) {
-            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes.`;
+            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.`;
           } else {
-            refPrompt = scene.visual_prompt;
+            refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.';
           }
 
           const genBody = {
             model: imageModel,
             prompt: refPrompt,
+            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text',
             aspect_ratio: aspectRatio,
             resolution: imageResolution
           };
