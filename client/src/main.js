@@ -6608,6 +6608,26 @@ async function startAdsStudioProduction(projectId) {
   render();
 }
 
+async function retryAdsStudioScene(projectId, sceneIndex, retryMode) {
+  try {
+    showToast('Retry scene ' + (sceneIndex + 1) + '...', 'info');
+    var body = { sceneIndex: sceneIndex };
+    if (retryMode) body.retryMode = retryMode;
+    var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/retry-scene', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var data = await response.json();
+    if (!data.success) {
+      showToast(data.error || 'Gagal retry scene', 'error');
+    }
+  } catch (err) {
+    showToast('Gagal retry: ' + err.message, 'error');
+  }
+}
+
 async function mergeAdsStudioProject(projectId) {
   try {
     var response = await fetch(API_URL + '/api/ads-studio/projects/' + projectId + '/merge', {
@@ -6747,6 +6767,14 @@ function attachAdsStudioListeners() {
   document.querySelectorAll('.ads-merge-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       mergeAdsStudioProject(btn.dataset.projectId);
+    });
+  });
+
+  document.querySelectorAll('.ads-retry-scene-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var mode = btn.dataset.mode;
+      var retryMode = mode === 'full' ? 'full' : (mode === 'video' ? 'video_only' : undefined);
+      retryAdsStudioScene(btn.dataset.projectId, parseInt(btn.dataset.scene), retryMode);
     });
   });
 }
@@ -7249,15 +7277,26 @@ function renderAdsStudioDetailPage() {
       if (scene.status === 'failed' && scene.error_message) {
         html += '<div class="error-box">' + escapeHtml(scene.error_message) + '</div>';
       }
+      if (scene.status === 'failed' || scene.status === 'completed') {
+        html += '<div class="auto-scene-retry-bar">';
+        if (scene.status === 'failed') {
+          html += '<button class="btn-secondary ads-retry-scene-btn" data-project-id="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="auto">Retry</button>';
+        }
+        if (scene.image_url) {
+          html += '<button class="btn-secondary ads-retry-scene-btn" data-project-id="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="video">Retry Video</button>';
+          html += '<button class="btn-secondary ads-retry-scene-btn" data-project-id="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="full">Retry Semua</button>';
+        }
+        html += '</div>';
+      }
       html += '</div>';
     });
     html += '</div>';
   }
 
-  var hasMultipleVideos = scenes.filter(function(s) { return s.video_url; }).length > 1;
-  if (hasMultipleVideos && (project.status === 'completed' || project.status === 'production_failed') && !project.final_video_url) {
+  var hasCompletedVideos = scenes.filter(function(s) { return s.status === 'completed' && s.video_url; }).length;
+  if (hasCompletedVideos >= 2 && (project.status === 'completed' || project.status === 'production_failed' || project.status === 'producing')) {
     html += '<div class="section-card" style="text-align:center;padding:16px;">';
-    html += '<button class="btn-primary ads-merge-btn" data-project-id="' + project.project_id + '">Gabungkan Semua Video</button>';
+    html += '<button class="btn-primary ads-merge-btn" data-project-id="' + project.project_id + '">Gabungkan Semua Video (' + hasCompletedVideos + ' scene)</button>';
     html += '</div>';
   }
   if (project.final_video_url) {

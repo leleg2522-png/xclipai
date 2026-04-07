@@ -15092,6 +15092,224 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
   }
 });
 
+app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { projectId } = req.params;
+  const { sceneIndex, retryMode } = req.body;
+  try {
+    const projResult = await pool.query(
+      `SELECT * FROM ads_studio_projects WHERE project_id = $1 AND user_id = $2`,
+      [projectId, req.session.userId]
+    );
+    if (projResult.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    const project = projResult.rows[0];
+
+    const sceneResult = await pool.query(
+      `SELECT * FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = $2`,
+      [projectId, sceneIndex]
+    );
+    if (sceneResult.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
+    const scene = sceneResult.rows[0];
+    if (scene.status !== 'failed' && scene.status !== 'completed') return res.status(400).json({ error: 'Scene harus failed atau completed untuk di-retry' });
+
+    const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
+    if (!apimodelsKey) return res.status(500).json({ error: 'Video API key tidak tersedia' });
+
+    const retryFull = retryMode === 'full' || !scene.image_url;
+    const retryInitStatus = retryFull ? 'generating_image' : 'generating_video';
+    if (retryFull) {
+      await pool.query(
+        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, image_url = NULL, image_task_id = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus]
+      );
+      scene.image_url = null;
+    } else {
+      await pool.query(
+        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus]
+      );
+    }
+    if (project.status === 'production_failed' || project.status === 'completed') {
+      await pool.query(
+        `UPDATE ads_studio_projects SET status = 'producing', error_message = NULL, updated_at = NOW() WHERE project_id = $1`,
+        [projectId]
+      );
+      sendSSEToUser(req.session.userId, { type: 'ads_studio_update', projectId, status: 'producing' });
+    }
+    sendSSEToUser(req.session.userId, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: retryInitStatus });
+    res.json({ success: true, message: 'Retrying scene...' });
+
+    const aspectRatio = project.format === 'shorts' ? '9:16' : '16:9';
+    const modelConfigMap = {
+      'grok-video-3': { apiModel: 'grok-video-3', duration: 5, provider: 'apimodels' },
+      'grok-video-3-10s': { apiModel: 'grok-video-3-10s', duration: 10, provider: 'apimodels' },
+      'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5, provider: 'apimodels' },
+      'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
+      'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
+      'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
+      'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
+    };
+    const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
+    if (project.video_duration && [5, 10].includes(project.video_duration)) {
+      vidModel.duration = project.video_duration;
+    }
+    const isFreepik = vidModel.provider === 'freepik';
+    const imageModel = 'nanobanana-2-beta';
+    const imageResolution = '4K';
+
+    (async () => {
+      try {
+        let sceneImageUrl = scene.image_url;
+        const characterRefUrl = project.character_image_url || null;
+        const productRefUrl = project.product_image_url || null;
+
+        if (!sceneImageUrl) {
+          const prevSceneRes = await pool.query(
+            `SELECT image_url FROM ads_studio_scenes WHERE project_id = $1 AND scene_index < $2 AND image_url IS NOT NULL ORDER BY scene_index DESC LIMIT 1`,
+            [projectId, sceneIndex]
+          );
+          const retryPrevImage = prevSceneRes.rows[0]?.image_url || null;
+          const scene1Res = await pool.query(
+            `SELECT image_url FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = 0 AND image_url IS NOT NULL`,
+            [projectId]
+          );
+          const retryScene1Image = scene1Res.rows[0]?.image_url || null;
+
+          const refImages = [];
+          let imgIdx = 1;
+          const refDesc = [];
+          if (characterRefUrl) { refImages.push(characterRefUrl); refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE (copy this person's face EXACTLY)`); imgIdx++; }
+          if (productRefUrl) { refImages.push(productRefUrl); refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE (this product must appear in the scene)`); imgIdx++; }
+          if (retryPrevImage) { refImages.push(retryPrevImage); refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE for continuity`); imgIdx++; }
+          if (retryScene1Image && retryScene1Image !== retryPrevImage) { refImages.push(retryScene1Image); refDesc.push(`Image ${imgIdx} = SCENE 1 for overall style consistency`); }
+
+          let refPrompt;
+          if (refImages.length > 0) {
+            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes.`;
+          } else {
+            refPrompt = scene.visual_prompt;
+          }
+
+          const genBody = {
+            model: imageModel,
+            prompt: refPrompt,
+            aspect_ratio: aspectRatio,
+            resolution: imageResolution
+          };
+          if (refImages.length === 1) genBody.image_url = refImages[0];
+          else if (refImages.length > 1) genBody.image_urls = refImages;
+
+          console.log(`[ADS-STUDIO] Retry: Generating image (${refImages.length} refs) for ${projectId} scene ${sceneIndex}`);
+          const imgResponse = await axios.post(
+            'https://apimodels.app/api/v1/images/generations', genBody,
+            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
+          );
+          const imgData = imgResponse.data?.data || imgResponse.data;
+          const imgTaskId = imgData?.taskId || imgData?.task_id;
+          sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
+
+          if (!sceneImageUrl && imgTaskId) {
+            for (let a = 0; a < 120; a++) {
+              await new Promise(r => setTimeout(r, 5000));
+              const pr = await axios.get(
+                `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
+                { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
+              );
+              const pd = pr.data?.data || pr.data;
+              const ps = pd?.state || pd?.status;
+              if (ps === 'completed' || ps === 'success') { sceneImageUrl = pd?.url || pd?.resultUrls?.[0]; break; }
+              if (ps === 'failed' || ps === 'error') throw new Error(pd?.failMsg || 'Image failed');
+            }
+          }
+          if (!sceneImageUrl) throw new Error('Image generation failed');
+
+          await pool.query(
+            `UPDATE ads_studio_scenes SET image_url = $3, status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+            [projectId, sceneIndex, sceneImageUrl]
+          );
+          sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'generating_video', imageUrl: sceneImageUrl });
+        }
+
+        let videoUrl = null;
+        if (isFreepik) {
+          console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
+          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
+          if (fpResult.success) {
+            await pool.query(
+              `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, sceneIndex, fpResult.taskId]
+            );
+            const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'ads_studio');
+            if (pollResult.status === 'completed') {
+              videoUrl = pollResult.url;
+            } else {
+              throw new Error(pollResult.error || 'Freepik video failed');
+            }
+          } else if (fpResult.fallback) {
+            const retryScene = { ...scene, image_url: sceneImageUrl };
+            const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+          } else {
+            throw new Error(fpResult.error || 'Freepik generation failed');
+          }
+        } else {
+          const retryScene = { ...scene, image_url: sceneImageUrl };
+          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel);
+        }
+        if (!videoUrl) throw new Error('Video generation failed - no URL');
+
+        await pool.query(
+          `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+          [projectId, sceneIndex, videoUrl]
+        );
+        sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'completed', videoUrl });
+
+        const stats = await pool.query(
+          `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed, COUNT(*) FILTER (WHERE status = 'failed') as failed
+           FROM ads_studio_scenes WHERE project_id = $1`, [projectId]
+        );
+        const s = stats.rows[0];
+        if (parseInt(s.completed) + parseInt(s.failed) === parseInt(s.total)) {
+          const finalStatus = parseInt(s.failed) === 0 ? 'completed' : (parseInt(s.completed) > 0 ? 'completed' : 'production_failed');
+          await pool.query(
+            `UPDATE ads_studio_projects SET status = $2::varchar, updated_at = NOW(), completed_at = CASE WHEN $2::varchar = 'completed' THEN NOW() ELSE completed_at END WHERE project_id = $1`,
+            [projectId, finalStatus]
+          );
+          sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: finalStatus });
+        }
+      } catch (err) {
+        console.error(`[ADS-STUDIO] Retry scene ${sceneIndex} failed:`, err.message);
+        await pool.query(
+          `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+          [projectId, sceneIndex, err.message]
+        ).catch(() => {});
+        sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'failed', error: err.message });
+
+        try {
+          const stats = await pool.query(
+            `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'completed') as completed, COUNT(*) FILTER (WHERE status = 'failed') as failed
+             FROM ads_studio_scenes WHERE project_id = $1`, [projectId]
+          );
+          const s = stats.rows[0];
+          if (parseInt(s.completed) + parseInt(s.failed) === parseInt(s.total)) {
+            const finalStatus = parseInt(s.completed) > 0 ? 'completed' : 'production_failed';
+            await pool.query(
+              `UPDATE ads_studio_projects SET status = $2::varchar, updated_at = NOW() WHERE project_id = $1`,
+              [projectId, finalStatus]
+            );
+            sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: finalStatus });
+          }
+        } catch (e) {}
+      }
+    })();
+  } catch (error) {
+    console.error('[ADS-STUDIO] Retry scene error:', error.message);
+    res.status(500).json({ error: 'Gagal retry scene' });
+  }
+});
+
 app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
