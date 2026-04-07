@@ -7262,7 +7262,7 @@ function renderAdsStudioDetailPage() {
       if (scene.status === 'failed' && scene.error_message) {
         html += '<div class="error-box">' + escapeHtml(scene.error_message) + '</div>';
       }
-      if ((scene.status === 'failed' || scene.status === 'completed') && scene.image_url) {
+      if ((scene.status === 'failed' || scene.status === 'completed' || scene.status === 'generating_video' || scene.status === 'generating_image') && scene.image_url) {
         html += '<div class="auto-scene-retry-bar">';
         html += '<button class="btn-secondary ads-retry-scene-btn" data-project-id="' + project.project_id + '" data-scene="' + scene.scene_index + '" data-mode="video">Retry Video</button>';
         html += '</div>';

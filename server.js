@@ -14325,6 +14325,7 @@ async function initDatabase() {
       )
     `);
     await pool.query(`ALTER TABLE ads_studio_projects ADD COLUMN IF NOT EXISTS text_overlay_enabled BOOLEAN DEFAULT true`);
+    await pool.query(`ALTER TABLE ads_studio_scenes ADD COLUMN IF NOT EXISTS retry_gen_id VARCHAR(32)`);
     console.log('Ads Studio tables created');
 
     console.log('[DB] Database initialized successfully');
@@ -14954,8 +14955,11 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
                 if (!videoUrl) throw new Error('Video generation failed - no URL');
 
+                const stillOriginal = await pool.query(`SELECT retry_gen_id FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = $2`, [projectId, scene.scene_index]);
+                if (stillOriginal.rows[0]?.retry_gen_id) { console.log(`[ADS-STUDIO] Scene ${scene.scene_index} superseded by retry, discarding original result`); return; }
+
                 await pool.query(
-                  `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2 AND retry_gen_id IS NULL`,
                   [projectId, scene.scene_index, videoUrl]
                 );
                 sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
@@ -14965,8 +14969,10 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               } catch (retryErr) {
                 console.error(`[ADS-STUDIO] Scene ${scene.scene_index} video attempt ${vidRetry + 1}/${maxVideoRetries} failed:`, retryErr.message);
                 if (vidRetry === maxVideoRetries - 1) {
+                  const stillOrig2 = await pool.query(`SELECT retry_gen_id FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = $2`, [projectId, scene.scene_index]);
+                  if (stillOrig2.rows[0]?.retry_gen_id) { console.log(`[ADS-STUDIO] Scene ${scene.scene_index} superseded by retry, not marking failed`); return; }
                   await pool.query(
-                    `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                    `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2 AND retry_gen_id IS NULL`,
                     [projectId, scene.scene_index, 'Video: ' + retryErr.message + ` (${maxVideoRetries} attempts)`]
                   );
                   sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: retryErr.message });
@@ -15094,23 +15100,24 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
     );
     if (sceneResult.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
     const scene = sceneResult.rows[0];
-    if (scene.status !== 'failed' && scene.status !== 'completed') return res.status(400).json({ error: 'Scene harus failed atau completed untuk di-retry' });
+    if (scene.status === 'pending') return res.status(400).json({ error: 'Scene belum mulai generate' });
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.VIDGEN2_ROOM1_KEY_1;
     if (!apimodelsKey) return res.status(500).json({ error: 'Video API key tidak tersedia' });
 
+    const retryGenId = require('crypto').randomBytes(12).toString('hex');
     const retryFull = retryMode === 'full' || !scene.image_url;
     const retryInitStatus = retryFull ? 'generating_image' : 'generating_video';
     if (retryFull) {
       await pool.query(
-        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, image_url = NULL, image_task_id = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-        [projectId, sceneIndex, retryInitStatus]
+        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, image_url = NULL, image_task_id = NULL, video_url = NULL, video_task_id = NULL, retry_gen_id = $4, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus, retryGenId]
       );
       scene.image_url = null;
     } else {
       await pool.query(
-        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, video_url = NULL, video_task_id = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-        [projectId, sceneIndex, retryInitStatus]
+        `UPDATE ads_studio_scenes SET status = $3, error_message = NULL, video_url = NULL, video_task_id = NULL, retry_gen_id = $4, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+        [projectId, sceneIndex, retryInitStatus, retryGenId]
       );
     }
     if (project.status === 'production_failed' || project.status === 'completed') {
@@ -15144,6 +15151,11 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
     const imageResolution = '4K';
 
     (async () => {
+      const checkStillValid = async () => {
+        const chk = await pool.query(`SELECT retry_gen_id FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = $2`, [projectId, sceneIndex]);
+        return chk.rows.length > 0 && chk.rows[0].retry_gen_id === retryGenId;
+      };
+
       try {
         let sceneImageUrl = scene.image_url;
         const characterRefUrl = project.character_image_url || null;
@@ -15209,12 +15221,16 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
           }
           if (!sceneImageUrl) throw new Error('Image generation failed');
 
+          if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after image gen, aborting`); return; }
+
           await pool.query(
-            `UPDATE ads_studio_scenes SET image_url = $3, status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-            [projectId, sceneIndex, sceneImageUrl]
+            `UPDATE ads_studio_scenes SET image_url = $3, status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2 AND retry_gen_id = $4`,
+            [projectId, sceneIndex, sceneImageUrl, retryGenId]
           );
           sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'generating_video', imageUrl: sceneImageUrl });
         }
+
+        if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded before video gen, aborting`); return; }
 
         let videoUrl = null;
         if (isFreepik) {
@@ -15244,9 +15260,11 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         }
         if (!videoUrl) throw new Error('Video generation failed - no URL');
 
+        if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after video gen, aborting`); return; }
+
         await pool.query(
-          `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-          [projectId, sceneIndex, videoUrl]
+          `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2 AND retry_gen_id = $4`,
+          [projectId, sceneIndex, videoUrl, retryGenId]
         );
         sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'completed', videoUrl });
 
@@ -15265,9 +15283,10 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         }
       } catch (err) {
         console.error(`[ADS-STUDIO] Retry scene ${sceneIndex} failed:`, err.message);
+        if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded on error, ignoring`); return; }
         await pool.query(
-          `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-          [projectId, sceneIndex, err.message]
+          `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2 AND retry_gen_id = $4`,
+          [projectId, sceneIndex, err.message, retryGenId]
         ).catch(() => {});
         sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex, status: 'failed', error: err.message });
 
