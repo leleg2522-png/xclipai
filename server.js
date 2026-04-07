@@ -11389,10 +11389,37 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
   let requestBody = {};
   const dur = String(videoDuration || 5);
-  const characterLockPrompt = prompt
-    ? `${prompt}, consistent character appearance, cinematic smooth natural motion`
-    : 'cinematic video with smooth natural motion, consistent character';
-  const charNegPrompt = 'face morph, body transformation, deformed face, extra limbs, blurry, low quality, distorted, glitch, static frozen';
+
+  function simplifyPromptForVideo(rawPrompt) {
+    if (!rawPrompt) return 'cinematic video with smooth natural motion, consistent character';
+    let simplified = rawPrompt;
+    let dialogPart = '';
+    const dialogMatch = simplified.match(/(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["']([^"']+)["']/i);
+    if (dialogMatch) {
+      let dialogText = dialogMatch[1].trim();
+      const dialogWords = dialogText.split(/\s+/);
+      if (dialogWords.length > 15) {
+        dialogText = dialogWords.slice(0, 15).join(' ');
+      }
+      dialogPart = `, character speaking saying "${dialogText}"`;
+    }
+    simplified = simplified.replace(/(?:character\s+)?(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["'][^"']*["']/gi, '');
+    simplified = simplified.replace(/["'][^"']{20,}["']/g, '');
+    simplified = simplified.replace(/cinematic\s+photorealistic/gi, '');
+    simplified = simplified.replace(/9:16\s+vertical\s+frame/gi, '');
+    simplified = simplified.replace(/16:9\s+widescreen/gi, '');
+    simplified = simplified.replace(/,\s*,/g, ',').replace(/\s{2,}/g, ' ').trim();
+    const words = simplified.split(/\s+/);
+    if (words.length > 35) {
+      simplified = words.slice(0, 35).join(' ');
+    }
+    simplified += dialogPart;
+    simplified += ', natural lip sync, consistent character, correct human anatomy, two arms two hands five fingers each hand';
+    return simplified;
+  }
+
+  const characterLockPrompt = simplifyPromptForVideo(prompt);
+  const charNegPrompt = 'extra hands, extra arms, extra fingers, three hands, three arms, six fingers, deformed hands, mutated hands, fused fingers, too many fingers, extra limbs, missing fingers, deformed body, face morph, body transformation, deformed face, blurry, low quality, distorted, glitch, static frozen, duplicate body parts, conjoined, mutation';
 
   if (config.api === 'kling26') {
     requestBody = {
