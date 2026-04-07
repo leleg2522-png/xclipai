@@ -135,7 +135,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 1: Create project (niche, format, video model, scene count, language)
   - Step 2: AI generates script via ApiModels.app (GPT-5, endpoint: api.apimodels.app) with narration + visual prompts per scene
   - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - generates IMAGE first per scene (ApiModels image API), then generates VIDEO from that image (image-to-video via ApiModels video API or Freepik API for Kling models)
+  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially (for character consistency), Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
   - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik)
   - Freepik models use Key Pool system with automatic rotation on exhaustion, fallback to ApiModels if all keys exhausted
   - Real-time SSE updates for project and scene status changes
@@ -149,7 +149,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 1: Create project (product info, ad type soft/hard, format shorts/landscape, video model, duration, scene count, language, voice over toggle)
   - Step 2: AI generates ad script via ApiModels Claude Sonnet (with Gemini/GPT fallbacks) - narration, text overlay, visual prompt per scene
   - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - generates IMAGE per scene (ApiModels nanobanana-2-beta), then generates VIDEO from image (ApiModels or Freepik)
+  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially (for character/product consistency with reference images), Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
   - Step 5: Merge all scene videos into final ad video via FFmpeg
   - Character reference + product image upload support (FormData with multer)
   - Video models: Wan 2.6 Pro (default, Freepik Key Pool), Kling 2.6 Pro (Freepik Key Pool), Kling V3 (Freepik Key Pool), Veo 3.1 Fast (ApiModels)

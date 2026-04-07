@@ -12227,12 +12227,19 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
         }
         let prevSceneImageUrl = null;
         let scene1ImageUrl = null;
+        console.log(`[AUTOMATION] Phase 1: Generating images sequentially for ${scenes.rows.length} scenes`);
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (!referenceImageUrl && scene.image_url) referenceImageUrl = scene.image_url;
             if (scene.scene_index === 0 && scene.image_url) scene1ImageUrl = scene.image_url;
             if (scene.image_url) prevSceneImageUrl = scene.image_url;
             continue;
+          }
+
+          if (scene.image_url) {
+            prevSceneImageUrl = scene.image_url;
+            if (scene.scene_index === 0) scene1ImageUrl = scene.image_url;
+            if (!referenceImageUrl) referenceImageUrl = scene.image_url;
           }
 
           if (!scene.image_url) {
@@ -12360,60 +12367,96 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
               continue;
             }
           }
+        }
 
-          await pool.query(
-            `UPDATE automation_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-            [projectId, scene.scene_index]
-          );
-          sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
+        const autoScenesWithImages = scenes.rows.filter(s => s.image_url && !(s.status === 'completed' && s.video_url));
+        if (autoScenesWithImages.length > 0) {
+          console.log(`[AUTOMATION] Phase 2: Generating ${autoScenesWithImages.length} videos in PARALLEL`);
 
-          try {
-            let videoUrl = null;
+          const autoVideoPromises = autoScenesWithImages.map(scene => (async () => {
+            try {
+            await pool.query(
+              `UPDATE automation_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index]
+            );
+            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
 
-            if (isFreepik) {
-              console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}`);
-              const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
-
-              if (fpResult.success) {
-                await pool.query(
-                  `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                  [projectId, scene.scene_index, fpResult.taskId]
-                );
-                const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'automation');
-                if (pollResult.status === 'completed') {
-                  videoUrl = pollResult.url;
-                } else {
-                  throw new Error(pollResult.error || 'Freepik video failed');
+            const maxVideoRetries = 3;
+            for (let vidRetry = 0; vidRetry < maxVideoRetries; vidRetry++) {
+              try {
+                if (vidRetry > 0) {
+                  console.log(`[AUTOMATION] Video retry #${vidRetry} for scene ${scene.scene_index}`);
+                  sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video', retry: vidRetry });
+                  await new Promise(r => setTimeout(r, 5000));
                 }
-              } else if (fpResult.fallback) {
-                console.log(`[AUTOMATION] Freepik keys exhausted, falling back to ApiModels for scene ${scene.scene_index}`);
-                const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-                const fallbackResult = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
-                videoUrl = fallbackResult;
-              } else {
-                throw new Error(fpResult.error || 'Freepik generation failed');
+                let videoUrl = null;
+
+                if (isFreepik) {
+                  console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}`);
+                  const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
+
+                  if (fpResult.success) {
+                    await pool.query(
+                      `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                      [projectId, scene.scene_index, fpResult.taskId]
+                    );
+                    const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'automation');
+                    if (pollResult.status === 'completed') {
+                      videoUrl = pollResult.url;
+                    } else {
+                      throw new Error(pollResult.error || 'Freepik video failed');
+                    }
+                  } else if (fpResult.fallback) {
+                    console.log(`[AUTOMATION] Freepik keys exhausted, falling back to ApiModels for scene ${scene.scene_index}`);
+                    const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+                  } else {
+                    throw new Error(fpResult.error || 'Freepik generation failed');
+                  }
+                } else {
+                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+                }
+
+                if (!videoUrl) throw new Error('Video generation failed - no URL');
+
+                await pool.query(
+                  `UPDATE automation_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, videoUrl]
+                );
+                sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
+                console.log(`[AUTOMATION] Scene ${scene.scene_index} completed (attempt ${vidRetry + 1}): ${videoUrl}`);
+                return;
+
+              } catch (retryErr) {
+                console.error(`[AUTOMATION] Scene ${scene.scene_index} video attempt ${vidRetry + 1}/${maxVideoRetries} failed:`, retryErr.message);
+                if (vidRetry === maxVideoRetries - 1) {
+                  await pool.query(
+                    `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                    [projectId, scene.scene_index, 'Video: ' + retryErr.message + ` (${maxVideoRetries} attempts)`]
+                  );
+                  sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: retryErr.message });
+                }
               }
-            } else {
-              videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
             }
+            } catch (outerErr) {
+              console.error(`[AUTOMATION] Scene ${scene.scene_index} unexpected error:`, outerErr.message);
+              try {
+                await pool.query(
+                  `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, 'Unexpected: ' + outerErr.message]
+                );
+                sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: outerErr.message });
+              } catch (dbErr) { console.error(`[AUTOMATION] Failed to mark scene ${scene.scene_index} as failed:`, dbErr.message); }
+            }
+          })());
 
-            if (!videoUrl) throw new Error('Video generation failed - no URL');
-
-            await pool.query(
-              `UPDATE automation_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, videoUrl]
-            );
-            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
-            console.log(`[AUTOMATION] Scene ${scene.scene_index} completed: ${videoUrl}`);
-
-          } catch (sceneErr) {
-            console.error(`[AUTOMATION] Scene ${scene.scene_index} video failed:`, sceneErr.message);
-            await pool.query(
-              `UPDATE automation_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, 'Video: ' + sceneErr.message]
-            );
-            sendSSEToUser(project.user_id, { type: 'automation_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: sceneErr.message });
-          }
+          const autoVideoResults = await Promise.allSettled(autoVideoPromises);
+          autoVideoResults.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              console.error(`[AUTOMATION] Scene ${autoScenesWithImages[i].scene_index} promise rejected:`, r.reason?.message || r.reason);
+            }
+          });
+          console.log(`[AUTOMATION] All ${autoScenesWithImages.length} video generations finished`);
         }
 
         const completedScenes = await pool.query(
@@ -14723,11 +14766,17 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
         let prevSceneImageUrl = null;
         let scene1ImageUrl = null;
 
+        console.log(`[ADS-STUDIO] Phase 1: Generating images sequentially for ${scenes.rows.length} scenes`);
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
             if (scene.image_url) prevSceneImageUrl = scene.image_url;
             if (scene.scene_index === 0 && scene.image_url) scene1ImageUrl = scene.image_url;
             continue;
+          }
+
+          if (scene.image_url) {
+            prevSceneImageUrl = scene.image_url;
+            if (scene.scene_index === 0) scene1ImageUrl = scene.image_url;
           }
 
           if (!scene.image_url) {
@@ -14838,68 +14887,93 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               continue;
             }
           }
+        }
 
-          await pool.query(
-            `UPDATE ads_studio_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-            [projectId, scene.scene_index]
-          );
-          sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
+        const scenesWithImages = scenes.rows.filter(s => s.image_url && !(s.status === 'completed' && s.video_url));
+        if (scenesWithImages.length > 0) {
+          console.log(`[ADS-STUDIO] Phase 2: Generating ${scenesWithImages.length} videos in PARALLEL`);
 
-          const maxVideoRetries = 3;
-          let videoSuccess = false;
-          for (let vidRetry = 0; vidRetry < maxVideoRetries && !videoSuccess; vidRetry++) {
+          const videoPromises = scenesWithImages.map(scene => (async () => {
             try {
-              if (vidRetry > 0) {
-                console.log(`[ADS-STUDIO] Video retry #${vidRetry} for scene ${scene.scene_index}`);
-                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video', retry: vidRetry });
-                await new Promise(r => setTimeout(r, 5000));
-              }
-              let videoUrl = null;
+            await pool.query(
+              `UPDATE ads_studio_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+              [projectId, scene.scene_index]
+            );
+            sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
 
-              if (isFreepik) {
-                const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
-                if (fpResult.success) {
-                  await pool.query(
-                    `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                    [projectId, scene.scene_index, fpResult.taskId]
-                  );
-                  const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'ads_studio');
-                  if (pollResult.status === 'completed') {
-                    videoUrl = pollResult.url;
-                  } else {
-                    throw new Error(pollResult.error || 'Freepik video failed');
-                  }
-                } else if (fpResult.fallback) {
-                  const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
-                } else {
-                  throw new Error(fpResult.error || 'Freepik generation failed');
+            const maxVideoRetries = 3;
+            for (let vidRetry = 0; vidRetry < maxVideoRetries; vidRetry++) {
+              try {
+                if (vidRetry > 0) {
+                  console.log(`[ADS-STUDIO] Video retry #${vidRetry} for scene ${scene.scene_index}`);
+                  sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video', retry: vidRetry });
+                  await new Promise(r => setTimeout(r, 5000));
                 }
-              } else {
-                videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
-              }
+                let videoUrl = null;
 
-              if (!videoUrl) throw new Error('Video generation failed - no URL');
+                if (isFreepik) {
+                  const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
+                  if (fpResult.success) {
+                    await pool.query(
+                      `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                      [projectId, scene.scene_index, fpResult.taskId]
+                    );
+                    const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'ads_studio');
+                    if (pollResult.status === 'completed') {
+                      videoUrl = pollResult.url;
+                    } else {
+                      throw new Error(pollResult.error || 'Freepik video failed');
+                    }
+                  } else if (fpResult.fallback) {
+                    const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+                  } else {
+                    throw new Error(fpResult.error || 'Freepik generation failed');
+                  }
+                } else {
+                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+                }
 
-              await pool.query(
-                `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                [projectId, scene.scene_index, videoUrl]
-              );
-              sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
-              console.log(`[ADS-STUDIO] Scene ${scene.scene_index} completed (attempt ${vidRetry + 1}): ${videoUrl}`);
-              videoSuccess = true;
+                if (!videoUrl) throw new Error('Video generation failed - no URL');
 
-            } catch (retryErr) {
-              console.error(`[ADS-STUDIO] Scene ${scene.scene_index} video attempt ${vidRetry + 1}/${maxVideoRetries} failed:`, retryErr.message);
-              if (vidRetry === maxVideoRetries - 1) {
                 await pool.query(
-                  `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                  [projectId, scene.scene_index, 'Video: ' + retryErr.message + ` (${maxVideoRetries} attempts)`]
+                  `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, videoUrl]
                 );
-                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: retryErr.message });
+                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
+                console.log(`[ADS-STUDIO] Scene ${scene.scene_index} completed (attempt ${vidRetry + 1}): ${videoUrl}`);
+                return;
+
+              } catch (retryErr) {
+                console.error(`[ADS-STUDIO] Scene ${scene.scene_index} video attempt ${vidRetry + 1}/${maxVideoRetries} failed:`, retryErr.message);
+                if (vidRetry === maxVideoRetries - 1) {
+                  await pool.query(
+                    `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                    [projectId, scene.scene_index, 'Video: ' + retryErr.message + ` (${maxVideoRetries} attempts)`]
+                  );
+                  sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: retryErr.message });
+                }
               }
             }
-          }
+            } catch (outerErr) {
+              console.error(`[ADS-STUDIO] Scene ${scene.scene_index} unexpected error:`, outerErr.message);
+              try {
+                await pool.query(
+                  `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, 'Unexpected: ' + outerErr.message]
+                );
+                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: outerErr.message });
+              } catch (dbErr) { console.error(`[ADS-STUDIO] Failed to mark scene ${scene.scene_index} as failed:`, dbErr.message); }
+            }
+          })());
+
+          const videoResults = await Promise.allSettled(videoPromises);
+          videoResults.forEach((r, i) => {
+            if (r.status === 'rejected') {
+              console.error(`[ADS-STUDIO] Scene ${scenesWithImages[i].scene_index} promise rejected:`, r.reason?.message || r.reason);
+            }
+          });
+          console.log(`[ADS-STUDIO] All ${scenesWithImages.length} video generations finished`);
         }
 
         const completedScenes = await pool.query(
