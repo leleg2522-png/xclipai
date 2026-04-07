@@ -14201,6 +14201,7 @@ async function initDatabase() {
         scene_count INTEGER DEFAULT 4,
         language VARCHAR(50) DEFAULT 'id',
         voice_over_enabled BOOLEAN DEFAULT false,
+        text_overlay_enabled BOOLEAN DEFAULT true,
         voice_id VARCHAR(255),
         voice_name VARCHAR(255),
         status VARCHAR(50) DEFAULT 'draft',
@@ -14234,6 +14235,7 @@ async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await pool.query(`ALTER TABLE ads_studio_projects ADD COLUMN IF NOT EXISTS text_overlay_enabled BOOLEAN DEFAULT true`);
     console.log('Ads Studio tables created');
 
     console.log('[DB] Database initialized successfully');
@@ -14331,7 +14333,7 @@ app.post('/api/ads-studio/projects', upload.fields([
 ]), async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   try {
-    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled } = req.body;
+    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, textOverlayEnabled } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
@@ -14347,10 +14349,12 @@ app.post('/api/ads-studio/projects', upload.fields([
       productImageUrl = `${baseUrl}/uploads/${req.files['productImage'][0].filename}`;
     }
 
+    const overlayEnabled = textOverlayEnabled === undefined || textOverlayEnabled === 'true' || textOverlayEnabled === true;
+
     await pool.query(
-      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
+      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, text_overlay_enabled, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')`,
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true, overlayEnabled]
     );
 
     res.json({ success: true, projectId });
@@ -14893,14 +14897,19 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 const downloadedFiles = [];
                 const overlayedFiles = [];
                 const tmpDir = require('os').tmpdir();
+                const useOverlay = project.text_overlay_enabled !== false;
                 for (const s of completedScenesData.rows) {
                   const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
                   await downloadFileToPath(s.video_url, destPath);
                   downloadedFiles.push(destPath);
 
-                  const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
-                  await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay || '');
-                  overlayedFiles.push(overlayPath);
+                  if (useOverlay && s.text_overlay && s.text_overlay.trim()) {
+                    const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
+                    await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay);
+                    overlayedFiles.push(overlayPath);
+                  } else {
+                    overlayedFiles.push(destPath);
+                  }
                 }
 
                 const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
@@ -14914,7 +14923,8 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 );
                 sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-                for (const f of [...downloadedFiles, ...overlayedFiles]) {
+                const filesToClean = [...new Set([...downloadedFiles, ...overlayedFiles])];
+                for (const f of filesToClean) {
                   try { fs.unlinkSync(f); } catch (e) {}
                 }
               } catch (mergeErr) {
@@ -14977,14 +14987,19 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
         const downloadedFiles = [];
         const overlayedFiles = [];
         const tmpDir = require('os').tmpdir();
+        const useOverlay = project.text_overlay_enabled !== false;
         for (const s of completedScenes.rows) {
           const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
           await downloadFileToPath(s.video_url, destPath);
           downloadedFiles.push(destPath);
 
-          const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
-          await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay || '');
-          overlayedFiles.push(overlayPath);
+          if (useOverlay && s.text_overlay && s.text_overlay.trim()) {
+            const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
+            await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay);
+            overlayedFiles.push(overlayPath);
+          } else {
+            overlayedFiles.push(destPath);
+          }
         }
 
         const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
@@ -14998,7 +15013,8 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
         );
         sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-        for (const f of [...downloadedFiles, ...overlayedFiles]) {
+        const filesToClean = [...new Set([...downloadedFiles, ...overlayedFiles])];
+        for (const f of filesToClean) {
           try { fs.unlinkSync(f); } catch (e) {}
         }
       } catch (mergeErr) {
