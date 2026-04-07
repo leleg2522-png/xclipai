@@ -14452,10 +14452,25 @@ CHARACTER SPEAKING (CRITICAL — video AI generates audio):
 - The video model generates audio including speech from the character
 - In EVERY visual_prompt, include the character SPEAKING/TALKING naturally
 - Write exactly what the character says in ${langName} using this format: character speaks saying "[exact dialogue in ${langName}]"
-- The dialogue should match or summarize the narration content
 - Character must have natural lip movement, facial expressions while speaking
-- Example: "woman holds product and speaks to camera saying 'Ini serum favorit aku, kulit langsung glowing dalam seminggu', genuine smile forming, maintaining eye contact"
-- Keep dialogue short (1-2 sentences) and natural/conversational in ${langName}
+
+DIALOGUE STYLE — MUST BE NATURAL & CASUAL (NOT ROBOTIC):
+- Write dialogue like a REAL PERSON talking to their friend or doing a casual review, NOT like a script or commercial
+- Use casual/informal language: "gue/aku", "banget", "sih", "nih", "deh", "loh", "dong", "kan"
+- Add natural speech patterns: filler words, pauses, reactions like "Wah", "Eh", "Nah", "Hmm"
+- BAD (kaku/robotic): "Produk ini memiliki kualitas premium dengan harga terjangkau" ← sounds like robot reading
+- BAD (kaku/robotic): "Selamat datang, hari ini saya akan membahas produk ini" ← too formal
+- GOOD (natural): "Eh ini seriusan bagus sih, aku awalnya ragu tapi ternyata beneran worth it"
+- GOOD (natural): "Nah ini nih yang aku suka, teksturnya tuh ringan banget"
+- GOOD (natural): "Wah gila, baru seminggu udah keliatan bedanya loh"
+- Each dialogue should feel like ONE continuous thought, not a rehearsed line
+
+VOICE CONSISTENCY (CRITICAL — same voice across all scenes):
+- The character must speak with the SAME tone, energy level, and speaking style in EVERY scene
+- Pick ONE personality and stick with it: casual reviewer, excited friend, calm expert, etc.
+- Do NOT switch between formal and informal between scenes
+- If Scene 1 uses casual tone ("gue suka banget nih"), ALL scenes must stay casual
+- Same emotional energy: if enthusiastic in Scene 1, stay enthusiastic throughout
 
 SCENE CONTINUITY:
 - Same character appearance, clothing, and setting across all scenes
@@ -14482,7 +14497,7 @@ Return ONLY valid JSON:
   "product_visual_description": "precise visual description of ${project.product_name} — shape, color, packaging, branding, size, material",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 kalimat pendek' : '2-3 kalimat'} in ${langName}",
+      "narration": "${project.format === 'shorts' ? '1-2 kalimat pendek' : '2-3 kalimat'} in ${langName} — casual, natural, like talking to a friend",
       "text_overlay": "5-15 words in ${langName} — will be burned onto the video as subtitle",
       "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words."
     }
@@ -14492,9 +14507,9 @@ Return ONLY valid JSON:
 VISUAL PROMPT TEMPLATE (follow this structure):
 "[CHARACTER does ACTION with PRODUCT — use motion verbs: lifts, turns, examines, reaches, slides], [CAMERA: slow push-in / gentle pan / tracking / orbit], [ENVIRONMENT MOTION: wind through hair, light shifting, steam rising, fabric flowing, reflections moving], [MICRO-DETAILS: fingers brushing surface, smile forming, eyes glancing], cinematic photorealistic, ${project.format === 'shorts' ? '9:16 vertical frame' : '16:9 widescreen'}"
 
-EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian dialogue' : 'English dialogue'}):
-Scene 1: "woman picks up serum bottle from marble counter and speaks to camera saying '${langName === 'Bahasa Indonesia' ? 'Aku udah coba banyak serum, tapi ini beda banget' : 'I have tried many serums but this one is different'}', camera pushes in from medium to close-up, golden morning light intensifies through sheer curtain, dust particles drift in sunbeam, genuine curious expression, natural lip movement while speaking"
-Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Teksturnya ringan dan langsung meresap' : 'The texture is light and absorbs instantly'}', droplet catches light with prismatic sparkle, camera orbits slowly right, bokeh shifts in background, satisfied smile forming while explaining"
+EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian dialogue — casual, natural' : 'English dialogue — casual, natural'}):
+Scene 1: "woman picks up serum bottle from marble counter and speaks to camera saying '${langName === 'Bahasa Indonesia' ? 'Eh guys, ini seriusan sih, aku awalnya ragu tapi ternyata beda banget sama yang lain' : 'Okay so I was honestly skeptical at first but this one is actually different'}', camera pushes in from medium to close-up, golden morning light intensifies through sheer curtain, dust particles drift in sunbeam, excited genuine expression, natural lip movement while speaking"
+Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Nah coba liat nih teksturnya, ringan banget dan langsung nyerep gitu loh' : 'Look at this texture though, it is so light and just sinks right in'}', droplet catches light with prismatic sparkle, camera orbits slowly right, bokeh shifts in background, impressed smile forming while casually explaining"
 
 CONTINUITY: Same character, same product, same setting. Each scene flows logically to the next.`;
 
