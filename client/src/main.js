@@ -418,7 +418,7 @@ const state = {
       productDescription: '',
       adType: 'soft_selling',
       format: 'shorts',
-      videoModel: 'wan-v2.6-pro',
+      videoModel: 'wan-v2.7-pro',
       videoDuration: 5,
       sceneCount: 4,
       language: 'id',
@@ -6488,7 +6488,7 @@ async function createAdsStudioProject() {
   var productDesc = (descEl ? descEl.value : '') || '';
   var adType = (adTypeEl ? adTypeEl.value : '') || 'soft_selling';
   var format = (formatEl ? formatEl.value : '') || 'shorts';
-  var videoModel = (modelEl ? modelEl.value : '') || 'wan-v2.6-pro';
+  var videoModel = (modelEl ? modelEl.value : '') || 'wan-v2.7-pro';
   var videoDuration = (durEl ? parseInt(durEl.value) : 5) || 5;
   var sceneCount = (sceneEl ? parseInt(sceneEl.value) : 4) || 4;
   var language = (langEl ? langEl.value : '') || 'id';
@@ -6533,7 +6533,7 @@ async function createAdsStudioProject() {
 
     var data = await response.json();
     if (data.success) {
-      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.6-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
+      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.7-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
       state.adsStudio.isCreating = false;
       state.adsStudio._loaded = false;
       await loadAdsStudioProjects();
@@ -7090,7 +7090,8 @@ function renderAdsStudioPage() {
   html += '<option value="landscape"' + (state.adsStudio.newProject.format === 'landscape' ? ' selected' : '') + '>Landscape</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsVideoModel">';
-  html += '<option value="wan-v2.6-pro" selected>Wan 2.6 Pro</option>';
+  html += '<option value="wan-v2.7-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.7-pro' || !state.adsStudio.newProject.videoModel ? ' selected' : '') + '>Wan 2.7 Pro</option>';
+  html += '<option value="wan-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.6-pro' ? ' selected' : '') + '>Wan 2.6 Pro</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
   html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';

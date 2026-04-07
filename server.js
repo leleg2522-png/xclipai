@@ -11425,7 +11425,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
     'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' },
     'wan-v2.6-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p', api: 'wan26' },
-    'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' }
+    'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' },
+    'wan-v2.7-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-7-1080p', api: 'wan26' },
+    'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-7-720p', api: 'wan26' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -14208,7 +14210,7 @@ async function initDatabase() {
         product_description TEXT,
         ad_type VARCHAR(20) DEFAULT 'soft_selling',
         format VARCHAR(20) DEFAULT 'shorts',
-        video_model VARCHAR(100) DEFAULT 'wan-v2.6-pro',
+        video_model VARCHAR(100) DEFAULT 'wan-v2.7-pro',
         video_duration INTEGER DEFAULT 5,
         character_image_url TEXT,
         product_image_url TEXT,
@@ -14365,7 +14367,7 @@ app.post('/api/ads-studio/projects', upload.fields([
     await pool.query(
       `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.6-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
     );
 
     res.json({ success: true, projectId });
@@ -14675,9 +14677,10 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
-      'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' }
+      'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
     };
-    const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.6-pro'];
+    const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
