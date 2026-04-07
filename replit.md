@@ -202,6 +202,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
 
 ## Security Fixes Applied (March 2026)
 - **Vidgen4/Vidgen2 Proxy & Download Auth**: Added API key validation + ownership verification + URL domain allowlist to `/api/vidgen4/proxy-video`, `/api/vidgen4/download`, `/api/vidgen2/proxy-video`, `/api/vidgen2/download`. Only the video owner can access/download their own videos.
+- **CDN Redirect Optimization (Bandwidth Savings)**: Video proxy endpoints (`/api/videogen/proxy-video`, `/api/vidgen2/proxy-video`, `/api/vidgen4/proxy-video`) now use `res.redirect(302, videoUrl)` instead of downloading+piping video through the server. This eliminates double bandwidth (download from CDN + upload to user) and saves ~80% of Railway network costs. Download endpoints still pipe through server for proper `Content-Disposition: attachment` headers. URL health check via `HEAD` request before redirect; if expired, refreshes URL from Freepik API then redirects.
 - **Download Proxy Hardened**: `/api/download-video` now requires session auth + HTTPS-only URL domain allowlist (prevents SSRF attacks).
 - **Open Redirect Fixed**: Proxy-video endpoints now validate URL hostname against allowed CDN domains before redirecting.
 - **localStorage Per-User Isolation**: All localStorage keys (pending tasks, user inputs, API keys) are now prefixed with user ID via `getUserStorageKey()`. Prevents data leaking between users sharing the same browser.

@@ -4853,35 +4853,20 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     const cached = videoRefreshCache.get(taskId);
     if (cached) videoUrl = cached.url;
 
-    async function tryStream(url) {
-      const resp = await axios.get(url, {
-        responseType: 'stream',
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://www.freepik.com/',
-          'Accept': 'video/mp4,video/*,*/*'
-        }
-      });
-      const ct = resp.headers['content-type'] || 'video/mp4';
-      res.setHeader('Content-Type', ct);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      if (resp.headers['content-length']) res.setHeader('Content-Length', resp.headers['content-length']);
-      resp.data.pipe(res);
-      return true;
+    async function checkUrlAlive(url) {
+      try {
+        const resp = await axios.head(url, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        return resp.status >= 200 && resp.status < 400;
+      } catch (e) {
+        const st = e.response?.status;
+        return st !== 403 && st !== 410 && st !== 401;
+      }
     }
 
-    try {
-      await tryStream(videoUrl);
-      return;
-    } catch (firstErr) {
-      const status = firstErr.response?.status;
-      if (status !== 403 && status !== 410 && status !== 401) {
-        console.error('[VIDEOGEN] Proxy video error:', firstErr.message);
-        if (!res.headersSent) return res.status(500).json({ error: 'Gagal memuat video' });
-        return;
-      }
+    const urlAlive = await checkUrlAlive(videoUrl);
+    if (urlAlive) {
+      console.log(`[VIDEOGEN] Redirecting to CDN for task ${taskId}`);
+      return res.redirect(302, videoUrl);
     }
 
     if (videoRefreshFailed.has(taskId)) {
@@ -4889,7 +4874,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     }
 
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
-      console.log(`[VIDEOGEN] Task ${taskId} already refreshed recently but still 403, marking failed`);
+      console.log(`[VIDEOGEN] Task ${taskId} already refreshed recently but still expired, marking failed`);
       videoRefreshFailed.set(taskId, Date.now());
       return res.status(410).json({ error: 'Video sudah tidak tersedia' });
     }
@@ -4923,7 +4908,6 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
 
     const model = task.model || '';
     const isMotion = model.startsWith('motion-');
-    const isPro = model.includes('pro');
 
     const vidgen3Endpoints = {
       'minimax-live': '/v1/ai/image-to-video/minimax-live',
@@ -4950,15 +4934,11 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
 
     let pollEndpoints = [];
     if (isMotion) {
-      pollEndpoints = [
-        `/v1/ai/image-to-video/kling-v2-6/${taskId}`
-      ];
+      pollEndpoints = [`/v1/ai/image-to-video/kling-v2-6/${taskId}`];
     } else {
       const allEndpoints = { ...vidgen3Endpoints, ...videogenEndpoints };
       const matched = allEndpoints[model];
-      if (matched) {
-        pollEndpoints.push(`${matched}/${taskId}`);
-      }
+      if (matched) pollEndpoints.push(`${matched}/${taskId}`);
       pollEndpoints.push(`/v1/ai/image-to-video/kling-v2-6/${taskId}`);
       pollEndpoints = [...new Set(pollEndpoints)];
     }
@@ -4966,22 +4946,13 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     let freshUrl = null;
     for (const ep of pollEndpoints) {
       try {
-        const pollResp = await makeFreepikRequest(
-          'GET',
-          `https://api.freepik.com${ep}`,
-          apiKey,
-          null,
-          true,
-          taskId,
-          'decodo'
-        );
+        const pollResp = await makeFreepikRequest('GET', `https://api.freepik.com${ep}`, apiKey, null, true, taskId, 'decodo');
         const d = pollResp.data?.data || pollResp.data;
         freshUrl = (d.generated && d.generated.length > 0 ? d.generated[0] : null)
           || d.video?.url || d.result?.url || d.url;
         if (freshUrl) break;
       } catch (e) {
         if (e.response?.status === 429) {
-          console.log(`[VIDEOGEN] Rate limited during refresh for ${taskId}, skipping`);
           videoRefreshFailed.set(taskId, Date.now());
           return res.status(429).json({ error: 'Rate limited, coba lagi nanti' });
         }
@@ -4997,15 +4968,8 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     videoRefreshCache.set(taskId, { url: freshUrl, at: Date.now() });
     await pool.query('UPDATE video_generation_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
     await pool.query('UPDATE vidgen3_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
-    console.log(`[VIDEOGEN] Refreshed video URL for task ${taskId}`);
-
-    try {
-      await tryStream(freshUrl);
-    } catch (e) {
-      console.error('[VIDEOGEN] Fresh URL also failed:', e.message);
-      videoRefreshFailed.set(taskId, Date.now());
-      if (!res.headersSent) res.status(410).json({ error: 'Video sudah tidak tersedia' });
-    }
+    console.log(`[VIDEOGEN] Refreshed video URL for task ${taskId}, redirecting to CDN`);
+    return res.redirect(302, freshUrl);
   } catch (error) {
     console.error('[VIDEOGEN] Proxy video error:', error.message);
     if (!res.headersSent) res.status(500).json({ error: 'Gagal memuat video' });
@@ -7538,20 +7502,8 @@ app.get('/api/vidgen2/proxy-video', async (req, res) => {
       return res.status(403).json({ error: 'Video bukan milik Anda' });
     }
     
-    const response = await axios.get(videoUrl, {
-      responseType: 'stream',
-      timeout: 600000
-    });
-    
-    const contentType = response.headers['content-type'] || 'video/mp4';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    if (response.headers['content-length']) {
-      res.setHeader('Content-Length', response.headers['content-length']);
-    }
-    
-    response.data.pipe(res);
+    console.log(`[VIDGEN2] Redirecting to CDN for user ${keyInfo.user_id}: ${videoUrl.substring(0, 80)}`);
+    return res.redirect(302, videoUrl);
   } catch (error) {
     console.error('[VIDGEN2] Video proxy error:', error.message);
     res.status(500).json({ error: 'Gagal memuat video' });
