@@ -14831,15 +14831,15 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 if (productRefUrl) { refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE (this product must appear in the scene)`); imgIdx++; }
                 if (scene.scene_index > 0 && prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE for continuity`); imgIdx++; }
                 if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = SCENE 1 for overall style consistency`); }
-                refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.`;
+                refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.`;
               } else {
-                refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.';
+                refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.';
               }
 
               const genBody = {
                 model: imageModel,
                 prompt: refPrompt,
-                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text',
+                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection',
                 aspect_ratio: aspectRatio,
                 resolution: imageResolution
               };
@@ -15194,15 +15194,15 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
 
           let refPrompt;
           if (refImages.length > 0) {
-            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.`;
+            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES: Character must look EXACTLY like the character reference. Product must be VISIBLE and match the product reference. Same person, same product, same look across all scenes. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.`;
           } else {
-            refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image.';
+            refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.';
           }
 
           const genBody = {
             model: imageModel,
             prompt: refPrompt,
-            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text',
+            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection',
             aspect_ratio: aspectRatio,
             resolution: imageResolution
           };
