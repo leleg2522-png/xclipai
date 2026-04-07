@@ -14422,7 +14422,7 @@ app.post('/api/ads-studio/projects', upload.fields([
 ]), async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   try {
-    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, textOverlayEnabled } = req.body;
+    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
@@ -14438,12 +14438,10 @@ app.post('/api/ads-studio/projects', upload.fields([
       productImageUrl = `${baseUrl}/uploads/${req.files['productImage'][0].filename}`;
     }
 
-    const overlayEnabled = textOverlayEnabled === undefined || textOverlayEnabled === 'true' || textOverlayEnabled === true;
-
     await pool.query(
-      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, text_overlay_enabled, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true, overlayEnabled]
+      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
     );
 
     res.json({ success: true, projectId });
@@ -14543,8 +14541,7 @@ SCENE CONTINUITY:
 - Product looks identical in every scene — same colors, packaging, branding
 - Logical action flow between scenes (not random jumps)
 
-TEXT OVERLAY: Each scene gets a short text_overlay (5-15 words) in ${langName}
-- ${project.ad_type === 'hard_selling' ? 'Product name, key benefit, price/discount, or CTA' : 'Subtle product mention, lifestyle statement, soft recommendation'}`;
+`;
 
     let userPrompt = `Create a ${formatDesc} PRODUCT AD script for "${project.product_name}".
 ${project.product_description ? `Product details: ${project.product_description}` : ''}
@@ -14564,7 +14561,6 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "${project.format === 'shorts' ? '1-2 kalimat pendek' : '2-3 kalimat'} in ${langName} — casual, natural, like talking to a friend",
-      "text_overlay": "5-15 words in ${langName} — will be burned onto the video as subtitle",
       "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words."
     }
   ]
@@ -14669,9 +14665,9 @@ CONTINUITY: Same character, same product, same setting. Each scene flows logical
         for (let i = 0; i < parsed.scenes.length; i++) {
           const scene = parsed.scenes[i];
           await pool.query(
-            `INSERT INTO ads_studio_scenes (project_id, scene_index, narration, text_overlay, visual_prompt, status, metadata)
-             VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-            [projectId, i, scene.narration || '', scene.text_overlay || '', scene.visual_prompt || '', JSON.stringify({ character_description: parsed.character_description, product_visual_description: parsed.product_visual_description })]
+            `INSERT INTO ads_studio_scenes (project_id, scene_index, narration, visual_prompt, status, metadata)
+             VALUES ($1, $2, $3, $4, 'pending', $5)`,
+            [projectId, i, scene.narration || '', scene.visual_prompt || '', JSON.stringify({ character_description: parsed.character_description, product_visual_description: parsed.product_visual_description })]
           );
         }
 
@@ -14704,13 +14700,12 @@ app.put('/api/ads-studio/projects/:projectId/scenes/:sceneIndex', async (req, re
     if (projCheck.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
     if (projCheck.rows[0].status !== 'script_ready') return res.status(400).json({ error: 'Script harus dalam status ready untuk diedit' });
 
-    const { narration, textOverlay, visualPrompt } = req.body;
+    const { narration, visualPrompt } = req.body;
     const updateFields = [];
     const updateValues = [projectId, parseInt(sceneIndex)];
     let paramIdx = 3;
 
     if (narration !== undefined) { updateFields.push(`narration = $${paramIdx++}`); updateValues.push(narration); }
-    if (textOverlay !== undefined) { updateFields.push(`text_overlay = $${paramIdx++}`); updateValues.push(textOverlay); }
     if (visualPrompt !== undefined) { updateFields.push(`visual_prompt = $${paramIdx++}`); updateValues.push(visualPrompt); }
     if (updateFields.length === 0) return res.status(400).json({ error: 'No fields to update' });
     updateFields.push('updated_at = NOW()');
@@ -15022,31 +15017,21 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
             if (completedScenesData.rows.length > 1) {
               try {
-                console.log(`[ADS-STUDIO] Merging ${completedScenesData.rows.length} scene videos with text overlays...`);
+                console.log(`[ADS-STUDIO] Merging ${completedScenesData.rows.length} scene videos...`);
                 await pool.query(`UPDATE ads_studio_projects SET status = 'merging', updated_at = NOW() WHERE project_id = $1`, [projectId]);
                 sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'merging' });
 
                 const downloadedFiles = [];
-                const overlayedFiles = [];
                 const tmpDir = require('os').tmpdir();
-                const useOverlay = project.text_overlay_enabled !== false;
                 for (const s of completedScenesData.rows) {
                   const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
                   await downloadFileToPath(s.video_url, destPath);
                   downloadedFiles.push(destPath);
-
-                  if (useOverlay && s.text_overlay && s.text_overlay.trim()) {
-                    const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
-                    await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay);
-                    overlayedFiles.push(overlayPath);
-                  } else {
-                    overlayedFiles.push(destPath);
-                  }
                 }
 
                 const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
                 const outputPath = path.join(__dirname, 'processed', mergedFilename);
-                await concatVideosFFmpeg(overlayedFiles, outputPath);
+                await concatVideosFFmpeg(downloadedFiles, outputPath);
                 const mergedUrl = `/processed/${mergedFilename}`;
 
                 await pool.query(
@@ -15055,8 +15040,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 );
                 sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-                const filesToClean = [...new Set([...downloadedFiles, ...overlayedFiles])];
-                for (const f of filesToClean) {
+                for (const f of downloadedFiles) {
                   try { fs.unlinkSync(f); } catch (e) {}
                 }
               } catch (mergeErr) {
@@ -15335,26 +15319,16 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
     (async () => {
       try {
         const downloadedFiles = [];
-        const overlayedFiles = [];
         const tmpDir = require('os').tmpdir();
-        const useOverlay = project.text_overlay_enabled !== false;
         for (const s of completedScenes.rows) {
           const destPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}.mp4`);
           await downloadFileToPath(s.video_url, destPath);
           downloadedFiles.push(destPath);
-
-          if (useOverlay && s.text_overlay && s.text_overlay.trim()) {
-            const overlayPath = path.join(tmpDir, `ads_${projectId}_scene_${s.scene_index}_overlay.mp4`);
-            await burnTextOverlayFFmpeg(destPath, overlayPath, s.text_overlay);
-            overlayedFiles.push(overlayPath);
-          } else {
-            overlayedFiles.push(destPath);
-          }
         }
 
         const mergedFilename = `ads_${projectId}_merged_${Date.now()}.mp4`;
         const outputPath = path.join(__dirname, 'processed', mergedFilename);
-        await concatVideosFFmpeg(overlayedFiles, outputPath);
+        await concatVideosFFmpeg(downloadedFiles, outputPath);
         const mergedUrl = `/processed/${mergedFilename}`;
 
         await pool.query(
@@ -15363,8 +15337,7 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
         );
         sendSSEToUser(project.user_id, { type: 'ads_studio_update', projectId, status: 'completed', merged: true, finalVideoUrl: mergedUrl });
 
-        const filesToClean = [...new Set([...downloadedFiles, ...overlayedFiles])];
-        for (const f of filesToClean) {
+        for (const f of downloadedFiles) {
           try { fs.unlinkSync(f); } catch (e) {}
         }
       } catch (mergeErr) {

@@ -6493,8 +6493,6 @@ async function createAdsStudioProject() {
   var sceneCount = (sceneEl ? parseInt(sceneEl.value) : 4) || 4;
   var language = (langEl ? langEl.value : '') || 'id';
   var voiceOverEnabled = voEl ? voEl.checked : false;
-  var overlayEl = document.getElementById('adsTextOverlay');
-  var textOverlayEnabled = overlayEl ? overlayEl.checked : true;
 
   var charImage = state.adsStudio.newProject.characterImage;
   var prodImage = state.adsStudio.newProject.productImage;
@@ -6515,7 +6513,6 @@ async function createAdsStudioProject() {
     formData.append('sceneCount', String(sceneCount));
     formData.append('language', language);
     formData.append('voiceOverEnabled', String(voiceOverEnabled));
-    formData.append('textOverlayEnabled', String(textOverlayEnabled));
 
     if (charImage) formData.append('characterImage', charImage);
     if (prodImage) formData.append('productImage', prodImage);
@@ -6573,11 +6570,9 @@ async function startAdsStudioProduction(projectId) {
   var scenes = state.adsStudio.currentScenes;
   for (var i = 0; i < scenes.length; i++) {
     var narrationEl = document.querySelector('.ads-scene-narration[data-scene="' + scenes[i].scene_index + '"]');
-    var overlayEl = document.querySelector('.ads-scene-overlay[data-scene="' + scenes[i].scene_index + '"]');
     var visualEl = document.querySelector('.ads-scene-visual[data-scene="' + scenes[i].scene_index + '"]');
     var updates = {};
     if (narrationEl && narrationEl.value !== scenes[i].narration) updates.narration = narrationEl.value;
-    if (overlayEl && overlayEl.value !== scenes[i].text_overlay) updates.textOverlay = overlayEl.value;
     if (visualEl && visualEl.value !== scenes[i].visual_prompt) updates.visualPrompt = visualEl.value;
     if (Object.keys(updates).length > 0) {
       try {
@@ -6726,8 +6721,6 @@ function attachAdsStudioListeners() {
   if (adsSceneCount) adsSceneCount.addEventListener('change', function() { state.adsStudio.newProject.sceneCount = parseInt(adsSceneCount.value); });
   var adsLanguage = document.getElementById('adsLanguage');
   if (adsLanguage) adsLanguage.addEventListener('change', function() { state.adsStudio.newProject.language = adsLanguage.value; });
-  var adsTextOverlay = document.getElementById('adsTextOverlay');
-  if (adsTextOverlay) adsTextOverlay.addEventListener('change', function() { state.adsStudio.newProject.textOverlayEnabled = adsTextOverlay.checked; });
   var adsVoiceOver = document.getElementById('adsVoiceOver');
   if (adsVoiceOver) adsVoiceOver.addEventListener('change', function() { state.adsStudio.newProject.voiceOverEnabled = adsVoiceOver.checked; });
   var adsProductNameInput = document.getElementById('adsProductName');
@@ -7143,7 +7136,6 @@ function renderAdsStudioPage() {
   html += '</div>';
 
   html += '<div class="ads-settings-row">';
-  html += '<label class="ads-vo-toggle"><input type="checkbox" id="adsTextOverlay"' + (state.adsStudio.newProject.textOverlayEnabled !== false ? ' checked' : '') + '/> Text Overlay</label>';
   html += '<label class="ads-vo-toggle"><input type="checkbox" id="adsVoiceOver"' + (state.adsStudio.newProject.voiceOverEnabled ? ' checked' : '') + '/> Voice Over</label>';
   html += '<button class="btn-primary ads-go-btn" id="adsCreateBtn" type="button" onclick="window._adsCreateClick && window._adsCreateClick()"' + (state.adsStudio.isCreating ? ' disabled' : '') + '>';
   html += state.adsStudio.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
@@ -7258,13 +7250,6 @@ function renderAdsStudioDetailPage() {
           html += '<textarea class="form-input auto-scene-ta ads-scene-narration" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="2" placeholder="Narration">' + escapeHtml(scene.narration) + '</textarea>';
         } else {
           html += '<p class="auto-scene-text"><strong>Narasi:</strong> ' + escapeHtml(scene.narration) + '</p>';
-        }
-      }
-      if (scene.text_overlay) {
-        if (project.status === 'script_ready') {
-          html += '<textarea class="form-input auto-scene-ta ads-scene-overlay" data-project="' + project.project_id + '" data-scene="' + scene.scene_index + '" rows="1" placeholder="Text overlay">' + escapeHtml(scene.text_overlay) + '</textarea>';
-        } else {
-          html += '<p class="auto-scene-text"><strong>&#128196; Overlay:</strong> ' + escapeHtml(scene.text_overlay) + '</p>';
         }
       }
       if (scene.visual_prompt) {
