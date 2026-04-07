@@ -4853,24 +4853,18 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     const cached = videoRefreshCache.get(taskId);
     if (cached) videoUrl = cached.url;
 
-    async function checkUrlAlive(url) {
-      try {
-        const resp = await axios.head(url, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-        return resp.status >= 200 && resp.status < 400;
-      } catch (e) {
-        const st = e.response?.status;
-        return st !== 403 && st !== 410 && st !== 401;
-      }
+    if (videoRefreshFailed.has(taskId)) {
+      return res.status(410).json({ error: 'Video sudah tidak tersedia' });
     }
 
-    const urlAlive = await checkUrlAlive(videoUrl);
-    if (urlAlive) {
+    if (videoUrl && !cached) {
       console.log(`[VIDEOGEN] Redirecting to CDN for task ${taskId}`);
       return res.redirect(302, videoUrl);
     }
 
-    if (videoRefreshFailed.has(taskId)) {
-      return res.status(410).json({ error: 'Video sudah tidak tersedia' });
+    if (videoUrl && cached && Date.now() - cached.at < 30 * 60 * 1000) {
+      console.log(`[VIDEOGEN] Redirecting to cached CDN URL for task ${taskId}`);
+      return res.redirect(302, videoUrl);
     }
 
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
