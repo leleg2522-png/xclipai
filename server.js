@@ -11401,6 +11401,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
   const characterLockPrompt = simplifyPromptForVideo(prompt);
   const charNegPrompt = 'extra hands, extra arms, extra fingers, three hands, three arms, six fingers, deformed hands, mutated hands, fused fingers, too many fingers, extra limbs, missing fingers, deformed body, face morph, body transformation, deformed face, blurry, low quality, distorted, glitch, static frozen, duplicate body parts, conjoined, mutation';
+  const wanNegPrompt = 'extra hands, extra arms, extra fingers, three hands, three arms, four arms, six fingers, seven fingers, deformed hands, mutated hands, fused fingers, too many fingers, missing fingers, extra limbs, missing limbs, deformed body, deformed face, face morph, face melt, face distortion, face swap, different face, wrong face, ugly face, asymmetric face, cross-eyed, wall-eyed, body transformation, body horror, body melt, limb distortion, twisted limbs, broken joints, wrong proportions, giant hands, tiny head, elongated neck, extra head, two heads, duplicate person, clone, split body, conjoined, siamese, duplicate body parts, merged bodies, overlapping figures, ghost limbs, phantom limbs, transparent body parts, flickering body, morphing clothes, wardrobe change, outfit change, clothing morph, disappearing clothes, blurry, low quality, low resolution, pixelated, jpeg artifacts, compression artifacts, noise, grain, distorted, glitch, static frozen, frame skip, frame tear, jitter, wobble, camera shake, unnatural motion, robotic movement, stiff movement, sliding feet, floating feet, feet not touching ground, wrong perspective, impossible anatomy, impossible pose, contortion, unrealistic physics, watermark, text overlay, logo, signature, border, letterbox, black bars, overexposed, underexposed, washed out, oversaturated, neon glow artifact, lens flare artifact, chromatic aberration';
 
   if (config.api === 'kling26') {
     requestBody = {
@@ -11428,7 +11429,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       prompt: characterLockPrompt,
       duration: dur,
       size: wanSize,
-      negative_prompt: charNegPrompt,
+      negative_prompt: wanNegPrompt,
       cfg_scale: 0.7,
       enable_prompt_expansion: false,
       shot_type: 'single',
@@ -11446,7 +11447,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       reference_images: refImgs,
       resolution: '1080P',
       duration: parseInt(dur),
-      negative_prompt: charNegPrompt,
+      negative_prompt: wanNegPrompt,
       enable_prompt_expansion: true
     };
   } else if (config.api === 'wan27') {
@@ -11456,7 +11457,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       prompt: characterLockPrompt,
       duration: parseInt(dur),
       resolution: wanRes,
-      negative_prompt: charNegPrompt,
+      negative_prompt: wanNegPrompt,
       enable_prompt_expansion: true
     };
   } else {
