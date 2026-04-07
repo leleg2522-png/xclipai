@@ -136,7 +136,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 2: AI generates script via ApiModels.app (GPT-5, endpoint: api.apimodels.app) with narration + visual prompts per scene
   - Step 3: User can review/edit script scenes before production
   - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially (for character consistency), Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
-  - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik)
+  - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik), Wan 2.7 R2V (Freepik Reference-to-Video)
+  - Wan 2.7 R2V: Reference-to-Video model that skips image generation entirely — uses uploaded reference image directly to generate videos. Requires reference image upload. API: POST /v1/ai/reference-to-video/wan-2-7 with reference_images[] array. Prompt auto-prepends "Image1" to reference character. Resolution always 1080P.
   - Freepik models use Key Pool system with automatic rotation on exhaustion, fallback to ApiModels if all keys exhausted
   - Real-time SSE updates for project and scene status changes
   - Scene retry for failed scenes (supports both ApiModels and Freepik paths)

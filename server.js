@@ -11345,7 +11345,7 @@ async function getKeyPoolStats() {
   return { ...stats.rows[0], byFeature: byFeature.rows };
 }
 
-async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration) {
+async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration, referenceImages) {
   const freepikModels = {
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
@@ -11353,7 +11353,8 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     'wan-v2.6-1080p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-1080p', api: 'wan26' },
     'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' },
     'wan-v2.7-1080p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' },
-    'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' }
+    'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' },
+    'wan-v2.7-r2v': { endpoint: '/v1/ai/reference-to-video/wan-2-7', api: 'wan27-r2v' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -11433,6 +11434,20 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       shot_type: 'single',
       seed: -1,
       generate_audio: true
+    };
+  } else if (config.api === 'wan27-r2v') {
+    const refImgs = referenceImages && referenceImages.length > 0 ? referenceImages : (imageUrl ? [imageUrl] : []);
+    let r2vPrompt = characterLockPrompt;
+    if (!r2vPrompt.includes('Image1')) {
+      r2vPrompt = 'Image1 ' + r2vPrompt;
+    }
+    requestBody = {
+      prompt: r2vPrompt,
+      reference_images: refImgs,
+      resolution: '1080P',
+      duration: parseInt(dur),
+      negative_prompt: charNegPrompt,
+      enable_prompt_expansion: true
     };
   } else if (config.api === 'wan27') {
     const wanRes = model.includes('1080p') ? '1080P' : '720P';
@@ -11772,7 +11787,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['kling-v2.6-pro', 'kling-v3'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v'];
   const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
@@ -12186,13 +12201,15 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
-      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
+      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
@@ -12207,6 +12224,14 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
         }
         let prevSceneImageUrl = null;
         let scene1ImageUrl = null;
+        if (isR2V) {
+          console.log(`[AUTOMATION] R2V mode: Skipping image generation, using reference image directly`);
+          if (!referenceImageUrl) {
+            throw new Error('Wan 2.7 Reference-to-Video membutuhkan reference image. Upload foto referensi terlebih dahulu.');
+          }
+        }
+
+        if (!isR2V) {
         console.log(`[AUTOMATION] Phase 1: Generating images sequentially for ${scenes.rows.length} scenes`);
         for (const scene of scenes.rows) {
           if (scene.status === 'completed' && scene.video_url) {
@@ -12348,12 +12373,15 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
             }
           }
         }
+        }
 
-        const autoScenesWithImages = scenes.rows.filter(s => s.image_url && !(s.status === 'completed' && s.video_url));
-        if (autoScenesWithImages.length > 0) {
-          console.log(`[AUTOMATION] Phase 2: Generating ${autoScenesWithImages.length} videos in PARALLEL`);
+        const autoScenesForVideo = isR2V
+          ? scenes.rows.filter(s => !(s.status === 'completed' && s.video_url))
+          : scenes.rows.filter(s => s.image_url && !(s.status === 'completed' && s.video_url));
+        if (autoScenesForVideo.length > 0) {
+          console.log(`[AUTOMATION] Phase 2: Generating ${autoScenesForVideo.length} videos in PARALLEL${isR2V ? ' (R2V mode)' : ''}`);
 
-          const autoVideoPromises = autoScenesWithImages.map(scene => (async () => {
+          const autoVideoPromises = autoScenesForVideo.map(scene => (async () => {
             try {
             await pool.query(
               `UPDATE automation_scenes SET status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -12372,8 +12400,9 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 let videoUrl = null;
 
                 if (isFreepik) {
-                  console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}`);
-                  const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
+                  console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
+                  const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
+                  const fpResult = await generateVideoWithFreepik(isR2V ? null : scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs);
 
                   if (fpResult.success) {
                     await pool.query(
@@ -12433,10 +12462,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
           const autoVideoResults = await Promise.allSettled(autoVideoPromises);
           autoVideoResults.forEach((r, i) => {
             if (r.status === 'rejected') {
-              console.error(`[AUTOMATION] Scene ${autoScenesWithImages[i].scene_index} promise rejected:`, r.reason?.message || r.reason);
+              console.error(`[AUTOMATION] Scene ${autoScenesForVideo[i].scene_index} promise rejected:`, r.reason?.message || r.reason);
             }
           });
-          console.log(`[AUTOMATION] All ${autoScenesWithImages.length} video generations finished`);
+          console.log(`[AUTOMATION] All ${autoScenesForVideo.length} video generations finished`);
         }
 
         const completedScenes = await pool.query(
@@ -12643,13 +12672,15 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
-      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' }
+      'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
+      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
     const imageModel = project.image_model || 'nanobanana-2-beta';
     const imageResolution = '4K';
 
@@ -12658,7 +12689,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         let sceneImageUrl = scene.image_url;
         const retryRefImage = project.reference_image_url || null;
 
-        if (!sceneImageUrl) {
+        if (isR2V) {
+          if (!retryRefImage) throw new Error('Wan 2.7 R2V membutuhkan reference image');
+          sceneImageUrl = null;
+        } else if (!sceneImageUrl) {
           let imgResponse;
           const prevSceneRes = await pool.query(
             `SELECT image_url FROM automation_scenes WHERE project_id = $1 AND scene_index < $2 AND image_url IS NOT NULL ORDER BY scene_index DESC LIMIT 1`,
@@ -12735,8 +12769,9 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
 
         let videoUrl = null;
         if (isFreepik) {
-          console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
-          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration);
+          console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
+          const r2vRefs = isR2V ? [retryRefImage] : undefined;
+          const fpResult = await generateVideoWithFreepik(isR2V ? null : sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs);
           if (fpResult.success) {
             await pool.query(
               `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
