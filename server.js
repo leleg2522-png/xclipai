@@ -14822,48 +14822,60 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
           );
           sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video' });
 
-          try {
-            let videoUrl = null;
-
-            if (isFreepik) {
-              const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
-              if (fpResult.success) {
-                await pool.query(
-                  `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                  [projectId, scene.scene_index, fpResult.taskId]
-                );
-                const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'ads_studio');
-                if (pollResult.status === 'completed') {
-                  videoUrl = pollResult.url;
-                } else {
-                  throw new Error(pollResult.error || 'Freepik video failed');
-                }
-              } else if (fpResult.fallback) {
-                const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-                videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
-              } else {
-                throw new Error(fpResult.error || 'Freepik generation failed');
+          const maxVideoRetries = 3;
+          let videoSuccess = false;
+          for (let vidRetry = 0; vidRetry < maxVideoRetries && !videoSuccess; vidRetry++) {
+            try {
+              if (vidRetry > 0) {
+                console.log(`[ADS-STUDIO] Video retry #${vidRetry} for scene ${scene.scene_index}`);
+                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'generating_video', retry: vidRetry });
+                await new Promise(r => setTimeout(r, 5000));
               }
-            } else {
-              videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+              let videoUrl = null;
+
+              if (isFreepik) {
+                const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
+                if (fpResult.success) {
+                  await pool.query(
+                    `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                    [projectId, scene.scene_index, fpResult.taskId]
+                  );
+                  const pollResult = await pollFreepikAutomationTask(fpResult.taskId, fpResult.keyRecord.api_key, fpResult.endpoint, project.user_id, 'ads_studio');
+                  if (pollResult.status === 'completed') {
+                    videoUrl = pollResult.url;
+                  } else {
+                    throw new Error(pollResult.error || 'Freepik video failed');
+                  }
+                } else if (fpResult.fallback) {
+                  const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
+                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+                } else {
+                  throw new Error(fpResult.error || 'Freepik generation failed');
+                }
+              } else {
+                videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+              }
+
+              if (!videoUrl) throw new Error('Video generation failed - no URL');
+
+              await pool.query(
+                `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, error_message = NULL, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                [projectId, scene.scene_index, videoUrl]
+              );
+              sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
+              console.log(`[ADS-STUDIO] Scene ${scene.scene_index} completed (attempt ${vidRetry + 1}): ${videoUrl}`);
+              videoSuccess = true;
+
+            } catch (retryErr) {
+              console.error(`[ADS-STUDIO] Scene ${scene.scene_index} video attempt ${vidRetry + 1}/${maxVideoRetries} failed:`, retryErr.message);
+              if (vidRetry === maxVideoRetries - 1) {
+                await pool.query(
+                  `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                  [projectId, scene.scene_index, 'Video: ' + retryErr.message + ` (${maxVideoRetries} attempts)`]
+                );
+                sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: retryErr.message });
+              }
             }
-
-            if (!videoUrl) throw new Error('Video generation failed - no URL');
-
-            await pool.query(
-              `UPDATE ads_studio_scenes SET status = 'completed', video_url = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, videoUrl]
-            );
-            sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'completed', videoUrl });
-            console.log(`[ADS-STUDIO] Scene ${scene.scene_index} completed: ${videoUrl}`);
-
-          } catch (sceneErr) {
-            console.error(`[ADS-STUDIO] Scene ${scene.scene_index} video failed:`, sceneErr.message);
-            await pool.query(
-              `UPDATE ads_studio_scenes SET status = 'failed', error_message = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-              [projectId, scene.scene_index, 'Video: ' + sceneErr.message]
-            );
-            sendSSEToUser(project.user_id, { type: 'ads_studio_scene_update', projectId, sceneIndex: scene.scene_index, status: 'failed', error: sceneErr.message });
           }
         }
 
