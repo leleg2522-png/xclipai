@@ -11462,7 +11462,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: parseInt(dur),
       resolution: wanRes,
       negative_prompt: charNegPrompt,
-      enable_prompt_expansion: false
+      enable_prompt_expansion: true
     };
   } else {
     requestBody = {
