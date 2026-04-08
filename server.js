@@ -14516,10 +14516,20 @@ AD TYPE: ${adTypeDesc}
 ${project.ad_type === 'hard_selling' ? `- Scene 1: HOOK — dramatic reveal or attention-grabbing action in first 2 seconds
 - Middle: Product demonstrations with clear benefit-showing movements
 - Final: Strong CTA moment — character confidently presents product to camera
-- Narration: urgent, benefit-driven, conversion-focused` : `- Scene 1: HOOK — relatable lifestyle moment with natural movement
-- Middle: Character naturally discovering/using the product in daily life
-- Final: Aspirational moment showing improved life WITH product
-- Narration: storytelling, authentic, like a friend recommending`}
+- Narration: urgent, benefit-driven, conversion-focused` : `SOFT SELLING STRUCTURE (CRITICAL — follow this exactly):
+- Scene 1: HOOK — show a RELATABLE PROBLEM or everyday struggle the viewer identifies with. Character looks frustrated/tired/struggling. NO product yet. Example: messy skin, tired after work, bad hair day, messy room
+- Scene 2-3 (middle): Character DISCOVERS the product naturally — finds it on a shelf, a friend gives it, sees it on table. Then USES IT with genuine curiosity. Show the product being opened, applied, or used. Natural reaction.
+- Scene 4 (or second-to-last): Show the RESULT/TRANSFORMATION — character looks happy, refreshed, confident. Before vs after feeling. Product visible but not the focus.
+- Final scene: Character casually recommends it like telling a friend — relaxed smile, natural gesture, product in hand but not pushing it.
+
+SOFT SELLING TONE RULES:
+- NEVER say "beli sekarang", "diskon", "limited", "promo", or any sales language
+- NEVER mention price, offer, or urgency
+- Narration should feel like a personal story/experience, NOT an ad
+- Character talks about their EXPERIENCE, not the product's features
+- Think: "cerita teman" NOT "iklan TV"
+- Example good narrations: "Awalnya gue ragu sih...", "Ternyata beneran ngaruh loh", "Gue ga nyangka hasilnya gini"
+- Example BAD narrations: "Produk ini sangat bagus untuk kulit anda", "Segera dapatkan!", "Harga terjangkau"`}
 
 MOTION-FOCUSED VISUAL PROMPT RULES:
 1. Start with the PRIMARY MOTION: what is the character DOING (verb + action)
