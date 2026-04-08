@@ -14502,10 +14502,14 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
     const hasCharImage = !!project.character_image_url;
     const hasProdImage = !!project.product_image_url;
 
+    const isSoft = project.ad_type !== 'hard_selling';
+    const dur = project.video_duration || 5;
+    const maxWords = dur * 3;
+
     const systemPrompt = `You are a world-class advertising creative director specializing in AI video generation. You create prompts optimized for IMAGE-TO-VIDEO AI models (like Wan 2.6) that produce stunning, cinematic product ads.
 
 CRITICAL UNDERSTANDING — IMAGE-TO-VIDEO AI:
-- The AI receives a STILL IMAGE and your PROMPT, then generates a 5-second VIDEO
+- The AI receives a STILL IMAGE and your PROMPT, then generates a ${dur}-second VIDEO
 - Your visual_prompt must describe MOTION, MOVEMENT, and ANIMATION — NOT static composition
 - The still image already has the composition — your prompt tells the AI WHAT MOVES and HOW
 - Focus on: camera movement, character actions, product interactions, environmental motion
@@ -14513,39 +14517,41 @@ CRITICAL UNDERSTANDING — IMAGE-TO-VIDEO AI:
 - GOOD prompt: "woman slowly lifts product to eye level examining label, gentle smile forming, camera pushes in smoothly, soft golden light shifts across her face, steam rises from coffee cup on counter, shallow depth of field with bokeh shifting"
 
 AD TYPE: ${adTypeDesc}
-${project.ad_type === 'hard_selling' ? `- Scene 1: HOOK — dramatic reveal or attention-grabbing action in first 2 seconds
+${!isSoft ? `HARD SELLING SCENE STRUCTURE:
+- Scene 1: HOOK — dramatic reveal or attention-grabbing action in first 2 seconds
 - Middle: Product demonstrations with clear benefit-showing movements
 - Final: Strong CTA moment — character confidently presents product to camera
-- Narration: urgent, benefit-driven, conversion-focused` : `SOFT SELLING STRUCTURE (CRITICAL — follow this exactly):
-- Scene 1: HOOK — show a RELATABLE PROBLEM or everyday struggle the viewer identifies with. Character looks frustrated/tired/struggling. NO product yet. Example: messy skin, tired after work, bad hair day, messy room
-- Scene 2-3 (middle): Character DISCOVERS the product naturally — finds it on a shelf, a friend gives it, sees it on table. Then USES IT with genuine curiosity. Show the product being opened, applied, or used. Natural reaction.
-- Scene 4 (or second-to-last): Show the RESULT/TRANSFORMATION — character looks happy, refreshed, confident. Before vs after feeling. Product visible but not the focus.
-- Final scene: Character casually recommends it like telling a friend — relaxed smile, natural gesture, product in hand but not pushing it.
+- Narration: urgent, benefit-driven, conversion-focused` : `SOFT SELLING SCENE STRUCTURE (FOLLOW THIS EXACTLY — THIS IS NOT A SUGGESTION):
+You are creating a STORY, not an advertisement. The viewer should NOT feel like they are watching an ad.
 
-SOFT SELLING TONE RULES:
-- NEVER say "beli sekarang", "diskon", "limited", "promo", or any sales language
-- NEVER mention price, offer, or urgency
-- Narration should feel like a personal story/experience, NOT an ad
-- Character talks about their EXPERIENCE, not the product's features
-- Think: "cerita teman" NOT "iklan TV"
-- Example good narrations: "Awalnya gue ragu sih...", "Ternyata beneran ngaruh loh", "Gue ga nyangka hasilnya gini"
-- Example BAD narrations: "Produk ini sangat bagus untuk kulit anda", "Segera dapatkan!", "Harga terjangkau"`}
+SCENE FLOW (adapt to scene_count):
+- Scene 1 (THE PROBLEM): Character is in a REAL everyday situation showing a problem or frustration RELATED to the product category. Product is NOT visible. Character shows genuine emotion — sighing, looking tired, struggling. This scene makes the viewer think "that's me!"
+- Scene 2 (THE DISCOVERY): Character notices or picks up the product for the first time with CURIOSITY, not excitement. Like finding something interesting on a shelf. Subtle, not dramatic.
+- Scene 3+ (THE EXPERIENCE): Character is USING the product in their daily routine. Show the actual usage — applying, wearing, tasting, etc. Character reacts naturally with mild surprise or satisfaction.
+- Last Scene (THE RESULT): Character looks noticeably better/happier. They share their honest reaction like talking to a close friend. Product may or may not be in frame — the focus is on the CHARACTER's improved state.
+
+SOFT SELLING ABSOLUTE RULES:
+- Product should appear in MAX 60% of scenes — NOT every scene
+- Scene 1 MUST NOT show the product at all
+- NEVER describe the product being "presented to camera" or "held up proudly" — that is hard selling
+- Character should interact with the product CASUALLY like a normal object, not like showing it off
+- Each scene must feel like a continuation of ONE story in ONE location/setting
+- All scenes happen in the SAME place (e.g., bathroom, bedroom, kitchen, living room)
+
+SOFT SELLING NARRATION RULES:
+- FORBIDDEN words/phrases: "beli", "diskon", "promo", "limited", "harga", "murah", "worth it", "recommended", "wajib coba", "link di bio", "checkout"
+- Every line must sound like INNER THOUGHTS or talking to self/friend
+- Emotion progression: frustrated → curious → surprised → happy
+- GOOD: "Duh, lagi-lagi nih...", "Hmm, coba deh", "Eh, lumayan juga", "Gue suka sih ternyata"
+- BAD: "Produk ini luar biasa!", "Kalian harus coba!", "Best product ever!"`}
 
 MOTION-FOCUSED VISUAL PROMPT RULES:
 1. Start with the PRIMARY MOTION: what is the character DOING (verb + action)
-2. Add SECONDARY MOTION: environmental movement (wind, light shifts, particles, steam, reflections)
-3. Specify CAMERA MOVEMENT: slow push-in, gentle pan, tracking shot, static with subtle drift
-4. Describe SPEED/TEMPO: slow-motion, real-time, gradual, sudden
-5. Include MICRO-MOVEMENTS: facial expressions changing, fingers moving, fabric flowing, hair swaying
-6. Add LIGHT DYNAMICS: light shifting, shadows moving, golden hour glow intensifying
-7. Keep prompts 80-120 words — rich in motion verbs
-8. EVERY prompt must have at least 3 different types of motion happening simultaneously
-9. Respond with valid JSON only, no markdown, no code blocks
-
-MOTION VERB VOCABULARY (use these):
-- Character: lifts, turns, glances, reaches, tilts, brushes, slides, presses, opens, reveals, examines, smiles, nods, speaks, talks, explains
-- Camera: pushes in, pulls back, tracks left/right, tilts up/down, orbits, racks focus, drifts
-- Environment: rustles, sways, shifts, drifts, flickers, glistens, sparkles, ripples, flows, floats
+2. Add CAMERA MOVEMENT: slow push-in, gentle pan, tracking shot, static with subtle drift
+3. Add ENVIRONMENT MOTION: wind, light shifts, steam, fabric flowing
+4. Include MICRO-MOVEMENTS: facial expressions, fingers, hair
+5. Keep prompts 60-90 words — focused and clear
+6. Respond with valid JSON only, no markdown, no code blocks
 
 CHARACTER SPEAKING (CRITICAL — video AI generates audio):
 - The video model generates audio including speech from the character
@@ -14553,38 +14559,22 @@ CHARACTER SPEAKING (CRITICAL — video AI generates audio):
 - Write exactly what the character says in ${langName} using this format: character speaks saying "[exact dialogue in ${langName}]"
 - Character must have natural lip movement, facial expressions while speaking
 
-DIALOGUE LENGTH — CRITICAL (each scene is only ${project.video_duration || 5} seconds):
-- Each narration/dialogue MUST be MAX 8-12 words so it fits within ${project.video_duration || 5} seconds
-- A person speaks ~2-3 words per second, so ${project.video_duration || 5} seconds = MAX ${(project.video_duration || 5) * 3} words
+DIALOGUE LENGTH — CRITICAL (each scene is only ${dur} seconds):
+- Each narration/dialogue MUST be MAX 5-8 words so it fits within ${dur} seconds
+- A person speaks ~2-3 words per second, so ${dur} seconds = MAX ${maxWords} words
 - If the narration is too long, it WILL get cut off — this is the #1 problem to avoid
-- Keep it SHORT, PUNCHY, ONE quick thought per scene
-- BAD (too long): "Eh ini seriusan bagus sih, aku awalnya ragu tapi ternyata beneran worth it banget guys" ← 15 words, will be cut off
-- GOOD (short): "Eh ini seriusan bagus sih!" ← 5 words, fits perfectly
-- GOOD (short): "Nah ini nih yang aku suka" ← 6 words
-- GOOD (short): "Wah gila, bedanya keliatan banget" ← 5 words
+- Keep it SHORT, ONE quick thought per scene
 
-DIALOGUE STYLE — NATURAL & CASUAL:
-- Write like a REAL PERSON talking to a friend, NOT like a script or commercial
-- Use casual language: "gue/aku", "banget", "sih", "nih", "deh", "loh"
-- Each line = ONE short reaction or thought
-
-VOICE CONSISTENCY (CRITICAL — same voice across all scenes):
-- The character must speak with the SAME tone, energy level, and speaking style in EVERY scene
-- Pick ONE personality and stick with it: casual reviewer, excited friend, calm expert, etc.
-- Do NOT switch between formal and informal between scenes
-- If Scene 1 uses casual tone ("gue suka banget nih"), ALL scenes must stay casual
-- Same emotional energy: if enthusiastic in Scene 1, stay enthusiastic throughout
-
-SCENE CONTINUITY:
-- Same character appearance, clothing, and setting across all scenes
-- Product looks identical in every scene — same colors, packaging, branding
-- Logical action flow between scenes (not random jumps)
+VOICE & CHARACTER CONSISTENCY (CRITICAL):
+- SAME person in EVERY scene: same face, same hair, same clothes, same skin tone
+- SAME voice tone in EVERY scene: same pitch, same speed, same energy
+- SAME location/setting in EVERY scene: same room, same lighting, same background
+- Pick ONE personality and keep it: if casual in Scene 1, casual in ALL scenes
+- Each scene is a CONTINUATION of the previous one — like one continuous video cut into parts
 
 ABSOLUTELY NO TEXT IN VISUALS:
 - visual_prompt must NEVER include any text, titles, captions, subtitles, watermarks, logos, or written words
-- Do NOT describe any on-screen text, floating text, text overlay, or typography in visual_prompt
 - The video should be PURELY VISUAL — all messaging is conveyed through narration audio only
-- If you want to convey a message, put it in the narration field, NOT in the visual_prompt
 
 `;
 
@@ -14595,30 +14585,57 @@ Exactly ${project.scene_count} scenes. Narration in ${langName}.
 ${hasCharImage ? 'CHARACTER REFERENCE IMAGE provided — the image generator handles appearance, do NOT describe character looks in visual_prompt.' : ''}
 ${hasProdImage ? 'PRODUCT IMAGE provided — the image generator has the product reference, focus visual_prompt on MOTION and ACTION with the product.' : ''}
 
-IMPORTANT: Each visual_prompt will be used to animate a STILL IMAGE into a 5-second video.
+IMPORTANT: Each visual_prompt will be used to animate a STILL IMAGE into a ${dur}-second video.
 The still image is already generated separately — your visual_prompt ONLY controls the MOTION/ANIMATION.
 
 Return ONLY valid JSON:
 {
-  "title": "compelling ad title in ${langName}",
+  "title": "${isSoft ? 'story-like title that does NOT sound like an ad' : 'compelling ad title'} in ${langName}",
   "character_description": "${hasCharImage ? 'character from reference image' : 'detailed character: gender, age range, ethnicity, hair style+color, outfit with specific colors and materials'}",
   "product_visual_description": "precise visual description of ${project.product_name} — shape, color, packaging, branding, size, material",
+  ${isSoft ? '"setting": "ONE specific location where the entire story takes place (e.g., modern bathroom, cozy bedroom, bright kitchen)",' : ''}
   "scenes": [
     {
-      "narration": "MAX 8-12 words (must fit in ${project.video_duration || 5} seconds of speech) in ${langName} — casual, short, punchy",
-      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
+      "narration": "MAX 5-8 words in ${langName} — ${isSoft ? 'inner thought or talking to self, NOT selling' : 'casual, short, punchy'}",
+      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. 60-90 words. Describe MOTION only. NO TEXT in visual."${isSoft ? ',\n      "product_visible": "true or false — product must NOT appear in scene 1"' : ''}
     }
   ]
 }
+${isSoft ? `
+SOFT SELLING EXAMPLE (skincare serum, 4 scenes, Bahasa Indonesia):
+{
+  "title": "Pagi yang Berbeda",
+  "character_description": "young Indonesian woman, mid-20s, messy bun, wearing oversized white t-shirt",
+  "product_visual_description": "small glass serum bottle with gold cap, clear liquid inside, minimalist white label",
+  "setting": "modern minimalist bathroom with white tiles and warm morning light",
+  "scenes": [
+    {
+      "narration": "Duh, lagi-lagi nih...",
+      "visual_prompt": "woman stares at mirror touching her face with frustrated expression, sighs deeply, shoulders drop, camera slowly pushes in from medium to close-up, warm morning light through frosted window shifts across her face, steam from sink drifts upward, character speaks saying 'Duh, lagi-lagi nih...'",
+      "product_visible": "false"
+    },
+    {
+      "narration": "Hmm, coba deh yang ini",
+      "visual_prompt": "character reaches for small serum bottle on bathroom shelf, picks it up curiously turning it in her hand, examines the label tilting her head, camera tracks her hand movement, soft light catches the glass bottle, character speaks saying 'Hmm, coba deh yang ini'",
+      "product_visible": "true"
+    },
+    {
+      "narration": "Wah enak juga di kulit",
+      "visual_prompt": "character gently applies serum drops on cheek with fingertips, pats skin softly, slight surprise expression forming, camera close-up on face, natural light on skin, dewy texture visible, character speaks saying 'Wah enak juga di kulit'",
+      "product_visible": "true"
+    },
+    {
+      "narration": "Gue suka sih ternyata",
+      "visual_prompt": "character smiles at mirror touching her face gently, satisfied relaxed expression, nods slightly to herself, camera pulls back slowly, golden morning light wraps around her, peaceful mood, character speaks saying 'Gue suka sih ternyata'",
+      "product_visible": "false"
+    }
+  ]
+}` : `
+EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian' : 'English'}):
+Scene 1: "woman picks up serum bottle from marble counter and speaks saying '${langName === 'Bahasa Indonesia' ? 'Eh ini bagus banget sih!' : 'This one is actually amazing!'}', camera pushes in from medium to close-up, golden morning light, excited expression, natural lip movement"
+Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Teksturnya ringan banget loh' : 'The texture is so light'}', droplet catches light, camera orbits slowly right, bokeh shifts, impressed smile forming"`}
 
-VISUAL PROMPT TEMPLATE (follow this structure):
-"[CHARACTER does ACTION with PRODUCT — use motion verbs: lifts, turns, examines, reaches, slides], [CAMERA: slow push-in / gentle pan / tracking / orbit], [ENVIRONMENT MOTION: wind through hair, light shifting, steam rising, fabric flowing, reflections moving], [MICRO-DETAILS: fingers brushing surface, smile forming, eyes glancing], cinematic photorealistic, ${project.format === 'shorts' ? '9:16 vertical frame' : '16:9 widescreen'}"
-
-EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian — SHORT dialogue' : 'English — SHORT dialogue'}):
-Scene 1: "woman picks up serum bottle from marble counter and speaks to camera saying '${langName === 'Bahasa Indonesia' ? 'Eh ini bagus banget sih!' : 'This one is actually amazing!'}', camera pushes in from medium to close-up, golden morning light, dust particles drift in sunbeam, excited expression, natural lip movement"
-Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Teksturnya ringan banget loh' : 'The texture is so light'}', droplet catches light, camera orbits slowly right, bokeh shifts, impressed smile forming"
-
-CONTINUITY: Same character, same product, same setting. Each scene flows logically to the next.`;
+CONTINUITY: Same character, same product, same setting, same clothing. Each scene flows logically to the next like ONE continuous story.`;
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
     if (!apimodelsKey) {
