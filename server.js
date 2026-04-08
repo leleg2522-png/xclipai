@@ -11409,9 +11409,11 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   if (language && language !== 'en') {
     const langMap = { 'id': 'Bahasa Indonesia', 'es': 'Spanish', 'pt': 'Portuguese', 'fr': 'French', 'de': 'German', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'ms': 'Malay', 'tr': 'Turkish', 'ru': 'Russian' };
     const langLabel = langMap[language] || language;
-    characterLockPrompt += `, character speaks in ${langLabel}, ${langLabel} audio only`;
+    characterLockPrompt += `, character speaks ONLY in ${langLabel}, ALL dialogue in ${langLabel}, ${langLabel} audio only, no English speech, no foreign language, no mixed language`;
+  } else if (language === 'en') {
+    characterLockPrompt += ', character speaks ONLY in English, English dialogue only, no foreign language';
   }
-  const langNeg = (language && language !== 'en') ? ', English speech, speaking English' : '';
+  const langNeg = (language && language !== 'en') ? ', English speech, speaking English, English dialogue, English words, foreign language, mixed language, wrong language' : '';
   const MAX_NEG = 500;
 
   function buildNeg(parts) {
@@ -11444,7 +11446,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       prompt: characterLockPrompt,
       duration: dur,
       aspect_ratio: rawAR,
-      cfg_scale: 0.7
+      negative_prompt: wanNegPrompt,
+      cfg_scale: 0.7,
+      generate_audio: true
     };
   } else if (config.api === 'wan26') {
     let wanSize;
@@ -11489,12 +11493,14 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: parseInt(dur),
       resolution: wanRes,
       negative_prompt: wanNegPrompt,
-      enable_prompt_expansion: allowExpansion
+      enable_prompt_expansion: allowExpansion,
+      generate_audio: true
     };
   } else {
     requestBody = {
       image: imageUrl, prompt: characterLockPrompt, duration: dur,
-      aspect_ratio: mappedAR, cfg_scale: 0.7
+      aspect_ratio: mappedAR, negative_prompt: wanNegPrompt,
+      cfg_scale: 0.7, generate_audio: true
     };
   }
 
