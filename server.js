@@ -11345,7 +11345,7 @@ async function getKeyPoolStats() {
   return { ...stats.rows[0], byFeature: byFeature.rows };
 }
 
-async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration, referenceImages) {
+async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration, referenceImages, language) {
   const freepikModels = {
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
@@ -11403,12 +11403,18 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   if (feature === 'ads_studio') {
     characterLockPrompt += ', product must be FULLY visible in frame at all times, no cropping on product, product centered with safe margin from edges, complete product shown from top to bottom, maintain product shape and proportions exactly as in reference image';
   }
+  if (language && language !== 'en') {
+    const langMap = { 'id': 'Bahasa Indonesia', 'es': 'Spanish', 'pt': 'Portuguese', 'fr': 'French', 'de': 'German', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'ms': 'Malay', 'tr': 'Turkish', 'ru': 'Russian' };
+    const langLabel = langMap[language] || language;
+    characterLockPrompt += `, character speaks in ${langLabel}, all dialogue and speech must be in ${langLabel}, ${langLabel} language audio only`;
+  }
   const charNegPrompt = 'extra hands, extra arms, extra fingers, three hands, three arms, six fingers, deformed hands, mutated hands, fused fingers, too many fingers, extra limbs, missing fingers, deformed body, face morph, body transformation, deformed face, blurry, low quality, distorted, glitch, static frozen, duplicate body parts, conjoined, mutation';
   const wanBaseNeg = 'extra hands, extra arms, extra fingers, deformed hands, fused fingers, too many fingers, missing fingers, deformed body, deformed face, face morph, face melt, face swap, ugly face, cross-eyed, body horror, twisted limbs, wrong proportions, duplicate person, duplicate body parts, ghost limbs, morphing clothes, blurry, low quality, distorted, glitch, static frozen, unnatural motion, sliding feet, impossible anatomy, watermark';
   const wanAdsNeg = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, ugly face, body horror, wrong proportions, duplicate person, ghost limbs, blurry, low quality, distorted, glitch, static frozen, unnatural motion, impossible anatomy, cropped product, cut off product, product out of frame, deformed product, wrong product shape, broken product, wrong product color, blurry product, duplicate product';
-  const wanNegPrompt = feature === 'ads_studio' ? wanAdsNeg : wanBaseNeg;
+  const langNeg = (language && language !== 'en') ? ', English speech, English dialogue, English narration, English voiceover, speaking in English, English words, English language audio' : '';
+  const wanNegPrompt = (feature === 'ads_studio' ? wanAdsNeg : wanBaseNeg) + langNeg;
   const klingProductNeg = ', cropped product, cut off product, product out of frame, deformed product, wrong product shape, broken product, wrong product color, blurry product, duplicate product';
-  const adsNegPrompt = feature === 'ads_studio' ? charNegPrompt + klingProductNeg : charNegPrompt;
+  const adsNegPrompt = (feature === 'ads_studio' ? charNegPrompt + klingProductNeg : charNegPrompt) + langNeg;
 
   if (config.api === 'kling26') {
     requestBody = {
@@ -12410,7 +12416,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 if (isFreepik) {
                   console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
                   const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
-                  const fpResult = await generateVideoWithFreepik(isR2V ? null : scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs);
+                  const fpResult = await generateVideoWithFreepik(isR2V ? null : scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs, project.language);
 
                   if (fpResult.success) {
                     await pool.query(
@@ -12779,7 +12785,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
           const r2vRefs = isR2V ? [retryRefImage] : undefined;
-          const fpResult = await generateVideoWithFreepik(isR2V ? null : sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs);
+          const fpResult = await generateVideoWithFreepik(isR2V ? null : sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs, project.language);
           if (fpResult.success) {
             await pool.query(
               `UPDATE automation_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -14572,7 +14578,7 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "MAX 8-12 words (must fit in ${project.video_duration || 5} seconds of speech) in ${langName} — casual, short, punchy",
-      "visual_prompt": "MOTION-FOCUSED prompt for image-to-video AI in ${langName}. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
+      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
     }
   ]
 }
@@ -14942,7 +14948,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 let videoUrl = null;
 
                 if (isFreepik) {
-                  const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
+                  const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
                   if (fpResult.success) {
                     await pool.query(
                       `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -15247,7 +15253,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isFreepik) {
           console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
-          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration);
+          const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
           if (fpResult.success) {
             await pool.query(
               `UPDATE ads_studio_scenes SET video_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
