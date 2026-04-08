@@ -11401,7 +11401,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
 
   let characterLockPrompt = simplifyPromptForVideo(prompt);
   if (feature === 'ads_studio' || feature === 'automation') {
-    characterLockPrompt += ', same voice tone and pitch throughout, calm steady adult voice, consistent speaking pace';
+    characterLockPrompt += ', same voice tone and pitch throughout, calm steady adult voice, consistent speaking pace, same character identity as reference image, preserve exact face features and hair and clothing, do not change character appearance';
   }
   if (feature === 'ads_studio') {
     characterLockPrompt += ', product must be FULLY visible in frame at all times, no cropping on product, product centered with safe margin from edges, complete product shown from top to bottom, maintain product shape and proportions exactly as in reference image';
@@ -11419,7 +11419,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     return raw.length <= MAX_NEG ? raw : raw.substring(0, raw.lastIndexOf(',', MAX_NEG));
   }
 
-  const voiceNeg = (feature === 'ads_studio' || feature === 'automation') ? ', changing voice, multiple voices, voice shift, child voice, robotic voice' : '';
+  const voiceNeg = (feature === 'ads_studio' || feature === 'automation') ? ', changing voice, multiple voices, voice shift, child voice, robotic voice, different person, face change, outfit change, age change' : '';
   const baseQuality = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, blurry, low quality, distorted, glitch, static frozen, wrong proportions, duplicate person';
   const productNeg = 'cropped product, product out of frame, deformed product, blurry product';
   const wanExtra = 'unnatural motion, impossible anatomy, ghost limbs, sliding feet';
