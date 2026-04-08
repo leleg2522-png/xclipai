@@ -11462,23 +11462,25 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     if (!r2vPrompt.includes('Image1')) {
       r2vPrompt = 'Image1 ' + r2vPrompt;
     }
+    const allowExpansion = (feature !== 'ads_studio' && feature !== 'automation');
     requestBody = {
       prompt: r2vPrompt,
       reference_images: refImgs,
       resolution: '1080P',
       duration: parseInt(dur),
       negative_prompt: wanNegPrompt,
-      enable_prompt_expansion: true
+      enable_prompt_expansion: allowExpansion
     };
   } else if (config.api === 'wan27') {
     const wanRes = model.includes('1080p') ? '1080P' : '720P';
+    const allowExpansion = (feature !== 'ads_studio' && feature !== 'automation');
     requestBody = {
       start_image_url: imageUrl,
       prompt: characterLockPrompt,
       duration: parseInt(dur),
       resolution: wanRes,
       negative_prompt: wanNegPrompt,
-      enable_prompt_expansion: true
+      enable_prompt_expansion: allowExpansion
     };
   } else {
     requestBody = {
