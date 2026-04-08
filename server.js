@@ -11400,13 +11400,16 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   }
 
   let characterLockPrompt = simplifyPromptForVideo(prompt);
+  if (feature === 'ads_studio' || feature === 'automation') {
+    characterLockPrompt += ', same voice tone and pitch throughout, calm steady adult voice, consistent speaking pace';
+  }
   if (feature === 'ads_studio') {
     characterLockPrompt += ', product must be FULLY visible in frame at all times, no cropping on product, product centered with safe margin from edges, complete product shown from top to bottom, maintain product shape and proportions exactly as in reference image';
   }
   if (language && language !== 'en') {
     const langMap = { 'id': 'Bahasa Indonesia', 'es': 'Spanish', 'pt': 'Portuguese', 'fr': 'French', 'de': 'German', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'ms': 'Malay', 'tr': 'Turkish', 'ru': 'Russian' };
     const langLabel = langMap[language] || language;
-    characterLockPrompt += `, character speaks in ${langLabel}, all dialogue and speech must be in ${langLabel}, ${langLabel} language audio only`;
+    characterLockPrompt += `, character speaks in ${langLabel}, ${langLabel} audio only`;
   }
   const langNeg = (language && language !== 'en') ? ', English speech, speaking English' : '';
   const MAX_NEG = 500;
@@ -11416,12 +11419,13 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     return raw.length <= MAX_NEG ? raw : raw.substring(0, raw.lastIndexOf(',', MAX_NEG));
   }
 
+  const voiceNeg = (feature === 'ads_studio' || feature === 'automation') ? ', changing voice, multiple voices, voice shift, child voice, robotic voice' : '';
   const baseQuality = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, blurry, low quality, distorted, glitch, static frozen, wrong proportions, duplicate person';
   const productNeg = 'cropped product, product out of frame, deformed product, blurry product';
   const wanExtra = 'unnatural motion, impossible anatomy, ghost limbs, sliding feet';
 
-  const wanNegPrompt = buildNeg([baseQuality, wanExtra, ...(feature === 'ads_studio' ? [productNeg] : []), langNeg].filter(Boolean));
-  const adsNegPrompt = buildNeg([baseQuality, ...(feature === 'ads_studio' ? [productNeg] : []), langNeg].filter(Boolean));
+  const wanNegPrompt = buildNeg([baseQuality, wanExtra, ...(feature === 'ads_studio' ? [productNeg] : []), voiceNeg, langNeg].filter(Boolean));
+  const adsNegPrompt = buildNeg([baseQuality, ...(feature === 'ads_studio' ? [productNeg] : []), voiceNeg, langNeg].filter(Boolean));
 
   if (config.api === 'kling26') {
     requestBody = {
