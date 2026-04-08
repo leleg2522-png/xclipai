@@ -11371,6 +11371,9 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   let requestBody = {};
   const dur = String(videoDuration || 5);
 
+  const langMap = { 'id': 'Bahasa Indonesia', 'es': 'Spanish', 'pt': 'Portuguese', 'fr': 'French', 'de': 'German', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'ms': 'Malay', 'tr': 'Turkish', 'ru': 'Russian' };
+  const langLabel = language ? (langMap[language] || language) : '';
+
   function simplifyPromptForVideo(rawPrompt) {
     if (!rawPrompt) return 'cinematic video with smooth natural motion, consistent character';
     let simplified = rawPrompt;
@@ -11382,7 +11385,8 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       if (dialogWords.length > 15) {
         dialogText = dialogWords.slice(0, 15).join(' ');
       }
-      dialogPart = `, character speaking saying "${dialogText}"`;
+      const langTag = langLabel ? ` in ${langLabel}` : '';
+      dialogPart = `, character speaking${langTag} saying "${dialogText}"`;
     }
     simplified = simplified.replace(/(?:character\s+)?(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["'][^"']*["']/gi, '');
     simplified = simplified.replace(/["'][^"']{20,}["']/g, '');
@@ -11407,8 +11411,6 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     characterLockPrompt += ', product must be FULLY visible in frame at all times, no cropping on product, product centered with safe margin from edges, complete product shown from top to bottom, maintain product shape and proportions exactly as in reference image';
   }
   if (language && language !== 'en') {
-    const langMap = { 'id': 'Bahasa Indonesia', 'es': 'Spanish', 'pt': 'Portuguese', 'fr': 'French', 'de': 'German', 'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'ms': 'Malay', 'tr': 'Turkish', 'ru': 'Russian' };
-    const langLabel = langMap[language] || language;
     characterLockPrompt += `, character speaks ONLY in ${langLabel}, ALL dialogue in ${langLabel}, ${langLabel} audio only, no English speech, no foreign language, no mixed language`;
   } else if (language === 'en') {
     characterLockPrompt += ', character speaks ONLY in English, English dialogue only, no foreign language';
