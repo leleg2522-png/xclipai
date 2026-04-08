@@ -11419,13 +11419,18 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     return raw.length <= MAX_NEG ? raw : raw.substring(0, raw.lastIndexOf(',', MAX_NEG));
   }
 
-  const voiceNeg = (feature === 'ads_studio' || feature === 'automation') ? ', changing voice, multiple voices, voice shift, child voice, robotic voice, different person, face change, outfit change, age change' : '';
-  const baseQuality = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, blurry, low quality, distorted, glitch, static frozen, wrong proportions, duplicate person';
-  const productNeg = 'cropped product, product out of frame, deformed product, blurry product';
-  const wanExtra = 'unnatural motion, impossible anatomy, ghost limbs, sliding feet';
+  const baseNeg = 'blurry, low quality, distorted face, deformed face, extra fingers, missing fingers, bad anatomy, glitch, artifacts, flickering';
+  const motionNeg = 'unnatural movement, stiff motion, jittery motion, frozen face, robotic expression, exaggerated motion';
+  const charNeg = 'inconsistent face, changing identity, face morphing, double face, duplicate face, different person, warped body';
+  const lipNeg = 'unrealistic mouth, broken lips, bad lip sync, unsynced audio, mouth not moving';
+  const productNeg = 'deformed object, melting object, unrealistic product, warped hands holding object, cropped product, product out of frame';
+  const voiceNeg = (feature === 'ads_studio' || feature === 'automation') ? 'changing voice, multiple voices, child voice, robotic voice' : '';
 
-  const wanNegPrompt = buildNeg([baseQuality, wanExtra, ...(feature === 'ads_studio' ? [productNeg] : []), voiceNeg, langNeg].filter(Boolean));
-  const adsNegPrompt = buildNeg([baseQuality, ...(feature === 'ads_studio' ? [productNeg] : []), voiceNeg, langNeg].filter(Boolean));
+  const adsStudioParts = [baseNeg, motionNeg, charNeg, lipNeg, productNeg, voiceNeg, langNeg].filter(Boolean);
+  const defaultParts = [baseNeg, motionNeg, charNeg, lipNeg, voiceNeg, langNeg].filter(Boolean);
+
+  const wanNegPrompt = buildNeg(feature === 'ads_studio' ? adsStudioParts : defaultParts);
+  const adsNegPrompt = buildNeg(feature === 'ads_studio' ? adsStudioParts : defaultParts);
 
   if (config.api === 'kling26') {
     requestBody = {
