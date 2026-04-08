@@ -11378,15 +11378,19 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     if (!rawPrompt) return 'cinematic video with smooth natural motion, consistent character';
     let simplified = rawPrompt;
     let dialogPart = '';
+    const isNonEnglish = language && language !== 'en';
     const dialogMatch = simplified.match(/(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["']([^"']+)["']/i);
     if (dialogMatch) {
-      let dialogText = dialogMatch[1].trim();
-      const dialogWords = dialogText.split(/\s+/);
-      if (dialogWords.length > 15) {
-        dialogText = dialogWords.slice(0, 15).join(' ');
+      if (isNonEnglish) {
+        dialogPart = `, character speaking naturally in ${langLabel}, natural mouth movement, talking to camera`;
+      } else {
+        let dialogText = dialogMatch[1].trim();
+        const dialogWords = dialogText.split(/\s+/);
+        if (dialogWords.length > 15) {
+          dialogText = dialogWords.slice(0, 15).join(' ');
+        }
+        dialogPart = `, character speaking in English saying "${dialogText}"`;
       }
-      const langTag = langLabel ? ` in ${langLabel}` : '';
-      dialogPart = `, character speaking${langTag} saying "${dialogText}"`;
     }
     simplified = simplified.replace(/(?:character\s+)?(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["'][^"']*["']/gi, '');
     simplified = simplified.replace(/["'][^"']{20,}["']/g, '');
@@ -14894,6 +14898,19 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               const settingDesc = scriptData?.setting || '';
               const prodVisual = scriptData?.product_visual_description || '';
 
+              function toStaticImagePrompt(vp) {
+                if (!vp) return '';
+                let s = vp;
+                s = s.replace(/(?:character\s+)?(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["'][^"']*["']/gi, '');
+                s = s.replace(/\b(camera\s+(?:pushes?|pulls?|tracks?|tilts?|orbits?|racks?|drifts?|pans?|zooms?)[^,]*)/gi, '');
+                s = s.replace(/\b(slow[- ]motion|real[- ]time|gradually|suddenly)\b/gi, '');
+                s = s.replace(/\b(rustles?|sways?|drifts?|flickers?|ripples?|flows?|floats?|shifts?)\b/gi, '');
+                s = s.replace(/,\s*,/g, ',').replace(/\s{2,}/g, ' ').trim();
+                return s;
+              }
+
+              const staticPrompt = toStaticImagePrompt(scene.visual_prompt);
+
               if (refImages.length > 0) {
                 const refDesc = [];
                 let imgIdx = 1;
@@ -14901,7 +14918,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 if (productRefUrl) { refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE — the product must look IDENTICAL to this image.`); imgIdx++; }
                 if (scene.scene_index > 0 && prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE — match the character's appearance, the background/room, lighting style, and color palette from this scene EXACTLY.`); imgIdx++; }
                 if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = SCENE 1 — the very first scene. The character and setting must stay consistent with this.`); }
-                refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE: ${scene.visual_prompt}\n${charDesc ? `\nCHARACTER IDENTITY (must match across ALL scenes): ${charDesc}` : ''}${settingDesc ? `\nSETTING/LOCATION (same room/place in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT APPEARANCE: ${prodVisual}` : ''}\n\nSTRICT CONSISTENCY RULES:\n1. CHARACTER LOCK: The person must be IDENTICAL to the reference — same face shape, same eye shape and color, same nose, same lips, same skin tone and complexion, same hair color and length and style, same exact clothing (color, material, fit), same accessories. If the character is wearing a white t-shirt in the reference, they MUST wear the same white t-shirt. NO changes whatsoever.\n2. BACKGROUND LOCK: The room/environment must be the SAME location as previous scenes — same wall color, same furniture, same objects, same layout, same flooring. Only the camera angle can change slightly.\n3. LIGHTING LOCK: Same lighting direction, same color temperature, same time of day feeling.\n4. PRODUCT LOCK: The product must look identical in every scene — same shape, same colors, same size, same label/branding.\n5. NO TEXT: Never add any text, titles, captions, subtitles, watermarks, logos, or written words.\n6. NO REFLECTIVE FLOORS: No glossy/mirror floors or reflective surfaces at the bottom.`;
+                refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE (still image): ${staticPrompt}\n${charDesc ? `\nCHARACTER (MUST be identical in every scene): ${charDesc}` : ''}${settingDesc ? `\nSETTING (SAME location in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT: ${prodVisual}` : ''}\n\nCRITICAL — THIS IS THE MOST IMPORTANT RULE:\nThe character in this image MUST be the EXACT SAME PERSON as in the reference images. Copy the face pixel-by-pixel. Same face shape, eyes, nose, mouth, skin tone, hair color, hair length, hairstyle, clothing color, clothing style. If you change ANYTHING about the character's appearance, the image is WRONG.\n\nADDITIONAL RULES:\n- SAME background/room as reference images — same walls, furniture, objects, floor\n- SAME lighting direction and color temperature\n- Product must look identical — same shape, colors, size, label\n- NO text, titles, captions, watermarks, logos anywhere\n- NO reflective/glossy floors`;
               } else {
                 refPrompt = `${scene.visual_prompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
               }
@@ -15264,6 +15281,18 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
           const settingDesc = scriptData?.setting || '';
           const prodVisual = scriptData?.product_visual_description || '';
 
+          function toStaticImagePrompt(vp) {
+            if (!vp) return '';
+            let s = vp;
+            s = s.replace(/(?:character\s+)?(?:speaks?|talks?|says?|saying|speaking)\s+(?:saying\s+)?["'][^"']*["']/gi, '');
+            s = s.replace(/\b(camera\s+(?:pushes?|pulls?|tracks?|tilts?|orbits?|racks?|drifts?|pans?|zooms?)[^,]*)/gi, '');
+            s = s.replace(/\b(slow[- ]motion|real[- ]time|gradually|suddenly)\b/gi, '');
+            s = s.replace(/\b(rustles?|sways?|drifts?|flickers?|ripples?|flows?|floats?|shifts?)\b/gi, '');
+            s = s.replace(/,\s*,/g, ',').replace(/\s{2,}/g, ' ').trim();
+            return s;
+          }
+          const staticPrompt = toStaticImagePrompt(scene.visual_prompt);
+
           if (characterRefUrl) { refImages.push(characterRefUrl); refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE — this is THE character. Clone this person's face, body, hair, skin tone, and outfit EXACTLY into the new scene.`); imgIdx++; }
           if (productRefUrl) { refImages.push(productRefUrl); refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE — the product must look IDENTICAL to this image.`); imgIdx++; }
           if (retryPrevImage) { refImages.push(retryPrevImage); refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE — match the character's appearance, the background/room, lighting style, and color palette from this scene EXACTLY.`); imgIdx++; }
@@ -15271,9 +15300,9 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
 
           let refPrompt;
           if (refImages.length > 0) {
-            refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE: ${scene.visual_prompt}\n${charDesc ? `\nCHARACTER IDENTITY (must match across ALL scenes): ${charDesc}` : ''}${settingDesc ? `\nSETTING/LOCATION (same room/place in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT APPEARANCE: ${prodVisual}` : ''}\n\nSTRICT CONSISTENCY RULES:\n1. CHARACTER LOCK: The person must be IDENTICAL to the reference — same face shape, same eye shape and color, same nose, same lips, same skin tone and complexion, same hair color and length and style, same exact clothing (color, material, fit), same accessories. If the character is wearing a white t-shirt in the reference, they MUST wear the same white t-shirt. NO changes whatsoever.\n2. BACKGROUND LOCK: The room/environment must be the SAME location as previous scenes — same wall color, same furniture, same objects, same layout, same flooring. Only the camera angle can change slightly.\n3. LIGHTING LOCK: Same lighting direction, same color temperature, same time of day feeling.\n4. PRODUCT LOCK: The product must look identical in every scene — same shape, same colors, same size, same label/branding.\n5. NO TEXT: Never add any text, titles, captions, subtitles, watermarks, logos, or written words.\n6. NO REFLECTIVE FLOORS: No glossy/mirror floors or reflective surfaces at the bottom.`;
+            refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE (still image): ${staticPrompt}\n${charDesc ? `\nCHARACTER (MUST be identical in every scene): ${charDesc}` : ''}${settingDesc ? `\nSETTING (SAME location in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT: ${prodVisual}` : ''}\n\nCRITICAL — THIS IS THE MOST IMPORTANT RULE:\nThe character in this image MUST be the EXACT SAME PERSON as in the reference images. Copy the face pixel-by-pixel. Same face shape, eyes, nose, mouth, skin tone, hair color, hair length, hairstyle, clothing color, clothing style. If you change ANYTHING about the character's appearance, the image is WRONG.\n\nADDITIONAL RULES:\n- SAME background/room as reference images — same walls, furniture, objects, floor\n- SAME lighting direction and color temperature\n- Product must look identical — same shape, colors, size, label\n- NO text, titles, captions, watermarks, logos anywhere\n- NO reflective/glossy floors`;
           } else {
-            refPrompt = `${scene.visual_prompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
+            refPrompt = `${staticPrompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
           const genBody = {
