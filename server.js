@@ -14572,7 +14572,7 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "narration": "MAX 8-12 words (must fit in ${project.video_duration || 5} seconds of speech) in ${langName} — casual, short, punchy",
-      "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
+      "visual_prompt": "MOTION-FOCUSED prompt for image-to-video AI in ${langName}. Describe what MOVES: character actions (verbs), camera movement, environmental motion, micro-expressions. 80-120 words. NO TEXT/TITLES/CAPTIONS/SUBTITLES anywhere in the visual."
     }
   ]
 }
