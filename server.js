@@ -14521,7 +14521,9 @@ ${!isSoft ? `HARD SELLING SCENE STRUCTURE:
 - Scene 1: HOOK — dramatic reveal or attention-grabbing action in first 2 seconds
 - Middle: Product demonstrations with clear benefit-showing movements
 - Final: Strong CTA moment — character confidently presents product to camera
-- Narration: urgent, benefit-driven, conversion-focused` : `SOFT SELLING SCENE STRUCTURE (FOLLOW THIS EXACTLY — THIS IS NOT A SUGGESTION):
+- Narration: urgent, benefit-driven, conversion-focused
+- ALL scenes must happen in the SAME location/setting with the SAME character (same face, hair, clothes)
+- The character must NOT change between scenes — same person throughout` : `SOFT SELLING SCENE STRUCTURE (FOLLOW THIS EXACTLY — THIS IS NOT A SUGGESTION):
 You are creating a STORY, not an advertisement. The viewer should NOT feel like they are watching an ad.
 
 SCENE FLOW (adapt to scene_count):
@@ -14571,6 +14573,8 @@ VOICE & CHARACTER CONSISTENCY (CRITICAL):
 - SAME location/setting in EVERY scene: same room, same lighting, same background
 - Pick ONE personality and keep it: if casual in Scene 1, casual in ALL scenes
 - Each scene is a CONTINUATION of the previous one — like one continuous video cut into parts
+- EVERY visual_prompt MUST start with the setting description (e.g., "in a modern white bathroom, ..." or "in a cozy bedroom, ...") to anchor the AI to the same location
+- EVERY visual_prompt MUST mention the character's key appearance (e.g., "young woman with long black hair wearing white t-shirt") to anchor the AI to the same person
 
 ABSOLUTELY NO TEXT IN VISUALS:
 - visual_prompt must NEVER include any text, titles, captions, subtitles, watermarks, logos, or written words
@@ -14593,7 +14597,7 @@ Return ONLY valid JSON:
   "title": "${isSoft ? 'story-like title that does NOT sound like an ad' : 'compelling ad title'} in ${langName}",
   "character_description": "${hasCharImage ? 'character from reference image' : 'detailed character: gender, age range, ethnicity, hair style+color, outfit with specific colors and materials'}",
   "product_visual_description": "precise visual description of ${project.product_name} — shape, color, packaging, branding, size, material",
-  ${isSoft ? '"setting": "ONE specific location where the entire story takes place (e.g., modern bathroom, cozy bedroom, bright kitchen)",' : ''}
+  "setting": "ONE specific location where the entire story takes place (e.g., modern bathroom, cozy bedroom, bright kitchen, studio backdrop)",
   "scenes": [
     {
       "narration": "MAX 5-8 words in ${langName} — ${isSoft ? 'inner thought or talking to self, NOT selling' : 'casual, short, punchy'}",
@@ -14839,6 +14843,9 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
     const imageModel = 'nanobanana-2-beta';
     const imageResolution = '4K';
 
+    let scriptData = {};
+    try { scriptData = JSON.parse(project.script || '{}'); } catch (e) { scriptData = {}; }
+
     (async () => {
       try {
         let characterRefUrl = project.character_image_url || null;
@@ -14875,22 +14882,26 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               if (scene.scene_index > 0 && prevSceneImageUrl) refImages.push(prevSceneImageUrl);
               if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) refImages.push(scene1ImageUrl);
 
+              const charDesc = scriptData?.character_description || '';
+              const settingDesc = scriptData?.setting || '';
+              const prodVisual = scriptData?.product_visual_description || '';
+
               if (refImages.length > 0) {
                 const refDesc = [];
                 let imgIdx = 1;
-                if (characterRefUrl) { refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE (copy this person's face EXACTLY)`); imgIdx++; }
-                if (productRefUrl) { refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE (this product must appear in the scene)`); imgIdx++; }
-                if (scene.scene_index > 0 && prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE for continuity`); imgIdx++; }
-                if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = SCENE 1 for overall style consistency`); }
-                refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES:\n- Character must look EXACTLY like the character reference: same face shape, same eyes, same nose, same mouth, same skin tone, same hair color and style, same clothing and accessories\n- Do NOT change the character's age, gender, ethnicity, hairstyle, or outfit\n- Product must be VISIBLE and match the product reference exactly\n- Same person, same product, same look across ALL scenes\n- NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image\n- Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image`;
+                if (characterRefUrl) { refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE — this is THE character. Clone this person's face, body, hair, skin tone, and outfit EXACTLY into the new scene.`); imgIdx++; }
+                if (productRefUrl) { refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE — the product must look IDENTICAL to this image.`); imgIdx++; }
+                if (scene.scene_index > 0 && prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE — match the character's appearance, the background/room, lighting style, and color palette from this scene EXACTLY.`); imgIdx++; }
+                if (scene.scene_index > 1 && scene1ImageUrl && scene1ImageUrl !== prevSceneImageUrl) { refDesc.push(`Image ${imgIdx} = SCENE 1 — the very first scene. The character and setting must stay consistent with this.`); }
+                refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE: ${scene.visual_prompt}\n${charDesc ? `\nCHARACTER IDENTITY (must match across ALL scenes): ${charDesc}` : ''}${settingDesc ? `\nSETTING/LOCATION (same room/place in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT APPEARANCE: ${prodVisual}` : ''}\n\nSTRICT CONSISTENCY RULES:\n1. CHARACTER LOCK: The person must be IDENTICAL to the reference — same face shape, same eye shape and color, same nose, same lips, same skin tone and complexion, same hair color and length and style, same exact clothing (color, material, fit), same accessories. If the character is wearing a white t-shirt in the reference, they MUST wear the same white t-shirt. NO changes whatsoever.\n2. BACKGROUND LOCK: The room/environment must be the SAME location as previous scenes — same wall color, same furniture, same objects, same layout, same flooring. Only the camera angle can change slightly.\n3. LIGHTING LOCK: Same lighting direction, same color temperature, same time of day feeling.\n4. PRODUCT LOCK: The product must look identical in every scene — same shape, same colors, same size, same label/branding.\n5. NO TEXT: Never add any text, titles, captions, subtitles, watermarks, logos, or written words.\n6. NO REFLECTIVE FLOORS: No glossy/mirror floors or reflective surfaces at the bottom.`;
               } else {
-                refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.';
+                refPrompt = `${scene.visual_prompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
               }
 
               const genBody = {
                 model: imageModel,
                 prompt: refPrompt,
-                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, changed face, changed hairstyle, changed clothing, wrong skin tone',
+                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, different face, changed face, face change, different hairstyle, changed hairstyle, hair color change, different clothing, outfit change, clothing change, wrong skin tone, skin color change, different background, background change, different room, different location, different lighting, age change, gender change',
                 aspect_ratio: aspectRatio,
                 resolution: imageResolution
               };
@@ -15212,6 +15223,9 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
     const imageModel = 'nanobanana-2-beta';
     const imageResolution = '4K';
 
+    let scriptData = {};
+    try { scriptData = JSON.parse(project.script || '{}'); } catch (e) { scriptData = {}; }
+
     (async () => {
       const checkStillValid = async () => {
         const chk = await pool.query(`SELECT retry_gen_id FROM ads_studio_scenes WHERE project_id = $1 AND scene_index = $2`, [projectId, sceneIndex]);
@@ -15238,22 +15252,26 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
           const refImages = [];
           let imgIdx = 1;
           const refDesc = [];
-          if (characterRefUrl) { refImages.push(characterRefUrl); refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE (copy this person's face EXACTLY)`); imgIdx++; }
-          if (productRefUrl) { refImages.push(productRefUrl); refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE (this product must appear in the scene)`); imgIdx++; }
-          if (retryPrevImage) { refImages.push(retryPrevImage); refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE for continuity`); imgIdx++; }
-          if (retryScene1Image && retryScene1Image !== retryPrevImage) { refImages.push(retryScene1Image); refDesc.push(`Image ${imgIdx} = SCENE 1 for overall style consistency`); }
+          const charDesc = scriptData?.character_description || '';
+          const settingDesc = scriptData?.setting || '';
+          const prodVisual = scriptData?.product_visual_description || '';
+
+          if (characterRefUrl) { refImages.push(characterRefUrl); refDesc.push(`Image ${imgIdx} = CHARACTER REFERENCE — this is THE character. Clone this person's face, body, hair, skin tone, and outfit EXACTLY into the new scene.`); imgIdx++; }
+          if (productRefUrl) { refImages.push(productRefUrl); refDesc.push(`Image ${imgIdx} = PRODUCT REFERENCE — the product must look IDENTICAL to this image.`); imgIdx++; }
+          if (retryPrevImage) { refImages.push(retryPrevImage); refDesc.push(`Image ${imgIdx} = PREVIOUS SCENE — match the character's appearance, the background/room, lighting style, and color palette from this scene EXACTLY.`); imgIdx++; }
+          if (retryScene1Image && retryScene1Image !== retryPrevImage) { refImages.push(retryScene1Image); refDesc.push(`Image ${imgIdx} = SCENE 1 — the very first scene. The character and setting must stay consistent with this.`); }
 
           let refPrompt;
           if (refImages.length > 0) {
-            refPrompt = `You are given reference images:\n${refDesc.join('\n')}\n\nGenerate this ad scene: ${scene.visual_prompt}\n\nABSOLUTE RULES:\n- Character must look EXACTLY like the character reference: same face shape, same eyes, same nose, same mouth, same skin tone, same hair color and style, same clothing and accessories\n- Do NOT change the character's age, gender, ethnicity, hairstyle, or outfit\n- Product must be VISIBLE and match the product reference exactly\n- Same person, same product, same look across ALL scenes\n- NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image\n- Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image`;
+            refPrompt = `REFERENCE IMAGES:\n${refDesc.join('\n')}\n\nSCENE TO GENERATE: ${scene.visual_prompt}\n${charDesc ? `\nCHARACTER IDENTITY (must match across ALL scenes): ${charDesc}` : ''}${settingDesc ? `\nSETTING/LOCATION (same room/place in every scene): ${settingDesc}` : ''}${prodVisual ? `\nPRODUCT APPEARANCE: ${prodVisual}` : ''}\n\nSTRICT CONSISTENCY RULES:\n1. CHARACTER LOCK: The person must be IDENTICAL to the reference — same face shape, same eye shape and color, same nose, same lips, same skin tone and complexion, same hair color and length and style, same exact clothing (color, material, fit), same accessories. If the character is wearing a white t-shirt in the reference, they MUST wear the same white t-shirt. NO changes whatsoever.\n2. BACKGROUND LOCK: The room/environment must be the SAME location as previous scenes — same wall color, same furniture, same objects, same layout, same flooring. Only the camera angle can change slightly.\n3. LIGHTING LOCK: Same lighting direction, same color temperature, same time of day feeling.\n4. PRODUCT LOCK: The product must look identical in every scene — same shape, same colors, same size, same label/branding.\n5. NO TEXT: Never add any text, titles, captions, subtitles, watermarks, logos, or written words.\n6. NO REFLECTIVE FLOORS: No glossy/mirror floors or reflective surfaces at the bottom.`;
           } else {
-            refPrompt = scene.visual_prompt + '. NEVER add any text, titles, captions, subtitles, watermarks, logos, or written words onto the image. Use a natural realistic background — NO reflective floors, NO glossy surfaces, NO mirror reflections at the bottom of the image.';
+            refPrompt = `${scene.visual_prompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
           const genBody = {
             model: imageModel,
             prompt: refPrompt,
-            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, changed face, changed hairstyle, changed clothing, wrong skin tone',
+            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, different face, changed face, face change, different hairstyle, changed hairstyle, hair color change, different clothing, outfit change, clothing change, wrong skin tone, skin color change, different background, background change, different room, different location, different lighting, age change, gender change',
             aspect_ratio: aspectRatio,
             resolution: imageResolution
           };
