@@ -11408,13 +11408,20 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     const langLabel = langMap[language] || language;
     characterLockPrompt += `, character speaks in ${langLabel}, all dialogue and speech must be in ${langLabel}, ${langLabel} language audio only`;
   }
-  const charNegPrompt = 'extra hands, extra arms, extra fingers, three hands, three arms, six fingers, deformed hands, mutated hands, fused fingers, too many fingers, extra limbs, missing fingers, deformed body, face morph, body transformation, deformed face, blurry, low quality, distorted, glitch, static frozen, duplicate body parts, conjoined, mutation';
-  const wanBaseNeg = 'extra hands, extra arms, extra fingers, deformed hands, fused fingers, too many fingers, missing fingers, deformed body, deformed face, face morph, face melt, face swap, ugly face, cross-eyed, body horror, twisted limbs, wrong proportions, duplicate person, duplicate body parts, ghost limbs, morphing clothes, blurry, low quality, distorted, glitch, static frozen, unnatural motion, sliding feet, impossible anatomy, watermark';
-  const wanAdsNeg = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, ugly face, body horror, wrong proportions, duplicate person, ghost limbs, blurry, low quality, distorted, glitch, static frozen, unnatural motion, impossible anatomy, cropped product, cut off product, product out of frame, deformed product, wrong product shape, broken product, wrong product color, blurry product, duplicate product';
-  const langNeg = (language && language !== 'en') ? ', English speech, English dialogue, English narration, English voiceover, speaking in English, English words, English language audio' : '';
-  const wanNegPrompt = (feature === 'ads_studio' ? wanAdsNeg : wanBaseNeg) + langNeg;
-  const klingProductNeg = ', cropped product, cut off product, product out of frame, deformed product, wrong product shape, broken product, wrong product color, blurry product, duplicate product';
-  const adsNegPrompt = (feature === 'ads_studio' ? charNegPrompt + klingProductNeg : charNegPrompt) + langNeg;
+  const langNeg = (language && language !== 'en') ? ', English speech, speaking English' : '';
+  const MAX_NEG = 500;
+
+  function buildNeg(parts) {
+    const raw = parts.join(', ');
+    return raw.length <= MAX_NEG ? raw : raw.substring(0, raw.lastIndexOf(',', MAX_NEG));
+  }
+
+  const baseQuality = 'extra hands, deformed hands, fused fingers, deformed face, face morph, face swap, blurry, low quality, distorted, glitch, static frozen, wrong proportions, duplicate person';
+  const productNeg = 'cropped product, product out of frame, deformed product, blurry product';
+  const wanExtra = 'unnatural motion, impossible anatomy, ghost limbs, sliding feet';
+
+  const wanNegPrompt = buildNeg([baseQuality, wanExtra, ...(feature === 'ads_studio' ? [productNeg] : []), langNeg].filter(Boolean));
+  const adsNegPrompt = buildNeg([baseQuality, ...(feature === 'ads_studio' ? [productNeg] : []), langNeg].filter(Boolean));
 
   if (config.api === 'kling26') {
     requestBody = {
