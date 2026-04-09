@@ -8279,42 +8279,53 @@ function extractVideoUrlFromContent(rawContent) {
   return null;
 }
 
-async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl) {
-  const createUrl = `${APIYI_API_BASE}/videos/generations`;
+async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl, config) {
+  const chatUrl = `${APIYI_API_BASE}/chat/completions`;
+  const chatModelName = config?.apiyiSyncModel || modelName;
   
+  const contentParts = [];
+  if (prompt) {
+    contentParts.push({ type: 'text', text: prompt });
+  }
   if (imageUrl) {
-    try {
-      const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
-      const imgBuf = Buffer.from(imgResp.data);
-      const imgType = imgResp.headers['content-type'] || 'image/png';
-      const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
-      const FormData = require('form-data');
-      const form = new FormData();
-      form.append('model', modelName);
-      form.append('prompt', prompt || '');
-      form.append('size', size);
-      form.append('seconds', String(seconds));
-      form.append('input_image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-      console.log(`[VIDGEN3] POST /v1/videos/generations (multipart): model=${modelName}, size=${size}, seconds=${seconds}`);
-      const response = await axios.post(
-        createUrl,
-        form,
-        { headers: { ...form.getHeaders(), 'Authorization': `Bearer ${apiKey}` }, timeout: 120000 }
-      );
-      return response.data;
-    } catch (imgErr) {
-      console.warn(`[VIDGEN3] Multipart upload failed, trying JSON: ${imgErr.message}`);
+    contentParts.push({ type: 'image_url', image_url: { url: imageUrl } });
+    if (!prompt) {
+      contentParts.unshift({ type: 'text', text: 'Bring this scene to life with vivid details' });
     }
   }
+  if (contentParts.length === 0) {
+    contentParts.push({ type: 'text', text: 'Generate a video' });
+  }
 
-  const requestBody = { model: modelName, prompt: prompt || '', size, seconds: String(seconds) };
-  console.log(`[VIDGEN3] POST /v1/videos/generations (JSON): model=${modelName}, size=${size}, seconds=${seconds}, prompt=${(prompt || '').substring(0, 80)}`);
-  const response = await axios.post(
-    createUrl,
-    requestBody,
-    { headers: apiyiHeaders(apiKey), timeout: 120000 }
-  );
-  return response.data;
+  const requestBody = {
+    model: chatModelName,
+    stream: false,
+    messages: [{
+      role: 'user',
+      content: contentParts.length === 1 && contentParts[0].type === 'text'
+        ? (prompt || 'Generate a video')
+        : contentParts
+    }]
+  };
+
+  console.log(`[VIDGEN3] POST /v1/chat/completions: model=${chatModelName}, prompt=${(prompt || '').substring(0, 80)}, hasImage=${!!imageUrl}`);
+  const response = await axios.post(chatUrl, requestBody, {
+    headers: apiyiHeaders(apiKey),
+    timeout: 600000
+  });
+  
+  const data = response.data;
+  const content = data.choices?.[0]?.message?.content || '';
+  console.log(`[VIDGEN3] Chat response content: ${content.substring(0, 300)}`);
+  
+  const videoUrl = extractVideoUrlFromContent(content);
+  
+  return {
+    id: data.id || `vidgen3_${Date.now()}`,
+    status: videoUrl ? 'completed' : (content ? 'completed_no_url' : 'failed'),
+    videoUrl: videoUrl,
+    rawContent: content
+  };
 }
 
 async function pollApiyiVideoStatus(apiKey, videoId, maxWaitMs = 600000) {
@@ -8407,23 +8418,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const videoSize = isPortrait ? config.size.portrait : config.size.landscape;
     const videoSeconds = config.seconds;
 
-    let createData;
-    try {
-      createData = await callApiyiVideoCreate(apiyiKey, apiyiModelName, prompt, videoSize, videoSeconds, imageUrlForApi);
-    } catch (createErr) {
-      const errMsg = createErr.response?.data?.error?.message || createErr.response?.data?.error || createErr.response?.data?.message || createErr.message || 'Apiyi create failed';
-      const errStr = typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg);
-      console.error(`[VIDGEN3] Create error: ${errStr}`);
-      return res.status(createErr.response?.status || 500).json({ error: errStr });
-    }
-
-    const videoId = createData.id || createData.task_id || createData.request_id;
-    if (!videoId) {
-      console.error('[VIDGEN3] No video ID in response:', JSON.stringify(createData));
-      return res.status(500).json({ error: 'Tidak mendapat video ID dari Apiyi' });
-    }
-
-    const taskId = videoId;
+    const taskId = `vidgen3_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     await pool.query(`
       INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, original_params)
@@ -8435,7 +8430,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       [roomKeyResult.keyInfoId]
     );
 
-    console.log(`[VIDGEN3] Video created: ${taskId}, model=${apiyiModelName}, size=${videoSize}, seconds=${videoSeconds}`);
+    console.log(`[VIDGEN3] Task ${taskId} created, model=${apiyiModelName}, calling chat/completions (sync, up to 10min timeout)`);
 
     res.json({
       taskId: taskId,
@@ -8446,16 +8441,35 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const bgUserId = roomKeyResult.userId;
     (async () => {
       try {
-        const result = await pollApiyiVideoStatus(apiyiKey, taskId);
-        if (result.status === 'completed' && result.videoUrl) {
+        const result = await callApiyiVideoCreate(apiyiKey, apiyiModelName, prompt, videoSize, videoSeconds, imageUrlForApi, config);
+        
+        if (result.videoUrl) {
           await pool.query(
             'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
             ['completed', result.videoUrl, taskId]
           );
           console.log(`[VIDGEN3] Completed: ${taskId} → ${result.videoUrl}`);
           sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl: result.videoUrl, model });
+        } else if (result.rawContent) {
+          const videoUrl = extractVideoUrlFromContent(result.rawContent);
+          if (videoUrl) {
+            await pool.query(
+              'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+              ['completed', videoUrl, taskId]
+            );
+            console.log(`[VIDGEN3] Completed (extracted): ${taskId} → ${videoUrl}`);
+            sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl, model });
+          } else {
+            const errDetail = `No video URL in response. Content: ${result.rawContent.substring(0, 300)}`;
+            await pool.query(
+              'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+              ['failed', errDetail.substring(0, 1000), taskId]
+            );
+            console.error(`[VIDGEN3] Failed (no URL): ${taskId}: ${errDetail}`);
+            sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: errDetail.substring(0, 200) });
+          }
         } else {
-          const errDetail = result.error || 'Video generation failed';
+          const errDetail = result.error || 'Video generation failed - no content';
           await pool.query(
             'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
             ['failed', errDetail.substring(0, 1000), taskId]
@@ -8464,7 +8478,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: errDetail.substring(0, 200) });
         }
       } catch (bgErr) {
-        const errMsg = bgErr.message || 'Apiyi generation failed';
+        const errMsg = bgErr.response?.data?.error?.message || bgErr.response?.data?.error || bgErr.message || 'Apiyi generation failed';
         const errStr = typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg);
         await pool.query(
           'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
