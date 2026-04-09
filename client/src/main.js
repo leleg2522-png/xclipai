@@ -3729,8 +3729,8 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'sora-2', name: 'Sora 2', desc: 'Video 10 detik, OpenAI Sora 2', badge: 'SORA', icon: '🎯', type: 'text2video' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video 15 detik, kualitas tinggi', badge: 'PRO', icon: '🎬', type: 'text2video' },
+    { id: 'sora-2', name: 'Sora 2', desc: 'Video 8 detik, OpenAI Sora 2', badge: 'SORA', icon: '🎯', type: 'text2video' },
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video 12 detik, kualitas tinggi', badge: 'PRO', icon: '🎬', type: 'text2video' },
     { id: 'grok-video', name: 'Grok Video', desc: 'Video 10 detik, audio native, xAI', badge: 'NEW', icon: '🚀', type: 'text2video' },
     { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, cepat & audio native', badge: 'BEST', icon: '⚡', type: 'text2video' },
     { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik, hemat biaya, 720p/1080p', badge: 'LITE', icon: '💰', type: 'text2video' },

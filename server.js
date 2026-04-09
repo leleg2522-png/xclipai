@@ -6746,15 +6746,13 @@ const VIDGEN3_MODEL_CONFIGS = {
   'sora-2': {
     apiyiModel: 'sora-2',
     label: 'Sora 2',
-    seconds: 10,
-    maxSeconds: 16,
+    seconds: 8,
     size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'sora-2-pro': {
     apiyiModel: 'sora-2-pro',
     label: 'Sora 2 Pro',
-    seconds: 15,
-    maxSeconds: 25,
+    seconds: 12,
     size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'grok-video': {
@@ -8278,8 +8276,7 @@ function extractVideoUrlFromContent(rawContent) {
 async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl, config) {
   const endpoints = [
     { url: `https://vip.apiyi.com/v1/videos`, label: 'vip/videos' },
-    { url: `https://api.apiyi.com/v1/videos`, label: 'api/videos' },
-    { url: `https://api.apiyi.com/v1/chat/completions`, label: 'api/chat', isChat: true }
+    { url: `https://api.apiyi.com/v1/videos`, label: 'api/videos' }
   ];
 
   let lastError = null;
