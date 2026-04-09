@@ -6743,6 +6743,24 @@ async function getMotionRoomApiKey(xclipApiKey) {
 // ============ VIDGEN3 (Apiyi.com Video Generation) API ============
 
 const VIDGEN3_MODEL_CONFIGS = {
+  'sora-2': {
+    apiyiModel: 'sora-2',
+    label: 'Sora 2',
+    seconds: 10,
+    size: { landscape: '1280x720', portrait: '720x1280' }
+  },
+  'sora-2-pro': {
+    apiyiModel: 'sora-2-pro',
+    label: 'Sora 2 Pro',
+    seconds: 15,
+    size: { landscape: '1792x1024', portrait: '1024x1792' }
+  },
+  'grok-video': {
+    apiyiModel: 'grok-imagine-video',
+    label: 'Grok Video',
+    seconds: 10,
+    size: { landscape: '1280x720', portrait: '720x1280' }
+  },
   'veo-3.1-fast': {
     apiyiModel: 'veo-3.1-fast-generate-preview',
     label: 'Veo 3.1 Fast',
@@ -8513,7 +8531,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       });
     }
     
-    const estimatedMs = (task.model === 'veo-3.1' ? 180000 : task.model === 'veo-3.1-lite' ? 90000 : 120000);
+    const estimatedMs = (task.model === 'veo-3.1' || task.model === 'sora-2-pro' ? 180000 : task.model === 'veo-3.1-lite' ? 90000 : 120000);
     const progress = Math.min(95, Math.round((elapsed / estimatedMs) * 100));
     
     return res.json({
@@ -8521,7 +8539,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       progress: progress,
       taskId: taskId,
       model: task.model,
-      message: 'Video sedang diproses oleh Google Veo 3.1...'
+      message: 'Video sedang diproses...'
     });
     
   } catch (error) {
