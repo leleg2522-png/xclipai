@@ -8212,12 +8212,16 @@ async function getVidgen3RoomApiKey(xclipApiKey) {
     ORDER BY s.created_at DESC LIMIT 1
   `, [keyInfo.user_id]);
   const vidgen3RoomId = subResult.rows[0]?.vidgen3_room_id || 1;
-  const roomKeyPrefix = `VIDGEN3_ROOM${vidgen3RoomId}_KEY_`;
+
+  const apiyiKey = process.env.APIYI_API_KEY;
+  if (apiyiKey) {
+    return { apiKey: apiyiKey, keyName: 'APIYI_API_KEY', roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
+  }
+
+  const roomKeyPrefix = `VIDGEN3_ROOM${vidgen3RoomId}_APIYI_KEY_`;
   const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   if (availableKeys.length === 0) {
-    const apiyiKey = process.env.APIYI_API_KEY;
-    if (apiyiKey) return { apiKey: apiyiKey, keyName: 'APIYI_API_KEY', roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
-    return { error: 'Tidak ada API key Vidgen3 yang tersedia. Hubungi admin.' };
+    return { error: 'APIYI_API_KEY belum dikonfigurasi. Hubungi admin.' };
   }
   const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
   return { apiKey: process.env[randomKeyName], keyName: randomKeyName, roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
