@@ -38,14 +38,14 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Apiyi.com Sora 2 Video Generator)**: Advanced video generation via Apiyi.com API (OpenAI chat completions format). Uses APIYI_API_KEY env var (or room-based VIDGEN3_ROOM{N}_KEY_{1-3}). Features include:
-  - 3 AI models via Apiyi.com (api.apiyi.com):
-    - Sora 2 (sora_video2): Text/image-to-video, 10 seconds, landscape/portrait
-    - Sora 2 15s (sora_video2-15s): Text/image-to-video, 15 seconds, landscape/portrait
-    - Sora 2 Pro (sora-2-pro): Text/image-to-video, 15 seconds, high quality
-  - Apiyi API: POST /v1/chat/completions (OpenAI format, non-streaming), video URL parsed from response content
+- **Vidgen3 (Apiyi.com Veo 3.1 Video Generator)**: Advanced video generation via Apiyi.com API (OpenAI Videos API format). Uses APIYI_API_KEY env var. Features include:
+  - 3 AI models via Apiyi.com (api.apiyi.com) — Google Veo 3.1 series:
+    - Veo 3.1 Fast (veo-3.1-fast-generate-preview): 8 seconds, up to 4K, 2x speed, native audio
+    - Veo 3.1 Lite (veo-3.1-lite-generate-preview): 8 seconds, 720p/1080p, cheapest option
+    - Veo 3.1 Standard (veo-3.1-generate-preview): 8 seconds, 4K, highest quality
+  - Apiyi API: POST /v1/videos to create, GET /v1/videos/{id} to poll status, GET /v1/videos/{id}/content for download URL
   - Auth: Authorization: Bearer {APIYI_API_KEY}
-  - Architecture: Request returns immediately with taskId, background async call to Apiyi, DB updated on completion/failure, client polls /api/vidgen3/tasks/:taskId
+  - Architecture: Create job synchronously (returns video ID), background polling every 15s, DB updated on completion/failure, SSE events emitted, client polls /api/vidgen3/tasks/:taskId
   - Frontend: prompt (required) + optional image reference, landscape/portrait orientation
   - Database tables: vidgen3_rooms, vidgen3_tasks
   - Room assignment via vidgen3_room_id in subscriptions

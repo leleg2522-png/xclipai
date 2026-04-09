@@ -193,7 +193,7 @@ const state = {
     sourceImage: null,
     referenceVideo: null,
     prompt: '',
-    selectedModel: 'sora-2',
+    selectedModel: 'veo-3.1-fast',
     resolution: '720p',
     isGenerating: false,
     isPolling: false,
@@ -3729,9 +3729,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'sora-2', name: 'Sora 2', desc: 'Video 10 detik dengan OpenAI Sora 2', badge: 'NEW', icon: '🚀', type: 'text2video' },
-    { id: 'sora-2-15s', name: 'Sora 2 15s', desc: 'Video 15 detik dengan OpenAI Sora 2', badge: '15s', icon: '⚡', type: 'text2video' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video 15 detik kualitas tinggi dengan Sora 2 Pro', badge: 'PRO', icon: '🎬', type: 'text2video' }
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, cepat & audio native', badge: 'BEST', icon: '⚡', type: 'text2video' },
+    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik, hemat biaya, 720p/1080p', badge: 'LITE', icon: '💰', type: 'text2video' },
+    { id: 'veo-3.1', name: 'Veo 3.1 Standard', desc: 'Video 8 detik, kualitas tertinggi, 4K', badge: 'PRO', icon: '🎬', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
@@ -3946,7 +3946,7 @@ function renderVidgen3ModelSettings() {
       </div>
     </div>
     <p class="setting-hint" style="text-align:center;opacity:0.7;">
-      ${model === 'sora-2' ? 'OpenAI Sora 2 - Video 10 detik' : model === 'sora-2-15s' ? 'OpenAI Sora 2 - Video 15 detik' : 'OpenAI Sora 2 Pro - Video 15 detik, kualitas tinggi'}
+      ${model === 'veo-3.1-fast' ? 'Google Veo 3.1 Fast - Video 8 detik, 4K, audio native' : model === 'veo-3.1-lite' ? 'Google Veo 3.1 Lite - Video 8 detik, hemat biaya' : 'Google Veo 3.1 Standard - Video 8 detik, kualitas tertinggi'}
     </p>
   `;
 
