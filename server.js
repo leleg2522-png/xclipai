@@ -6745,21 +6745,17 @@ async function getMotionRoomApiKey(xclipApiKey) {
 const VIDGEN3_MODEL_CONFIGS = {
   'sora-2': {
     apiyiModel: 'sora-2',
-    apiyiSyncModel: 'sora_video2',
     label: 'Sora 2',
     seconds: 10,
     maxSeconds: 16,
-    size: { landscape: '1280x720', portrait: '720x1280' },
-    endpoint: 'videos-generations'
+    size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'sora-2-pro': {
     apiyiModel: 'sora-2-pro',
-    apiyiSyncModel: 'sora_video2',
     label: 'Sora 2 Pro',
     seconds: 15,
     maxSeconds: 25,
-    size: { landscape: '1280x720', portrait: '720x1280' },
-    endpoint: 'videos-generations'
+    size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'grok-video': {
     apiyiModel: 'grok-imagine-video',
@@ -6791,7 +6787,7 @@ const VIDGEN3_MODEL_CONFIGS = {
   },
 };
 
-const APIYI_API_BASE = 'https://api.apiyi.com/v1';
+const APIYI_API_BASE = 'https://vip.apiyi.com/v1';
 
 function apiyiHeaders(apiKey) {
   return {
@@ -8281,7 +8277,7 @@ function extractVideoUrlFromContent(rawContent) {
 
 async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl, config) {
   const chatUrl = `${APIYI_API_BASE}/chat/completions`;
-  const chatModelName = config?.apiyiSyncModel || modelName;
+  const chatModelName = modelName;
   
   const contentParts = [];
   if (prompt) {
