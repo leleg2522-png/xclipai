@@ -6744,28 +6744,22 @@ async function getMotionRoomApiKey(xclipApiKey) {
 
 const VIDGEN3_MODEL_CONFIGS = {
   'sora-2': {
-    apiyiModel: 'sora_video2',
+    apiyiModel: 'sora-2',
     label: 'Sora 2',
-    duration: 10,
-    getModelName: (aspectRatio) => {
-      const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
-      return isPortrait ? 'sora_video2' : 'sora_video2-landscape';
-    }
+    seconds: 10,
+    size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'sora-2-15s': {
-    apiyiModel: 'sora_video2-15s',
+    apiyiModel: 'sora-2',
     label: 'Sora 2 15s',
-    duration: 15,
-    getModelName: (aspectRatio) => {
-      const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
-      return isPortrait ? 'sora_video2-15s' : 'sora_video2-landscape-15s';
-    }
+    seconds: 15,
+    size: { landscape: '1280x720', portrait: '720x1280' }
   },
   'sora-2-pro': {
     apiyiModel: 'sora-2-pro',
     label: 'Sora 2 Pro',
-    duration: 15,
-    getModelName: () => 'sora-2-pro'
+    seconds: 15,
+    size: { landscape: '1792x1024', portrait: '1024x1792' }
   },
 };
 
@@ -8257,31 +8251,86 @@ function extractVideoUrlFromContent(rawContent) {
   return null;
 }
 
-async function callApiyiVideoGeneration(apiKey, modelName, prompt, imageUrl) {
-  const messages = [{ role: 'user', content: [] }];
-  if (prompt) messages[0].content.push({ type: 'text', text: prompt });
-  if (imageUrl) messages[0].content.push({ type: 'image_url', image_url: { url: imageUrl } });
-  if (messages[0].content.length === 0) messages[0].content.push({ type: 'text', text: 'Generate a video' });
-
-  const requestBody = { model: modelName, stream: false, messages };
-  console.log(`[VIDGEN3] Apiyi request: model=${modelName}, prompt=${prompt?.substring(0, 100) || 'none'}, hasImage=${!!imageUrl}`);
-
-  const response = await axios.post(
-    `${APIYI_API_BASE}/chat/completions`,
-    requestBody,
-    { headers: apiyiHeaders(apiKey), timeout: 600000 }
-  );
-
-  const rawContent = response.data?.choices?.[0]?.message?.content;
-  const contentStr = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
-  const videoUrl = extractVideoUrlFromContent(rawContent);
-
-  if (!videoUrl) {
-    const dataUrl = response.data?.data?.[0]?.url || response.data?.video_url || response.data?.url || null;
-    if (dataUrl) return { content: contentStr, videoUrl: dataUrl, rawResponse: response.data };
+async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl) {
+  const requestBody = { model: modelName, prompt: prompt || '', size, seconds: String(seconds) };
+  if (imageUrl) {
+    try {
+      const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const imgBuf = Buffer.from(imgResp.data);
+      const imgType = imgResp.headers['content-type'] || 'image/png';
+      const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
+      const FormData = require('form-data');
+      const form = new FormData();
+      form.append('model', modelName);
+      form.append('prompt', prompt || '');
+      form.append('size', size);
+      form.append('seconds', String(seconds));
+      form.append('input_image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
+      console.log(`[VIDGEN3] Apiyi Videos API (multipart): model=${modelName}, size=${size}, seconds=${seconds}`);
+      const response = await axios.post(
+        `${APIYI_API_BASE}/videos`,
+        form,
+        { headers: { ...form.getHeaders(), 'Authorization': `Bearer ${apiKey}` }, timeout: 120000 }
+      );
+      return response.data;
+    } catch (imgErr) {
+      console.warn(`[VIDGEN3] Image upload failed, sending without image: ${imgErr.message}`);
+    }
   }
 
-  return { content: contentStr, videoUrl, rawResponse: response.data };
+  console.log(`[VIDGEN3] Apiyi Videos API (JSON): model=${modelName}, size=${size}, seconds=${seconds}, prompt=${(prompt || '').substring(0, 80)}`);
+  const response = await axios.post(
+    `${APIYI_API_BASE}/videos`,
+    requestBody,
+    { headers: apiyiHeaders(apiKey), timeout: 120000 }
+  );
+  return response.data;
+}
+
+async function pollApiyiVideoStatus(apiKey, videoId, maxWaitMs = 600000) {
+  const startTime = Date.now();
+  const pollInterval = 15000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollInterval));
+    try {
+      const resp = await axios.get(
+        `${APIYI_API_BASE}/videos/${videoId}`,
+        { headers: apiyiHeaders(apiKey), timeout: 30000 }
+      );
+      const data = resp.data;
+      const status = (data.status || '').toLowerCase();
+      console.log(`[VIDGEN3] Poll ${videoId}: status=${status}`);
+
+      if (status === 'completed' || status === 'succeeded' || status === 'done') {
+        let videoUrl = data.video?.url || data.url || null;
+        if (!videoUrl) {
+          try {
+            const contentResp = await axios.get(
+              `${APIYI_API_BASE}/videos/${videoId}/content`,
+              { headers: apiyiHeaders(apiKey), timeout: 30000, maxRedirects: 0, validateStatus: s => s < 400 }
+            );
+            videoUrl = contentResp.headers?.location || contentResp.data?.url || contentResp.request?.res?.responseUrl || null;
+          } catch (contentErr) {
+            if (contentErr.response?.status === 302 || contentErr.response?.status === 301) {
+              videoUrl = contentErr.response.headers?.location || null;
+            }
+            console.warn(`[VIDGEN3] Content endpoint: ${contentErr.message}, location: ${videoUrl || 'none'}`);
+          }
+        }
+        return { status: 'completed', videoUrl };
+      }
+
+      if (status === 'failed' || status === 'error') {
+        const errMsg = data.error?.message || data.error || data.failure_reason || 'Generation failed';
+        return { status: 'failed', error: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg) };
+      }
+    } catch (pollErr) {
+      console.warn(`[VIDGEN3] Poll error for ${videoId}: ${pollErr.message}`);
+    }
+  }
+
+  return { status: 'failed', error: 'Polling timeout exceeded' };
 }
 
 app.post('/api/vidgen3/proxy', async (req, res) => {
@@ -8321,22 +8370,41 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
       console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
     }
     
-    const apiyiModelName = config.getModelName(aspectRatio);
+    const apiyiModelName = config.apiyiModel;
     const apiyiKey = roomKeyResult.apiKey;
+    const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
+    const videoSize = isPortrait ? config.size.portrait : config.size.landscape;
+    const videoSeconds = config.seconds;
 
-    const taskId = `apiyi_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    let createData;
+    try {
+      createData = await callApiyiVideoCreate(apiyiKey, apiyiModelName, prompt, videoSize, videoSeconds, imageUrlForApi);
+    } catch (createErr) {
+      const errMsg = createErr.response?.data?.error?.message || createErr.response?.data?.error || createErr.response?.data?.message || createErr.message || 'Apiyi create failed';
+      const errStr = typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg);
+      console.error(`[VIDGEN3] Apiyi create error: ${errStr}`);
+      return res.status(createErr.response?.status || 500).json({ error: errStr });
+    }
+
+    const videoId = createData.id || createData.task_id || createData.request_id;
+    if (!videoId) {
+      console.error('[VIDGEN3] No video ID in Apiyi response:', JSON.stringify(createData));
+      return res.status(500).json({ error: 'Tidak mendapat video ID dari Apiyi' });
+    }
+
+    const taskId = videoId;
 
     await pool.query(`
       INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, original_params)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', $8)
-    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName, JSON.stringify({ model: apiyiModelName, prompt, image: imageUrlForApi })]);
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName, JSON.stringify({ model: apiyiModelName, prompt, image: imageUrlForApi, size: videoSize, seconds: videoSeconds })]);
 
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
       [roomKeyResult.keyInfoId]
     );
 
-    console.log(`[VIDGEN3] Starting Apiyi generation: taskId=${taskId}, model=${apiyiModelName}`);
+    console.log(`[VIDGEN3] Apiyi video created: ${taskId}, model=${apiyiModelName}, size=${videoSize}, seconds=${videoSeconds}`);
 
     res.json({
       taskId: taskId,
@@ -8347,8 +8415,8 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const bgUserId = roomKeyResult.userId;
     (async () => {
       try {
-        const result = await callApiyiVideoGeneration(apiyiKey, apiyiModelName, prompt, imageUrlForApi);
-        if (result.videoUrl) {
+        const result = await pollApiyiVideoStatus(apiyiKey, taskId);
+        if (result.status === 'completed' && result.videoUrl) {
           await pool.query(
             'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
             ['completed', result.videoUrl, taskId]
@@ -8356,13 +8424,13 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
           console.log(`[VIDGEN3] Apiyi completed: ${taskId} → ${result.videoUrl}`);
           sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl: result.videoUrl, model });
         } else {
-          const errDetail = 'No video URL in Apiyi response: ' + (result.content || '').substring(0, 500);
+          const errDetail = result.error || 'Video generation failed';
           await pool.query(
             'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-            ['failed', errDetail, taskId]
+            ['failed', errDetail.substring(0, 1000), taskId]
           );
-          console.error(`[VIDGEN3] Apiyi no video URL: ${taskId}, content: ${(result.content || '').substring(0, 300)}`);
-          sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: 'Video generation gagal: tidak ada URL video dalam response' });
+          console.error(`[VIDGEN3] Apiyi failed: ${taskId}: ${errDetail}`);
+          sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: errDetail.substring(0, 200) });
         }
       } catch (bgErr) {
         const errMsg = bgErr.response?.data?.error?.message || bgErr.response?.data?.message || bgErr.message || 'Apiyi generation failed';
