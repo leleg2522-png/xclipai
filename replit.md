@@ -38,14 +38,15 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Yunwu AI Video Generator)**: Advanced video generation via Yunwu AI relay API. Uses YUNWU_API_KEY env var. Room-based Xclip API key system for access control. Features include:
-  - 3 AI models via Yunwu AI (api.yunwu.ai):
-    - Grok 15s (grok-imagine-video): Text/image-to-video, 15 seconds, 480p/720p, with audio sync
-    - Grok 10s (grok-imagine-video): Text/image-to-video, 10 seconds, 480p/720p, with audio sync
-    - Sora 2 Pro (sora-2-pro): Text/image-to-video, ~16 seconds, 720p/1080p, high quality
-  - Yunwu AI API: POST /v1/videos to create, GET /v1/videos/{task_id} to poll
-  - Auth: Authorization: Bearer {YUNWU_API_KEY}
-  - Frontend: prompt (required) + optional image reference, text-to-video focused
+- **Vidgen3 (Apiyi.com Sora 2 Video Generator)**: Advanced video generation via Apiyi.com API (OpenAI chat completions format). Uses APIYI_API_KEY env var (or room-based VIDGEN3_ROOM{N}_KEY_{1-3}). Features include:
+  - 3 AI models via Apiyi.com (api.apiyi.com):
+    - Sora 2 (sora_video2): Text/image-to-video, 10 seconds, landscape/portrait
+    - Sora 2 15s (sora_video2-15s): Text/image-to-video, 15 seconds, landscape/portrait
+    - Sora 2 Pro (sora-2-pro): Text/image-to-video, 15 seconds, high quality
+  - Apiyi API: POST /v1/chat/completions (OpenAI format, non-streaming), video URL parsed from response content
+  - Auth: Authorization: Bearer {APIYI_API_KEY}
+  - Architecture: Request returns immediately with taskId, background async call to Apiyi, DB updated on completion/failure, client polls /api/vidgen3/tasks/:taskId
+  - Frontend: prompt (required) + optional image reference, landscape/portrait orientation
   - Database tables: vidgen3_rooms, vidgen3_tasks
   - Room assignment via vidgen3_room_id in subscriptions
   - SSE events: vidgen3_completed, vidgen3_failed

@@ -193,7 +193,7 @@ const state = {
     sourceImage: null,
     referenceVideo: null,
     prompt: '',
-    selectedModel: 'grok-15s',
+    selectedModel: 'sora-2',
     resolution: '720p',
     isGenerating: false,
     isPolling: false,
@@ -3729,11 +3729,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'grok-15s', name: 'Grok 15s', desc: 'Video 15 detik dengan Grok AI', badge: 'NEW', icon: '🚀', type: 'text2video' },
-    { id: 'grok-10s', name: 'Grok 10s', desc: 'Video 10 detik dengan Grok AI', badge: 'FAST', icon: '⚡', type: 'text2video' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video ~15 detik dengan OpenAI Sora', badge: 'PRO', icon: '🎬', type: 'text2video' },
-    { id: 'veo3.1-fast-4k', name: 'Veo 3.1 Fast 4K', desc: 'Video cepat 4K dengan Google Veo 3.1', badge: '4K', icon: '🎥', type: 'text2video' },
-    { id: 'veo3.1-4k', name: 'Veo 3.1 4K', desc: 'Video 4K kualitas tinggi dengan Google Veo 3.1', badge: '4K PRO', icon: '🎬', type: 'text2video' }
+    { id: 'sora-2', name: 'Sora 2', desc: 'Video 10 detik dengan OpenAI Sora 2', badge: 'NEW', icon: '🚀', type: 'text2video' },
+    { id: 'sora-2-15s', name: 'Sora 2 15s', desc: 'Video 15 detik dengan OpenAI Sora 2', badge: '15s', icon: '⚡', type: 'text2video' },
+    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video 15 detik kualitas tinggi dengan Sora 2 Pro', badge: 'PRO', icon: '🎬', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
@@ -3936,78 +3934,21 @@ function renderVidgen3ModelSettings() {
   const model = state.vidgen3.selectedModel;
   let html = '';
 
-  if (model === 'grok-15s' || model === 'grok-10s') {
-    const grokAspects = [
-      { id: '16:9', label: '🖥 16:9' },
-      { id: '9:16', label: '📱 9:16' },
-      { id: '1:1', label: '⬜ 1:1' },
-      { id: '4:3', label: '📺 4:3' },
-      { id: '3:4', label: '📲 3:4' },
-      { id: '3:2', label: '🖼 3:2' },
-      { id: '2:3', label: '🎴 2:3' }
-    ];
-    html += `
-      <div class="setting-group">
-        <label class="setting-label">Aspect Ratio</label>
-        <div class="aspect-ratio-selector" style="flex-wrap:wrap;gap:6px;">
-          ${grokAspects.map(a => `
-            <button class="aspect-btn ${(state.vidgen3.aspectRatio || '16:9') === a.id ? 'active' : ''}" data-vidgen3-aspect="${a.id}">
-              <span>${a.label}</span>
-            </button>
-          `).join('')}
-        </div>
+  html += `
+    <div class="setting-group">
+      <label class="setting-label">Orientasi</label>
+      <div class="aspect-ratio-selector">
+        ${['landscape', 'portrait'].map(o => `
+          <button class="aspect-btn ${(state.vidgen3.aspectRatio || 'landscape') === o ? 'active' : ''}" data-vidgen3-aspect="${o}">
+            <span>${o === 'landscape' ? '🖥 Landscape' : '📱 Portrait'}</span>
+          </button>
+        `).join('')}
       </div>
-      <div class="setting-group">
-        <label class="setting-label">Resolution</label>
-        <div class="aspect-ratio-selector">
-          ${['480p', '720p'].map(r => `
-            <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
-              <span>${r}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <p class="setting-hint" style="text-align:center;opacity:0.7;">Grok AI - Video ${model === 'grok-15s' ? '15' : '10'} detik, dengan audio sinkron</p>
-    `;
-  } else if (model === 'sora-2-pro') {
-    html += `
-      <div class="setting-group">
-        <label class="setting-label">Orientasi</label>
-        <div class="aspect-ratio-selector">
-          ${['landscape', 'portrait'].map(o => `
-            <button class="aspect-btn ${(state.vidgen3.aspectRatio || 'landscape') === o ? 'active' : ''}" data-vidgen3-aspect="${o}">
-              <span>${o === 'landscape' ? '🖥 Landscape' : '📱 Portrait'}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <div class="setting-group">
-        <label class="setting-label">Resolution</label>
-        <div class="aspect-ratio-selector">
-          ${['720p', '1080p'].map(r => `
-            <button class="aspect-btn ${state.vidgen3.resolution === r ? 'active' : ''}" data-vidgen3-resolution="${r}">
-              <span>${r}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <p class="setting-hint" style="text-align:center;opacity:0.7;">OpenAI Sora 2 Pro - Video ~16 detik, kualitas tinggi</p>
-    `;
-  } else if (model === 'veo3.1-fast-4k') {
-    html += `
-      <div class="setting-group">
-        <label class="setting-label">Orientasi</label>
-        <div class="aspect-ratio-selector">
-          ${['landscape', 'portrait'].map(o => `
-            <button class="aspect-btn ${(state.vidgen3.aspectRatio || 'landscape') === o ? 'active' : ''}" data-vidgen3-aspect="${o}">
-              <span>${o === 'landscape' ? '🖥 Landscape' : '📱 Portrait'}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-      <p class="setting-hint" style="text-align:center;opacity:0.7;">Google Veo 3.1 Fast - Video 4K, cepat & kualitas tinggi</p>
-    `;
-  }
+    </div>
+    <p class="setting-hint" style="text-align:center;opacity:0.7;">
+      ${model === 'sora-2' ? 'OpenAI Sora 2 - Video 10 detik' : model === 'sora-2-15s' ? 'OpenAI Sora 2 - Video 15 detik' : 'OpenAI Sora 2 Pro - Video 15 detik, kualitas tinggi'}
+    </p>
+  `;
 
   return html;
 }

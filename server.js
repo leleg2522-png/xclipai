@@ -6740,93 +6740,38 @@ async function getMotionRoomApiKey(xclipApiKey) {
   };
 }
 
-// ============ VIDGEN3 (Yunwu AI Video Generation) API ============
+// ============ VIDGEN3 (Apiyi.com Sora 2 Video Generation) API ============
 
 const VIDGEN3_MODEL_CONFIGS = {
-  'grok-15s': {
-    yunwuModel: 'grok-video-3',
-    type: 'grok',
-    duration: 15,
-    label: 'Grok 15s',
-    buildBody: (params) => {
-      const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
-      const body = {
-        model: 'grok-video-3',
-        prompt: params.prompt || '',
-        aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P',
-        duration: 15
-      };
-      if (params.image) body.images = [params.image];
-      return body;
+  'sora-2': {
+    apiyiModel: 'sora_video2',
+    label: 'Sora 2',
+    duration: 10,
+    getModelName: (aspectRatio) => {
+      const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
+      return isPortrait ? 'sora_video2' : 'sora_video2-landscape';
     }
   },
-  'grok-10s': {
-    yunwuModel: 'grok-video-3',
-    type: 'grok',
-    duration: 10,
-    label: 'Grok 10s',
-    buildBody: (params) => {
-      const arMap = {'16:9':'3:2','9:16':'2:3','1:1':'1:1','4:3':'3:2','3:4':'2:3','3:2':'3:2','2:3':'2:3','portrait':'2:3','landscape':'3:2'};
-      const body = {
-        model: 'grok-video-3',
-        prompt: params.prompt || '',
-        aspect_ratio: arMap[params.aspectRatio] || '3:2',
-        size: '720P',
-        duration: 10
-      };
-      if (params.image) body.images = [params.image];
-      return body;
+  'sora-2-15s': {
+    apiyiModel: 'sora_video2-15s',
+    label: 'Sora 2 15s',
+    duration: 15,
+    getModelName: (aspectRatio) => {
+      const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
+      return isPortrait ? 'sora_video2-15s' : 'sora_video2-landscape-15s';
     }
   },
   'sora-2-pro': {
-    yunwuModel: 'sora-2-pro',
-    type: 'text2video',
-    duration: 15,
+    apiyiModel: 'sora-2-pro',
     label: 'Sora 2 Pro',
-    buildBody: (params) => ({
-      images: params.image ? [params.image] : [],
-      model: 'sora-2-pro',
-      orientation: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? 'portrait' : 'landscape',
-      prompt: params.prompt || '',
-      size: 'large',
-      duration: 15,
-      watermark: false,
-      private: true
-    })
-  },
-  'veo3.1-fast-4k': {
-    yunwuModel: 'veo3.1-fast',
-    type: 'text2video',
-    useReferenceImages: true,
-    label: 'Veo 3.1 Fast 4K',
-    buildBody: (params) => ({
-      model: 'veo3.1-fast',
-      prompt: params.prompt || '',
-      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
-      enable_upsample: true,
-      enhance_prompt: true
-    })
-  },
-  'veo3.1-4k': {
-    yunwuModel: 'veo3.1-4k',
-    type: 'text2video',
-    useReferenceImages: true,
-    label: 'Veo 3.1 4K',
-    buildBody: (params) => ({
-      model: 'veo3.1-4k',
-      prompt: params.prompt || '',
-      aspect_ratio: (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9:16' : '16:9',
-      enable_upsample: true,
-      enhance_prompt: true
-    })
+    duration: 15,
+    getModelName: () => 'sora-2-pro'
   },
 };
 
-const YUNWU_API_BASE = 'https://yunwu.ai/v1';
-const YUNWU_API_FALLBACK_BASES = [];
+const APIYI_API_BASE = 'https://api.apiyi.com/v1';
 
-function yunwuHeaders(apiKey) {
+function apiyiHeaders(apiKey) {
   return {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -6834,35 +6779,6 @@ function yunwuHeaders(apiKey) {
   };
 }
 
-async function makeYunwuRequest(method, url, apiKey, body = null, timeoutMs = 120000) {
-  const config = {
-    method,
-    url,
-    headers: yunwuHeaders(apiKey),
-    timeout: timeoutMs
-  };
-  if (body) config.data = body;
-  
-  try {
-    return await axios(config);
-  } catch (err) {
-    const isTimeout = err.code === 'ECONNABORTED' || (err.message || '').includes('timeout');
-    const isConnErr = err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
-    if ((isTimeout || isConnErr) && YUNWU_API_FALLBACK_BASES.length > 0) {
-      for (const fallbackBase of YUNWU_API_FALLBACK_BASES) {
-        const fallbackUrl = url.replace(YUNWU_API_BASE, fallbackBase);
-        if (fallbackUrl === url) continue;
-        try {
-          console.log(`[YUNWU] Primary ${url} failed (${isTimeout ? 'timeout' : err.code}), trying fallback: ${fallbackUrl}`);
-          return await axios({ ...config, url: fallbackUrl });
-        } catch (fbErr) {
-          console.warn(`[YUNWU] Fallback ${fallbackUrl} also failed: ${fbErr.code || fbErr.message}`);
-        }
-      }
-    }
-    throw err;
-  }
-}
 
 // ============ VIDGEN2 (Poyo AI) ============
 
@@ -8299,37 +8215,91 @@ async function getVidgen3RoomApiKey(xclipApiKey) {
   const roomKeyPrefix = `VIDGEN3_ROOM${vidgen3RoomId}_KEY_`;
   const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
   if (availableKeys.length === 0) {
-    if (process.env.FREEPIK_API_KEY) return { apiKey: process.env.FREEPIK_API_KEY, keyName: 'FREEPIK_API_KEY', roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
+    const apiyiKey = process.env.APIYI_API_KEY;
+    if (apiyiKey) return { apiKey: apiyiKey, keyName: 'APIYI_API_KEY', roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
     return { error: 'Tidak ada API key Vidgen3 yang tersedia. Hubungi admin.' };
   }
   const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
   return { apiKey: process.env[randomKeyName], keyName: randomKeyName, roomId: vidgen3RoomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
 }
 
-// Generate video with Vidgen3 (Freepik)
+function extractVideoUrlFromContent(rawContent) {
+  let content = '';
+  if (typeof rawContent === 'string') {
+    content = rawContent;
+  } else if (Array.isArray(rawContent)) {
+    content = rawContent.map(c => (typeof c === 'string' ? c : c?.text || c?.url || JSON.stringify(c))).join(' ');
+  } else if (rawContent && typeof rawContent === 'object') {
+    content = rawContent.text || rawContent.url || JSON.stringify(rawContent);
+  }
+  
+  const urlPatterns = [
+    /https?:\/\/[^\s\)\]"']+\.mp4[^\s\)\]"']*/i,
+    /https?:\/\/[^\s\)\]"']+\/video[^\s\)\]"']*/i,
+    /https?:\/\/[^\s\)\]"']+sora[^\s\)\]"']*/i,
+    /\[.*?\]\((https?:\/\/[^\s\)]+)\)/,
+    /https?:\/\/[^\s\)\]"']+/i
+  ];
+  
+  for (const pattern of urlPatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      const url = match[1] || match[0];
+      if (url.match(/\.(mp4|webm|mov|avi)/i) || url.includes('video') || url.includes('sora') || url.includes('cdn')) {
+        return url.replace(/[\]\)"']+$/, '');
+      }
+    }
+  }
+  return null;
+}
+
+async function callApiyiVideoGeneration(apiKey, modelName, prompt, imageUrl) {
+  const messages = [{ role: 'user', content: [] }];
+  if (prompt) messages[0].content.push({ type: 'text', text: prompt });
+  if (imageUrl) messages[0].content.push({ type: 'image_url', image_url: { url: imageUrl } });
+  if (messages[0].content.length === 0) messages[0].content.push({ type: 'text', text: 'Generate a video' });
+
+  const requestBody = { model: modelName, stream: false, messages };
+  console.log(`[VIDGEN3] Apiyi request: model=${modelName}, prompt=${prompt?.substring(0, 100) || 'none'}, hasImage=${!!imageUrl}`);
+
+  const response = await axios.post(
+    `${APIYI_API_BASE}/chat/completions`,
+    requestBody,
+    { headers: apiyiHeaders(apiKey), timeout: 600000 }
+  );
+
+  const rawContent = response.data?.choices?.[0]?.message?.content;
+  const contentStr = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
+  const videoUrl = extractVideoUrlFromContent(rawContent);
+
+  if (!videoUrl) {
+    const dataUrl = response.data?.data?.[0]?.url || response.data?.video_url || response.data?.url || null;
+    if (dataUrl) return { content: contentStr, videoUrl: dataUrl, rawResponse: response.data };
+  }
+
+  return { content: contentStr, videoUrl, rawResponse: response.data };
+}
+
 app.post('/api/vidgen3/proxy', async (req, res) => {
   try {
     console.log('[VIDGEN3] Generate request received');
     const xclipApiKey = req.headers['x-xclip-key'];
     
     if (!xclipApiKey) {
-      console.log('[VIDGEN3] No API key provided');
       return res.status(401).json({ error: 'Xclip API key diperlukan' });
     }
     
-    console.log('[VIDGEN3] Getting room API key...');
     const roomKeyResult = await getVidgen3RoomApiKey(xclipApiKey);
     if (roomKeyResult.error) {
-      console.log('[VIDGEN3] Room key error:', roomKeyResult.error);
       return res.status(400).json({ error: roomKeyResult.error });
     }
-    console.log('[VIDGEN3] Got room API key:', roomKeyResult.keyName);
+    console.log('[VIDGEN3] Got API key:', roomKeyResult.keyName);
     
-    const { model, prompt, image, videoUrl, resolution, aspectRatio } = req.body;
+    const { model, prompt, image, aspectRatio } = req.body;
     
     const config = VIDGEN3_MODEL_CONFIGS[model];
     if (!config) {
-      return res.status(400).json({ error: `Model tidak didukung: ${model}` });
+      return res.status(400).json({ error: `Model tidak didukung: ${model}. Model tersedia: ${Object.keys(VIDGEN3_MODEL_CONFIGS).join(', ')}` });
     }
     
     if (!prompt && !image) {
@@ -8337,356 +8307,77 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     let imageUrlForApi = image;
-    let imageBase64ForRef = null;
-    let imageMimeType = 'image/jpeg';
-    
-    console.log(`[VIDGEN3] Image input: ${image ? (image.length > 200 ? image.substring(0, 100) + '...[' + image.length + ' chars]' : image) : 'NONE'}, model=${model}, useReferenceImages=${config.useReferenceImages}`);
     
     if (image && image.includes('base64')) {
-      const b64Match = image.match(/^data:(image\/\w+);base64,(.+)$/);
-      if (b64Match) {
-        imageMimeType = b64Match[1];
-        imageBase64ForRef = b64Match[2];
-      } else {
-        imageBase64ForRef = image.replace(/^data:[^;]+;base64,/, '');
-      }
-      
       const v3protocol = req.headers['x-forwarded-proto'] || 'https';
       const v3host = req.headers['x-forwarded-host'] || req.headers.host;
       const v3baseUrl = `${v3protocol}://${v3host}`;
       const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
       imageUrlForApi = imgFile.publicUrl;
       console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
-    } else if (image) {
-      try {
-        const dlResp = await axios.get(image, { responseType: 'arraybuffer', timeout: 30000 });
-        const buf = Buffer.from(dlResp.data);
-        imageBase64ForRef = buf.toString('base64');
-        imageMimeType = dlResp.headers['content-type'] || 'image/jpeg';
-      } catch (dlErr) {
-        console.warn(`[VIDGEN3] Could not download image for base64: ${dlErr.message}`);
-      }
     }
     
-    if (imageUrlForApi && !config.useReferenceImages) {
-      if (config.type === 'grok') {
-        try {
-          const yunwuKey = process.env.YUNWU_API_KEY;
-          if (yunwuKey) {
-            console.log(`[VIDGEN3] Grok model: uploading image to Yunwu image host for China accessibility`);
-            let imgBuffer;
-            if (imageBase64ForRef) {
-              imgBuffer = Buffer.from(imageBase64ForRef, 'base64');
-            } else {
-              const dlResp = await axios.get(imageUrlForApi, { responseType: 'arraybuffer', timeout: 30000 });
-              imgBuffer = Buffer.from(dlResp.data);
-            }
-            const ext = (imageMimeType || '').includes('jpeg') || (imageMimeType || '').includes('jpg') ? 'jpg' : 'png';
-            const yunwuImgUrl = await uploadToYunwuImageHost(imgBuffer, yunwuKey, `grok_ref.${ext}`);
-            if (yunwuImgUrl) {
-              console.log(`[VIDGEN3] Grok image uploaded to Yunwu host: ${yunwuImgUrl}`);
-              imageUrlForApi = yunwuImgUrl;
-            } else {
-              console.warn(`[VIDGEN3] Yunwu image host returned null, trying catbox/0x0 fallback`);
-              const cdnUrl = await reuploadToCDN(imageUrlForApi);
-              if (cdnUrl) imageUrlForApi = cdnUrl;
-            }
-          }
-        } catch (grokImgErr) {
-          console.warn(`[VIDGEN3] Grok image upload failed: ${grokImgErr.message}, trying CDN fallback`);
-          try {
-            const cdnUrl = await reuploadToCDN(imageUrlForApi);
-            if (cdnUrl) imageUrlForApi = cdnUrl;
-          } catch (e) {}
-        }
-      } else {
-        try {
-          const cdnUrl = await reuploadToCDN(imageUrlForApi);
-          if (cdnUrl) {
-            console.log(`[VIDGEN3] Image re-uploaded to CDN: ${cdnUrl}`);
-            imageUrlForApi = cdnUrl;
-          }
-        } catch (cdnErr) {
-          console.warn(`[VIDGEN3] CDN re-upload failed, using original URL: ${cdnErr.message}`);
-        }
-      }
-    }
-    
-    let videoUrlForApi = videoUrl;
-    if (videoUrl && videoUrl.includes('base64')) {
-      const v3protocol = req.headers['x-forwarded-proto'] || 'https';
-      const v3host = req.headers['x-forwarded-host'] || req.headers.host;
-      const v3baseUrl = `${v3protocol}://${v3host}`;
-      const vidFile = await saveBase64ToFile(videoUrl, 'video', v3baseUrl);
-      videoUrlForApi = vidFile.publicUrl;
-      console.log(`[VIDGEN3] Video saved to public URL: ${videoUrlForApi}`);
-    }
-    
-    const requestBody = config.buildBody({ prompt, image: imageUrlForApi, videoUrl: videoUrlForApi, resolution, aspectRatio });
-    
-    if (config.useReferenceImages && image) {
-      if (imageBase64ForRef) {
-        requestBody.reference_images = [{
-          bytesBase64Encoded: imageBase64ForRef,
-          mimeType: imageMimeType
-        }];
-        console.log(`[VIDGEN3] Using reference_images format (mimeType: ${imageMimeType}, size: ${imageBase64ForRef.length} chars)`);
-      } else {
-        console.error('[VIDGEN3] Failed to convert image to base64 for reference_images');
-        return res.status(400).json({ error: 'Gagal memproses gambar referensi. Coba upload ulang.' });
-      }
-      if (imageUrlForApi) {
-        try {
-          let cdnUrl = imageUrlForApi;
-          const cdnResult = await reuploadToCDN(imageUrlForApi);
-          if (cdnResult) cdnUrl = cdnResult;
-          requestBody.images = [cdnUrl];
-          console.log(`[VIDGEN3] Also added images URL as fallback: ${cdnUrl}`);
-        } catch (cdnErr) {
-          requestBody.images = [imageUrlForApi];
-          console.log(`[VIDGEN3] Also added images URL as fallback (no CDN): ${imageUrlForApi}`);
-        }
-      }
-    } else if (!config.useReferenceImages && config.type !== 'grok' && imageUrlForApi) {
-      if (!requestBody.images) {
-        requestBody.images = [imageUrlForApi];
-      }
-    }
-    
-    const yunwuApiKey = process.env.YUNWU_API_KEY;
-    if (!yunwuApiKey) {
-      return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
-    }
-    
-    console.log(`[VIDGEN3] Generating with model: ${model} via Yunwu AI (${config.yunwuModel})`);
-    console.log(`[VIDGEN3] Request body:`, JSON.stringify(requestBody));
-    
-    let response;
-    let usedFormat = 'unified';
-    
-    let modelFallbacks;
-    if (model === 'sora-2-pro') {
-      modelFallbacks = [
-        { modelName: 'sora-2-pro', format: 'unified' },
-        { modelName: 'new-sora-2-pro', format: 'unified' },
-        { modelName: 'sora-2-all', format: 'unified' },
-        { modelName: 'sora-2-pro', format: 'openai' },
-      ];
-    } else if (model === 'veo3.1-fast-4k') {
-      modelFallbacks = [
-        { modelName: 'veo3.1-fast', format: 'unified' },
-        { modelName: 'veo3.1', format: 'unified' },
-        { modelName: 'veo3-fast', format: 'unified' },
-        { modelName: 'veo_3_1', format: 'openai' },
-      ];
-    } else if (model === 'veo3.1-4k') {
-      modelFallbacks = [
-        { modelName: 'veo3.1-4k', format: 'unified' },
-        { modelName: 'veo3.1', format: 'unified' },
-        { modelName: 'veo3.1-fast', format: 'unified' },
-        { modelName: 'veo_3_1', format: 'openai' },
-      ];
-    } else if (model === 'grok-15s' || model === 'grok-10s') {
-      modelFallbacks = [
-        { modelName: 'grok-video-3', format: 'grok' },
-      ];
-    } else {
-      modelFallbacks = [{ modelName: config.yunwuModel, format: 'unified' }];
-    }
-    
-    let fallbackIdx = 0;
-    const isGrokRequest = config.type === 'grok';
-    const maxRetries = isGrokRequest ? 2 : 6;
-    
-    function isSaturatedError(str) {
-      return str.includes('upstream_saturated') || str.includes('No available channel') || str.includes('saturated') || str.includes('饱和') || str.includes('负载') || str.includes('上游');
-    }
-    
-    async function tryOpenAIFormat(apiKey, modelName, params) {
-      const FormData = require('form-data');
-      const form = new FormData();
-      form.append('model', modelName);
-      form.append('prompt', params.prompt || '');
-      if (modelName.includes('veo')) {
-        form.append('size', (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') ? '9x16' : '16x9');
-        form.append('seconds', '8');
-        form.append('watermark', 'false');
-      } else {
-        const isSoraPro = modelName.includes('sora-2-pro');
-        if (params.aspectRatio === 'portrait' || params.aspectRatio === '9:16') {
-          form.append('size', isSoraPro ? '1024x1792' : '720x1280');
-        } else {
-          form.append('size', isSoraPro ? '1792x1024' : '1280x720');
-        }
-        form.append('seconds', '15');
-      }
-      if (params.image) {
-        try {
-          const imgResp = await axios.get(params.image, { responseType: 'arraybuffer', timeout: 30000 });
-          const imgBuf = Buffer.from(imgResp.data);
-          const imgType = imgResp.headers['content-type'] || 'image/png';
-          const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
-          form.append('input_reference', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-        } catch (dlErr) {
-          console.warn('[VIDGEN3] Could not download image for OpenAI format, sending URL:', dlErr.message);
-          form.append('input_reference', params.image);
-        }
-      }
-      const headers = {
-        ...form.getHeaders(),
-        'Authorization': `Bearer ${apiKey}`
-      };
-      return axios({
-        method: 'POST',
-        url: `${YUNWU_API_BASE}/videos`,
-        headers,
-        data: form,
-        timeout: 300000
-      });
-    }
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const currentFallback = modelFallbacks[fallbackIdx];
-      try {
-        if (currentFallback.format === 'grok') {
-          usedFormat = 'grok';
-          const grokBody = { ...requestBody, model: currentFallback.modelName };
-          console.log(`[VIDGEN3] Sending Grok request:`, JSON.stringify(grokBody));
-          const grokStartTime = Date.now();
-          const grokUrls = [
-            `${YUNWU_API_BASE}/video/create`,
-            ...YUNWU_API_FALLBACK_BASES.map(b => `${b}/video/create`)
-          ];
-          let grokSuccess = false;
-          for (const grokUrl of grokUrls) {
-            try {
-              console.log(`[VIDGEN3] Trying Grok URL: ${grokUrl}`);
-              response = await makeYunwuRequest('POST', grokUrl, yunwuApiKey, grokBody, 30000);
-              console.log(`[VIDGEN3] Grok response from ${grokUrl} in ${Date.now() - grokStartTime}ms, status=${response.status}`);
-              grokSuccess = true;
-              break;
-            } catch (grokUrlErr) {
-              const isTimeout = grokUrlErr.code === 'ECONNABORTED' || (grokUrlErr.message || '').includes('timeout');
-              const isConnErr = grokUrlErr.code === 'ECONNREFUSED' || grokUrlErr.code === 'ENOTFOUND';
-              console.warn(`[VIDGEN3] Grok URL ${grokUrl} failed: ${isTimeout ? 'TIMEOUT(30s)' : grokUrlErr.response?.status || grokUrlErr.code || grokUrlErr.message}`);
-              if (!isTimeout && !isConnErr) throw grokUrlErr;
-            }
-          }
-          if (!grokSuccess) {
-            throw new Error('Semua server Yunwu timeout untuk Grok. Model mungkin sedang maintenance.');
-          }
-        } else if (currentFallback.format === 'openai') {
-          usedFormat = 'openai';
-          response = await tryOpenAIFormat(yunwuApiKey, currentFallback.modelName, { prompt, image: imageUrlForApi, aspectRatio: requestBody.orientation || requestBody.aspect_ratio || aspectRatio });
-        } else {
-          usedFormat = 'unified';
-          const body = { ...requestBody, model: currentFallback.modelName };
-          const logBody = { ...body };
-          if (logBody.reference_images) logBody.reference_images = `[${logBody.reference_images.length} items, base64 ${logBody.reference_images[0]?.bytesBase64Encoded?.length || 0} chars]`;
-          console.log(`[VIDGEN3] Sending unified request:`, JSON.stringify(logBody));
-          response = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, body);
-        }
-        
-        const respData = response.data || {};
-        const respError = respData.error || '';
-        const respStatus = (respData.status || '').toLowerCase();
-        if (respStatus === 'error' || respError) {
-          const errStr = typeof respError === 'string' ? respError : JSON.stringify(respError);
-          const saturated = isSaturatedError(errStr);
-          
-          if (saturated && fallbackIdx < modelFallbacks.length - 1) {
-            fallbackIdx++;
-            const next = modelFallbacks[fallbackIdx];
-            console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
-            continue;
-          }
-          
-          if ((saturated || errStr.includes('rate_limit')) && attempt < maxRetries) {
-            const delay = attempt * 6000;
-            console.warn(`[VIDGEN3] Yunwu API error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-        }
-        
-        break;
-      } catch (retryErr) {
-        const errMsg = retryErr.response?.data?.error?.message || retryErr.response?.data?.message || retryErr.response?.data?.error || retryErr.message || '';
-        const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg);
-        const saturated = isSaturatedError(errStr);
-        
-        if (saturated && fallbackIdx < modelFallbacks.length - 1) {
-          fallbackIdx++;
-          const next = modelFallbacks[fallbackIdx];
-          console.warn(`[VIDGEN3] Model ${currentFallback.modelName} (${currentFallback.format}) saturated → trying ${next.modelName} (${next.format})`);
-          continue;
-        }
-        
-        const isTimeout = retryErr.code === 'ECONNABORTED' || errStr.includes('timeout');
-        const isRetryable = saturated || isTimeout || errStr.includes('rate_limit') || (retryErr.response?.status === 429) || (retryErr.response?.status === 503);
-        if (isRetryable && attempt < maxRetries) {
-          const delay = attempt * 6000;
-          console.warn(`[VIDGEN3] Yunwu request error: ${errStr}, retrying in ${delay/1000}s (attempt ${attempt}/${maxRetries})`);
-          await new Promise(r => setTimeout(r, delay));
-        } else {
-          throw retryErr;
-        }
-      }
-    }
-    
-    console.log(`[VIDGEN3] Yunwu response (format=${usedFormat}, model=${modelFallbacks[fallbackIdx]?.modelName}):`, JSON.stringify(response.data));
-    
-    const respData = response.data || {};
-    if (respData.status === 'error' && respData.error) {
-      console.error('[VIDGEN3] Yunwu API returned error after retries:', respData.error);
-      return res.status(503).json({ error: 'Server video sedang sibuk, coba lagi dalam beberapa menit.' });
-    }
-    
-    let taskId = respData.task_id || respData.request_id || respData.id;
-    if (config.useChatCompletions && !taskId) {
-      const content = respData.choices?.[0]?.message?.content || '';
-      const idMatch = content.match(/task[_-][\w-]+/) || content.match(/video[_-][\w-]+/);
-      if (idMatch) taskId = idMatch[0];
-      if (!taskId && respData.id) taskId = respData.id;
-    }
-    
-    if (!taskId) {
-      console.error('[VIDGEN3] No task id in Yunwu response:', JSON.stringify(respData));
-      return res.status(500).json({ error: 'Tidak mendapat task id dari Yunwu AI' });
-    }
-    
+    const apiyiModelName = config.getModelName(aspectRatio);
+    const apiyiKey = roomKeyResult.apiKey;
+
+    const taskId = `apiyi_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
     await pool.query(`
       INSERT INTO vidgen3_tasks (xclip_api_key_id, user_id, room_id, task_id, model, prompt, used_key_name, status, original_params)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', $8)
-    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName, JSON.stringify(requestBody)]);
-    
+    `, [roomKeyResult.keyInfoId, roomKeyResult.userId, roomKeyResult.roomId, taskId, model, prompt || '', roomKeyResult.keyName, JSON.stringify({ model: apiyiModelName, prompt, image: imageUrlForApi })]);
+
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
       [roomKeyResult.keyInfoId]
     );
-    
-    console.log(`[VIDGEN3] Yunwu job created: ${taskId}`);
-    
+
+    console.log(`[VIDGEN3] Starting Apiyi generation: taskId=${taskId}, model=${apiyiModelName}`);
+
     res.json({
       taskId: taskId,
       model: model,
-      status: 'processing',
-      estimatedCost: response.data?.estimated_cost || null
+      status: 'processing'
     });
-    
+
+    const bgUserId = roomKeyResult.userId;
+    (async () => {
+      try {
+        const result = await callApiyiVideoGeneration(apiyiKey, apiyiModelName, prompt, imageUrlForApi);
+        if (result.videoUrl) {
+          await pool.query(
+            'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
+            ['completed', result.videoUrl, taskId]
+          );
+          console.log(`[VIDGEN3] Apiyi completed: ${taskId} → ${result.videoUrl}`);
+          sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl: result.videoUrl, model });
+        } else {
+          const errDetail = 'No video URL in Apiyi response: ' + (result.content || '').substring(0, 500);
+          await pool.query(
+            'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+            ['failed', errDetail, taskId]
+          );
+          console.error(`[VIDGEN3] Apiyi no video URL: ${taskId}, content: ${(result.content || '').substring(0, 300)}`);
+          sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: 'Video generation gagal: tidak ada URL video dalam response' });
+        }
+      } catch (bgErr) {
+        const errMsg = bgErr.response?.data?.error?.message || bgErr.response?.data?.message || bgErr.message || 'Apiyi generation failed';
+        const errStr = typeof errMsg === 'object' ? JSON.stringify(errMsg) : String(errMsg);
+        await pool.query(
+          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
+          ['failed', errStr.substring(0, 1000), taskId]
+        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
+        console.error(`[VIDGEN3] Apiyi background error: ${taskId}: ${errStr}`);
+        sendSSEToUser(bgUserId, { type: 'vidgen3_failed', taskId, error: errStr.substring(0, 200) });
+      }
+    })();
+
   } catch (error) {
     const errData = error.response?.data;
     const rawErr = errData?.error || errData?.message || error.message || 'Gagal generate video';
     const errStr = typeof rawErr === 'object' ? (rawErr.message || JSON.stringify(rawErr)) : String(rawErr);
     console.error('[VIDGEN3] Generate error:', errStr);
-    
-    const isChannelError = errStr.includes('No available channel') || errStr.includes('available channel');
-    const statusCode = isChannelError ? 503 : (error.response?.status || 500);
-    const userMsg = isChannelError 
-      ? `Model ${model} sedang tidak tersedia di Yunwu. Coba lagi nanti atau gunakan model lain.`
-      : errStr;
-    
-    res.status(statusCode).json({ error: userMsg });
+    res.status(error.response?.status || 500).json({ error: errStr });
   }
 });
 
@@ -8733,210 +8424,33 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       });
     }
     
-    const yunwuApiKey = process.env.YUNWU_API_KEY;
-    if (!yunwuApiKey) {
-      return res.status(500).json({ error: 'Yunwu API key belum dikonfigurasi' });
+    const createdAt = task.created_at ? new Date(task.created_at).getTime() : Date.now();
+    const elapsed = Date.now() - createdAt;
+    const maxProcessingMs = 900000;
+    
+    if (elapsed > maxProcessingMs) {
+      await pool.query(
+        'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3 AND status = $4',
+        ['failed', 'Timeout: video generation exceeded 15 minutes', taskId, 'processing']
+      ).catch(e => console.error('[VIDGEN3] DB timeout update error:', e));
+      console.warn(`[VIDGEN3] Task ${taskId} timed out after ${Math.round(elapsed/1000)}s`);
+      return res.json({
+        status: 'failed',
+        error: 'Video generation timeout (>15 menit). Silakan coba lagi.',
+        taskId: taskId
+      });
     }
     
-    try {
-      const isOpenAIFormatTask = taskId.startsWith('video_');
-      
-      const dbTask = await pool.query('SELECT model FROM vidgen3_tasks WHERE task_id = $1', [taskId]).catch(() => null);
-      const taskModel = dbTask?.rows?.[0]?.model || '';
-      const isGrokModel = taskModel.startsWith('grok-');
-      
-      let pollUrl;
-      if (isOpenAIFormatTask) {
-        pollUrl = `${YUNWU_API_BASE}/videos/${taskId}`;
-      } else {
-        pollUrl = `${YUNWU_API_BASE}/video/query?id=${taskId}`;
-      }
-      
-      const pollResponse = await makeYunwuRequest(
-        'GET',
-        pollUrl,
-        yunwuApiKey
-      );
-      
-      console.log(`[VIDGEN3] Yunwu poll response:`, JSON.stringify(pollResponse.data));
-      const data = pollResponse.data;
-      const status = (data.status || '').toLowerCase();
-      
-      const detailStatus = (data.detail?.status || '').toLowerCase();
-      const upsampleStatus = (data.detail?.upsample_status || '').toUpperCase();
-      const isUpsampling = status === 'video_upsampling' || detailStatus === 'video_upsampling';
-      const isUpsampleDone = upsampleStatus === 'MEDIA_GENERATION_STATUS_SUCCESSFUL' || upsampleStatus === 'MEDIA_GENERATION_STATUS_COMPLETED';
-      
-      const isCompleted = status === 'completed' || status === 'success' || status === 'done' || detailStatus === 'completed' 
-        || (isUpsampling && isUpsampleDone)
-        || (data.video_url && data.video_url !== null);
-      
-      if (isCompleted) {
-        let videoUrl = data.video?.url || data.detail?.upsample_video_url || data.video_url || data.detail?.video_url || data.url || null;
-        if (!videoUrl && isOpenAIFormatTask) {
-          try {
-            const dlResponse = await makeYunwuRequest('GET', `${YUNWU_API_BASE}/videos/${taskId}/content`, yunwuApiKey);
-            videoUrl = dlResponse.data?.video_url || dlResponse.data?.url || dlResponse.request?.res?.responseUrl || null;
-          } catch (dlErr) {
-            console.warn('[VIDGEN3] Download endpoint failed:', dlErr.message);
-          }
-        }
-        if (!videoUrl && data.final_result) {
-          videoUrl = data.final_result.url || (data.final_result.urls && data.final_result.urls[0]) || null;
-        }
-        if (!videoUrl && data.data && data.data[0]) {
-          videoUrl = data.data[0].url || null;
-        }
-        
-        if (videoUrl) {
-          pool.query(
-            'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
-            ['completed', videoUrl, taskId]
-          ).catch(e => console.error('[VIDGEN3] DB update error:', e));
-          
-          return res.json({
-            status: 'completed',
-            progress: 100,
-            videoUrl: videoUrl,
-            taskId: taskId,
-            model: task.model,
-            cost: data.cost || data.cost_usd || null
-          });
-        }
-      }
-      
-      const hasErrorObj = data.error && (typeof data.error === 'object' ? data.error.message : data.error);
-      if (status === 'failed' || detailStatus === 'failed' || (hasErrorObj && status !== 'completed' && status !== 'success' && status !== 'done' && status !== 'in_progress' && status !== 'queued' && status !== 'processing')) {
-        const rawErr = data.error;
-        const rawErrorMsg = (typeof rawErr === 'object' && rawErr?.message) ? rawErr.message : (rawErr || data.detail?.error_message || data.detail || data.message || 'Generation failed');
-        const errorMsg = typeof rawErrorMsg === 'string' ? rawErrorMsg : JSON.stringify(rawErrorMsg);
-        
-        const isQueueTimeout = errorMsg.includes('请稍后重试') || errorMsg.includes('排队') || errorMsg.includes('queue') || errorMsg.includes('retry later') || errorMsg.includes('超时') || errorMsg.includes('重新发起请求') || errorMsg.includes('生成过程中出现异常') || errorMsg.includes('请重新');
-        if (isQueueTimeout) {
-          console.log(`[VIDGEN3] Queue timeout detected (${errorMsg}), auto-resubmitting...`);
-          try {
-            const retryTaskResult = await pool.query('SELECT * FROM vidgen3_tasks WHERE task_id = $1', [taskId]);
-            const origTask = retryTaskResult.rows[0];
-            if (origTask) {
-              const retryCount = origTask.retry_count || 0;
-              if (retryCount < 3) {
-                const origModel = origTask.model;
-                const origConfig = VIDGEN3_MODEL_CONFIGS[origModel];
-                if (origConfig) {
-                  let retryBody;
-                  if (origTask.original_params) {
-                    retryBody = typeof origTask.original_params === 'string' ? JSON.parse(origTask.original_params) : origTask.original_params;
-                    retryBody.model = origConfig.yunwuModel;
-                  } else {
-                    retryBody = origConfig.buildBody({ prompt: origTask.prompt || '' });
-                  }
-                  const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
-                  const retryData = retryResponse.data;
-                  const newTaskId = retryData?.request_id || retryData?.task_id || retryData?.id;
-                  if (newTaskId) {
-                    await pool.query(
-                      `UPDATE vidgen3_tasks SET task_id = $1, status = 'processing', retry_count = $2, error_message = $3 WHERE task_id = $4`,
-                      [newTaskId, retryCount + 1, `Queue retry ${retryCount + 1}/3`, taskId]
-                    ).catch(e => console.error('[VIDGEN3] DB queue retry error:', e));
-                    console.log(`[VIDGEN3] Queue retry ${retryCount + 1}/3 → new task: ${newTaskId}`);
-                    return res.json({
-                      status: 'retrying',
-                      progress: 5,
-                      taskId: taskId,
-                      newTaskId: newTaskId,
-                      message: `Antrian penuh, retry otomatis ${retryCount + 1}/3`
-                    });
-                  }
-                }
-              }
-            }
-          } catch (qRetryErr) {
-            console.error('[VIDGEN3] Queue retry failed:', qRetryErr.message);
-          }
-        }
-        
-        const isGoogleSafetyError = errorMsg.includes('UNSAFE_GENERATION') || errorMsg.includes('AUDIO_FILTERED') || errorMsg.includes('SAFETY') || errorMsg.includes('FILTERED');
-        const isVeo3Model = taskId.startsWith('veo3');
-        
-        if (isGoogleSafetyError && isVeo3Model) {
-          console.log(`[VIDGEN3] Veo3 safety filter error (${errorMsg}), auto-retrying...`);
-          try {
-            const retryTaskResult = await pool.query('SELECT * FROM vidgen3_tasks WHERE task_id = $1', [taskId]);
-            const origTask = retryTaskResult.rows[0];
-            const retryPrompt = origTask?.prompt || '';
-            const retryCount = origTask?.retry_count || 0;
-            
-            if (retryCount < 2) {
-              const retryModel = retryCount === 0 ? 'veo3.1-fast' : 'veo2-fast';
-              const retryBody = {
-                model: retryModel,
-                prompt: retryPrompt,
-                enable_upsample: true,
-                enhance_prompt: true
-              };
-              
-              const origImages = data.detail?.req?.images;
-              if (origImages && origImages.length > 0) {
-                retryBody.images = origImages;
-              }
-              
-              const retryResponse = await makeYunwuRequest('POST', `${YUNWU_API_BASE}/video/create`, yunwuApiKey, retryBody);
-              const retryData = retryResponse.data;
-              
-              if (retryData && retryData.id) {
-                const newTaskId = retryData.id;
-                await pool.query(
-                  `UPDATE vidgen3_tasks SET task_id = $1, status = 'processing', retry_count = $2, 
-                   error_message = $3 WHERE task_id = $4`,
-                  [newTaskId, retryCount + 1, `Retry ${retryCount + 1}/2 → ${retryModel}`, taskId]
-                ).catch(e => console.error('[VIDGEN3] DB retry update error:', e));
-                
-                console.log(`[VIDGEN3] Auto-retry ${retryCount + 1}/2 success! New task: ${newTaskId} (${retryModel})`);
-                return res.json({
-                  status: 'retrying',
-                  progress: 5,
-                  taskId: taskId,
-                  newTaskId: newTaskId,
-                  retryModel: retryModel,
-                  message: `Safety filter → retry ${retryCount + 1}/2 (${retryModel})`
-                });
-              }
-            }
-          } catch (retryErr) {
-            console.error('[VIDGEN3] Auto-retry failed:', retryErr.message);
-          }
-        }
-        
-        pool.query(
-          'UPDATE vidgen3_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE task_id = $3',
-          ['failed', errorMsg, taskId]
-        ).catch(e => console.error('[VIDGEN3] DB update error:', e));
-        
-        return res.json({
-          status: 'failed',
-          error: errorMsg,
-          taskId: taskId
-        });
-      }
-      
-      const progress = data.progress || (isUpsampling ? 85 : (status === 'in_progress' ? 50 : (status === 'queued' ? 10 : 5)));
-      return res.json({
-        status: 'processing',
-        progress: progress,
-        taskId: taskId,
-        yunwuStatus: status,
-        ...(isUpsampling ? { message: 'Video berhasil, sedang upscale ke 4K...' } : {})
-      });
-      
-    } catch (pollError) {
-      console.error('[VIDGEN3] Yunwu poll error:', pollError.response?.data || pollError.message);
-      return res.json({
-        status: 'processing',
-        progress: 0,
-        taskId: taskId,
-        message: 'Video sedang diproses...'
-      });
-    }
+    const estimatedMs = (task.model === 'sora-2-pro' ? 180000 : task.model === 'sora-2-15s' ? 150000 : 120000);
+    const progress = Math.min(95, Math.round((elapsed / estimatedMs) * 100));
+    
+    return res.json({
+      status: 'processing',
+      progress: progress,
+      taskId: taskId,
+      model: task.model,
+      message: 'Video sedang diproses oleh Apiyi (Sora 2)...'
+    });
     
   } catch (error) {
     console.error('[VIDGEN3] Status check error:', error);
