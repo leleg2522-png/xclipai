@@ -6745,39 +6745,49 @@ async function getMotionRoomApiKey(xclipApiKey) {
 const VIDGEN3_MODEL_CONFIGS = {
   'sora-2': {
     apiyiModel: 'sora-2',
+    apiyiSyncModel: 'sora_video2',
     label: 'Sora 2',
     seconds: 10,
-    size: { landscape: '1280x720', portrait: '720x1280' }
+    maxSeconds: 16,
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
   'sora-2-pro': {
     apiyiModel: 'sora-2-pro',
+    apiyiSyncModel: 'sora_video2',
     label: 'Sora 2 Pro',
     seconds: 15,
-    size: { landscape: '1792x1024', portrait: '1024x1792' }
+    maxSeconds: 25,
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
   'grok-video': {
     apiyiModel: 'grok-imagine-video',
     label: 'Grok Video',
     seconds: 10,
-    size: { landscape: '1280x720', portrait: '720x1280' }
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
   'veo-3.1-fast': {
     apiyiModel: 'veo-3.1-fast-generate-preview',
     label: 'Veo 3.1 Fast',
     seconds: 8,
-    size: { landscape: '1280x720', portrait: '720x1280' }
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
   'veo-3.1-lite': {
     apiyiModel: 'veo-3.1-lite-generate-preview',
     label: 'Veo 3.1 Lite',
     seconds: 8,
-    size: { landscape: '1280x720', portrait: '720x1280' }
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
   'veo-3.1': {
     apiyiModel: 'veo-3.1-generate-preview',
     label: 'Veo 3.1 Standard',
     seconds: 8,
-    size: { landscape: '1280x720', portrait: '720x1280' }
+    size: { landscape: '1280x720', portrait: '720x1280' },
+    endpoint: 'videos-generations'
   },
 };
 
@@ -8270,6 +8280,8 @@ function extractVideoUrlFromContent(rawContent) {
 }
 
 async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, imageUrl) {
+  const createUrl = `${APIYI_API_BASE}/videos/generations`;
+  
   if (imageUrl) {
     try {
       const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
@@ -8283,9 +8295,9 @@ async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, im
       form.append('size', size);
       form.append('seconds', String(seconds));
       form.append('input_image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-      console.log(`[VIDGEN3] POST /v1/videos (multipart): model=${modelName}, size=${size}, seconds=${seconds}`);
+      console.log(`[VIDGEN3] POST /v1/videos/generations (multipart): model=${modelName}, size=${size}, seconds=${seconds}`);
       const response = await axios.post(
-        `${APIYI_API_BASE}/videos`,
+        createUrl,
         form,
         { headers: { ...form.getHeaders(), 'Authorization': `Bearer ${apiKey}` }, timeout: 120000 }
       );
@@ -8296,9 +8308,9 @@ async function callApiyiVideoCreate(apiKey, modelName, prompt, size, seconds, im
   }
 
   const requestBody = { model: modelName, prompt: prompt || '', size, seconds: String(seconds) };
-  console.log(`[VIDGEN3] POST /v1/videos (JSON): model=${modelName}, size=${size}, seconds=${seconds}, prompt=${(prompt || '').substring(0, 80)}`);
+  console.log(`[VIDGEN3] POST /v1/videos/generations (JSON): model=${modelName}, size=${size}, seconds=${seconds}, prompt=${(prompt || '').substring(0, 80)}`);
   const response = await axios.post(
-    `${APIYI_API_BASE}/videos`,
+    createUrl,
     requestBody,
     { headers: apiyiHeaders(apiKey), timeout: 120000 }
   );
