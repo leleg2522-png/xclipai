@@ -110,8 +110,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Supports both synchronous (direct URL) and asynchronous (task polling) responses
   - 2-minute cooldown timer between generations
   - Image history persistence in database
-- **X Image3 (Freepik AI Image Generator)**: AI-powered image generation using Freepik API with 13 models. Uses Freepik key pool (freepik_key_pool table, feature='ximage3') or FREEPIK_API_KEY env fallback. Features include:
-  - 13 AI models via Freepik API (api.freepik.com):
+- **X Image3 (Freepik AI Image Generator)**: AI-powered image generation using Freepik API with 15 models. Uses Freepik key pool (freepik_key_pool table, feature='ximage3') or FREEPIK_API_KEY env fallback. Features include:
+  - 15 AI models via Freepik API (api.freepik.com):
     - Mystic Sparkle (Freepik, endpoint: /v1/ai/mystic, engine: sparkle, I2I, 1 ref) — flagship balanced realistic
     - Mystic Sharpy (Freepik, endpoint: /v1/ai/mystic, engine: sharpy, I2I, 1 ref) — sharp detailed photos
     - Mystic Illusio (Freepik, endpoint: /v1/ai/mystic, engine: illusio, I2I, 1 ref) — soft illustrations
@@ -121,18 +121,21 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - Flux 2 Klein (Black Forest Labs, endpoint: /v1/ai/text-to-image/flux-2-klein, I2I via input_image URL, 4 refs) — sub-second real-time
     - Hyperflux (Black Forest Labs, endpoint: /v1/ai/text-to-image/hyperflux, text-only) — ultra-fast generation
     - Seedream V5 Lite (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v5-lite, text-only) — perfect text rendering
+    - Seedream V5 Lite Edit (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v5-lite-edit, I2I via reference_images array, 5 refs) — multi-ref editing
     - Seedream 4.5 (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v4-5, text-only) — ultra 4K cinematic
+    - Seedream 4.5 Edit (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v4-5-edit, I2I via reference_images array, 5 refs) — multi-ref pro editing
     - Z-Image Turbo (Freepik, endpoint: /v1/ai/text-to-image/z-image-turbo, text-only) — ultra-fast iterations
     - RunWay (RunWay, endpoint: /v1/ai/text-to-image/runway, text-only) — high quality generation
     - Classic Fast (Freepik, endpoint: /v1/ai/text-to-image, SYNC, text-only, n: 1-4) — instant sync
   - Text-to-image and image-to-image modes
   - Freepik API auth: x-freepik-api-key header
-  - Model families: mystic (engine param, structure_reference I2I), flux (input_image URL I2I), standard (text-only), classic (sync)
+  - Model families: mystic (engine param, structure_reference I2I), flux (input_image URL I2I), edit (reference_images array, 1-5 URLs), standard (text-only), classic (sync)
   - Mystic: POST /v1/ai/mystic, GET /v1/ai/mystic/{task_id}
   - Flux/Seedream/etc: POST /v1/ai/text-to-image/{model}, GET /v1/ai/text-to-image/{model}/{task_id}
+  - Edit models: POST /v1/ai/text-to-image/{model} with reference_images array (1-5 URLs/base64), requires at least 1 image
   - Sync (classic-fast): POST /v1/ai/text-to-image → data[0].base64 directly
   - Freepik aspect_ratio values: square_1_1, widescreen_16_9, social_story_9_16, classic_4_3, traditional_3_4, standard_3_2, traditional_2_3
-  - Mystic I2I: structure_reference (base64 without data URI prefix). Flux I2I: input_image (public URL)
+  - Mystic I2I: structure_reference (base64 without data URI prefix). Flux I2I: input_image (public URL). Edit I2I: reference_images (array of URLs)
   - Database tables: ximage3_rooms, ximage3_history
   - Room assignment via ximage3_room_id in subscriptions
   - 10-second cooldown timer between generations
@@ -208,7 +211,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
     - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
-    - Freepik AI Image API (for X Image3 image generation with 13 models: Mystic x3, Flux Kontext Pro/Pro v1.1/2 Pro/2 Klein/Hyperflux, Seedream V5 Lite/4.5, Z-Image Turbo, RunWay, Classic Fast)
+    - Freepik AI Image API (for X Image3 image generation with 15 models: Mystic x3, Flux Kontext Pro/Pro v1.1/2 Pro/2 Klein/Hyperflux, Seedream V5 Lite/V5 Edit/4.5/4.5 Edit, Z-Image Turbo, RunWay, Classic Fast)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)

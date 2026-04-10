@@ -10399,7 +10399,9 @@ const XIMAGE3_MODELS = {
   'flux-2-klein': { name: 'Flux 2 Klein', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-2-klein', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Sub-second real-time generation' },
   'hyperflux': { name: 'Hyperflux', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/hyperflux', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast Flux generation' },
   'seedream-v5-lite': { name: 'Seedream V5 Lite', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v5-lite', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'ByteDance latest, perfect text rendering' },
+  'seedream-v5-lite-edit': { name: 'Seedream V5 Lite Edit', provider: 'ByteDance', family: 'edit', endpoint: '/v1/ai/text-to-image/seedream-v5-lite-edit', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 5, desc: 'Edit gambar dengan referensi hingga 5 foto' },
   'seedream-v4-5': { name: 'Seedream 4.5', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v4-5', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra 4K cinematic' },
+  'seedream-v4-5-edit': { name: 'Seedream 4.5 Edit', provider: 'ByteDance', family: 'edit', endpoint: '/v1/ai/text-to-image/seedream-v4-5-edit', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 5, desc: 'Edit gambar pro dengan referensi hingga 5 foto' },
   'z-image-turbo': { name: 'Z-Image Turbo', provider: 'Freepik', family: 'standard', endpoint: '/v1/ai/text-to-image/z-image-turbo', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast iterations' },
   'runway-t2i': { name: 'RunWay', provider: 'RunWay', family: 'standard', endpoint: '/v1/ai/text-to-image/runway', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'High quality RunWay generation' },
   'classic-fast': { name: 'Classic Fast', provider: 'Freepik', family: 'classic', endpoint: '/v1/ai/text-to-image', isSync: true, supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, desc: 'Instant sync generation with styling' }
@@ -10631,8 +10633,11 @@ app.post('/api/ximage3/generate', async (req, res) => {
     if (isI2I && !modelConfig.supportsI2I) {
       return res.status(400).json({ error: `Model ${modelConfig.name} tidak mendukung image-to-image` });
     }
+    if (modelConfig.family === 'edit' && !isI2I) {
+      return res.status(400).json({ error: `Model ${modelConfig.name} memerlukan minimal 1 gambar referensi` });
+    }
     
-    console.log(`[XIMAGE3] Generating with model: ${model}, size: ${size || 'default'}, n: ${n || 1}, i2i: ${isI2I}, endpoint: ${modelConfig.endpoint}`);
+    console.log(`[XIMAGE3] Generating with model: ${model}, size: ${size || 'default'}, n: ${n || 1}, i2i: ${isI2I}, images: ${images ? images.length : 0}, endpoint: ${modelConfig.endpoint}`);
     
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
@@ -10642,22 +10647,30 @@ app.post('/api/ximage3/generate', async (req, res) => {
     
     let referenceBase64 = null;
     let referenceImageUrl = null;
-    if (isI2I && images[0]) {
-      if (images[0].startsWith('data:')) {
-        referenceBase64 = images[0];
-      } else if (images[0].startsWith('http')) {
-        referenceImageUrl = images[0];
-        try {
-          const imgResp = await axios.get(images[0], { responseType: 'arraybuffer', timeout: 30000 });
-          const ct = imgResp.headers['content-type'] || 'image/png';
-          referenceBase64 = `data:${ct};base64,${Buffer.from(imgResp.data).toString('base64')}`;
-        } catch (e) {
-          console.error('[XIMAGE3] Failed to fetch reference image:', e.message);
+    let referenceImageUrls = [];
+    if (isI2I && images && images.length > 0) {
+      for (const img of images.filter(Boolean)) {
+        let b64 = null;
+        let url = null;
+        if (img.startsWith('data:')) {
+          b64 = img;
+        } else if (img.startsWith('http')) {
+          url = img;
+          try {
+            const imgResp = await axios.get(img, { responseType: 'arraybuffer', timeout: 30000 });
+            const ct = imgResp.headers['content-type'] || 'image/png';
+            b64 = `data:${ct};base64,${Buffer.from(imgResp.data).toString('base64')}`;
+          } catch (e) {
+            console.error('[XIMAGE3] Failed to fetch reference image:', e.message);
+          }
         }
-      }
-      if (referenceBase64 && !referenceImageUrl) {
-        const saved = await saveBase64ToFile(referenceBase64, 'image', baseUrl);
-        referenceImageUrl = saved.publicUrl;
+        if (b64 && !url) {
+          const saved = await saveBase64ToFile(b64, 'image', baseUrl);
+          url = saved.publicUrl;
+        }
+        if (!referenceBase64) referenceBase64 = b64;
+        if (!referenceImageUrl) referenceImageUrl = url;
+        if (url) referenceImageUrls.push(url);
       }
     }
     
@@ -10691,6 +10704,15 @@ app.post('/api/ximage3/generate', async (req, res) => {
       if (isI2I && referenceImageUrl) {
         requestBody.input_image = referenceImageUrl;
       }
+    } else if (family === 'edit') {
+      requestBody = {
+        prompt: prompt,
+        aspect_ratio: freepikSize,
+        webhook_url: `${baseUrl}/api/ximage3/webhook`
+      };
+      if (isI2I && referenceImageUrls.length > 0) {
+        requestBody.reference_images = referenceImageUrls.slice(0, modelConfig.maxRefs || 5);
+      }
     } else {
       requestBody = {
         prompt: prompt,
@@ -10699,7 +10721,7 @@ app.post('/api/ximage3/generate', async (req, res) => {
       };
     }
     
-    console.log('[XIMAGE3] Freepik request:', JSON.stringify({ ...requestBody, structure_reference: requestBody.structure_reference ? '[BASE64]' : undefined, input_image: requestBody.input_image ? '[URL]' : undefined }));
+    console.log('[XIMAGE3] Freepik request:', JSON.stringify({ ...requestBody, structure_reference: requestBody.structure_reference ? '[BASE64]' : undefined, input_image: requestBody.input_image ? '[URL]' : undefined, reference_images: requestBody.reference_images ? `[${requestBody.reference_images.length} URLs]` : undefined }));
     
     const response = await axios.post(
       `https://api.freepik.com${modelConfig.endpoint}`,

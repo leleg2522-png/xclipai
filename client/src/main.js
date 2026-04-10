@@ -4375,7 +4375,7 @@ function renderXImage2Page() {
   html += '</div></div>';
 
   if (state.ximage2.mode === 'image-to-image') {
-    var numUploadZones = Math.min(maxRefs, 4);
+    var numUploadZones = Math.min(maxRefs, 5);
     for (var zi = 0; zi < numUploadZones; zi++) {
       var hasImg = state.ximage2.sourceImages[zi];
       html += '<div class="section-card">';
@@ -4611,7 +4611,9 @@ function renderXImage3Page() {
     { id: 'flux-2-klein', name: 'Flux 2 Klein', icon: 'flux', supportsI2I: true, badge: 'FAST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 4, group: 'flux' },
     { id: 'hyperflux', name: 'Hyperflux', icon: 'flux', supportsI2I: false, badge: 'FASTEST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'flux' },
     { id: 'seedream-v5-lite', name: 'Seedream V5 Lite', icon: 'bytedance', supportsI2I: false, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'bytedance' },
+    { id: 'seedream-v5-lite-edit', name: 'Seedream V5 Edit', icon: 'bytedance', supportsI2I: true, badge: 'EDIT', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 5, group: 'bytedance' },
     { id: 'seedream-v4-5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: false, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'bytedance' },
+    { id: 'seedream-v4-5-edit', name: 'Seedream 4.5 Edit', icon: 'bytedance', supportsI2I: true, badge: 'EDIT', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 5, group: 'bytedance' },
     { id: 'z-image-turbo', name: 'Z-Image Turbo', icon: 'freepik', supportsI2I: false, badge: 'FAST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'freepik' },
     { id: 'runway-t2i', name: 'RunWay', icon: 'runway', supportsI2I: false, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'runway' },
     { id: 'classic-fast', name: 'Classic Fast', icon: 'freepik', supportsI2I: false, badge: 'INSTANT', hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'freepik' }
@@ -4631,16 +4633,19 @@ function renderXImage3Page() {
   html += '<div class="ximage-content">';
 
   html += '<div class="section-card">';
+  var isEditOnlyModel = currentModelConfig.id && (currentModelConfig.id.indexOf('-edit') !== -1);
   html += '<h3 class="section-title">Mode</h3>';
   html += '<div class="mode-selector">';
-  html += '<button class="mode-btn ' + (state.ximage3.mode === 'text-to-image' ? 'active' : '') + '" data-ximage3-mode="text-to-image">';
+  html += '<button class="mode-btn ' + (state.ximage3.mode === 'text-to-image' ? 'active' : '') + ' ' + (isEditOnlyModel ? 'disabled' : '') + '" data-ximage3-mode="text-to-image"' + (isEditOnlyModel ? ' title="Model ini khusus editing, butuh gambar referensi"' : '') + '>';
   html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Text to Image</button>';
   html += '<button class="mode-btn ' + (state.ximage3.mode === 'image-to-image' ? 'active' : '') + '" data-ximage3-mode="image-to-image">';
   html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Image to Image</button>';
-  html += '</div></div>';
+  html += '</div>';
+  if (isEditOnlyModel) html += '<p style="color:#ff9800;font-size:12px;margin-top:8px;">Model edit: upload gambar referensi (maks ' + (currentModelConfig.maxRefs || 5) + ' gambar) untuk hasil akurat</p>';
+  html += '</div>';
 
   if (state.ximage3.mode === 'image-to-image') {
-    var numUploadZones = Math.min(maxRefs, 4);
+    var numUploadZones = Math.min(maxRefs, 5);
     for (var zi = 0; zi < numUploadZones; zi++) {
       var hasImg = state.ximage3.sourceImages[zi];
       html += '<div class="section-card">';
@@ -11510,7 +11515,7 @@ function attachXImage2EventListeners() {
     loadXImage2SubscriptionStatus().then(function() { render(); });
   }
 
-  var maxRefSlots = 4;
+  var maxRefSlots = 5;
   for (var zi = 0; zi < maxRefSlots; zi++) {
     (function(idx) {
       var uploadZone = document.getElementById('ximage2UploadZone' + idx);
@@ -12048,7 +12053,7 @@ function attachXImage3EventListeners() {
     loadXImage3SubscriptionStatus().then(function() { render(); });
   }
 
-  var maxRefSlots = 4;
+  var maxRefSlots = 5;
   for (var zi = 0; zi < maxRefSlots; zi++) {
     (function(idx) {
       var uploadZone = document.getElementById('ximage3UploadZone' + idx);
@@ -12098,6 +12103,10 @@ function attachXImage3EventListeners() {
     document.addEventListener('click', function(e) {
       var modeBtn = e.target.closest('[data-ximage3-mode]');
       if (modeBtn && state.currentPage === 'ximage3') {
+        var editModelsCheck = ['seedream-v5-lite-edit', 'seedream-v4-5-edit'];
+        if (modeBtn.dataset.ximage3Mode === 'text-to-image' && editModelsCheck.indexOf(state.ximage3.selectedModel) !== -1) {
+          return;
+        }
         state.ximage3.mode = modeBtn.dataset.ximage3Mode;
         state.ximage3.sourceImages = [];
         saveUserInputs('ximage3');
@@ -12107,6 +12116,10 @@ function attachXImage3EventListeners() {
       var modelCard = e.target.closest('[data-ximage3-model]');
       if (modelCard && state.currentPage === 'ximage3' && !modelCard.classList.contains('disabled')) {
         state.ximage3.selectedModel = modelCard.dataset.ximage3Model;
+        var editModels = ['seedream-v5-lite-edit', 'seedream-v4-5-edit'];
+        if (editModels.indexOf(state.ximage3.selectedModel) !== -1) {
+          state.ximage3.mode = 'image-to-image';
+        }
         saveUserInputs('ximage3');
         render();
         return;

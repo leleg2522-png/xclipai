@@ -6572,6 +6572,11 @@ textarea.form-input {
   color: white;
 }
 
+.badge-edit {
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: white;
+}
+
 .ximage-model-disabled-text {
   font-size: 0.7rem;
   color: var(--text-muted);
