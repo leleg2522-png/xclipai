@@ -2866,8 +2866,9 @@ async function pollApimartTask(taskId, apiKey) {
     { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 }
   );
   const rawData = statusResponse.data;
-  const data = rawData.data || rawData;
-  const status = data.status || data.state;
+  let data = rawData.data || rawData;
+  if (Array.isArray(data) && data.length > 0) data = data[0];
+  const status = rawData.status || rawData.state || data.status || data.state;
   
   if (status === 'completed' || status === 'finished' || status === 'success') {
     let url = data.result?.video?.url ||
@@ -2888,14 +2889,46 @@ async function pollApimartTask(taskId, apiKey) {
               data.output?.video_url ||
               data.output?.images?.[0]?.url ||
               data.output?.image_url ||
+              data.output?.videos?.[0]?.url ||
+              data.output?.video?.url ||
               data.media_url;
     
     if (Array.isArray(url)) url = url[0];
     if (!url && data.result?.images?.[0]) {
       url = typeof data.result.images[0] === 'string' ? data.result.images[0] : null;
     }
+    
+    if (!url && data.result && typeof data.result === 'object') {
+      const rKeys = Object.keys(data.result);
+      for (const k of rKeys) {
+        const v = data.result[k];
+        if (typeof v === 'string' && (v.startsWith('http://') || v.startsWith('https://'))) {
+          url = v;
+          break;
+        }
+        if (Array.isArray(v) && v.length > 0) {
+          const item = v[0];
+          if (typeof item === 'string' && (item.startsWith('http://') || item.startsWith('https://'))) {
+            url = item;
+            break;
+          }
+          if (typeof item === 'object' && item) {
+            url = item.url || item.video_url || item.download_url || null;
+            if (url) break;
+          }
+        }
+      }
+    }
+    
+    if (!url && rawData.data && Array.isArray(rawData.data)) {
+      const firstItem = rawData.data[0];
+      if (firstItem) {
+        url = firstItem.video_url || firstItem.url || firstItem.output?.video_url || firstItem.output?.url || firstItem.result?.video_url || firstItem.result?.url;
+      }
+    }
+    
     console.log(`[APIMART] Completed task URL extracted: ${url ? url.substring(0, 80) : 'NULL'}`);
-    console.log(`[APIMART] Raw data keys: ${JSON.stringify(Object.keys(data))}, result keys: ${data.result ? JSON.stringify(Object.keys(data.result)) : 'no result'}`);
+    console.log(`[APIMART] Full response: ${JSON.stringify(rawData).substring(0, 500)}`);
     return { status: 'completed', url };
   }
   
@@ -7952,8 +7985,9 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
         console.log(`[VIDGEN4] Status response:`, JSON.stringify(statusResponse.data));
         
         const rawData = statusResponse.data;
-        const data = rawData.data || rawData;
-        const status = data.status || data.state;
+        let data = rawData.data || rawData;
+        if (Array.isArray(data) && data.length > 0) data = data[0];
+        const status = rawData.status || rawData.state || data.status || data.state;
         
         if (status === 'completed' || status === 'finished' || status === 'success') {
           let videoUrl = data.result?.video?.url ||
@@ -7967,13 +8001,44 @@ app.get('/api/vidgen4/tasks/:taskId', async (req, res) => {
                          data.video_url || 
                          data.url || 
                          data.output?.url ||
-                         data.output?.video_url;
+                         data.output?.video_url ||
+                         data.output?.videos?.[0]?.url ||
+                         data.output?.video?.url;
+          
+          if (!videoUrl && data.result && typeof data.result === 'object') {
+            const rKeys = Object.keys(data.result);
+            for (const k of rKeys) {
+              const v = data.result[k];
+              if (typeof v === 'string' && (v.startsWith('http://') || v.startsWith('https://'))) {
+                videoUrl = v;
+                break;
+              }
+              if (Array.isArray(v) && v.length > 0) {
+                const item = v[0];
+                if (typeof item === 'string' && (item.startsWith('http://') || item.startsWith('https://'))) {
+                  videoUrl = item;
+                  break;
+                }
+                if (typeof item === 'object' && item) {
+                  videoUrl = item.url || item.video_url || item.download_url || null;
+                  if (videoUrl) break;
+                }
+              }
+            }
+          }
+          
+          if (!videoUrl && rawData.data && Array.isArray(rawData.data)) {
+            const firstItem = rawData.data[0];
+            if (firstItem) {
+              videoUrl = firstItem.video_url || firstItem.url || firstItem.output?.video_url || firstItem.output?.url || firstItem.result?.video_url || firstItem.result?.url;
+            }
+          }
           
           if (Array.isArray(videoUrl)) videoUrl = videoUrl[0];
           if (videoUrl && typeof videoUrl === 'object') videoUrl = videoUrl.url || videoUrl.video_url || null;
           if (videoUrl && typeof videoUrl !== 'string') videoUrl = String(videoUrl);
           console.log(`[VIDGEN4] Status URL extracted: ${videoUrl ? videoUrl.substring(0,80) : 'NULL'}`);
-          console.log(`[VIDGEN4] Data keys: ${JSON.stringify(Object.keys(data))}, result: ${JSON.stringify(data.result)?.substring(0,200)}`);
+          console.log(`[VIDGEN4] Full response: ${JSON.stringify(rawData).substring(0,500)}`);
           
           if (videoUrl) {
             console.log(`[VIDGEN4] Video URL found: ${videoUrl}`);

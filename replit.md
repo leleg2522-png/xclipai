@@ -72,9 +72,10 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Video history persistence in database
   - 4-minute cooldown timer between generations
 - **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
-  - 2 AI models:
+  - 3 AI models:
     - Sora 2 VIP (720p, 10/15 seconds, text-to-video + image-to-video, premium quality)
     - Veo 3.1 Fast (max 1080p, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
+    - Grok Video (480p/720p, 6/10 seconds, image reference)
   - Sora 2 playground: aspect_ratio (16:9/9:16), duration (10/15s), watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
   - Veo 3.1 Fast playground: aspect_ratio (16:9/9:16), duration (8s fixed), resolution (720p/1080p), generation_type (frame/reference), enable_gif
   - Veo 3.1 frame mode: image_urls[0]=start frame, image_urls[1]=end frame
@@ -82,10 +83,13 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Image reference via `image_urls` array
   - Database tables: vidgen4_rooms, vidgen4_tasks
   - Room assignment via vidgen4_room_id in subscriptions
-  - Apimart.ai API: POST /v1/videos/generations to create, GET /v1/videos/{task_id} to poll
-  - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll: `{ code: 200, data: { status, result: { videos } } }`
+  - Apimart.ai API: POST /v1/videos/generations to create, GET /v1/tasks/{task_id} to poll
+  - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll supports both object and array data formats
+  - Deep URL extraction: scans result object keys for HTTP URLs, handles array data responses
+  - Background polling via startServerBgPoll with apiType 'apimart'
+  - Anti-flicker: isPolling flag prevents full re-render during active polling, progress updates via DOM manipulation
   - Video history persistence in database
-  - 5-minute cooldown timer between generations
+  - 3-minute cooldown timer between generations
 - **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 11 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
   - 11 AI models:
     - GPT-4o Image (OpenAI, sizes: 1024x1024/1536x1024/1024x1536/auto, n: 1-4)

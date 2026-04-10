@@ -2887,6 +2887,12 @@ function render(force = false) {
   if (state.motion.isPolling && !force && state.currentPage === 'motion') {
     return;
   }
+  if (state.vidgen3.isPolling && !force && state.currentPage === 'vidgen3') {
+    return;
+  }
+  if (state.vidgen4.isPolling && !force && state.currentPage === 'vidgen4') {
+    return;
+  }
   
   const now = Date.now();
   if (!force && now - lastRenderTime < RENDER_THROTTLE) {
@@ -10339,14 +10345,17 @@ async function pollVidgen4Task(taskId) {
   const maxAttempts = 720;
   let attempts = 0;
   
+  state.vidgen4.isPolling = true;
+  
   const poll = async () => {
     if (attempts >= maxAttempts) {
       state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
       _activePolls.delete(taskId);
+      state.vidgen4.isPolling = false;
       savePendingTasks();
       state.vidgen4.error = 'Timeout - video generation terlalu lama';
       showToast('Timeout - video generation terlalu lama', 'error');
-      render();
+      render(true);
       return;
     }
     
@@ -10358,8 +10367,9 @@ async function pollVidgen4Task(taskId) {
       if (!response.ok && (response.status === 404 || response.status === 401)) {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen4.isPolling = state.vidgen4.tasks.length > 0;
         savePendingTasks();
-        render();
+        render(true);
         return;
       }
       
@@ -10368,6 +10378,7 @@ async function pollVidgen4Task(taskId) {
       if (data.status === 'completed' && data.videoUrl) {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen4.isPolling = state.vidgen4.tasks.length > 0;
         savePendingTasks();
         const alreadyExists = state.vidgen4.generatedVideos.some(v => v.id === taskId || v.taskId === taskId);
         if (!alreadyExists) {
@@ -10381,17 +10392,18 @@ async function pollVidgen4Task(taskId) {
           });
         }
         showToast('Video berhasil digenerate!', 'success');
-        render();
+        render(true);
         return;
       }
       
       if (data.status === 'failed') {
         state.vidgen4.tasks = state.vidgen4.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen4.isPolling = state.vidgen4.tasks.length > 0;
         savePendingTasks();
         state.vidgen4.error = data.error || 'Video generation failed';
         showToast(data.error || 'Video generation failed', 'error');
-        render();
+        render(true);
         return;
       }
       
@@ -10413,6 +10425,7 @@ async function pollVidgen4Task(taskId) {
       attempts++;
       if (attempts >= 3 && !state.vidgen4.tasks.find(t => t.taskId === taskId)) {
         _activePolls.delete(taskId);
+        state.vidgen4.isPolling = false;
         savePendingTasks();
         return;
       }
@@ -10803,12 +10816,13 @@ function pollVidgen3Task(initialTaskId, model) {
   let attempts = 0;
   let taskId = initialTaskId;
 
+  state.vidgen3.isPolling = true;
   setTimeout(() => poll(), 5000);
 
   const poll = async () => {
     try {
       const task = state.vidgen3.tasks.find(t => t.taskId === taskId);
-      if (!task) return;
+      if (!task) { state.vidgen3.isPolling = state.vidgen3.tasks.length > 0; return; }
 
       const response = await fetch(`${API_URL}/api/vidgen3/tasks/${taskId}?model=${encodeURIComponent(model)}`, {
         headers: { 'X-Xclip-Key': state.vidgen3.customApiKey }
@@ -10844,9 +10858,10 @@ function pollVidgen3Task(initialTaskId, model) {
         }
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen3.isPolling = state.vidgen3.tasks.length > 0;
         savePendingTasks();
         showToast('Video berhasil di-generate!', 'success');
-        render();
+        render(true);
         return;
       }
 
@@ -10859,19 +10874,19 @@ function pollVidgen3Task(initialTaskId, model) {
         _activePolls.add(data.newTaskId);
         savePendingTasks();
         showToast(data.message || 'Auto-retry...', 'info');
-        render();
+        render(true);
         taskId = data.newTaskId;
         setTimeout(poll, 8000);
         return;
       }
 
       if (data.status === 'failed') {
-        task.status = 'failed';
-        task.error = data.error || 'Generation gagal';
+        state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen3.isPolling = state.vidgen3.tasks.length > 0;
         savePendingTasks();
-        showToast(`Video gagal: ${task.error}`, 'error');
-        render();
+        showToast(`Video gagal: ${data.error || 'Generation gagal'}`, 'error');
+        render(true);
         return;
       }
 
@@ -10887,9 +10902,10 @@ function pollVidgen3Task(initialTaskId, model) {
       } else {
         state.vidgen3.tasks = state.vidgen3.tasks.filter(t => t.taskId !== taskId);
         _activePolls.delete(taskId);
+        state.vidgen3.isPolling = false;
         savePendingTasks();
         showToast('Timeout - video generation terlalu lama', 'error');
-        render();
+        render(true);
       }
     } catch (error) {
       console.error('Poll vidgen3 error:', error);
