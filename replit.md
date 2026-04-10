@@ -110,27 +110,32 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Supports both synchronous (direct URL) and asynchronous (task polling) responses
   - 2-minute cooldown timer between generations
   - Image history persistence in database
-- **X Image3 (Poyo AI Image Generator)**: AI-powered image generation using Poyo AI API with 10 models. Uses room-based API key system (XIMAGE3_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
-  - 10 AI models:
-    - GPT-4o Image (OpenAI, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 1 ref)
-    - GPT Image 1.5 (OpenAI, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 1 ref, 4x faster)
-    - Nano Banana 2 (Google Gemini 3.1 Flash, model ID: nano-banana-2-new, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/4k, 14 refs)
-    - Nano Banana Pro (Google Gemini 3 Pro, model ID: nano-banana-2, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/4k, 14 refs)
-    - Grok Imagine (xAI Aurora, model ID: grok-imagine-image, sizes: 1:1/2:3/3:2, 1 ref)
-    - Seedream 5.0 Lite (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4, resolution: 1k/2k/3k, n: 1-4, 14 refs)
-    - Seedream 4.5 (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4, n: 1-4, 14 refs)
-    - Flux Kontext Pro (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4, 4 refs)
-    - Flux 2 Pro (Black Forest Labs, model ID: flux-2-pro, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, resolution: 1K/2K, 8 refs)
-    - Flux 2 Flex (Black Forest Labs, model ID: flux-2-flex, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, resolution: 1K/2K, 8 refs)
+- **X Image3 (Freepik AI Image Generator)**: AI-powered image generation using Freepik API with 12 models. Uses Freepik key pool (freepik_key_pool table, feature='ximage3') or FREEPIK_API_KEY env fallback. Features include:
+  - 12 AI models via Freepik API (api.freepik.com):
+    - Mystic Sparkle (Freepik, endpoint: /v1/ai/mystic, engine: sparkle, I2I, 1 ref) — flagship balanced realistic
+    - Mystic Sharpy (Freepik, endpoint: /v1/ai/mystic, engine: sharpy, I2I, 1 ref) — sharp detailed photos
+    - Mystic Illusio (Freepik, endpoint: /v1/ai/mystic, engine: illusio, I2I, 1 ref) — soft illustrations
+    - Flux Kontext Pro (Black Forest Labs, endpoint: /v1/ai/flux-kontext-pro, I2I, 4 refs) — character consistency
+    - Flux Kontext Max (Black Forest Labs, endpoint: /v1/ai/flux-kontext-max, I2I, 4 refs) — highest quality
+    - Flux 2 Pro (Black Forest Labs, endpoint: /v1/ai/flux-2-pro, I2I, 10 refs, extra sizes: 3:2/2:3) — professional 2K
+    - Flux 2 Klein (Black Forest Labs, endpoint: /v1/ai/flux-2-klein, I2I, 4 refs) — sub-second real-time
+    - Seedream V5 Lite (ByteDance, endpoint: /v1/ai/seedream-v5-lite, text-only) — perfect text rendering
+    - Seedream 4.5 (ByteDance, endpoint: /v1/ai/seedream-v4-5, text-only) — ultra 4K cinematic
+    - Z-Image Turbo (Freepik, endpoint: /v1/ai/z-image-turbo, text-only) — ultra-fast iterations
+    - RunWay (RunWay, endpoint: /v1/ai/runway, text-only) — high quality generation
+    - Classic Fast (Freepik, endpoint: /v1/ai/text-to-image, SYNC, text-only, n: 1-4) — instant sync
   - Text-to-image and image-to-image modes
+  - Freepik API auth: x-freepik-api-key header
+  - Async models: POST /v1/ai/{model} → task_id, GET /v1/ai/{model}/{task_id} → status/generated
+  - Sync (classic-fast): POST /v1/ai/text-to-image → data[0].base64 directly
+  - Freepik size format: square_1_1, widescreen_16_9, portrait_9_16, landscape_4_3, portrait_3_4, landscape_3_2, portrait_2_3
+  - Mystic I2I: structure_reference (base64 without data URI prefix). Flux I2I: image_url field
   - Database tables: ximage3_rooms, ximage3_history
   - Room assignment via ximage3_room_id in subscriptions
-  - Poyo AI API: POST https://api.poyo.ai/api/generate/submit, GET /api/generate/status/{task_id}
-  - Request format: { model, callback_url, input: { prompt, size, resolution, n, image_urls } }
-  - 1-minute cooldown timer between generations
+  - 10-second cooldown timer between generations
   - Image history persistence in database
-  - SSE events: ximage3_completed, ximage3_failed
-  - Server-side background polling with apiType 'poyo'
+  - Server-side background polling with apiType 'freepik-image'
+  - Status endpoint enforces user ownership (user_id filter on all queries)
 - **Scene Studio (Simple Batch Image Generation)**: Generate multiple images at once with optional character/style consistency. Uses Apimart.ai API (same as X Image2). Features include:
   - Simple single-page UI: character/style description (global prefix) + reference image upload + list of prompts + model/size picker + generate button
   - Character description automatically prepended to all prompts for visual consistency
@@ -199,7 +204,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - ElevenLabs API (for speech-to-text transcription)
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
-    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models, and X Image3 image generation with 10 models: GPT-4o Image, GPT Image 1.5, Nano Banana 2/Pro, Grok Imagine, Seedream 5.0 Lite/4.5, Flux Kontext Pro, Flux 2 Pro/Flex)
+    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
+    - Freepik AI Image API (for X Image3 image generation with 12 models: Mystic x3, Flux Kontext Pro/Max, Flux 2 Pro/Klein, Seedream V5/4.5, Z-Image Turbo, RunWay, Classic Fast)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)
