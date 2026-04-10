@@ -11262,6 +11262,7 @@ async function getKeyPoolStats() {
 
 async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, userId, feature, videoDuration, referenceImages, language) {
   const freepikModels = {
+    'kling-v2.1-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-1-pro', api: 'kling26' },
     'kling-v2.6-pro': { endpoint: '/v1/ai/image-to-video/kling-v2-6-pro', api: 'kling26' },
     'kling-v2.6-std': { endpoint: '/v1/ai/image-to-video/kling-v2-6-std', api: 'kling26' },
     'kling-v3': { endpoint: '/v1/ai/video/kling-v3-pro', api: 'kling-v3' },
@@ -14754,6 +14755,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5, provider: 'apimodels' },
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
+      'kling-v2.1-pro': { apiModel: 'kling-v2.1-pro', duration: 5, provider: 'freepik' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
@@ -15150,6 +15152,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
       'veo-3.1-fast-5s': { apiModel: 'veo-3.1-fast', duration: 5, provider: 'apimodels' },
       'veo-3.1-fast': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'apimodels' },
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
+      'kling-v2.1-pro': { apiModel: 'kling-v2.1-pro', duration: 5, provider: 'freepik' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },

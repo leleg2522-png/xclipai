@@ -7081,6 +7081,7 @@ function renderAdsStudioPage() {
   html += '<select class="form-input ads-select" id="adsVideoModel">';
   html += '<option value="wan-v2.7-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.7-pro' || !state.adsStudio.newProject.videoModel ? ' selected' : '') + '>Wan 2.7 Pro</option>';
   html += '<option value="wan-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.6-pro' ? ' selected' : '') + '>Wan 2.6 Pro</option>';
+  html += '<option value="kling-v2.1-pro"' + (state.adsStudio.newProject.videoModel === 'kling-v2.1-pro' ? ' selected' : '') + '>Kling 2.1 Pro</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
   html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
