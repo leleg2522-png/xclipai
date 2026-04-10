@@ -4623,9 +4623,9 @@ function renderXImage3Page() {
 
   var html = '<div class="container">';
   html += '<div class="hero ximage-hero">';
-  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Freepik AI Image</div>';
+  html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator V3</div>';
   html += '<h1 class="gradient-title">X Image3</h1>';
-  html += '<p class="hero-subtitle">Generate gambar menakjubkan via Freepik API — Mystic, Flux, Seedream & lainnya</p>';
+  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan Mystic, Flux, Seedream & lainnya</p>';
   html += '</div>';
 
   html += '<div class="ximage-content">';
