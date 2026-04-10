@@ -10382,26 +10382,27 @@ app.post('/api/admin/voiceover/subscribe', requireAdmin, async (req, res) => {
 const FREEPIK_SIZE_MAP = {
   '1:1': 'square_1_1',
   '16:9': 'widescreen_16_9',
-  '9:16': 'portrait_9_16',
-  '4:3': 'landscape_4_3',
-  '3:4': 'portrait_3_4',
-  '3:2': 'classic_3_2',
-  '2:3': 'classic_2_3'
+  '9:16': 'social_story_9_16',
+  '4:3': 'classic_4_3',
+  '3:4': 'traditional_3_4',
+  '3:2': 'standard_3_2',
+  '2:3': 'traditional_2_3'
 };
 
 const XIMAGE3_MODELS = {
-  'mystic-sparkle': { name: 'Mystic Sparkle', provider: 'Freepik', endpoint: '/v1/ai/mystic', engine: 'sparkle', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Balanced realistic - Freepik flagship' },
-  'mystic-sharpy': { name: 'Mystic Sharpy', provider: 'Freepik', endpoint: '/v1/ai/mystic', engine: 'sharpy', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Sharp detailed realistic photos' },
-  'mystic-illusio': { name: 'Mystic Illusio', provider: 'Freepik', endpoint: '/v1/ai/mystic', engine: 'illusio', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Soft illustrations & landscapes' },
-  'flux-kontext-pro': { name: 'Flux Kontext Pro', provider: 'Black Forest Labs', endpoint: '/v1/ai/flux-kontext-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Character consistency & editing' },
-  'flux-kontext-max': { name: 'Flux Kontext Max', provider: 'Black Forest Labs', endpoint: '/v1/ai/flux-kontext-max', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Highest quality Kontext' },
-  'flux-2-pro': { name: 'Flux 2 Pro', provider: 'Black Forest Labs', endpoint: '/v1/ai/flux-2-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 10, desc: 'Professional 2K, photoreal, typography' },
-  'flux-2-klein': { name: 'Flux 2 Klein', provider: 'Black Forest Labs', endpoint: '/v1/ai/flux-2-klein', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Sub-second real-time generation' },
-  'seedream-v5-lite': { name: 'Seedream V5 Lite', provider: 'ByteDance', endpoint: '/v1/ai/seedream-v5-lite', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'ByteDance latest, perfect text rendering' },
-  'seedream-v4-5': { name: 'Seedream 4.5', provider: 'ByteDance', endpoint: '/v1/ai/seedream-v4-5', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra 4K cinematic' },
-  'z-image-turbo': { name: 'Z-Image Turbo', provider: 'Freepik', endpoint: '/v1/ai/z-image-turbo', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast iterations' },
-  'runway-t2i': { name: 'RunWay', provider: 'RunWay', endpoint: '/v1/ai/runway', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'High quality RunWay generation' },
-  'classic-fast': { name: 'Classic Fast', provider: 'Freepik', endpoint: '/v1/ai/text-to-image', isSync: true, supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, desc: 'Instant sync generation with styling' }
+  'mystic-sparkle': { name: 'Mystic Sparkle', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'sparkle', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Balanced realistic - Freepik flagship' },
+  'mystic-sharpy': { name: 'Mystic Sharpy', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'sharpy', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Sharp detailed realistic photos' },
+  'mystic-illusio': { name: 'Mystic Illusio', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'illusio', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Soft illustrations & landscapes' },
+  'flux-kontext-pro': { name: 'Flux Kontext Pro', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-kontext-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], maxN: 1, maxRefs: 1, desc: 'Context-aware generation with image guidance' },
+  'flux-pro-v1-1': { name: 'Flux Pro v1.1', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-pro-v1-1', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], maxN: 1, desc: 'Premium quality Flux generation' },
+  'flux-2-pro': { name: 'Flux 2 Pro', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-2-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 4, desc: 'Professional 2K, photoreal, typography' },
+  'flux-2-klein': { name: 'Flux 2 Klein', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-2-klein', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Sub-second real-time generation' },
+  'hyperflux': { name: 'Hyperflux', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/hyperflux', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast Flux generation' },
+  'seedream-v5-lite': { name: 'Seedream V5 Lite', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v5-lite', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'ByteDance latest, perfect text rendering' },
+  'seedream-v4-5': { name: 'Seedream 4.5', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v4-5', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra 4K cinematic' },
+  'z-image-turbo': { name: 'Z-Image Turbo', provider: 'Freepik', family: 'standard', endpoint: '/v1/ai/text-to-image/z-image-turbo', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast iterations' },
+  'runway-t2i': { name: 'RunWay', provider: 'RunWay', family: 'standard', endpoint: '/v1/ai/text-to-image/runway', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'High quality RunWay generation' },
+  'classic-fast': { name: 'Classic Fast', provider: 'Freepik', family: 'classic', endpoint: '/v1/ai/text-to-image', isSync: true, supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, desc: 'Instant sync generation with styling' }
 };
 
 async function getXImage3RoomApiKey(xclipApiKey) {
@@ -10640,10 +10641,12 @@ app.post('/api/ximage3/generate', async (req, res) => {
     const freepikSize = FREEPIK_SIZE_MAP[size] || 'square_1_1';
     
     let referenceBase64 = null;
+    let referenceImageUrl = null;
     if (isI2I && images[0]) {
       if (images[0].startsWith('data:')) {
         referenceBase64 = images[0];
-      } else {
+      } else if (images[0].startsWith('http')) {
+        referenceImageUrl = images[0];
         try {
           const imgResp = await axios.get(images[0], { responseType: 'arraybuffer', timeout: 30000 });
           const ct = imgResp.headers['content-type'] || 'image/png';
@@ -10652,41 +10655,51 @@ app.post('/api/ximage3/generate', async (req, res) => {
           console.error('[XIMAGE3] Failed to fetch reference image:', e.message);
         }
       }
+      if (referenceBase64 && !referenceImageUrl) {
+        const saved = await saveBase64ToFile(referenceBase64, 'image', baseUrl);
+        referenceImageUrl = saved.publicUrl;
+      }
     }
     
     let requestBody = {};
+    const family = modelConfig.family;
     
-    if (modelConfig.isSync) {
+    if (family === 'classic') {
       requestBody = {
         prompt: prompt,
         num_images: Math.min(parseInt(n) || 1, modelConfig.maxN || 1),
         image: { size: freepikSize },
         filter_nsfw: false
       };
-    } else if (modelConfig.engine) {
+    } else if (family === 'mystic') {
       requestBody = {
         prompt: prompt,
         engine: modelConfig.engine,
-        image: { size: freepikSize },
+        aspect_ratio: freepikSize,
         webhook_url: `${baseUrl}/api/ximage3/webhook`
       };
       if (isI2I && referenceBase64) {
         const b64Only = referenceBase64.includes(',') ? referenceBase64.split(',')[1] : referenceBase64;
         requestBody.structure_reference = b64Only;
       }
+    } else if (family === 'flux') {
+      requestBody = {
+        prompt: prompt,
+        aspect_ratio: freepikSize,
+        webhook_url: `${baseUrl}/api/ximage3/webhook`
+      };
+      if (isI2I && referenceImageUrl) {
+        requestBody.input_image = referenceImageUrl;
+      }
     } else {
       requestBody = {
         prompt: prompt,
-        image: { size: freepikSize },
+        aspect_ratio: freepikSize,
         webhook_url: `${baseUrl}/api/ximage3/webhook`
       };
-      if (isI2I && referenceBase64) {
-        const b64Only = referenceBase64.includes(',') ? referenceBase64.split(',')[1] : referenceBase64;
-        requestBody.image_url = b64Only;
-      }
     }
     
-    console.log('[XIMAGE3] Freepik request:', JSON.stringify({ ...requestBody, structure_reference: requestBody.structure_reference ? '[BASE64]' : undefined, image_url: requestBody.image_url ? '[BASE64]' : undefined }));
+    console.log('[XIMAGE3] Freepik request:', JSON.stringify({ ...requestBody, structure_reference: requestBody.structure_reference ? '[BASE64]' : undefined, input_image: requestBody.input_image ? '[URL]' : undefined }));
     
     const response = await axios.post(
       `https://api.freepik.com${modelConfig.endpoint}`,
