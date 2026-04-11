@@ -14769,7 +14769,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = 'gemini-3-pro-image-lite';
+    const imageModel = 'nanobanana-2-beta';
     const imageResolution = '4K';
 
     let scriptData = {};
@@ -15163,7 +15163,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
-    const imageModel = 'gemini-3-pro-image-lite';
+    const imageModel = 'nanobanana-2-beta';
     const imageResolution = '4K';
 
     let scriptData = {};
