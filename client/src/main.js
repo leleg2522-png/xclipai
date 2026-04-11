@@ -7298,6 +7298,7 @@ function renderAutomationPage() {
   html += '<select class="form-input auto-select" id="autoVideoModel">';
   html += '<option value="kling-v2.6-pro"' + (state.automation.newProject.videoModel === 'kling-v2.6-pro' ? ' selected' : '') + '>Kling 2.6 Pro</option>';
   html += '<option value="kling-v3"' + (state.automation.newProject.videoModel === 'kling-v3' ? ' selected' : '') + '>Kling V3</option>';
+  html += '<option value="wan-v2.7-pro"' + (state.automation.newProject.videoModel === 'wan-v2.7-pro' ? ' selected' : '') + '>Wan 2.7 Pro I2V</option>';
   html += '<option value="wan-v2.7-r2v"' + (state.automation.newProject.videoModel === 'wan-v2.7-r2v' ? ' selected' : '') + '>Wan 2.7 R2V</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoDuration">';

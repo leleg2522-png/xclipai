@@ -11743,7 +11743,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro'];
   const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
@@ -12158,7 +12158,8 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
-      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' }
+      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
@@ -12629,7 +12630,8 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'veo-3.1': { apiModel: 'veo-3.1', duration: 8, provider: 'apimodels' },
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
-      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' }
+      'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
