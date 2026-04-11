@@ -11141,11 +11141,8 @@ async function getActiveKeyForUser(userId, feature, excludeKeys = []) {
 }
 
 async function markKeyExhausted(keyId, errorMsg) {
-  await pool.query(
-    `UPDATE freepik_key_pool SET status = 'exhausted', exhausted_at = NOW(), error_message = $2 WHERE id = $1`,
-    [keyId, errorMsg || 'Credit exhausted (402)']
-  );
-  console.log(`[KEY-POOL] Key ${keyId} marked exhausted: ${errorMsg || '402'}`);
+  await pool.query(`DELETE FROM freepik_key_pool WHERE id = $1`, [keyId]);
+  console.log(`[KEY-POOL] Key ${keyId} deleted (dead): ${errorMsg || '402'}`);
 }
 
 async function replaceExhaustedKey(userId, feature) {
@@ -11209,11 +11206,10 @@ async function handlePoolKeyExhausted(poolId, userId, feature, errorMsg) {
 
 async function resetExpiredKeys() {
   const result = await pool.query(
-    `UPDATE freepik_key_pool SET status = 'available', feature = NULL, assigned_user_id = NULL, assigned_at = NULL, exhausted_at = NULL, error_message = NULL 
-     WHERE status = 'exhausted' AND exhausted_at < NOW() - INTERVAL '${KEY_EXHAUSTED_RESET_HOURS} hours' RETURNING id`
+    `DELETE FROM freepik_key_pool WHERE status = 'exhausted' RETURNING id`
   );
   if (result.rowCount > 0) {
-    console.log(`[KEY-POOL] Reset ${result.rowCount} exhausted keys back to available`);
+    console.log(`[KEY-POOL] Auto-deleted ${result.rowCount} exhausted (dead) keys from pool`);
   }
   return result.rowCount;
 }
