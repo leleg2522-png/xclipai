@@ -193,7 +193,7 @@ const state = {
     sourceImage: null,
     referenceVideo: null,
     prompt: '',
-    selectedModel: 'sora-2',
+    selectedModel: 'veo-3.1-fast',
     resolution: '720p',
     isGenerating: false,
     isPolling: false,
@@ -3736,12 +3736,10 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'sora-2', name: 'Sora 2', desc: 'Video 8 detik, OpenAI Sora 2', badge: 'SORA', icon: '🎯', type: 'text2video' },
-    { id: 'sora-2-pro', name: 'Sora 2 Pro', desc: 'Video 12 detik, kualitas tinggi', badge: 'PRO', icon: '🎬', type: 'text2video' },
-    { id: 'grok-video', name: 'Grok Video', desc: 'Video 10 detik, audio native, xAI', badge: 'NEW', icon: '🚀', type: 'text2video' },
-    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 4K, cepat & audio native', badge: 'BEST', icon: '⚡', type: 'text2video' },
-    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik, hemat biaya, 720p/1080p', badge: 'LITE', icon: '💰', type: 'text2video' },
-    { id: 'veo-3.1', name: 'Veo 3.1 Standard', desc: 'Video 8 detik, kualitas tertinggi, 4K', badge: '4K', icon: '🎥', type: 'text2video' }
+    { id: 'veo-3.1', name: 'Veo 3.1', desc: 'Video 8 detik, kualitas tertinggi, 720p/1080p', badge: 'BEST', icon: '🎥', type: 'text2video' },
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, cepat, 720p/1080p', badge: 'FAST', icon: '⚡', type: 'text2video' },
+    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik + audio, hemat biaya', badge: 'AUDIO', icon: '🔊', type: 'text2video' },
+    { id: 'veo-2', name: 'Veo 2', desc: 'Video 8 detik, 720p, landscape & portrait', badge: 'VEO2', icon: '🎬', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
