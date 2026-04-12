@@ -6828,15 +6828,6 @@ async function getMotionRoomApiKey(xclipApiKey) {
 // ============ VIDGEN3 (GeminiGen.AI Video Generation) API ============
 
 const VIDGEN3_MODEL_CONFIGS = {
-  'veo-3.1': {
-    geminiModel: 'veo-3.1',
-    label: 'Veo 3.1',
-    duration: 8,
-    resolutions: ['720p', '1080p'],
-    defaultResolution: '720p',
-    aspectRatios: ['16:9'],
-    hasAudio: false
-  },
   'veo-3.1-fast': {
     geminiModel: 'veo-3.1-fast',
     label: 'Veo 3.1 Fast',
@@ -6844,6 +6835,7 @@ const VIDGEN3_MODEL_CONFIGS = {
     resolutions: ['720p', '1080p'],
     defaultResolution: '720p',
     aspectRatios: ['16:9'],
+    apiEndpoint: 'video-gen/veo',
     hasAudio: false
   },
   'veo-3.1-lite': {
@@ -6853,16 +6845,19 @@ const VIDGEN3_MODEL_CONFIGS = {
     resolutions: ['720p', '1080p'],
     defaultResolution: '720p',
     aspectRatios: ['16:9'],
+    apiEndpoint: 'video-gen/veo',
     hasAudio: true
   },
-  'veo-2': {
-    geminiModel: 'veo-2',
-    label: 'Veo 2',
-    duration: 8,
-    resolutions: ['720p'],
-    defaultResolution: '720p',
-    aspectRatios: ['16:9', '9:16'],
-    hasAudio: false
+  'grok-3': {
+    geminiModel: 'grok-3',
+    label: 'Grok 3',
+    duration: 10,
+    resolutions: ['480p', '720p'],
+    defaultResolution: '480p',
+    aspectRatios: ['landscape', 'portrait', 'square'],
+    apiEndpoint: 'video-gen/grok',
+    hasAudio: true,
+    useGrokAspect: true
   },
 };
 
@@ -8384,13 +8379,14 @@ function extractVideoUrlFromContent(rawContent) {
   return null;
 }
 
-async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, aspectRatio, imageUrl) {
+async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, aspectRatio, imageUrl, config) {
   const FormData = require('form-data');
   const form = new FormData();
   form.append('prompt', prompt || 'Generate a cinematic video');
   form.append('model', modelName);
   if (resolution) form.append('resolution', resolution);
   if (aspectRatio) form.append('aspect_ratio', aspectRatio);
+  if (config.duration) form.append('duration', String(config.duration));
 
   if (imageUrl) {
     try {
@@ -8399,17 +8395,18 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
       const imgType = imgResp.headers['content-type'] || 'image/png';
       const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
       form.append('ref_images', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-      form.append('mode_image', 'frame');
+      if (!config.useGrokAspect) form.append('mode_image', 'frame');
       console.log(`[VIDGEN3] Attaching reference image (${imgBuf.length} bytes)`);
     } catch (imgErr) {
       console.warn(`[VIDGEN3] Failed to download ref image: ${imgErr.message}, trying URL reference`);
       form.append('ref_images', imageUrl);
-      form.append('mode_image', 'frame');
+      if (!config.useGrokAspect) form.append('mode_image', 'frame');
     }
   }
 
-  console.log(`[VIDGEN3] Calling GeminiGen API: model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}`);
-  const resp = await axios.post(`${GEMINIGEN_API_BASE}/video-gen/veo`, form, {
+  const apiEndpoint = config.apiEndpoint || 'video-gen/veo';
+  console.log(`[VIDGEN3] Calling GeminiGen API: endpoint=${apiEndpoint}, model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}`);
+  const resp = await axios.post(`${GEMINIGEN_API_BASE}/${apiEndpoint}`, form, {
     headers: { ...form.getHeaders(), 'x-api-key': apiKey },
     timeout: 120000
   });
@@ -8491,7 +8488,9 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const geminiModelName = config.geminiModel;
     const geminiKey = roomKeyResult.apiKey;
     const isPortrait = aspectRatio === 'portrait' || aspectRatio === '9:16';
-    const videoAspectRatio = isPortrait ? '9:16' : '16:9';
+    const videoAspectRatio = config.useGrokAspect
+      ? (isPortrait ? 'portrait' : 'landscape')
+      : (isPortrait ? '9:16' : '16:9');
     const videoResolution = config.defaultResolution;
 
     const taskId = `vidgen3_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -8517,18 +8516,20 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const bgUserId = roomKeyResult.userId;
     (async () => {
       try {
-        const result = await callGeminiGenVideoCreate(geminiKey, geminiModelName, prompt, videoResolution, videoAspectRatio, imageUrlForApi);
+        const result = await callGeminiGenVideoCreate(geminiKey, geminiModelName, prompt, videoResolution, videoAspectRatio, imageUrlForApi, config);
 
-        const uuid = result.uuid || result.id;
-        const immediateStatus = result.status;
+        const resultData = result.data || result;
+        const uuid = resultData.uuid || resultData.id || result.uuid || result.id;
+        const immediateStatus = resultData.status || result.status;
 
-        if (immediateStatus === 2 && result.media_url) {
+        const immediateMediaUrl = resultData.media_url || result.media_url;
+        if (immediateStatus === 2 && immediateMediaUrl) {
           await pool.query(
             'UPDATE vidgen3_tasks SET status = $1, video_url = $2, completed_at = NOW() WHERE task_id = $3',
-            ['completed', result.media_url, taskId]
+            ['completed', immediateMediaUrl, taskId]
           );
-          console.log(`[VIDGEN3] Immediate completed: ${taskId} → ${result.media_url}`);
-          sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl: result.media_url, model });
+          console.log(`[VIDGEN3] Immediate completed: ${taskId} → ${immediateMediaUrl}`);
+          sendSSEToUser(bgUserId, { type: 'vidgen3_completed', taskId, videoUrl: immediateMediaUrl, model });
         } else if (immediateStatus === 3) {
           const errDetail = result.error_message || 'Generation failed immediately';
           await pool.query(
@@ -8646,7 +8647,7 @@ app.get('/api/vidgen3/tasks/:taskId', async (req, res) => {
       });
     }
     
-    const estimatedMs = (task.model === 'veo-3.1' ? 180000 : task.model === 'veo-3.1-lite' ? 90000 : task.model === 'veo-3.1-fast' ? 90000 : task.model === 'veo-2' ? 120000 : 120000);
+    const estimatedMs = (task.model === 'veo-3.1-fast' ? 90000 : task.model === 'veo-3.1-lite' ? 90000 : task.model === 'grok-3' ? 120000 : 120000);
     const progress = Math.min(95, Math.round((elapsed / estimatedMs) * 100));
     
     return res.json({

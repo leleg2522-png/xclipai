@@ -3736,10 +3736,9 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'veo-3.1', name: 'Veo 3.1', desc: 'Video 8 detik, kualitas tertinggi, 720p/1080p', badge: 'BEST', icon: '🎥', type: 'text2video' },
     { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, cepat, 720p/1080p', badge: 'FAST', icon: '⚡', type: 'text2video' },
-    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik + audio, hemat biaya', badge: 'AUDIO', icon: '🔊', type: 'text2video' },
-    { id: 'veo-2', name: 'Veo 2', desc: 'Video 8 detik, 720p, landscape & portrait', badge: 'VEO2', icon: '🎬', type: 'text2video' }
+    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik + audio sinkron', badge: 'AUDIO', icon: '🔊', type: 'text2video' },
+    { id: 'grok-3', name: 'Grok 3', desc: 'Video 10 detik + audio, landscape/portrait', badge: 'GROK', icon: '🚀', type: 'text2video' }
   ];
 
   const selectedModelInfo = models.find(m => m.id === state.vidgen3.selectedModel) || models[0];
@@ -3954,7 +3953,7 @@ function renderVidgen3ModelSettings() {
       </div>
     </div>
     <p class="setting-hint" style="text-align:center;opacity:0.7;">
-      ${model === 'sora-2' ? 'OpenAI Sora 2 - Video 10 detik' : model === 'sora-2-pro' ? 'OpenAI Sora 2 Pro - Video 15 detik, kualitas tinggi' : model === 'grok-video' ? 'xAI Grok Video - Video 10 detik, audio native' : model === 'veo-3.1-fast' ? 'Google Veo 3.1 Fast - Video 8 detik, 4K' : model === 'veo-3.1-lite' ? 'Google Veo 3.1 Lite - Video 8 detik, hemat' : 'Google Veo 3.1 Standard - Video 8 detik, 4K'}
+      ${model === 'veo-3.1-fast' ? 'Google Veo 3.1 Fast - Video 8 detik, 720p/1080p' : model === 'veo-3.1-lite' ? 'Google Veo 3.1 Lite - Video 8 detik + audio sinkron' : model === 'grok-3' ? 'xAI Grok 3 - Video 10 detik + audio' : 'Video AI Generation'}
     </p>
   `;
 

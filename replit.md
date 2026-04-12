@@ -38,26 +38,26 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (Apiyi.com Multi-Model Video Generator)**: Advanced video generation via Apiyi.com relay API. Uses APIYI_API_KEY env var. Features include:
-  - 6 AI models via Apiyi.com (api.apiyi.com):
-    - Sora 2 (sora-2): OpenAI, 10 seconds, $0.12/gen
-    - Sora 2 Pro (sora-2-pro): OpenAI, 15 seconds, $0.80/gen
-    - Grok Video (grok-imagine-video): xAI, 10 seconds, native audio
-    - Veo 3.1 Fast (veo-3.1-fast-generate-preview): Google, 8 seconds, up to 4K, native audio
-    - Veo 3.1 Lite (veo-3.1-lite-generate-preview): Google, 8 seconds, 720p/1080p, cheapest
-    - Veo 3.1 Standard (veo-3.1-generate-preview): Google, 8 seconds, 4K, highest quality
-  - Apiyi API: POST /v1/chat/completions with stream:true (SSE format, NOT /v1/videos)
-  - Request format: { model, stream: true, messages: [{ role: "user", content: "prompt" }] }
-  - For image-to-video: content array with text + image_url parts
-  - SSE response: progress updates (⌛️ queued → 🏃 X% → ✅ video URL in markdown link)
-  - Auth: Authorization: Bearer {APIYI_API_KEY}
-  - Architecture: Returns taskId immediately, background SSE stream collects video URL, DB updated on completion/failure, client SSE events emitted
+- **Vidgen3 (GeminiGen.AI Video Generator)**: Advanced video generation via GeminiGen.AI API. Uses GEMINIGEN_API_KEY env var. Features include:
+  - 3 AI models via GeminiGen.AI (api.geminigen.ai), all $0.015/gen:
+    - Veo 3.1 Fast (veo-3.1-fast): Google, 8 seconds, 720p/1080p, fast generation
+    - Veo 3.1 Lite (veo-3.1-lite): Google, 8 seconds, 720p/1080p, audio sync
+    - Grok 3 (grok-3): xAI, 10 seconds, 480p/720p, audio, landscape/portrait/square
+  - GeminiGen API endpoints:
+    - Veo models: POST https://api.geminigen.ai/uapi/v1/video-gen/veo (multipart/form-data)
+    - Grok model: POST https://api.geminigen.ai/uapi/v1/video-gen/grok (multipart/form-data)
+    - History/polling: GET https://api.geminigen.ai/uapi/v1/history/{uuid}
+  - Auth: x-api-key header (NOT Bearer token)
+  - Request format: multipart/form-data with prompt, model, resolution, aspect_ratio, ref_images, duration
+  - Response: Returns uuid, status (1=processing, 2=completed, 3=failed), media_url for video
+  - Architecture: Returns taskId immediately, background polls GeminiGen history API, DB updated on completion/failure, client SSE events emitted
   - Frontend: prompt (required) + optional image reference, landscape/portrait orientation
   - Database tables: vidgen3_rooms, vidgen3_tasks
   - Room assignment via vidgen3_room_id in subscriptions
+  - Key rotation: GEMINIGEN_API_KEY (primary) or VIDGEN3_ROOM{N}_GEMINIGEN_KEY_{1-3}
   - SSE events: vidgen3_completed, vidgen3_failed
   - Video history persistence in database
-  - Timeout: 10 minutes max for SSE stream
+  - Timeout: 10 minutes max polling
 - **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
   - 2 AI models:
     - Sora 2 Stable (720p, 10/15 seconds, text-to-video + image-to-video, style presets)
