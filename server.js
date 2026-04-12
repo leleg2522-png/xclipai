@@ -8386,7 +8386,7 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   form.append('model', modelName);
   if (resolution) form.append('resolution', resolution);
   if (aspectRatio) form.append('aspect_ratio', aspectRatio);
-  if (config.duration) form.append('duration', String(config.duration));
+  if (config.duration && !config.useGrokAspect) form.append('duration', String(config.duration));
 
   if (imageUrl) {
     try {
