@@ -8405,14 +8405,21 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   }
 
   const apiEndpoint = config.apiEndpoint || 'video-gen/veo';
-  console.log(`[VIDGEN3] Calling GeminiGen API: endpoint=${apiEndpoint}, model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}`);
-  const resp = await axios.post(`${GEMINIGEN_API_BASE}/${apiEndpoint}`, form, {
-    headers: { ...form.getHeaders(), 'x-api-key': apiKey },
-    timeout: 120000
-  });
-
-  console.log(`[VIDGEN3] GeminiGen response: ${JSON.stringify(resp.data).substring(0, 500)}`);
-  return resp.data;
+  console.log(`[VIDGEN3] Calling GeminiGen API: endpoint=${apiEndpoint}, model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}, hasImage=${!!imageUrl}`);
+  try {
+    const resp = await axios.post(`${GEMINIGEN_API_BASE}/${apiEndpoint}`, form, {
+      headers: { ...form.getHeaders(), 'x-api-key': apiKey },
+      timeout: 120000
+    });
+    console.log(`[VIDGEN3] GeminiGen response: ${JSON.stringify(resp.data).substring(0, 500)}`);
+    return resp.data;
+  } catch (apiErr) {
+    const errData = apiErr.response?.data;
+    const errStatus = apiErr.response?.status;
+    console.error(`[VIDGEN3] GeminiGen API error ${errStatus}: ${JSON.stringify(errData).substring(0, 1000)}`);
+    console.error(`[VIDGEN3] Request params: model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}, endpoint=${apiEndpoint}, duration=${config.duration}`);
+    throw apiErr;
+  }
 }
 
 async function pollGeminiGenVideoStatus(apiKey, uuid, maxWaitMs = 600000) {
