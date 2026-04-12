@@ -11417,10 +11417,10 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       enable_prompt_expansion: allowExpansion
     };
   } else if (config.api === 'wan27') {
-    const wanRes = model.includes('1080p') ? '1080P' : '720P';
+    const wanRes = model.includes('1080p') ? '1080p' : '720p';
     const allowExpansion = (feature !== 'ads_studio' && feature !== 'automation');
     requestBody = {
-      start_image_url: imageUrl,
+      image: imageUrl,
       prompt: characterLockPrompt,
       duration: parseInt(dur),
       resolution: wanRes,
