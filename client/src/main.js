@@ -313,7 +313,8 @@ const state = {
     imageStyle: 'AUTO',
     acceleration: 'none',
     googleSearch: false,
-    outputFormat: 'png'
+    outputFormat: 'png',
+    cooldownEnd: 0
   },
   ximageRoomManager: {
     rooms: [],
@@ -4263,10 +4264,13 @@ function renderXImagePage() {
   html += '</div>';
   
   // Generate Button
-  var btnDisabled = state.ximage.isGenerating || (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) || state.ximage.tasks.length >= 3;
+  var ximageCooldownRemaining = Math.max(0, Math.ceil((state.ximage.cooldownEnd - Date.now()) / 1000));
+  var btnDisabled = state.ximage.isGenerating || (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) || state.ximage.tasks.length >= 3 || ximageCooldownRemaining > 0;
   html += '<button class="btn btn-primary btn-lg btn-full" id="generateXimageBtn" ' + (btnDisabled ? 'disabled' : '') + '>';
   if (state.ximage.isGenerating) {
     html += '<span class="loading-spinner"></span><span>Generating...</span>';
+  } else if (ximageCooldownRemaining > 0) {
+    html += '<span>Cooldown ' + ximageCooldownRemaining + 's</span>';
   } else {
     html += '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
     html += '<span>Generate Image' + (state.ximage.tasks.length > 0 ? ' (' + state.ximage.tasks.length + '/3)' : '') + '</span>';
@@ -11316,7 +11320,27 @@ function handleXImageUpload2(e) {
   reader.readAsDataURL(file);
 }
 
+var ximageCooldownInterval = null;
+function startXimageCooldownTimer() {
+  if (ximageCooldownInterval) clearInterval(ximageCooldownInterval);
+  render();
+  ximageCooldownInterval = setInterval(function() {
+    if (Date.now() >= state.ximage.cooldownEnd) {
+      clearInterval(ximageCooldownInterval);
+      ximageCooldownInterval = null;
+      state.ximage.cooldownEnd = 0;
+    }
+    render();
+  }, 1000);
+}
+
 async function generateXImage() {
+  var now = Date.now();
+  if (state.ximage.cooldownEnd > now) {
+    alert('Cooldown aktif. Tunggu ' + Math.ceil((state.ximage.cooldownEnd - now) / 1000) + ' detik.');
+    return;
+  }
+
   if (state.ximage.mode === 'image-to-image' && !state.ximage.sourceImage) {
     alert('Upload gambar referensi terlebih dahulu');
     return;
@@ -11388,6 +11412,9 @@ async function generateXImage() {
       throw new Error(data.error || 'Gagal generate image');
     }
     
+    state.ximage.cooldownEnd = Date.now() + (data.cooldown || 120) * 1000;
+    startXimageCooldownTimer();
+
     if (data.imageUrl) {
       state.ximage.generatedImages.unshift({
         taskId: data.taskId,

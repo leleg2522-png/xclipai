@@ -2485,6 +2485,7 @@ const RATE_LIMIT_CONFIG = {
     jitterMaxMs: 3000,
     label: 'X Image2'
   },
+  ximage: { cooldownMs: 120 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image' },
   ximage3: { cooldownMs: 300 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image3' },
   voiceover: {
     cooldownMs: 120 * 1000,
@@ -9006,6 +9007,16 @@ app.post('/api/ximage/generate', async (req, res) => {
       return res.status(400).json({ error: roomKeyResult.error });
     }
     
+    const ximageCooldown = getUserCooldownRemaining(roomKeyResult.userId, 'ximage');
+    if (ximageCooldown > 0) {
+      const cooldownSec = Math.ceil(ximageCooldown / 1000);
+      return res.status(429).json({
+        error: `Mohon tunggu ${cooldownSec} detik sebelum generate gambar berikutnya`,
+        cooldown: cooldownSec,
+        cooldownMs: ximageCooldown
+      });
+    }
+
     const { model, prompt, image, image2, aspectRatio, mode, resolution, numberOfImages, quality, modelVariant, renderingSpeed, imageStyle, acceleration, googleSearch, outputFormat } = req.body;
     
     if (!prompt) {
@@ -9088,7 +9099,8 @@ app.post('/api/ximage/generate', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, NOW())
           `, [roomKeyResult.userId, syncTaskId, model, prompt, mode || 'text-to-image', aspectRatio || '1:1', null, syncUrl]);
           sendSSEToUser(roomKeyResult.userId, { type: 'ximage_completed', taskId: syncTaskId, imageUrl: syncUrl });
-          return res.json({ taskId: syncTaskId, model, imageUrl: syncUrl, message: 'Image generated' });
+          setUserCooldown(roomKeyResult.userId, 'ximage');
+          return res.json({ taskId: syncTaskId, model, imageUrl: syncUrl, cooldown: 120, message: 'Image generated' });
         }
         return res.status(500).json({ error: 'Tidak ada URL dari P-Image' });
       } else if (modelConfig.apiType === 'apimodels-edit') {
@@ -9110,7 +9122,8 @@ app.post('/api/ximage/generate', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, NOW())
           `, [roomKeyResult.userId, editTaskId, model, prompt, mode || 'image-to-image', aspectRatio || '1:1', imageUrls[0] || null, editUrl]);
           sendSSEToUser(roomKeyResult.userId, { type: 'ximage_completed', taskId: editTaskId, imageUrl: editUrl });
-          return res.json({ taskId: editTaskId, model, imageUrl: editUrl, message: 'Image edited' });
+          setUserCooldown(roomKeyResult.userId, 'ximage');
+          return res.json({ taskId: editTaskId, model, imageUrl: editUrl, cooldown: 120, message: 'Image edited' });
         }
         return res.status(500).json({ error: 'Tidak ada URL dari P-Image-Edit' });
       } else {
@@ -9162,7 +9175,8 @@ app.post('/api/ximage/generate', async (req, res) => {
       userId: roomKeyResult.userId
     });
     
-    res.json({ taskId, model, message: 'Image generation started' });
+    setUserCooldown(roomKeyResult.userId, 'ximage');
+    res.json({ taskId, model, cooldown: 120, message: 'Image generation started' });
     
   } catch (error) {
     const errData = error.response?.data;
