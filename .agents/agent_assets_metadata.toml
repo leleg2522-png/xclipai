@@ -6,3 +6,9 @@ id = "ruxwRpZw6Udk7yyY6cdLJ"
 uri = "file://proxy_logic_for_bot.md"
 type = "text"
 title = "Instruksi Proxy Hemat Bandwidth untuk Bot"
+
+[[outputs]]
+id = "d02XSc9sM7mDyNX6aNFnd"
+uri = "file://freepik_keys.txt"
+type = "text"
+title = "100 Freepik API Keys (koma separated)"
