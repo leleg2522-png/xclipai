@@ -8379,7 +8379,7 @@ function extractVideoUrlFromContent(rawContent) {
   return null;
 }
 
-async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, aspectRatio, imageUrl, config) {
+async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, aspectRatio, imageUrl, config, imageBufferDirect) {
   const FormData = require('form-data');
   const form = new FormData();
   form.append('prompt', prompt || 'Generate a cinematic video');
@@ -8389,21 +8389,36 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   if (config.duration && !config.useGrokAspect) form.append('duration', String(config.duration));
 
   if (imageUrl) {
-    try {
-      const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
-      const imgBuf = Buffer.from(imgResp.data);
-      const imgType = imgResp.headers['content-type'] || 'image/png';
+    let imgBuf = null;
+    let imgType = 'image/png';
+
+    if (imageBufferDirect) {
+      imgBuf = imageBufferDirect.buffer;
+      imgType = imageBufferDirect.contentType;
+      console.log(`[VIDGEN3] Using direct buffer (${imgBuf.length} bytes, ${imgType})`);
+    } else if (imageUrl !== '__direct_buffer__') {
+      try {
+        const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        imgBuf = Buffer.from(imgResp.data);
+        imgType = imgResp.headers['content-type'] || 'image/png';
+        console.log(`[VIDGEN3] Downloaded image from URL (${imgBuf.length} bytes, ${imgType})`);
+      } catch (imgErr) {
+        console.warn(`[VIDGEN3] Failed to download ref image: ${imgErr.message}, skipping image reference`);
+      }
+    }
+
+    if (imgBuf && imgBuf.length > 0) {
       const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
       if (config.useGrokAspect) {
         form.append('image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-        console.log(`[VIDGEN3] Attaching image file for Grok (${imgBuf.length} bytes)`);
+        console.log(`[VIDGEN3] Attached image for Grok (${imgBuf.length} bytes)`);
       } else {
         form.append('ref_images', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
         form.append('mode_image', 'frame');
-        console.log(`[VIDGEN3] Attaching ref_images file for Veo (${imgBuf.length} bytes)`);
+        console.log(`[VIDGEN3] Attached ref_images for Veo (${imgBuf.length} bytes)`);
       }
-    } catch (imgErr) {
-      console.warn(`[VIDGEN3] Failed to download ref image: ${imgErr.message}, skipping image reference`);
+    } else {
+      console.warn(`[VIDGEN3] No image buffer available, proceeding without image`);
     }
   }
 
@@ -8488,14 +8503,25 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     }
     
     let imageUrlForApi = image;
+    let imageBufferDirect = null;
     
     if (image && image.includes('base64')) {
-      const v3protocol = req.headers['x-forwarded-proto'] || 'https';
-      const v3host = req.headers['x-forwarded-host'] || req.headers.host;
-      const v3baseUrl = `${v3protocol}://${v3host}`;
-      const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
-      imageUrlForApi = imgFile.publicUrl;
-      console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
+      const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        imageBufferDirect = {
+          buffer: Buffer.from(matches[2], 'base64'),
+          contentType: matches[1] || 'image/png'
+        };
+        console.log(`[VIDGEN3] Decoded base64 image directly (${imageBufferDirect.buffer.length} bytes, ${imageBufferDirect.contentType})`);
+        imageUrlForApi = '__direct_buffer__';
+      } else {
+        const v3protocol = req.headers['x-forwarded-proto'] || 'https';
+        const v3host = req.headers['x-forwarded-host'] || req.headers.host;
+        const v3baseUrl = `${v3protocol}://${v3host}`;
+        const imgFile = await saveBase64ToFile(image, 'image', v3baseUrl);
+        imageUrlForApi = imgFile.publicUrl;
+        console.log(`[VIDGEN3] Image saved to public URL: ${imageUrlForApi}`);
+      }
     }
     
     const geminiModelName = config.geminiModel;
@@ -8529,7 +8555,7 @@ app.post('/api/vidgen3/proxy', async (req, res) => {
     const bgUserId = roomKeyResult.userId;
     (async () => {
       try {
-        const result = await callGeminiGenVideoCreate(geminiKey, geminiModelName, prompt, videoResolution, videoAspectRatio, imageUrlForApi, config);
+        const result = await callGeminiGenVideoCreate(geminiKey, geminiModelName, prompt, videoResolution, videoAspectRatio, imageUrlForApi, config, imageBufferDirect);
 
         const resultData = result.data || result;
         const uuid = resultData.uuid || resultData.id || result.uuid || result.id;
