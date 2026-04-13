@@ -8390,8 +8390,8 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
 
   if (imageUrl) {
     if (config.useGrokAspect) {
-      form.append('ref_images', imageUrl);
-      console.log(`[VIDGEN3] Attaching reference image URL for Grok: ${imageUrl}`);
+      form.append('image_url', imageUrl);
+      console.log(`[VIDGEN3] Attaching image_url for Grok: ${imageUrl}`);
     } else {
       try {
         const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
