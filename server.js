@@ -6853,7 +6853,7 @@ const VIDGEN3_MODEL_CONFIGS = {
     label: 'Grok 3',
     duration: 10,
     resolutions: ['480p', '720p'],
-    defaultResolution: '480p',
+    defaultResolution: '720p',
     aspectRatios: ['landscape', 'portrait', 'square'],
     apiEndpoint: 'video-gen/grok',
     hasAudio: true,
