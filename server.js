@@ -8516,6 +8516,24 @@ async function pollGeminiGenVideoStatus(apiKey, uuid, maxWaitMs = 600000) {
   return { status: 'failed', error: 'Polling timeout exceeded (10 minutes)' };
 }
 
+async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelName, duration, resolution) {
+  const geminiKey = process.env.GEMINIGEN_API_KEY;
+  if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
+
+  const config = { duration: String(duration || 8), apiEndpoint: 'video-gen/veo' };
+  const result = await callGeminiGenVideoCreate(geminiKey, modelName, prompt, resolution || '1080p', aspectRatio, imageUrl, config);
+  const resultData = result?.data || result;
+  const uuid = resultData?.uuid || result?.uuid || resultData?.id || result?.id;
+  if (!uuid) throw new Error('No UUID from GeminiGen: ' + JSON.stringify(result));
+
+  console.log(`[GEMINIGEN] Video task created: uuid=${uuid}, polling...`);
+  const pollResult = await pollGeminiGenVideoStatus(geminiKey, uuid, 600000);
+  if (pollResult.status === 'completed' && pollResult.videoUrl) {
+    return pollResult.videoUrl;
+  }
+  throw new Error(pollResult.error || 'GeminiGen video generation failed');
+}
+
 app.post('/api/vidgen3/proxy', async (req, res) => {
   try {
     console.log('[VIDGEN3] Generate request received');
@@ -11760,7 +11778,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd'];
   const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
@@ -12176,13 +12194,15 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
-      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isGeminiGen = vidModel.provider === 'geminigen';
     const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
@@ -12373,7 +12393,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 }
                 let videoUrl = null;
 
-                if (isFreepik) {
+                if (isGeminiGen) {
+                  console.log(`[AUTOMATION] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+                } else if (isFreepik) {
                   console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
                   const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
                   const fpResult = await generateVideoWithFreepik(isR2V ? null : scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs, project.language);
@@ -12648,13 +12671,15 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
-      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isGeminiGen = vidModel.provider === 'geminigen';
     const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
     const imageModel = project.image_model || 'nanobanana-2-beta';
     const imageResolution = '4K';
@@ -12743,7 +12768,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         }
 
         let videoUrl = null;
-        if (isFreepik) {
+        if (isGeminiGen) {
+          console.log(`[AUTOMATION] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+        } else if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
           const r2vRefs = isR2V ? [retryRefImage] : undefined;
           const fpResult = await generateVideoWithFreepik(isR2V ? null : sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'automation', vidModel.duration, r2vRefs, project.language);
@@ -14393,6 +14421,9 @@ app.post('/api/ads-studio/projects', upload.fields([
     const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
+    const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd'];
+    const validatedModel = adsValidModels.includes(videoModel) ? videoModel : 'wan-v2.7-pro';
+
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
     const baseUrl = `${req.protocol}://${req.get('host')}`;
 
@@ -14409,7 +14440,7 @@ app.post('/api/ads-studio/projects', upload.fields([
     await pool.query(
       `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', videoModel || 'wan-v2.7-pro', parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', validatedModel, parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
     );
 
     res.json({ success: true, projectId });
@@ -14774,13 +14805,15 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
-      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
     };
     const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isGeminiGen = vidModel.provider === 'geminigen';
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
@@ -14960,7 +14993,10 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 }
                 let videoUrl = null;
 
-                if (isFreepik) {
+                if (isGeminiGen) {
+                  console.log(`[ADS-STUDIO] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+                } else if (isFreepik) {
                   const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
                   if (fpResult.success) {
                     await pool.query(
@@ -15171,13 +15207,15 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v2.6-pro': { apiModel: 'kling-v2.6-pro', duration: 5, provider: 'freepik' },
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
-      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' }
+      'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
     };
     const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
       vidModel.duration = project.video_duration;
     }
     const isFreepik = vidModel.provider === 'freepik';
+    const isGeminiGen = vidModel.provider === 'geminigen';
     const imageModel = 'nanobanana-2-beta';
     const imageResolution = '4K';
 
@@ -15284,7 +15322,10 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded before video gen, aborting`); return; }
 
         let videoUrl = null;
-        if (isFreepik) {
+        if (isGeminiGen) {
+          console.log(`[ADS-STUDIO] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+        } else if (isFreepik) {
           console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
           const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
           if (fpResult.success) {
