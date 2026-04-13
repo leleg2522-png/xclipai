@@ -11849,7 +11849,8 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
       'grok-3-geminigen': 10
     };
     const sceneDur = project.video_duration || durationMap[project.video_model] || 5;
-    const maxNarrationWords = Math.floor(sceneDur * 2.5);
+    const minNarrationWords = Math.floor(sceneDur * 2.5);
+    const maxNarrationWords = Math.floor(sceneDur * 3.5);
 
     const systemPrompt = `You are a senior cinematographer and viral content strategist with 15 years of experience directing high-end commercial productions and viral social media content. You think in shots, not descriptions. Every frame you design has intentional composition, motivated camera movement, and cinematic lighting.
 
@@ -11903,19 +11904,20 @@ NARRATION MASTERY:
 - Use rhythm: mix short punchy lines with longer flowing ones
 
 NARRATION DURATION — CRITICAL (each scene video is ${sceneDur} seconds):
-- A person speaks ~2-3 words per second naturally
-- Each scene is ONLY ${sceneDur} seconds, so narration MUST be MAX ${maxNarrationWords} words per scene
-- If narration is too long, the voiceover will be cut off or rushed — this ruins the video
-- Keep it SHORT and IMPACTFUL: one powerful thought per scene, not a paragraph
-- Dialogue (if any) must also fit within ${sceneDur} seconds — MAX ${maxNarrationWords} words
-- BAD (too long for ${sceneDur}s): "Perjalanan ini dimulai dari kaki gunung yang sunyi, di mana angin berbisik melalui pepohonan cemara yang menjulang tinggi"
-- GOOD (fits ${sceneDur}s): "Hutannya mulai bicara. Dan kali ini, aku dengarkan."`;
+- A person speaks ~3 words per second naturally
+- Each scene is ${sceneDur} seconds, so narration MUST be ${minNarrationWords}-${maxNarrationWords} words per scene
+- Narration must NOT be too short — short narrations leave awkward empty silence in the video
+- Narration must fill the full ${sceneDur} seconds naturally with 1-2 complete sentences
+- If narration exceeds ${maxNarrationWords} words, it will be cut off — stay within range
+- Dialogue (if any) must also be ${minNarrationWords}-${maxNarrationWords} words to fill ${sceneDur} seconds
+- BAD (too short for ${sceneDur}s): "Hutannya mulai bicara." — leaves 5+ seconds of silence
+- GOOD (fills ${sceneDur}s): "Hutannya mulai berbisik pelan, dan kali ini aku diam sejenak untuk mendengarkan ceritanya"`;
 
     let userPrompt;
     if (hasRefImage) {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
-Each scene video is ${sceneDur} seconds long — narration MUST fit within ${sceneDur} seconds (max ${maxNarrationWords} words per scene).
+Each scene video is ${sceneDur} seconds long — narration MUST fill the full ${sceneDur} seconds (${minNarrationWords}-${maxNarrationWords} words per scene).
 
 The user provided a REFERENCE IMAGE of the main character. The image generator handles appearance — do NOT describe what the character looks like.
 
@@ -11925,9 +11927,9 @@ Return ONLY valid JSON:
   "character_description": "character from reference image",
   "scenes": [
     {
-      "narration": "MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s voiceover, premium quality, never obvious or generic",
+      "narration": "${minNarrationWords}-${maxNarrationWords} words in ${langName} — must fill ${sceneDur}s voiceover, premium quality, 1-2 full sentences",
       "visual_prompt": "English only. Professional cinematographer shot description with all required elements",
-      "dialogue": "(OPTIONAL) MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
+      "dialogue": "(OPTIONAL) ${minNarrationWords}-${maxNarrationWords} words in ${langName} — must fill ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
     }
   ]
 }
@@ -11960,7 +11962,7 @@ CONTINUITY ANCHORS:
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
-Each scene video is ${sceneDur} seconds long — narration MUST fit within ${sceneDur} seconds (max ${maxNarrationWords} words per scene).
+Each scene video is ${sceneDur} seconds long — narration MUST fill the full ${sceneDur} seconds (${minNarrationWords}-${maxNarrationWords} words per scene).
 
 Return ONLY valid JSON:
 {
@@ -11968,9 +11970,9 @@ Return ONLY valid JSON:
   "character_description": "ULTRA-PRECISE character design (see rules below)",
   "scenes": [
     {
-      "narration": "MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s voiceover, premium quality",
+      "narration": "${minNarrationWords}-${maxNarrationWords} words in ${langName} — must fill ${sceneDur}s voiceover, premium quality, 1-2 full sentences",
       "visual_prompt": "English only. Full character desc + professional cinematographer shot description",
-      "dialogue": "(OPTIONAL) MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
+      "dialogue": "(OPTIONAL) ${minNarrationWords}-${maxNarrationWords} words in ${langName} — must fill ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
     }
   ]
 }
@@ -14447,7 +14449,7 @@ app.post('/api/ads-studio/projects', upload.fields([
 ]), async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   try {
-    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled } = req.body;
+    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, customNarrations } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
     const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'grok-3-geminigen'];
@@ -14466,10 +14468,15 @@ app.post('/api/ads-studio/projects', upload.fields([
       productImageUrl = `${baseUrl}/uploads/${req.files['productImage'][0].filename}`;
     }
 
+    const projectMetadata = {};
+    if (customNarrations && customNarrations.trim()) {
+      projectMetadata.customNarrations = customNarrations.trim();
+    }
+
     await pool.query(
-      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', validatedModel, parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true]
+      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, metadata, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')`,
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', validatedModel, parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true, JSON.stringify(projectMetadata)]
     );
 
     res.json({ success: true, projectId });
@@ -14514,7 +14521,8 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
       'grok-3-geminigen': 10
     };
     const dur = project.video_duration || adsDurationMap[project.video_model] || 5;
-    const maxWords = Math.floor(dur * 2.5);
+    const minWords = Math.floor(dur * 2.5);
+    const maxWords = Math.floor(dur * 3.5);
 
     const systemPrompt = `You are a world-class advertising creative director specializing in AI video generation. You create prompts optimized for IMAGE-TO-VIDEO AI models (like Wan 2.6) that produce stunning, cinematic product ads.
 
@@ -14571,11 +14579,13 @@ CHARACTER SPEAKING (CRITICAL — video AI generates audio):
 - Write exactly what the character says in ${langName} using this format: character speaks saying "[exact dialogue in ${langName}]"
 - Character must have natural lip movement, facial expressions while speaking
 
-DIALOGUE LENGTH — CRITICAL (each scene is only ${dur} seconds):
-- Each narration/dialogue MUST be MAX 5-8 words so it fits within ${dur} seconds
-- A person speaks ~2-3 words per second, so ${dur} seconds = MAX ${maxWords} words
-- If the narration is too long, it WILL get cut off — this is the #1 problem to avoid
-- Keep it SHORT, ONE quick thought per scene
+DIALOGUE LENGTH — CRITICAL (each scene is ${dur} seconds):
+- Each narration/dialogue MUST be ${minWords}-${maxWords} words to FILL the full ${dur} seconds
+- A person speaks ~3 words per second, so ${dur} seconds = ${minWords}-${maxWords} words
+- Narration must NOT be too short — short narrations leave awkward silence in the video
+- Narration must NOT exceed ${maxWords} words or it will get cut off
+- Each narration should be a FULL SENTENCE that fills the ${dur}-second duration naturally
+- Think: 1-2 complete natural sentences per scene, NOT just a short phrase
 
 VOICE & CHARACTER CONSISTENCY (CRITICAL):
 - SAME person in EVERY scene: same face, same hair, same clothes, same skin tone
@@ -14592,13 +14602,21 @@ ABSOLUTELY NO TEXT IN VISUALS:
 
 `;
 
+    const projectMeta = project.metadata || {};
+    const customNarrationText = projectMeta.customNarrations || '';
+    const customNarrationLines = customNarrationText ? customNarrationText.split('\n').map(l => l.replace(/^scene\s*\d+\s*[:：]\s*/i, '').trim()).filter(l => l.length > 0) : [];
+
     let userPrompt = `Create a ${formatDesc} PRODUCT AD script for "${project.product_name}".
 ${project.product_description ? `Product details: ${project.product_description}` : ''}
 Ad type: ${adTypeDesc}
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
 ${hasCharImage ? 'CHARACTER REFERENCE IMAGE provided — the image generator handles appearance, do NOT describe character looks in visual_prompt.' : ''}
 ${hasProdImage ? 'PRODUCT IMAGE provided — the image generator has the product reference, focus visual_prompt on MOTION and ACTION with the product.' : ''}
-
+${customNarrationLines.length > 0 ? `
+USER-PROVIDED CUSTOM NARRATIONS — USE THESE EXACT NARRATIONS (do NOT change or rephrase):
+${customNarrationLines.map((n, i) => `Scene ${i + 1}: "${n}"`).join('\n')}
+${customNarrationLines.length < project.scene_count ? `Only ${customNarrationLines.length} narrations provided — generate narrations for the remaining scenes (Scene ${customNarrationLines.length + 1} to ${project.scene_count}) in the same style.` : ''}
+` : ''}
 IMPORTANT: Each visual_prompt will be used to animate a STILL IMAGE into a ${dur}-second video.
 The still image is already generated separately — your visual_prompt ONLY controls the MOTION/ANIMATION.
 
@@ -14610,7 +14628,7 @@ Return ONLY valid JSON:
   "setting": "ONE specific location where the entire story takes place (e.g., modern bathroom, cozy bedroom, bright kitchen, studio backdrop)",
   "scenes": [
     {
-      "narration": "MAX 5-8 words in ${langName} — ${isSoft ? 'inner thought or talking to self, NOT selling' : 'casual, short, punchy'}",
+      "narration": "${minWords}-${maxWords} words in ${langName} — ${isSoft ? 'inner thought or talking to self/friend, 1-2 full sentences, NOT selling' : 'casual, conversational, 1-2 full sentences that fill ' + dur + 's'}",
       "visual_prompt": "MOTION-FOCUSED English prompt for image-to-video AI. 60-90 words. Describe MOTION only. NO TEXT in visual."${isSoft ? ',\n      "product_visible": "true or false — product must NOT appear in scene 1"' : ''}
     }
   ]
@@ -14624,30 +14642,30 @@ SOFT SELLING EXAMPLE (skincare serum, 4 scenes, Bahasa Indonesia):
   "setting": "modern minimalist bathroom with white tiles and warm morning light",
   "scenes": [
     {
-      "narration": "Duh, lagi-lagi nih...",
-      "visual_prompt": "woman stares at mirror touching her face with frustrated expression, sighs deeply, shoulders drop, camera slowly pushes in from medium to close-up, warm morning light through frosted window shifts across her face, steam from sink drifts upward, character speaks saying 'Duh, lagi-lagi nih...'",
+      "narration": "Ya ampun, tiap pagi pasti kayak gini lagi, capek banget deh rasanya",
+      "visual_prompt": "woman stares at mirror touching her face with frustrated expression, sighs deeply, shoulders drop, camera slowly pushes in from medium to close-up, warm morning light through frosted window shifts across her face, steam from sink drifts upward, character speaks saying 'Ya ampun, tiap pagi pasti kayak gini lagi, capek banget deh rasanya'",
       "product_visible": "false"
     },
     {
-      "narration": "Hmm, coba deh yang ini",
-      "visual_prompt": "character reaches for small serum bottle on bathroom shelf, picks it up curiously turning it in her hand, examines the label tilting her head, camera tracks her hand movement, soft light catches the glass bottle, character speaks saying 'Hmm, coba deh yang ini'",
+      "narration": "Eh tunggu, ini apa ya? Kayaknya belum pernah coba yang ini deh",
+      "visual_prompt": "character reaches for small serum bottle on bathroom shelf, picks it up curiously turning it in her hand, examines the label tilting her head, camera tracks her hand movement, soft light catches the glass bottle, character speaks saying 'Eh tunggu, ini apa ya? Kayaknya belum pernah coba yang ini deh'",
       "product_visible": "true"
     },
     {
-      "narration": "Wah enak juga di kulit",
-      "visual_prompt": "character gently applies serum drops on cheek with fingertips, pats skin softly, slight surprise expression forming, camera close-up on face, natural light on skin, dewy texture visible, character speaks saying 'Wah enak juga di kulit'",
+      "narration": "Wah kok enak banget ya di kulit, ringan dan langsung nyerep gitu",
+      "visual_prompt": "character gently applies serum drops on cheek with fingertips, pats skin softly, slight surprise expression forming, camera close-up on face, natural light on skin, dewy texture visible, character speaks saying 'Wah kok enak banget ya di kulit, ringan dan langsung nyerep gitu'",
       "product_visible": "true"
     },
     {
-      "narration": "Gue suka sih ternyata",
-      "visual_prompt": "character smiles at mirror touching her face gently, satisfied relaxed expression, nods slightly to herself, camera pulls back slowly, golden morning light wraps around her, peaceful mood, character speaks saying 'Gue suka sih ternyata'",
+      "narration": "Oke sih, ternyata ini beneran bikin beda. Gue suka banget hasilnya",
+      "visual_prompt": "character smiles at mirror touching her face gently, satisfied relaxed expression, nods slightly to herself, camera pulls back slowly, golden morning light wraps around her, peaceful mood, character speaks saying 'Oke sih, ternyata ini beneran bikin beda. Gue suka banget hasilnya'",
       "product_visible": "false"
     }
   ]
 }` : `
 EXAMPLE GOOD PROMPTS (${langName === 'Bahasa Indonesia' ? 'Indonesian' : 'English'}):
-Scene 1: "woman picks up serum bottle from marble counter and speaks saying '${langName === 'Bahasa Indonesia' ? 'Eh ini bagus banget sih!' : 'This one is actually amazing!'}', camera pushes in from medium to close-up, golden morning light, excited expression, natural lip movement"
-Scene 2: "character tilts serum bottle letting golden liquid drop onto palm and speaks saying '${langName === 'Bahasa Indonesia' ? 'Teksturnya ringan banget loh' : 'The texture is so light'}', droplet catches light, camera orbits slowly right, bokeh shifts, impressed smile forming"`}
+Scene 1: narration "${langName === 'Bahasa Indonesia' ? 'Guys, ini sih yang lagi rame banget sekarang. Gue akhirnya coba sendiri dan ternyata beneran worth it' : 'Everyone has been talking about this one. I finally tried it myself and it is totally worth it'}" — "woman picks up serum bottle from marble counter, holds it up to camera with excited expression, speaks naturally, camera pushes in from medium to close-up, golden morning light, natural lip movement"
+Scene 2: narration "${langName === 'Bahasa Indonesia' ? 'Coba lihat deh teksturnya, ringan banget di kulit dan langsung meresap gitu loh' : 'Just look at the texture, it is so light on the skin and absorbs instantly'}" — "character tilts serum bottle letting golden liquid drop onto palm, speaks while demonstrating, droplet catches light, camera orbits slowly right, bokeh shifts, impressed smile forming"`}
 
 CONTINUITY: Same character, same product, same setting, same clothing. Each scene flows logically to the next like ONE continuous story.`;
 

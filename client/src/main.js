@@ -6449,6 +6449,8 @@ async function createAdsStudioProject() {
   var sceneCount = (sceneEl ? parseInt(sceneEl.value) : 4) || 4;
   var language = (langEl ? langEl.value : '') || 'id';
   var voiceOverEnabled = voEl ? voEl.checked : false;
+  var customNarrationsEl = document.getElementById('adsCustomNarrations');
+  var customNarrations = (customNarrationsEl ? customNarrationsEl.value : '') || '';
 
   var charImage = state.adsStudio.newProject.characterImage;
   var prodImage = state.adsStudio.newProject.productImage;
@@ -6469,6 +6471,7 @@ async function createAdsStudioProject() {
     formData.append('sceneCount', String(sceneCount));
     formData.append('language', language);
     formData.append('voiceOverEnabled', String(voiceOverEnabled));
+    if (customNarrations.trim()) formData.append('customNarrations', customNarrations.trim());
 
     if (charImage) formData.append('characterImage', charImage);
     if (prodImage) formData.append('productImage', prodImage);
@@ -6489,7 +6492,7 @@ async function createAdsStudioProject() {
 
     var data = await response.json();
     if (data.success) {
-      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.7-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null };
+      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.7-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null, customNarrations: '' };
       state.adsStudio.isCreating = false;
       state.adsStudio._loaded = false;
       await loadAdsStudioProjects();
@@ -6683,6 +6686,8 @@ function attachAdsStudioListeners() {
   if (adsProductNameInput) adsProductNameInput.addEventListener('input', function() { state.adsStudio.newProject.productName = adsProductNameInput.value; });
   var adsProductDescInput = document.getElementById('adsProductDesc');
   if (adsProductDescInput) adsProductDescInput.addEventListener('input', function() { state.adsStudio.newProject.productDescription = adsProductDescInput.value; });
+  var adsCustomNarrations = document.getElementById('adsCustomNarrations');
+  if (adsCustomNarrations) adsCustomNarrations.addEventListener('input', function() { state.adsStudio.newProject.customNarrations = adsCustomNarrations.value; });
 
   var backBtn = document.getElementById('adsBackBtn');
   if (backBtn) backBtn.addEventListener('click', function() {
@@ -7099,6 +7104,9 @@ function renderAdsStudioPage() {
   html += '<button class="btn-primary ads-go-btn" id="adsCreateBtn" type="button" onclick="window._adsCreateClick && window._adsCreateClick()"' + (state.adsStudio.isCreating ? ' disabled' : '') + '>';
   html += state.adsStudio.isCreating ? '<span class="spinner"></span>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
   html += '</button>';
+  html += '</div>';
+  html += '<div style="margin-top:8px;">';
+  html += '<textarea class="form-input" id="adsCustomNarrations" rows="3" placeholder="Narasi manual (opsional) — tulis narasi per scene, pisahkan dengan baris baru. Contoh:&#10;Scene 1: Guys ini produk baru yang lagi viral banget&#10;Scene 2: Teksturnya ringan banget di kulit&#10;Kosongkan untuk AI generate otomatis" style="font-size:13px;resize:vertical;">' + (state.adsStudio.newProject.customNarrations || '') + '</textarea>';
   html += '</div>';
   html += '<div id="adsErrorMsg" style="display:none;color:#ff6b6b;background:rgba(255,50,50,0.15);padding:10px 14px;border-radius:10px;margin-top:10px;font-size:14px;text-align:center;"></div>';
   html += '</div></div>';
