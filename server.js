@@ -8389,23 +8389,21 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   if (config.duration && !config.useGrokAspect) form.append('duration', String(config.duration));
 
   if (imageUrl) {
-    if (config.useGrokAspect) {
-      form.append('image_url', imageUrl);
-      console.log(`[VIDGEN3] Attaching image_url for Grok: ${imageUrl}`);
-    } else {
-      try {
-        const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
-        const imgBuf = Buffer.from(imgResp.data);
-        const imgType = imgResp.headers['content-type'] || 'image/png';
-        const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
+    try {
+      const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const imgBuf = Buffer.from(imgResp.data);
+      const imgType = imgResp.headers['content-type'] || 'image/png';
+      const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
+      if (config.useGrokAspect) {
+        form.append('image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
+        console.log(`[VIDGEN3] Attaching image file for Grok (${imgBuf.length} bytes)`);
+      } else {
         form.append('ref_images', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
         form.append('mode_image', 'frame');
-        console.log(`[VIDGEN3] Attaching reference image file (${imgBuf.length} bytes)`);
-      } catch (imgErr) {
-        console.warn(`[VIDGEN3] Failed to download ref image: ${imgErr.message}, trying URL reference`);
-        form.append('ref_images', imageUrl);
-        form.append('mode_image', 'frame');
+        console.log(`[VIDGEN3] Attaching ref_images file for Veo (${imgBuf.length} bytes)`);
       }
+    } catch (imgErr) {
+      console.warn(`[VIDGEN3] Failed to download ref image: ${imgErr.message}, skipping image reference`);
     }
   }
 
