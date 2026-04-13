@@ -38,7 +38,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Auto model selection when switching to image-to-image mode
   - Image history persistence in database (ximage_history table)
   - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (GeminiGen.AI Video Generator)**: Advanced video generation via GeminiGen.AI API. Uses GEMINIGEN_API_KEY env var. Also integrated into Ads Studio and Automation as "Veo 3.1 Fast FHD" option. Features include:
+- **Vidgen3 (GeminiGen.AI Video Generator)**: Advanced video generation via GeminiGen.AI API. Uses GEMINIGEN_API_KEY env var. Also integrated into Ads Studio and Automation as "Veo 3.1 Fast FHD" and "Grok 3 (10s, Audio)" options. Features include:
   - 5 AI models via GeminiGen.AI (api.geminigen.ai), all $0.015/gen:
     - Veo 3.1 Fast (veo-3.1-fast): Google, 8 seconds, 720p, fast generation
     - Veo 3.1 Fast FHD (veo-3.1-fast-fhd): Google, 8 seconds, 1080p, fast generation (also available in Ads Studio & Automation)

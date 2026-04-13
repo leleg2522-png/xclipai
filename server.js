@@ -8516,12 +8516,17 @@ async function pollGeminiGenVideoStatus(apiKey, uuid, maxWaitMs = 600000) {
   return { status: 'failed', error: 'Polling timeout exceeded (10 minutes)' };
 }
 
-async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelName, duration, resolution) {
+async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelName, duration, resolution, options) {
   const geminiKey = process.env.GEMINIGEN_API_KEY;
   if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
 
-  const config = { duration: String(duration || 8), apiEndpoint: 'video-gen/veo' };
-  const result = await callGeminiGenVideoCreate(geminiKey, modelName, prompt, resolution || '1080p', aspectRatio, imageUrl, config);
+  const isGrok = modelName === 'grok-3' || (options && options.isGrok);
+  const config = {
+    duration: String(duration || (isGrok ? 10 : 8)),
+    apiEndpoint: isGrok ? 'video-gen/grok' : 'video-gen/veo',
+    useGrokAspect: isGrok
+  };
+  const result = await callGeminiGenVideoCreate(geminiKey, modelName, prompt, resolution || (isGrok ? '720p' : '1080p'), aspectRatio, imageUrl, config);
   const resultData = result?.data || result;
   const uuid = resultData?.uuid || result?.uuid || resultData?.id || result?.id;
   if (!uuid) throw new Error('No UUID from GeminiGen: ' + JSON.stringify(result));
@@ -11778,7 +11783,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd', 'grok-3-geminigen'];
   const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
@@ -11840,7 +11845,8 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
       'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
       'kling-v2.6-pro': 5, 'kling-v3': 5,
       'wan-v2.7-pro': 5, 'wan-v2.7-r2v': 5,
-      'grok-video-3': 5, 'grok-video-3-10s': 10
+      'grok-video-3': 5, 'grok-video-3-10s': 10,
+      'grok-3-geminigen': 10
     };
     const sceneDur = project.video_duration || durationMap[project.video_model] || 5;
     const maxNarrationWords = Math.floor(sceneDur * 2.5);
@@ -12216,7 +12222,8 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
-      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
+      'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
@@ -12416,7 +12423,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
 
                 if (isGeminiGen) {
                   console.log(`[AUTOMATION] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
                 } else if (isFreepik) {
                   console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
                   const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
@@ -12693,7 +12700,8 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
-      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
+      'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
     const vidModel = modelConfig[project.video_model] || modelConfig['kling-v2.6-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
@@ -12791,7 +12799,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[AUTOMATION] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
         } else if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
           const r2vRefs = isR2V ? [retryRefImage] : undefined;
@@ -14442,7 +14450,7 @@ app.post('/api/ads-studio/projects', upload.fields([
     const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
-    const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd'];
+    const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'grok-3-geminigen'];
     const validatedModel = adsValidModels.includes(videoModel) ? videoModel : 'wan-v2.7-pro';
 
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
@@ -14502,7 +14510,8 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
       'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
       'kling-v2.1-pro': 5, 'kling-v2.6-pro': 5, 'kling-v3': 5,
       'wan-v2.6-pro': 5, 'wan-v2.7-pro': 5,
-      'grok-video-3': 5, 'grok-video-3-10s': 10
+      'grok-video-3': 5, 'grok-video-3-10s': 10,
+      'grok-3-geminigen': 10
     };
     const dur = project.video_duration || adsDurationMap[project.video_model] || 5;
     const maxWords = Math.floor(dur * 2.5);
@@ -14833,7 +14842,8 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
-      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
+      'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
     const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
@@ -15022,7 +15032,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
                 if (isGeminiGen) {
                   console.log(`[ADS-STUDIO] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
                 } else if (isFreepik) {
                   const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
                   if (fpResult.success) {
@@ -15235,7 +15245,8 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
-      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' }
+      'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
+      'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
     const vidModel = modelConfigMap[project.video_model] || modelConfigMap['wan-v2.7-pro'];
     if (project.video_duration && [5, 10].includes(project.video_duration)) {
@@ -15351,7 +15362,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[ADS-STUDIO] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution);
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
         } else if (isFreepik) {
           console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
           const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
