@@ -3736,8 +3736,10 @@ function formatMessageContent(content) {
 // ============ VIDGEN2 PAGE ============
 function renderVidgen3Page() {
   const models = [
-    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, cepat, 720p/1080p', badge: 'FAST', icon: '⚡', type: 'text2video' },
-    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik + audio sinkron', badge: 'AUDIO', icon: '🔊', type: 'text2video' },
+    { id: 'veo-3.1-fast', name: 'Veo 3.1 Fast', desc: 'Video 8 detik, 720p', badge: 'FAST', icon: '⚡', type: 'text2video' },
+    { id: 'veo-3.1-fast-fhd', name: 'Veo 3.1 Fast FHD', desc: 'Video 8 detik, 1080p Full HD', badge: 'FHD', icon: '🎬', type: 'text2video' },
+    { id: 'veo-3.1-lite', name: 'Veo 3.1 Lite', desc: 'Video 8 detik + audio, 720p', badge: 'AUDIO', icon: '🔊', type: 'text2video' },
+    { id: 'veo-3.1-lite-fhd', name: 'Veo 3.1 Lite FHD', desc: 'Video 8 detik + audio, 1080p Full HD', badge: 'FHD+🔊', icon: '🎵', type: 'text2video' },
     { id: 'grok-3', name: 'Grok 3', desc: 'Video 10 detik + audio, landscape/portrait', badge: 'GROK', icon: '🚀', type: 'text2video' }
   ];
 
@@ -3943,7 +3945,7 @@ function renderVidgen3ModelSettings() {
       </div>
     </div>
     <p class="setting-hint" style="text-align:center;opacity:0.7;">
-      ${model === 'veo-3.1-fast' ? 'Google Veo 3.1 Fast - Video 8 detik, 720p/1080p' : model === 'veo-3.1-lite' ? 'Google Veo 3.1 Lite - Video 8 detik + audio sinkron' : model === 'grok-3' ? 'xAI Grok 3 - Video 10 detik + audio' : 'Video AI Generation'}
+      ${model === 'veo-3.1-fast' ? 'Google Veo 3.1 Fast - Video 8 detik, 720p' : model === 'veo-3.1-fast-fhd' ? 'Google Veo 3.1 Fast - Video 8 detik, 1080p Full HD' : model === 'veo-3.1-lite' ? 'Google Veo 3.1 Lite - Video 8 detik + audio, 720p' : model === 'veo-3.1-lite-fhd' ? 'Google Veo 3.1 Lite - Video 8 detik + audio, 1080p Full HD' : model === 'grok-3' ? 'xAI Grok 3 - Video 10 detik + audio' : 'Video AI Generation'}
     </p>
   `;
 

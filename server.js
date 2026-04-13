@@ -6838,12 +6838,32 @@ const VIDGEN3_MODEL_CONFIGS = {
     apiEndpoint: 'video-gen/veo',
     hasAudio: false
   },
+  'veo-3.1-fast-fhd': {
+    geminiModel: 'veo-3.1-fast',
+    label: 'Veo 3.1 Fast Full HD',
+    duration: 8,
+    resolutions: ['1080p'],
+    defaultResolution: '1080p',
+    aspectRatios: ['16:9'],
+    apiEndpoint: 'video-gen/veo',
+    hasAudio: false
+  },
   'veo-3.1-lite': {
     geminiModel: 'veo-3.1-lite',
     label: 'Veo 3.1 Lite (Audio)',
     duration: 8,
     resolutions: ['720p', '1080p'],
     defaultResolution: '720p',
+    aspectRatios: ['16:9'],
+    apiEndpoint: 'video-gen/veo',
+    hasAudio: true
+  },
+  'veo-3.1-lite-fhd': {
+    geminiModel: 'veo-3.1-lite',
+    label: 'Veo 3.1 Lite Full HD (Audio)',
+    duration: 8,
+    resolutions: ['1080p'],
+    defaultResolution: '1080p',
     aspectRatios: ['16:9'],
     apiEndpoint: 'video-gen/veo',
     hasAudio: true
