@@ -614,10 +614,10 @@ const VIDEO_MODELS = [
 ];
 
 const IMAGE_MODELS = [
-  { id: 'nano-banana', name: 'Nano Banana', provider: 'GeminiGen AI', icon: '🍌', desc: 'Gratis, tercepat, support Image Reference', supportsReference: true },
-  { id: 'imagen-4-fast', name: 'Imagen 4 Fast', provider: 'GeminiGen AI', icon: '⚡', desc: 'Cepat dengan detail bagus' },
-  { id: 'imagen-4', name: 'Imagen 4 Standard', provider: 'GeminiGen AI', icon: '🎨', desc: 'Kualitas seimbang untuk semua kebutuhan' },
-  { id: 'imagen-4-ultra', name: 'Imagen 4 Ultra', provider: 'GeminiGen AI', icon: '👑', desc: 'Kualitas tertinggi, 2K resolution, text rendering' }
+  { id: 'nano-banana', name: 'Nano Banana', provider: 'Xclip AI', icon: '🍌', desc: 'Gratis, tercepat, support Image Reference', supportsReference: true },
+  { id: 'imagen-4-fast', name: 'Imagen 4 Fast', provider: 'Xclip AI', icon: '⚡', desc: 'Cepat dengan detail bagus' },
+  { id: 'imagen-4', name: 'Imagen 4 Standard', provider: 'Xclip AI', icon: '🎨', desc: 'Kualitas seimbang untuk semua kebutuhan' },
+  { id: 'imagen-4-ultra', name: 'Imagen 4 Ultra', provider: 'Xclip AI', icon: '👑', desc: 'Kualitas tertinggi, 2K resolution, text rendering' }
 ];
 
 const IMAGE_STYLES = [
@@ -4602,9 +4602,9 @@ function renderXImage2Gallery() {
 
 function renderXImage3Page() {
   var ximage3Models = [
-    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'geminigen', supportsI2I: true, badge: 'FREE', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' },
-    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'geminigen', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' },
-    { id: 'imagen-4', name: 'Imagen 4', icon: 'geminigen', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' }
+    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'FREE', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'xclip' },
+    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'google', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'xclip' },
+    { id: 'imagen-4', name: 'Imagen 4', icon: 'google', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'xclip' }
   ];
 
   var currentModelConfig = ximage3Models.find(function(m) { return m.id === state.ximage3.selectedModel; }) || ximage3Models[0];
@@ -4615,7 +4615,7 @@ function renderXImage3Page() {
   html += '<div class="hero ximage-hero">';
   html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator V3</div>';
   html += '<h1 class="gradient-title">X Image3</h1>';
-  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan GeminiGen AI - Banana Pro, Banana 2 & Imagen 4</p>';
+  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan AI - Banana Pro, Banana 2 & Imagen 4</p>';
   html += '</div>';
 
   html += '<div class="ximage-content">';
