@@ -343,7 +343,7 @@ const state = {
   ximage3: {
     sourceImages: [],
     prompt: '',
-    selectedModel: 'mystic-sparkle',
+    selectedModel: 'nano-banana-pro',
     size: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -575,6 +575,12 @@ function restoreAllUserInputs() {
 }
 
 restoreAllUserInputs();
+
+var validXimage3Models = ['nano-banana-pro', 'nano-banana-2', 'imagen-4'];
+if (validXimage3Models.indexOf(state.ximage3.selectedModel) === -1) {
+  state.ximage3.selectedModel = 'nano-banana-pro';
+  saveUserInputs('ximage3');
+}
 
 const MOTION_MODELS = [
   { id: 'kling-v2.6-pro', name: 'Kling V2.6 Pro Motion', desc: 'Transfer motion berkualitas tinggi', icon: '🔥' },
@@ -4029,7 +4035,8 @@ function getModelIcon(iconType) {
     ideogram: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>',
     tongyi: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
     freepik: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 7h10v10H7z" fill="none" stroke="currentColor" stroke-width="1"/></svg>',
-    runway: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3V4zm2 4h14v2H5V8zm3 4h8v2H8v-2zm4 4h4v2h-4v-2z"/></svg>'
+    runway: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3V4zm2 4h14v2H5V8zm3 4h8v2H8v-2zm4 4h4v2h-4v-2z"/></svg>',
+    geminigen: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>'
   };
   return icons[iconType] || '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>';
 }
@@ -4595,21 +4602,9 @@ function renderXImage2Gallery() {
 
 function renderXImage3Page() {
   var ximage3Models = [
-    { id: 'mystic-sparkle', name: 'Mystic Sparkle', icon: 'freepik', supportsI2I: true, badge: 'POPULAR', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 1, group: 'freepik' },
-    { id: 'mystic-sharpy', name: 'Mystic Sharpy', icon: 'freepik', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 1, group: 'freepik' },
-    { id: 'mystic-illusio', name: 'Mystic Illusio', icon: 'freepik', supportsI2I: true, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 1, group: 'freepik' },
-    { id: 'flux-kontext-pro', name: 'Flux Kontext Pro', icon: 'flux', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], maxRefs: 1, group: 'flux' },
-    { id: 'flux-pro-v1-1', name: 'Flux Pro v1.1', icon: 'flux', supportsI2I: false, badge: 'PREMIUM', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], group: 'flux' },
-    { id: 'flux-2-pro', name: 'Flux 2 Pro', icon: 'flux', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxRefs: 4, group: 'flux' },
-    { id: 'flux-2-klein', name: 'Flux 2 Klein', icon: 'flux', supportsI2I: true, badge: 'FAST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 4, group: 'flux' },
-    { id: 'hyperflux', name: 'Hyperflux', icon: 'flux', supportsI2I: false, badge: 'FASTEST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'flux' },
-    { id: 'seedream-v5-lite', name: 'Seedream V5 Lite', icon: 'bytedance', supportsI2I: false, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'bytedance' },
-    { id: 'seedream-v5-lite-edit', name: 'Seedream V5 Edit', icon: 'bytedance', supportsI2I: true, badge: 'EDIT', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 5, group: 'bytedance' },
-    { id: 'seedream-v4-5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: false, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'bytedance' },
-    { id: 'seedream-v4-5-edit', name: 'Seedream 4.5 Edit', icon: 'bytedance', supportsI2I: true, badge: 'EDIT', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxRefs: 5, group: 'bytedance' },
-    { id: 'z-image-turbo', name: 'Z-Image Turbo', icon: 'freepik', supportsI2I: false, badge: 'FAST', hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'freepik' },
-    { id: 'runway-t2i', name: 'RunWay', icon: 'runway', supportsI2I: false, hasN: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'runway' },
-    { id: 'classic-fast', name: 'Classic Fast', icon: 'freepik', supportsI2I: false, badge: 'INSTANT', hasN: true, maxN: 4, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], group: 'freepik' }
+    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'geminigen', supportsI2I: true, badge: 'FREE', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' },
+    { id: 'nano-banana-2', name: 'Nano Banana 2', icon: 'geminigen', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' },
+    { id: 'imagen-4', name: 'Imagen 4', icon: 'geminigen', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxRefs: 8, group: 'geminigen' }
   ];
 
   var currentModelConfig = ximage3Models.find(function(m) { return m.id === state.ximage3.selectedModel; }) || ximage3Models[0];
@@ -4620,7 +4615,7 @@ function renderXImage3Page() {
   html += '<div class="hero ximage-hero">';
   html += '<div class="hero-badge gradient-badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> AI Image Generator V3</div>';
   html += '<h1 class="gradient-title">X Image3</h1>';
-  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan Mystic, Flux, Seedream & lainnya</p>';
+  html += '<p class="hero-subtitle">Generate gambar menakjubkan dengan GeminiGen AI - Banana Pro, Banana 2 & Imagen 4</p>';
   html += '</div>';
 
   html += '<div class="ximage-content">';
@@ -12123,7 +12118,7 @@ function attachXImage3EventListeners() {
     document.addEventListener('click', function(e) {
       var modeBtn = e.target.closest('[data-ximage3-mode]');
       if (modeBtn && state.currentPage === 'ximage3') {
-        var editModelsCheck = ['seedream-v5-lite-edit', 'seedream-v4-5-edit'];
+        var editModelsCheck = [];
         if (modeBtn.dataset.ximage3Mode === 'text-to-image' && editModelsCheck.indexOf(state.ximage3.selectedModel) !== -1) {
           return;
         }
@@ -12136,7 +12131,7 @@ function attachXImage3EventListeners() {
       var modelCard = e.target.closest('[data-ximage3-model]');
       if (modelCard && state.currentPage === 'ximage3' && !modelCard.classList.contains('disabled')) {
         state.ximage3.selectedModel = modelCard.dataset.ximage3Model;
-        var editModels = ['seedream-v5-lite-edit', 'seedream-v4-5-edit'];
+        var editModels = [];
         if (editModels.indexOf(state.ximage3.selectedModel) !== -1) {
           state.ximage3.mode = 'image-to-image';
         }

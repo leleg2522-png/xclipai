@@ -112,37 +112,22 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Supports both synchronous (direct URL) and asynchronous (task polling) responses
   - 2-minute cooldown timer between generations
   - Image history persistence in database
-- **X Image3 (Freepik AI Image Generator)**: AI-powered image generation using Freepik API with 15 models. Uses Freepik key pool (freepik_key_pool table, feature='ximage3') or FREEPIK_API_KEY env fallback. Features include:
-  - 15 AI models via Freepik API (api.freepik.com):
-    - Mystic Sparkle (Freepik, endpoint: /v1/ai/mystic, engine: sparkle, I2I, 1 ref) — flagship balanced realistic
-    - Mystic Sharpy (Freepik, endpoint: /v1/ai/mystic, engine: sharpy, I2I, 1 ref) — sharp detailed photos
-    - Mystic Illusio (Freepik, endpoint: /v1/ai/mystic, engine: illusio, I2I, 1 ref) — soft illustrations
-    - Flux Kontext Pro (Black Forest Labs, endpoint: /v1/ai/text-to-image/flux-kontext-pro, I2I via input_image URL, 1 ref) — context-aware generation
-    - Flux Pro v1.1 (Black Forest Labs, endpoint: /v1/ai/text-to-image/flux-pro-v1-1, text-only) — premium quality
-    - Flux 2 Pro (Black Forest Labs, endpoint: /v1/ai/text-to-image/flux-2-pro, I2I via input_image URL, 4 refs, extra sizes: 3:2/2:3) — professional 2K
-    - Flux 2 Klein (Black Forest Labs, endpoint: /v1/ai/text-to-image/flux-2-klein, I2I via input_image URL, 4 refs) — sub-second real-time
-    - Hyperflux (Black Forest Labs, endpoint: /v1/ai/text-to-image/hyperflux, text-only) — ultra-fast generation
-    - Seedream V5 Lite (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v5-lite, text-only) — perfect text rendering
-    - Seedream V5 Lite Edit (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v5-lite-edit, I2I via reference_images array, 5 refs) — multi-ref editing
-    - Seedream 4.5 (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v4-5, text-only) — ultra 4K cinematic
-    - Seedream 4.5 Edit (ByteDance, endpoint: /v1/ai/text-to-image/seedream-v4-5-edit, I2I via reference_images array, 5 refs) — multi-ref pro editing
-    - Z-Image Turbo (Freepik, endpoint: /v1/ai/text-to-image/z-image-turbo, text-only) — ultra-fast iterations
-    - RunWay (RunWay, endpoint: /v1/ai/text-to-image/runway, text-only) — high quality generation
-    - Classic Fast (Freepik, endpoint: /v1/ai/text-to-image, SYNC, text-only, n: 1-4) — instant sync
-  - Text-to-image and image-to-image modes
-  - Freepik API auth: x-freepik-api-key header
-  - Model families: mystic (engine param, structure_reference I2I), flux (input_image URL I2I), edit (reference_images array, 1-5 URLs), standard (text-only), classic (sync)
-  - Mystic: POST /v1/ai/mystic, GET /v1/ai/mystic/{task_id}
-  - Flux/Seedream/etc: POST /v1/ai/text-to-image/{model}, GET /v1/ai/text-to-image/{model}/{task_id}
-  - Edit models: POST /v1/ai/text-to-image/{model} with reference_images array (1-5 URLs/base64), requires at least 1 image
-  - Sync (classic-fast): POST /v1/ai/text-to-image → data[0].base64 directly
-  - Freepik aspect_ratio values: square_1_1, widescreen_16_9, social_story_9_16, classic_4_3, traditional_3_4, standard_3_2, traditional_2_3
-  - Mystic I2I: structure_reference (base64 without data URI prefix). Flux I2I: input_image (public URL). Edit I2I: reference_images (array of URLs)
+- **X Image3 (GeminiGen AI Image Generator)**: AI-powered image generation using GeminiGen.AI API (api.geminigen.ai). Uses GEMINIGEN_API_KEY env var. Features include:
+  - 3 AI models via GeminiGen.AI API:
+    - Nano Banana Pro (nano-banana-pro): GeminiGen flagship, text-to-image & I2I, up to 8 refs, free
+    - Nano Banana 2 (nano-banana-2): Latest Banana model, enhanced quality, text-to-image & I2I, up to 8 refs, free
+    - Imagen 4 (imagen-4): Google Imagen 4, highest quality, text-to-image & I2I, up to 8 refs
+  - Text-to-image and image-to-image modes (up to 8 reference images via file_urls)
+  - GeminiGen API auth: x-api-key header
+  - Generate: POST https://api.geminigen.ai/uapi/v1/generate_image (multipart/form-data: prompt, model, aspect_ratio, file_urls)
+  - Polling: GET https://api.geminigen.ai/uapi/v1/history/{uuid} (status: 1=processing, 2=completed, 3=failed)
+  - Background polling type: geminigen-image (via pollGeminiGenImageTask)
+  - Aspect ratios: 1:1, 16:9, 9:16, 3:4, 4:3
+  - Cost: ~2 credits per generation on GeminiGen
   - Database tables: ximage3_rooms, ximage3_history
   - Room assignment via ximage3_room_id in subscriptions
-  - 10-second cooldown timer between generations
+  - 5-minute cooldown timer between generations
   - Image history persistence in database
-  - Server-side background polling with apiType 'freepik-image'
   - Status endpoint enforces user ownership (user_id filter on all queries)
 - **Scene Studio (Simple Batch Image Generation)**: Generate multiple images at once with optional character/style consistency. Uses Apimart.ai API (same as X Image2). Features include:
   - Simple single-page UI: character/style description (global prefix) + reference image upload + list of prompts + model/size picker + generate button
@@ -213,7 +198,7 @@ The application is built on a Node.js Express.js server, combining frontend and 
     - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
     - Freepik API (for image-to-video generation and motion control with Kling models)
     - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
-    - Freepik AI Image API (for X Image3 image generation with 15 models: Mystic x3, Flux Kontext Pro/Pro v1.1/2 Pro/2 Klein/Hyperflux, Seedream V5 Lite/V5 Edit/4.5/4.5 Edit, Z-Image Turbo, RunWay, Classic Fast)
+    - GeminiGen AI Image API (for X Image3 image generation with 3 models: Nano Banana Pro, Nano Banana 2, Imagen 4)
     - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
 - **Deployment & Utilities**:
     - Multer (for file uploads)

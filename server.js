@@ -3036,6 +3036,39 @@ async function pollFreepikImageTask(taskId, apiKey, endpoint) {
   }
 }
 
+async function pollGeminiGenImageTask(uuid, apiKey) {
+  try {
+    const resp = await axios.get(
+      `${GEMINIGEN_API_BASE}/history/${uuid}`,
+      { headers: geminiGenHeaders(apiKey), timeout: 30000 }
+    );
+    const data = resp.data;
+    const status = data.status;
+
+    if (status === 2 || status === 'completed') {
+      const imageUrl = data.media_url || data.image_url || data.url
+        || (data.generated_image && data.generated_image.length > 0 ? data.generated_image[0].image_url : null)
+        || null;
+      if (imageUrl) return { status: 'completed', url: imageUrl };
+      if (data.base64_images) {
+        return { status: 'completed', url: `data:image/png;base64,${data.base64_images}` };
+      }
+      console.error(`[XIMAGE3] GeminiGen completed but no URL. Keys: ${Object.keys(data)}`);
+      return { status: 'processing' };
+    }
+
+    if (status === 3 || status === 'failed') {
+      const errMsg = data.error_message || data.error_code || 'Generation failed';
+      return { status: 'failed', error: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg) };
+    }
+    return { status: 'processing' };
+  } catch (err) {
+    console.error(`[XIMAGE3] GeminiGen poll error for ${uuid}:`, err.message);
+    if (err.response?.status === 404) return { status: 'failed', error: 'Task not found' };
+    return { status: 'processing' };
+  }
+}
+
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   const primaryEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
 
@@ -3291,6 +3324,8 @@ setInterval(async () => {
         result = await pollFreepikVideoTask(taskId, task.apiKey, task.model, task.usedKeyName);
       } else if (task.apiType === 'freepik-image') {
         result = await pollFreepikImageTask(taskId, task.apiKey, task.endpoint || '/v1/ai/mystic');
+      } else if (task.apiType === 'geminigen-image') {
+        result = await pollGeminiGenImageTask(taskId, task.apiKey);
       }
       
       if (!result) continue;
@@ -3421,7 +3456,7 @@ async function resumePendingTaskPolling() {
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'ximage_history', apiType: 'apimodels-image', urlCol: 'image_url', keyCol: null },
       { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
-      { table: 'ximage3_history', apiType: 'freepik-image', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage3_history', apiType: 'geminigen-image', urlCol: 'image_url', keyCol: null },
       { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
     ];
     
@@ -3487,6 +3522,9 @@ async function resumePendingTaskPolling() {
           }
           if (!apiKey && (apiType === 'freepik-auto' || apiType === 'freepik-motion' || apiType === 'freepik-video' || apiType === 'freepik-image')) {
             if (process.env.FREEPIK_API_KEY) apiKey = sanitizeApiKey(process.env.FREEPIK_API_KEY);
+          }
+          if (!apiKey && apiType === 'geminigen-image') {
+            if (process.env.GEMINIGEN_API_KEY) apiKey = process.env.GEMINIGEN_API_KEY;
           }
           if (apiKey) {
             let resolvedType = apiType;
@@ -10442,56 +10480,20 @@ const FREEPIK_SIZE_MAP = {
 };
 
 const XIMAGE3_MODELS = {
-  'mystic-sparkle': { name: 'Mystic Sparkle', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'sparkle', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Balanced realistic - Freepik flagship' },
-  'mystic-sharpy': { name: 'Mystic Sharpy', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'sharpy', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Sharp detailed realistic photos' },
-  'mystic-illusio': { name: 'Mystic Illusio', provider: 'Freepik', family: 'mystic', endpoint: '/v1/ai/mystic', engine: 'illusio', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 1, desc: 'Soft illustrations & landscapes' },
-  'flux-kontext-pro': { name: 'Flux Kontext Pro', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-kontext-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], maxN: 1, maxRefs: 1, desc: 'Context-aware generation with image guidance' },
-  'flux-pro-v1-1': { name: 'Flux Pro v1.1', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-pro-v1-1', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'], maxN: 1, desc: 'Premium quality Flux generation' },
-  'flux-2-pro': { name: 'Flux 2 Pro', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-2-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], maxN: 1, maxRefs: 4, desc: 'Professional 2K, photoreal, typography' },
-  'flux-2-klein': { name: 'Flux 2 Klein', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/flux-2-klein', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 4, desc: 'Sub-second real-time generation' },
-  'hyperflux': { name: 'Hyperflux', provider: 'Black Forest Labs', family: 'flux', endpoint: '/v1/ai/text-to-image/hyperflux', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast Flux generation' },
-  'seedream-v5-lite': { name: 'Seedream V5 Lite', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v5-lite', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'ByteDance latest, perfect text rendering' },
-  'seedream-v5-lite-edit': { name: 'Seedream V5 Lite Edit', provider: 'ByteDance', family: 'edit', endpoint: '/v1/ai/text-to-image/seedream-v5-lite-edit', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 5, desc: 'Edit gambar dengan referensi hingga 5 foto' },
-  'seedream-v4-5': { name: 'Seedream 4.5', provider: 'ByteDance', family: 'standard', endpoint: '/v1/ai/text-to-image/seedream-v4-5', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra 4K cinematic' },
-  'seedream-v4-5-edit': { name: 'Seedream 4.5 Edit', provider: 'ByteDance', family: 'edit', endpoint: '/v1/ai/text-to-image/seedream-v4-5-edit', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, maxRefs: 5, desc: 'Edit gambar pro dengan referensi hingga 5 foto' },
-  'z-image-turbo': { name: 'Z-Image Turbo', provider: 'Freepik', family: 'standard', endpoint: '/v1/ai/text-to-image/z-image-turbo', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'Ultra-fast iterations' },
-  'runway-t2i': { name: 'RunWay', provider: 'RunWay', family: 'standard', endpoint: '/v1/ai/text-to-image/runway', supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 1, desc: 'High quality RunWay generation' },
-  'classic-fast': { name: 'Classic Fast', provider: 'Freepik', family: 'classic', endpoint: '/v1/ai/text-to-image', isSync: true, supportsI2I: false, sizes: ['1:1', '16:9', '9:16', '4:3', '3:4'], maxN: 4, desc: 'Instant sync generation with styling' }
+  'nano-banana-pro': { name: 'Nano Banana Pro', provider: 'GeminiGen', family: 'geminigen', apiModel: 'nano-banana-pro', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxN: 1, maxRefs: 8, desc: 'Balanced quality - GeminiGen flagship (free)' },
+  'nano-banana-2': { name: 'Nano Banana 2', provider: 'GeminiGen', family: 'geminigen', apiModel: 'nano-banana-2', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxN: 1, maxRefs: 8, desc: 'Latest Banana model - enhanced quality (free)' },
+  'imagen-4': { name: 'Imagen 4', provider: 'GeminiGen', family: 'geminigen', apiModel: 'imagen-4', supportsI2I: true, sizes: ['1:1', '16:9', '9:16', '3:4', '4:3'], maxN: 1, maxRefs: 8, desc: 'Google Imagen 4 - highest quality generation' }
 };
 
 async function getXImage3RoomApiKey(xclipApiKey) {
   const keyInfo = await validateXclipApiKey(xclipApiKey);
   if (!keyInfo) return { error: 'Xclip API key tidak valid' };
 
-  try {
-    const assigned = await pool.query(
-      `SELECT * FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = 'ximage3' AND status = 'assigned' ORDER BY usage_count ASC, last_used_at ASC NULLS FIRST LIMIT 1`,
-      [keyInfo.user_id]
-    );
-    if (assigned.rows.length > 0) {
-      const k = assigned.rows[0];
-      await pool.query('UPDATE freepik_key_pool SET usage_count = usage_count + 1, last_used_at = NOW() WHERE id = $1', [k.id]);
-      return { apiKey: k.api_key, keyName: 'pool_' + k.id, userId: keyInfo.user_id, keyInfoId: keyInfo.id, poolKeyId: k.id };
-    }
-    const available = await pool.query(
-      `SELECT * FROM freepik_key_pool WHERE status = 'available' ORDER BY usage_count ASC, created_at ASC LIMIT 1`
-    );
-    if (available.rows.length > 0) {
-      const k = available.rows[0];
-      await pool.query(
-        `UPDATE freepik_key_pool SET status = 'assigned', feature = 'ximage3', assigned_user_id = $1, assigned_at = NOW(), usage_count = usage_count + 1, last_used_at = NOW() WHERE id = $2`,
-        [keyInfo.user_id, k.id]
-      );
-      return { apiKey: k.api_key, keyName: 'pool_' + k.id, userId: keyInfo.user_id, keyInfoId: keyInfo.id, poolKeyId: k.id };
-    }
-  } catch (e) {
-    console.error('[XIMAGE3] Key pool error:', e.message);
+  const geminiKey = process.env.GEMINIGEN_API_KEY;
+  if (geminiKey) {
+    return { apiKey: geminiKey, keyName: 'GEMINIGEN_API_KEY', userId: keyInfo.user_id, keyInfoId: keyInfo.id };
   }
-
-  if (process.env.FREEPIK_API_KEY) {
-    return { apiKey: sanitizeApiKey(process.env.FREEPIK_API_KEY), keyName: 'FREEPIK_API_KEY', userId: keyInfo.user_id, keyInfoId: keyInfo.id };
-  }
-  return { error: 'Tidak ada Freepik API key yang tersedia. Hubungi admin.' };
+  return { error: 'Tidak ada GeminiGen API key yang tersedia. Hubungi admin.' };
 }
 
 app.get('/api/ximage3/subscription-status', async (req, res) => {
@@ -10689,122 +10691,75 @@ app.post('/api/ximage3/generate', async (req, res) => {
       return res.status(400).json({ error: `Model ${modelConfig.name} memerlukan minimal 1 gambar referensi` });
     }
     
-    console.log(`[XIMAGE3] Generating with model: ${model}, size: ${size || 'default'}, n: ${n || 1}, i2i: ${isI2I}, images: ${images ? images.length : 0}, endpoint: ${modelConfig.endpoint}`);
+    console.log(`[XIMAGE3] Generating with GeminiGen model: ${model} (${modelConfig.apiModel}), size: ${size || 'default'}, i2i: ${isI2I}, images: ${images ? images.length : 0}`);
     
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const baseUrl = `${protocol}://${host}`;
     
-    const freepikSize = FREEPIK_SIZE_MAP[size] || 'square_1_1';
-    
-    let referenceBase64 = null;
-    let referenceImageUrl = null;
     let referenceImageUrls = [];
     if (isI2I && images && images.length > 0) {
       for (const img of images.filter(Boolean)) {
-        let b64 = null;
         let url = null;
         if (img.startsWith('data:')) {
-          b64 = img;
+          const saved = await saveBase64ToFile(img, 'image', baseUrl);
+          url = saved.publicUrl;
         } else if (img.startsWith('http')) {
           url = img;
-          try {
-            const imgResp = await axios.get(img, { responseType: 'arraybuffer', timeout: 30000 });
-            const ct = imgResp.headers['content-type'] || 'image/png';
-            b64 = `data:${ct};base64,${Buffer.from(imgResp.data).toString('base64')}`;
-          } catch (e) {
-            console.error('[XIMAGE3] Failed to fetch reference image:', e.message);
-          }
         }
-        if (b64 && !url) {
-          const saved = await saveBase64ToFile(b64, 'image', baseUrl);
-          url = saved.publicUrl;
-        }
-        if (!referenceBase64) referenceBase64 = b64;
-        if (!referenceImageUrl) referenceImageUrl = url;
         if (url) referenceImageUrls.push(url);
       }
     }
     
-    let requestBody = {};
-    const family = modelConfig.family;
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('model', modelConfig.apiModel);
+    if (size) form.append('aspect_ratio', size);
     
-    if (family === 'classic') {
-      requestBody = {
-        prompt: prompt,
-        num_images: Math.min(parseInt(n) || 1, modelConfig.maxN || 1),
-        image: { size: freepikSize },
-        filter_nsfw: false
-      };
-    } else if (family === 'mystic') {
-      requestBody = {
-        prompt: prompt,
-        engine: modelConfig.engine,
-        aspect_ratio: freepikSize,
-        webhook_url: `${baseUrl}/api/ximage3/webhook`
-      };
-      if (isI2I && referenceBase64) {
-        const b64Only = referenceBase64.includes(',') ? referenceBase64.split(',')[1] : referenceBase64;
-        requestBody.structure_reference = b64Only;
+    if (isI2I && referenceImageUrls.length > 0) {
+      const maxRefs = modelConfig.maxRefs || 8;
+      for (const refUrl of referenceImageUrls.slice(0, maxRefs)) {
+        form.append('file_urls', refUrl);
       }
-    } else if (family === 'flux') {
-      requestBody = {
-        prompt: prompt,
-        aspect_ratio: freepikSize,
-        webhook_url: `${baseUrl}/api/ximage3/webhook`
-      };
-      if (isI2I && referenceImageUrl) {
-        requestBody.input_image = referenceImageUrl;
-      }
-    } else if (family === 'edit') {
-      requestBody = {
-        prompt: prompt,
-        aspect_ratio: freepikSize,
-        webhook_url: `${baseUrl}/api/ximage3/webhook`
-      };
-      if (isI2I && referenceImageUrls.length > 0) {
-        requestBody.reference_images = referenceImageUrls.slice(0, modelConfig.maxRefs || 5);
-      }
-    } else {
-      requestBody = {
-        prompt: prompt,
-        aspect_ratio: freepikSize,
-        webhook_url: `${baseUrl}/api/ximage3/webhook`
-      };
     }
     
-    console.log('[XIMAGE3] Freepik request:', JSON.stringify({ ...requestBody, structure_reference: requestBody.structure_reference ? '[BASE64]' : undefined, input_image: requestBody.input_image ? '[URL]' : undefined, reference_images: requestBody.reference_images ? `[${requestBody.reference_images.length} URLs]` : undefined }));
+    console.log(`[XIMAGE3] GeminiGen request: model=${modelConfig.apiModel}, aspect=${size}, refs=${referenceImageUrls.length}`);
     
     const response = await axios.post(
-      `https://api.freepik.com${modelConfig.endpoint}`,
-      requestBody,
+      `${GEMINIGEN_API_BASE}/generate_image`,
+      form,
       {
-        headers: freepikHeaders(roomKeyResult.apiKey),
-        timeout: 120000
+        headers: { 'x-api-key': roomKeyResult.apiKey, ...form.getHeaders() },
+        timeout: 60000
       }
     );
     
-    console.log('[XIMAGE3] Freepik response status:', response.status);
+    console.log('[XIMAGE3] GeminiGen response:', JSON.stringify(response.data).substring(0, 500));
     
     const respData = response.data;
+    const taskId = respData.uuid || respData.id;
     
-    if (modelConfig.isSync) {
-      const images = respData.data || [];
-      if (images.length === 0 || !images[0].base64) {
-        console.error('[XIMAGE3] Sync: no image data in response');
-        return res.status(500).json({ error: 'Tidak ada gambar dalam response Freepik' });
-      }
-      
-      const b64Data = `data:image/png;base64,${images[0].base64}`;
+    if (!taskId) {
+      console.error('[XIMAGE3] No UUID from GeminiGen. Keys:', Object.keys(respData));
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari GeminiGen. Response: ' + JSON.stringify(respData).substring(0, 200) });
+    }
+    
+    let imageUrl = null;
+    if (respData.base64_images) {
+      const b64Data = `data:image/png;base64,${respData.base64_images}`;
       const saved = await saveBase64ToFile(b64Data, 'image', baseUrl);
-      const imageUrl = saved.publicUrl;
-      
-      const syncTaskId = `sync_${uuidv4()}`;
-      
+      imageUrl = saved.publicUrl;
+    }
+    if (!imageUrl && respData.generated_image && respData.generated_image.length > 0) {
+      imageUrl = respData.generated_image[0].image_url;
+    }
+    
+    if (imageUrl) {
       await pool.query(`
         INSERT INTO ximage3_history (user_id, task_id, model, prompt, mode, size, reference_image, status, image_url, completed_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, NOW())
-      `, [roomKeyResult.userId, syncTaskId, model, prompt, 'text-to-image', size || '1:1', null, imageUrl]);
+      `, [roomKeyResult.userId, taskId, model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', isI2I ? 'ref_uploaded' : null, imageUrl]);
       
       await pool.query(
         'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
@@ -10815,22 +10770,13 @@ app.post('/api/ximage3/generate', async (req, res) => {
       
       return res.json({
         success: true,
-        taskId: syncTaskId,
+        taskId: taskId,
         model: model,
         imageUrl: imageUrl,
         syncComplete: true,
         cooldown: Math.ceil(RATE_LIMIT_CONFIG.ximage3.cooldownMs / 1000),
         message: 'Image berhasil digenerate!'
       });
-    }
-    
-    console.log('[XIMAGE3] Freepik async response:', JSON.stringify(respData).substring(0, 500));
-    
-    const taskId = respData.data?.task_id || respData.data?.id || respData.task_id || respData.id;
-    
-    if (!taskId) {
-      console.error('[XIMAGE3] No task ID. Keys:', Object.keys(respData), 'data keys:', respData.data ? Object.keys(respData.data) : 'N/A');
-      return res.status(500).json({ error: 'Tidak mendapat task ID dari Freepik. Response: ' + JSON.stringify(respData).substring(0, 200) });
     }
     
     await pool.query(`
@@ -10845,11 +10791,10 @@ app.post('/api/ximage3/generate', async (req, res) => {
     
     setUserCooldown(roomKeyResult.userId, 'ximage3');
     
-    startServerBgPoll(taskId, 'freepik-image', roomKeyResult.apiKey, {
+    startServerBgPoll(taskId, 'geminigen-image', roomKeyResult.apiKey, {
       dbTable: 'ximage3_history',
       urlColumn: 'image_url',
       model: model,
-      endpoint: modelConfig.endpoint,
       userId: roomKeyResult.userId
     });
     
@@ -10869,7 +10814,7 @@ app.post('/api/ximage3/generate', async (req, res) => {
     
     let userMsg = typeof rawMsg === 'string' ? rawMsg : 'Gagal generate image';
     if (userMsg.includes('timeout') || userMsg.includes('ETIMEDOUT')) {
-      userMsg = 'Request timeout. Server Freepik terlalu lama merespon, coba lagi.';
+      userMsg = 'Request timeout. Server GeminiGen terlalu lama merespon, coba lagi.';
     }
     
     res.status(error.response?.status || 500).json({ error: userMsg });
@@ -10918,34 +10863,18 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
       return res.json({ status: 'completed', imageUrl: localTask.rows[0]?.image_url });
     }
     
-    const modelName = localTask.rows[0]?.model;
-    const mc = XIMAGE3_MODELS[modelName];
-    const pollEndpoint = mc ? mc.endpoint : '/v1/ai/mystic';
-
-    let pollApiKey = null;
-    try {
-      const assigned = await pool.query(
-        `SELECT api_key FROM freepik_key_pool WHERE assigned_user_id = $1 AND feature = 'ximage3' AND status = 'assigned' LIMIT 1`,
-        [userId]
-      );
-      if (assigned.rows.length > 0) {
-        pollApiKey = assigned.rows[0].api_key;
-      }
-    } catch (e) {}
-    if (!pollApiKey && process.env.FREEPIK_API_KEY) {
-      pollApiKey = sanitizeApiKey(process.env.FREEPIK_API_KEY);
-    }
-    if (!pollApiKey) {
-      return res.status(500).json({ error: 'Tidak ada Freepik API key untuk polling' });
+    const geminiKey = process.env.GEMINIGEN_API_KEY;
+    if (!geminiKey) {
+      return res.status(500).json({ error: 'Tidak ada GeminiGen API key untuk polling' });
     }
     
     let statusResponse;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         statusResponse = await axios.get(
-          `https://api.freepik.com${pollEndpoint}/${taskId}`,
+          `${GEMINIGEN_API_BASE}/history/${taskId}`,
           {
-            headers: freepikHeaders(pollApiKey),
+            headers: geminiGenHeaders(geminiKey),
             timeout: 30000
           }
         );
@@ -10962,34 +10891,27 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
       }
     }
     
-    console.log('[XIMAGE3] Freepik status response:', JSON.stringify(statusResponse.data).substring(0, 500));
+    console.log('[XIMAGE3] GeminiGen status response:', JSON.stringify(statusResponse.data).substring(0, 500));
     
-    const raw = statusResponse.data;
-    const data = raw.data || raw;
-    const status = (data.status || raw.status || '').toUpperCase();
+    const data = statusResponse.data;
+    const status = data.status;
     
-    if (status === 'COMPLETED') {
-      let imageUrl = null;
-      const generated = data.generated || [];
-      if (generated.length > 0) {
-        const g = generated[0];
-        if (typeof g === 'string') {
-          imageUrl = g;
-        } else if (g.url) {
-          imageUrl = g.url;
-        } else if (g.base64) {
-          const b64Data = `data:image/png;base64,${g.base64}`;
-          const prot = req.headers['x-forwarded-proto'] || 'https';
-          const hst = req.headers['x-forwarded-host'] || req.headers.host;
-          const bUrl = `${prot}://${hst}`;
-          const saved = await saveBase64ToFile(b64Data, 'image', bUrl);
-          imageUrl = saved.publicUrl;
-        }
+    if (status === 2 || status === 'completed') {
+      let imageUrl = data.media_url || data.image_url || data.url
+        || (data.generated_image && data.generated_image.length > 0 ? data.generated_image[0].image_url : null)
+        || null;
+      
+      if (!imageUrl && data.base64_images) {
+        const b64Data = `data:image/png;base64,${data.base64_images}`;
+        const prot = req.headers['x-forwarded-proto'] || 'https';
+        const hst = req.headers['x-forwarded-host'] || req.headers.host;
+        const bUrl = `${prot}://${hst}`;
+        const saved = await saveBase64ToFile(b64Data, 'image', bUrl);
+        imageUrl = saved.publicUrl;
       }
-      if (!imageUrl) imageUrl = data.image_url || data.url;
       
       if (!imageUrl) {
-        console.error('[XIMAGE3] Completed but no image URL. Full:', JSON.stringify(raw).substring(0, 500));
+        console.error('[XIMAGE3] GeminiGen completed but no image URL. Keys:', Object.keys(data));
         return res.status(500).json({ status: 'failed', error: 'No image URL in response' });
       }
       
@@ -11002,8 +10924,8 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
       return res.json({ status: 'completed', imageUrl });
     }
     
-    if (status === 'FAILED') {
-      const errorMsg = data.error_message || data.error?.message || data.message || data.detail || 'Generation failed';
+    if (status === 3 || status === 'failed') {
+      const errorMsg = data.error_message || data.error_code || 'Generation failed';
       
       await pool.query(`
         UPDATE ximage3_history 
@@ -11011,12 +10933,13 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
         WHERE task_id = $1 AND user_id = $2
       `, [taskId, userId]);
       
-      return res.json({ status: 'failed', error: errorMsg });
+      return res.json({ status: 'failed', error: typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg) });
     }
     
+    const progress = data.status_percentage || 0;
     res.json({
       status: 'processing',
-      progress: 0,
+      progress: progress,
       message: 'Image sedang diproses...'
     });
     
