@@ -11835,6 +11835,16 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
+
+    const durationMap = {
+      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
+      'kling-v2.6-pro': 5, 'kling-v3': 5,
+      'wan-v2.7-pro': 5, 'wan-v2.7-r2v': 5,
+      'grok-video-3': 5, 'grok-video-3-10s': 10
+    };
+    const sceneDur = project.video_duration || durationMap[project.video_model] || 5;
+    const maxNarrationWords = Math.floor(sceneDur * 2.5);
+
     const systemPrompt = `You are a senior cinematographer and viral content strategist with 15 years of experience directing high-end commercial productions and viral social media content. You think in shots, not descriptions. Every frame you design has intentional composition, motivated camera movement, and cinematic lighting.
 
 YOUR EXPERTISE:
@@ -11884,12 +11894,22 @@ NARRATION MASTERY:
 - BAD narration: "Hari ini aku mulai perjalanan hiking di pegunungan yang asri." (boring, states the obvious)
 - GOOD narration: "Ada sesuatu tentang hutan yang belum disentuh manusia — udara terasa berbeda di sini." (evocative, creates mood)
 - Never describe what's already visible on screen — narration adds a LAYER of meaning beyond the visual
-- Use rhythm: mix short punchy lines with longer flowing ones`;
+- Use rhythm: mix short punchy lines with longer flowing ones
+
+NARRATION DURATION — CRITICAL (each scene video is ${sceneDur} seconds):
+- A person speaks ~2-3 words per second naturally
+- Each scene is ONLY ${sceneDur} seconds, so narration MUST be MAX ${maxNarrationWords} words per scene
+- If narration is too long, the voiceover will be cut off or rushed — this ruins the video
+- Keep it SHORT and IMPACTFUL: one powerful thought per scene, not a paragraph
+- Dialogue (if any) must also fit within ${sceneDur} seconds — MAX ${maxNarrationWords} words
+- BAD (too long for ${sceneDur}s): "Perjalanan ini dimulai dari kaki gunung yang sunyi, di mana angin berbisik melalui pepohonan cemara yang menjulang tinggi"
+- GOOD (fits ${sceneDur}s): "Hutannya mulai bicara. Dan kali ini, aku dengarkan."`;
 
     let userPrompt;
     if (hasRefImage) {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
+Each scene video is ${sceneDur} seconds long — narration MUST fit within ${sceneDur} seconds (max ${maxNarrationWords} words per scene).
 
 The user provided a REFERENCE IMAGE of the main character. The image generator handles appearance — do NOT describe what the character looks like.
 
@@ -11899,9 +11919,9 @@ Return ONLY valid JSON:
   "character_description": "character from reference image",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 powerful sentences' : '2-3 layered sentences'} in ${langName} — premium voiceover quality, never obvious or generic",
+      "narration": "MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s voiceover, premium quality, never obvious or generic",
       "visual_prompt": "English only. Professional cinematographer shot description with all required elements",
-      "dialogue": "(OPTIONAL) Natural speech in ${langName} — only when character speaks on camera. Must sound like real person talking, not YouTuber script. Omit field if no speaking."
+      "dialogue": "(OPTIONAL) MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
     }
   ]
 }
@@ -11934,6 +11954,7 @@ CONTINUITY ANCHORS:
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
+Each scene video is ${sceneDur} seconds long — narration MUST fit within ${sceneDur} seconds (max ${maxNarrationWords} words per scene).
 
 Return ONLY valid JSON:
 {
@@ -11941,9 +11962,9 @@ Return ONLY valid JSON:
   "character_description": "ULTRA-PRECISE character design (see rules below)",
   "scenes": [
     {
-      "narration": "${project.format === 'shorts' ? '1-2 powerful sentences' : '2-3 layered sentences'} in ${langName} — premium voiceover quality",
+      "narration": "MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s voiceover, premium quality",
       "visual_prompt": "English only. Full character desc + professional cinematographer shot description",
-      "dialogue": "(OPTIONAL) Natural speech in ${langName} — only when character speaks on camera. Omit field if no speaking."
+      "dialogue": "(OPTIONAL) MAX ${maxNarrationWords} words in ${langName} — must fit ${sceneDur}s. Only when character speaks on camera. Omit field if no speaking."
     }
   ]
 }
@@ -14477,8 +14498,14 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
     const hasProdImage = !!project.product_image_url;
 
     const isSoft = project.ad_type !== 'hard_selling';
-    const dur = project.video_duration || 5;
-    const maxWords = dur * 3;
+    const adsDurationMap = {
+      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
+      'kling-v2.1-pro': 5, 'kling-v2.6-pro': 5, 'kling-v3': 5,
+      'wan-v2.6-pro': 5, 'wan-v2.7-pro': 5,
+      'grok-video-3': 5, 'grok-video-3-10s': 10
+    };
+    const dur = project.video_duration || adsDurationMap[project.video_model] || 5;
+    const maxWords = Math.floor(dur * 2.5);
 
     const systemPrompt = `You are a world-class advertising creative director specializing in AI video generation. You create prompts optimized for IMAGE-TO-VIDEO AI models (like Wan 2.6) that produce stunning, cinematic product ads.
 
