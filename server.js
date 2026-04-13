@@ -10715,6 +10715,7 @@ app.post('/api/ximage3/generate', async (req, res) => {
     const form = new FormData();
     form.append('prompt', prompt);
     form.append('model', modelConfig.apiModel);
+    form.append('resolution', '4K');
     if (size) form.append('aspect_ratio', size);
     
     if (isI2I && referenceImageUrls.length > 0) {
