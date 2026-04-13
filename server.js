@@ -8425,7 +8425,18 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   form.append('prompt', prompt || 'Generate a cinematic video');
   form.append('model', modelName);
   if (resolution) form.append('resolution', resolution);
-  if (aspectRatio) form.append('aspect_ratio', aspectRatio);
+  if (aspectRatio) {
+    if (config.useGrokAspect) {
+      const grokAspectMap = {
+        '9:16': 'portrait', '16:9': 'landscape', '1:1': 'square',
+        '3:2': '3:2', '2:3': '2:3',
+        'portrait': 'portrait', 'landscape': 'landscape', 'square': 'square'
+      };
+      form.append('aspect_ratio', grokAspectMap[aspectRatio] || 'portrait');
+    } else {
+      form.append('aspect_ratio', aspectRatio);
+    }
+  }
   if (config.duration) form.append('duration', String(config.duration));
 
   if (imageUrl) {
