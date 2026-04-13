@@ -8386,7 +8386,7 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   form.append('model', modelName);
   if (resolution) form.append('resolution', resolution);
   if (aspectRatio) form.append('aspect_ratio', aspectRatio);
-  if (config.duration && !config.useGrokAspect) form.append('duration', String(config.duration));
+  if (config.duration) form.append('duration', String(config.duration));
 
   if (imageUrl) {
     let imgBuf = null;
@@ -8410,8 +8410,8 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
     if (imgBuf && imgBuf.length > 0) {
       const imgExt = imgType.includes('jpeg') || imgType.includes('jpg') ? 'jpg' : 'png';
       if (config.useGrokAspect) {
-        form.append('image', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
-        console.log(`[VIDGEN3] Attached image for Grok (${imgBuf.length} bytes)`);
+        form.append('files', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
+        console.log(`[VIDGEN3] Attached files for Grok (${imgBuf.length} bytes)`);
       } else {
         form.append('ref_images', imgBuf, { filename: `ref.${imgExt}`, contentType: imgType });
         form.append('mode_image', 'frame');
