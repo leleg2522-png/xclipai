@@ -4942,6 +4942,26 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
       return res.status(410).json({ error: 'Video sudah tidak tersedia' });
     }
 
+    const isR2Url = videoUrl && (videoUrl.includes('r2.cloudflarestorage.com') || videoUrl.includes('response-content-type=application%2Foctet-stream'));
+    
+    if (videoUrl && isR2Url) {
+      console.log(`[VIDEOGEN] Proxying R2 video for task ${taskId}`);
+      try {
+        const videoResp = await axios.get(videoUrl, { responseType: 'stream', timeout: 120000 });
+        res.setHeader('Content-Type', 'video/mp4');
+        if (videoResp.headers['content-length']) {
+          res.setHeader('Content-Length', videoResp.headers['content-length']);
+        }
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        videoResp.data.pipe(res);
+        return;
+      } catch (proxyErr) {
+        console.error(`[VIDEOGEN] R2 proxy error: ${proxyErr.message}`);
+        return res.status(502).json({ error: 'Failed to proxy video' });
+      }
+    }
+
     if (videoUrl && !cached) {
       console.log(`[VIDEOGEN] Redirecting to CDN for task ${taskId}`);
       return res.redirect(302, videoUrl);
