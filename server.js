@@ -8444,7 +8444,10 @@ async function pollGeminiGenVideoStatus(apiKey, uuid, maxWaitMs = 600000) {
       console.log(`[VIDGEN3] Poll ${uuid}: status=${status}, progress=${progress}%`);
 
       if (status === 2 || status === 'completed') {
-        const videoUrl = data.media_url || data.video_url || data.url || null;
+        const videoUrl = data.media_url || data.video_url || data.url
+          || (data.generated_video && data.generated_video.length > 0 ? data.generated_video[0].video_url : null)
+          || null;
+        console.log(`[VIDGEN3] Poll completed ${uuid}: videoUrl=${videoUrl ? videoUrl.substring(0, 100) + '...' : 'null'}`);
         return { status: 'completed', videoUrl, thumbnailUrl: data.thumbnail_url };
       }
 
