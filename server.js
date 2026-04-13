@@ -7147,7 +7147,7 @@ app.post('/api/vidgen2/generate', async (req, res) => {
       requestBody.mode = videoResolution === '1080P' ? 'pro' : 'std';
       requestBody.sound = 'on';
       requestBody.cfg_scale = 0.9;
-      requestBody.negative_prompt = 'blur, distort, low quality, change face, different person, different character';
+      requestBody.negative_prompt = 'blur, distort, low quality, change face, different person, different character, slow motion, slowmo, boomerang effect, reverse motion, character returning to start position';
       if (imageUrls.length > 0) {
         requestBody.image = imageUrls[0];
         console.log(`[VIDGEN2] Kling image URL: ${imageUrls[0]}`);
@@ -7863,7 +7863,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         requestBody.image_urls = [imageUrl];
         const soraConsistency = '[CHARACTER LOCK] Reproduce the person from the reference image with pixel-perfect accuracy. Preserve exact clothing: same fabric texture, same pattern, same decorative elements (bows, buttons, embroidery, prints), same colors, same fit and silhouette. Preserve exact face, hair, accessories, glasses, jewelry. Zero deviation allowed. ';
         requestBody.prompt = soraConsistency + requestBody.prompt;
-        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing details, missing decorations, different buttons, different collar, wardrobe change, costume change, different face, different person, inconsistent appearance';
+        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, simplified clothing, wardrobe change, costume change, different face, different person, slow motion, slowmo, boomerang effect, reverse motion, character returning to start position';
       }
     } else if (config.type === 'veo') {
       // Veo 3.1 Fast - official API: resolution, generation_type, image_urls (start/end frame), enable_gif
@@ -7896,7 +7896,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           requestBody.generation_type = 'frame';
           const frameConsistency = '[EXACT FRAME PRESERVATION] Animate starting from the exact first frame provided. The person\'s clothing must remain pixel-identical throughout: preserve exact fabric texture, pattern details, decorative elements (bows, ribbons, buttons, embroidery), colors, and fit. Do not simplify, alter, or reinterpret any clothing detail. ';
           requestBody.prompt = frameConsistency + requestBody.prompt;
-          requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing decorative details, missing bows, missing buttons, wardrobe change, costume change, morphing clothes';
+          requestBody.negative_prompt = 'different clothes, outfit change, different fabric, simplified clothing, wardrobe change, costume change, morphing clothes, slow motion, slowmo, boomerang effect, reverse motion, character returning to start position';
         }
       } else if (generationType === 'reference') {
         // Reference image mode - enhance prompt for character consistency
@@ -7913,7 +7913,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
           
           const consistencyBoost = '[STRICT VISUAL CLONE] Clone the exact person from the reference image with forensic-level accuracy. CLOTHING LOCK: Reproduce the exact same garment — same fabric weave/texture, same color shade, same pattern, same decorative elements (bows, ribbons, lace, buttons, embroidery, appliqués, pleats, ruffles), same collar style, same sleeve style, same fit/silhouette. Do NOT simplify, stylize, or reinterpret any clothing detail. APPEARANCE LOCK: Same face, same glasses, same hairstyle, same hair color, same skin tone, same jewelry/accessories. Every frame must show the identical outfit with zero variation. ';
           requestBody.prompt = consistencyBoost + requestBody.prompt;
-          requestBody.negative_prompt = 'different clothes, outfit change, wardrobe change, different fabric, different texture, different pattern, simplified pattern, abstract pattern, plain fabric replacing detailed fabric, missing decorative details, missing bows, missing ribbons, missing buttons, missing embroidery, different collar, different sleeves, costume change, different hairstyle, different hair color, different face, different person, inconsistent appearance, morphing, transformation';
+          requestBody.negative_prompt = 'different clothes, outfit change, wardrobe change, different fabric, simplified pattern, costume change, different face, different person, morphing, slow motion, slowmo, boomerang effect, reverse motion, character returning to start position';
         }
       }
     } else if (config.type === 'grok') {
@@ -7932,7 +7932,7 @@ app.post('/api/vidgen4/generate', async (req, res) => {
         requestBody.image_urls = [refUrl];
         const grokConsistency = '[CHARACTER LOCK] Reproduce the exact person from the reference image. Preserve exact clothing: same fabric texture, same pattern, same decorative elements (bows, ribbons, buttons, embroidery), same colors, same fit. Preserve exact face, glasses, hairstyle, accessories. Do not simplify or alter any clothing detail. ';
         requestBody.prompt = grokConsistency + requestBody.prompt;
-        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, different pattern, different texture, simplified clothing, abstract pattern, missing decorative details, missing bows, missing buttons, wardrobe change, costume change, different face, different person';
+        requestBody.negative_prompt = 'different clothes, outfit change, different fabric, simplified clothing, wardrobe change, costume change, different face, different person, slow motion, slowmo, boomerang effect, reverse motion, character returning to start position';
       }
     }
     
@@ -11366,13 +11366,13 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       simplified = words.slice(0, 35).join(' ');
     }
     simplified += dialogPart;
-    simplified += ', natural lip sync, consistent character, correct human anatomy, two arms two hands five fingers each hand';
+    simplified += ', natural lip sync, consistent character, correct human anatomy, two arms two hands five fingers each hand, normal speed real-time motion not slow motion, forward progressive movement no boomerang no reverse';
     return simplified;
   }
 
   let characterLockPrompt = simplifyPromptForVideo(prompt);
   if (feature === 'ads_studio' || feature === 'automation') {
-    characterLockPrompt += ', same voice tone and pitch throughout, calm steady adult voice, consistent speaking pace, same character identity as reference image, preserve exact face features and hair and clothing, do not change character appearance';
+    characterLockPrompt += ', same voice tone and pitch throughout, calm steady adult voice, same character identity as reference image, preserve face features and hair';
   }
   if (feature === 'ads_studio') {
     characterLockPrompt += ', product must be FULLY visible in frame at all times, no cropping on product, product centered with safe margin from edges, complete product shown from top to bottom, maintain product shape and proportions exactly as in reference image';
@@ -11391,7 +11391,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
   }
 
   const baseNeg = 'blurry, low quality, distorted face, deformed face, extra fingers, missing fingers, bad anatomy, glitch, artifacts, flickering';
-  const motionNeg = 'unnatural movement, stiff motion, jittery motion, frozen face, robotic expression, exaggerated motion';
+  const motionNeg = 'slow motion, slowmo, time lapse, boomerang effect, reverse motion, looping motion, character returning to start position, rewinding, frozen pose, stiff motion, jittery motion, frozen face, robotic expression';
   const charNeg = 'inconsistent face, changing identity, face morphing, double face, duplicate face, different person, warped body';
   const lipNeg = 'unrealistic mouth, broken lips, bad lip sync, unsynced audio, mouth not moving';
   const productNeg = 'deformed object, melting object, unrealistic product, warped hands holding object, cropped product, product out of frame';
@@ -11872,17 +11872,24 @@ YOUR EXPERTISE:
 - Your narration sounds like premium documentary voiceover, not amateur YouTube filler
 
 VISUAL PROMPT MASTERY — write each visual_prompt as a professional shot description:
-1. Each visual_prompt = one 5-10 second camera shot, written as a cinematographer's shot breakdown
-2. Include ALL of these in every visual_prompt:
-   - SUBJECT ACTION: precise body language and micro-expressions (not just "walking" but "striding confidently with shoulders back")
-   - ENVIRONMENT TEXTURE: material details (weathered oak, frosted glass, damp concrete, brushed steel)
-   - CAMERA: specific shot size (extreme close-up, medium close-up, cowboy shot, full shot) + movement (steadicam glide, crane descent, handheld drift, rack focus pull)
-   - LIGHTING DESIGN: light source + quality + direction (rim light from behind, soft key light at 45 degrees, dappled golden hour backlight, overcast diffused ambient)
-   - COLOR PALETTE: specific color grading (teal-orange grade, desaturated cool tones, warm amber highlights with crushed blacks)
-   - DEPTH/ATMOSPHERE: bokeh, haze, dust particles, lens flare, volumetric light rays, shallow depth of field
-3. NEVER use generic words: "beautiful", "nice", "amazing", "scenic", "peaceful", "epic"
-4. Keep 60-100 words per visual_prompt for maximum richness
-5. Respond with valid JSON only, no markdown, no code blocks
+1. Each visual_prompt = one ${sceneDur}-second camera shot at REAL-TIME SPEED (1x), written as a cinematographer's shot breakdown
+2. MOTION SPEED IS CRITICAL — NEVER SLOWMO:
+   - ALL motion must be at NORMAL real-time speed, NOT slow motion
+   - Characters move at natural human speed — walking, turning, gesturing at normal pace
+   - Camera movements are smooth but at real-time speed
+   - Write "at normal speed" or "real-time pace" in every visual_prompt to prevent AI from generating slowmo
+   - EXPLICITLY state: "normal speed, not slow motion" in the prompt
+   - BAD: "slowly reaches out hand..." / "gradually turns head..." — AI interprets these as slowmo
+   - GOOD: "reaches out hand at normal pace..." / "turns head naturally..." — clear real-time motion
+3. Include these in every visual_prompt:
+   - SUBJECT ACTION: precise body language with ACTIVE verbs at NORMAL SPEED (not "slowly walking" but "walking briskly with purpose")
+   - CAMERA: specific shot size + movement (steadicam, tracking, handheld — all at normal speed)
+   - LIGHTING: key light direction and quality
+   - ENVIRONMENT: relevant setting details
+4. AVOID words that trigger slowmo: "slowly", "gradually", "gently drifts", "subtle movement", "delicate", "softly"
+5. USE words that trigger normal speed: "quickly", "briskly", "naturally", "actively", "at normal pace", "real-time"
+6. Keep 50-80 words per visual_prompt — concise and action-focused
+7. Respond with valid JSON only, no markdown, no code blocks
 
 SCENE CONTINUITY (non-negotiable):
 - Every scene connects to the previous one — character's END position in Scene N = START position in Scene N+1
@@ -11892,10 +11899,10 @@ SCENE CONTINUITY (non-negotiable):
 - Reference "same [specific detail]" in each scene to anchor continuity
 
 SCENE PACING & STRUCTURE:
-- Scene 1: Establishing wide or medium-wide with slow camera movement — set the world, create atmosphere, hook the viewer
-- Scene 2: Tighter shot, character engages with the subject — build intrigue
-- Middle scenes: Alternate shot sizes (close-up ↔ medium), vary camera movement, build momentum
-- Final scene: Resolve with a memorable composition — pull back to wide context shot or push into meaningful detail close-up
+- Scene 1: Establishing wide or medium-wide with smooth camera movement at normal speed — set the world, hook viewer
+- Scene 2: Tighter shot, character actively engages with the subject — build intrigue
+- Middle scenes: Alternate shot sizes (close-up ↔ medium), vary camera movement, build momentum with real-time action
+- Final scene: Resolve with a memorable composition — all movement at natural pace
 
 DIALOGUE RULES:
 - Add "dialogue" field ONLY when the character naturally speaks (tutorial, vlog, presentation, review, storytelling)
@@ -14577,12 +14584,15 @@ SOFT SELLING NARRATION RULES:
 - BAD: "Produk ini luar biasa!", "Kalian harus coba!", "Best product ever!"`}
 
 MOTION-FOCUSED VISUAL PROMPT RULES:
-1. Start with the PRIMARY MOTION: what is the character DOING (verb + action)
-2. Add CAMERA MOVEMENT: slow push-in, gentle pan, tracking shot, static with subtle drift
-3. Add ENVIRONMENT MOTION: wind, light shifts, steam, fabric flowing
-4. Include MICRO-MOVEMENTS: facial expressions, fingers, hair
-5. Keep prompts 60-90 words — focused and clear
-6. Respond with valid JSON only, no markdown, no code blocks
+1. Start with the PRIMARY MOTION: what is the character DOING (verb + action) at NORMAL SPEED
+2. Add CAMERA MOVEMENT: push-in, pan, tracking shot — all at real-time speed, NOT slowmo
+3. Add ENVIRONMENT MOTION: wind, light shifts, steam — natural pace
+4. Include ACTIVE MOVEMENT: gestures, expressions, body language at normal human speed
+5. NEVER use words that trigger slowmo: "slowly", "gradually", "gently", "delicate", "softly drifts"
+6. ALWAYS use real-time motion words: "naturally", "briskly", "at normal pace", "real-time speed"
+7. MUST include "normal speed, not slow motion" in every visual_prompt
+8. Keep prompts 50-80 words — concise and action-focused
+9. Respond with valid JSON only, no markdown, no code blocks
 
 CHARACTER SPEAKING (CRITICAL — video AI generates audio):
 - The video model generates audio including speech from the character
