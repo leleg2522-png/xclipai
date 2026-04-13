@@ -3884,24 +3884,14 @@ function renderVidgen3Page() {
               </div>
 
               ${(() => {
-                const now = Date.now();
-                const isOnCooldown = state.vidgen3.cooldownEndTime > now;
-                const cooldownSecs = isOnCooldown ? Math.ceil((state.vidgen3.cooldownEndTime - now) / 1000) : 0;
-                const cooldownMins = Math.floor(cooldownSecs / 60);
-                const cooldownRemSecs = cooldownSecs % 60;
                 const model = state.vidgen3.selectedModel;
                 const needsPrompt = !state.vidgen3.prompt && !state.vidgen3.sourceImage;
-                const isDisabled = state.vidgen3.isGenerating || needsPrompt || state.vidgen3.tasks.length >= 3 || isOnCooldown;
+                const isDisabled = state.vidgen3.isGenerating || needsPrompt || state.vidgen3.tasks.length >= 3;
                 
                 return `<button class="btn btn-primary btn-lg btn-full" id="generateVidgen3Btn" ${isDisabled ? 'disabled' : ''}>
                 ${state.vidgen3.isGenerating ? `
                   <div class="spinner"></div>
                   <span>Generating...</span>
-                ` : isOnCooldown ? `
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  <span>Cooldown ${cooldownMins}:${cooldownRemSecs.toString().padStart(2, '0')}</span>
                 ` : `
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"/>
@@ -10765,12 +10755,6 @@ async function generateVidgen3Video() {
   if (!state.vidgen3.customApiKey) { alert('Masukkan Xclip API Key'); return; }
   if (state.vidgen3.tasks.length >= 3) { alert('Maks 3 video bersamaan'); return; }
 
-  if (state.vidgen3.cooldownEndTime > Date.now()) {
-    const remaining = Math.ceil((state.vidgen3.cooldownEndTime - Date.now()) / 1000);
-    alert(`Cooldown aktif. Tunggu ${Math.floor(remaining/60)}:${(remaining%60).toString().padStart(2,'0')} lagi.`);
-    return;
-  }
-
   state.vidgen3.isGenerating = true;
   state.vidgen3.error = null;
   render();
@@ -10806,10 +10790,6 @@ async function generateVidgen3Video() {
       status: 'processing',
       progress: 0
     });
-
-    state.vidgen3.cooldownEndTime = Date.now() + 300000;
-    localStorage.setItem('vidgen3_cooldown', state.vidgen3.cooldownEndTime.toString());
-    startVidgen3CooldownTimer();
 
     savePendingTasks();
     pollVidgen3Task(result.taskId, model);
