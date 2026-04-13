@@ -8422,7 +8422,8 @@ function extractVideoUrlFromContent(rawContent) {
 async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, aspectRatio, imageUrl, config, imageBufferDirect) {
   const FormData = require('form-data');
   const form = new FormData();
-  form.append('prompt', prompt || 'Generate a cinematic video');
+  const antiSlowmo = '. Normal speed real-time motion, not slow motion, not slowmo. Forward progressive movement, no boomerang, no reverse motion, no looping back to start position. Character moves naturally at real human speed.';
+  form.append('prompt', (prompt || 'Generate a cinematic video') + antiSlowmo);
   form.append('model', modelName);
   if (resolution) form.append('resolution', resolution);
   if (aspectRatio) {
