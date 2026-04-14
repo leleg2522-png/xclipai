@@ -8686,11 +8686,12 @@ async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelNa
 
   const isGrok = modelName === 'grok-3' || (options && options.isGrok);
   const isVeoModel = modelName && modelName.startsWith('veo');
+  const hasAudio = isVeoModel || isGrok;
   const language = options && options.language;
   const narration = options && options.narration;
   const langName = language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language === 'ms' ? 'Bahasa Melayu' : language;
-  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
-  const narrationInstruction = (isVeoModel && narration) ? `. The character MUST speak this exact dialogue naturally: "${narration}"` : '';
+  const langInstruction = (hasAudio && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
+  const narrationInstruction = (hasAudio && narration) ? `. The character MUST speak this exact dialogue naturally: "${narration}"` : '';
   const finalPrompt = prompt ? prompt + langInstruction + narrationInstruction : prompt;
   const config = {
     duration: String(duration || (isGrok ? 10 : 8)),
@@ -11719,9 +11720,11 @@ setInterval(() => {
 async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride, language) {
   const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
   const isVeoModel = vidModel.apiModel && vidModel.apiModel.startsWith('veo');
+  const isGrokModel = vidModel.apiModel && vidModel.apiModel.startsWith('grok');
+  const hasAudio = isVeoModel || isGrokModel;
   const langName = language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language === 'ms' ? 'Bahasa Melayu' : language;
-  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
-  const narrationInstruction = (isVeoModel && scene.narration) ? `. The character MUST speak this exact dialogue naturally: "${scene.narration}"` : '';
+  const langInstruction = (hasAudio && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
+  const narrationInstruction = (hasAudio && scene.narration) ? `. The character MUST speak this exact dialogue naturally: "${scene.narration}"` : '';
   const lockedPrompt = scene.visual_prompt
     ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation${langInstruction}${narrationInstruction}`
     : 'cinematic video';
