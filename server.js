@@ -11960,6 +11960,15 @@ NARRATION MASTERY:
 - Never describe what's already visible on screen — narration adds a LAYER of meaning beyond the visual
 - Use rhythm: mix short punchy lines with longer flowing ones
 
+NARRATION LANGUAGE — ABSOLUTE RULE (NON-NEGOTIABLE):
+- ALL narration text MUST be written in ${langName} — NO EXCEPTIONS
+- ALL dialogue text MUST be written in ${langName} — NO EXCEPTIONS
+- visual_prompt is ALWAYS in English (for AI image/video models)
+- If language is Bahasa Indonesia: narration and dialogue use casual Indonesian (gue/lu style or aku/kamu style)
+- NEVER write narration or dialogue in English when the language is Bahasa Indonesia
+- WRONG: narration in English when language = Bahasa Indonesia
+- RIGHT: narration in Bahasa Indonesia, visual_prompt in English
+
 NARRATION DURATION — CRITICAL (each scene video is ${sceneDur} seconds):
 - A person speaks ~3 words per second naturally
 - Each scene is ${sceneDur} seconds, so narration MUST be ${minNarrationWords}-${maxNarrationWords} words per scene
@@ -14574,6 +14583,16 @@ DIALOGUE LENGTH — CRITICAL (each scene is ${dur} seconds):
 - Narration must NOT exceed ${maxWords} words or it will get cut off
 - Each narration should be a FULL SENTENCE that fills the ${dur}-second duration naturally
 - Think: 1-2 complete natural sentences per scene, NOT just a short phrase
+
+NARRATION LANGUAGE — ABSOLUTE RULE (NON-NEGOTIABLE):
+- ALL narration text MUST be written in ${langName} — NO EXCEPTIONS
+- ALL dialogue in visual_prompt (character speaks saying "...") MUST be in ${langName}
+- visual_prompt description itself is ALWAYS in English (for AI models)
+- If language is Bahasa Indonesia: write narration in casual Indonesian (gue/lu or aku/kamu style)
+- NEVER write narration in English when the requested language is Bahasa Indonesia
+- NEVER mix English into narration when language is Bahasa Indonesia
+- WRONG: "This product is amazing" when language = Bahasa Indonesia
+- RIGHT: "Produk ini keren banget sih" when language = Bahasa Indonesia
 
 VOICE & CHARACTER CONSISTENCY (CRITICAL):
 - SAME person in EVERY scene: same face, same hair, same clothes, same skin tone
