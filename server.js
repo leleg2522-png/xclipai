@@ -3070,6 +3070,7 @@ async function pollGeminiGenImageTask(uuid, apiKey) {
 }
 
 async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution, refImageUrls, options = {}) {
+  const GEMINI_IMG_BASE = 'https://api.geminigen.ai/uapi/v1';
   const geminiKey = process.env.GEMINIGEN_API_KEY;
   if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
   
@@ -3080,23 +3081,42 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
   form.append('resolution', resolution || '4K');
   if (aspectRatio) form.append('aspect_ratio', aspectRatio);
   
+  const logPrefix = options.logPrefix || '[GEMINIGEN-IMG]';
+  
   if (refImageUrls && refImageUrls.length > 0) {
-    for (const refUrl of refImageUrls.slice(0, 8)) {
-      form.append('file_urls', refUrl);
+    for (let ri = 0; ri < Math.min(refImageUrls.length, 8); ri++) {
+      const refUrl = refImageUrls[ri];
+      try {
+        const imgResp = await axios.get(refUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        const contentType = imgResp.headers['content-type'] || 'image/png';
+        const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
+        form.append('image', Buffer.from(imgResp.data), { filename: `ref_${ri}.${ext}`, contentType });
+        console.log(`${logPrefix} Downloaded ref ${ri}: ${refUrl.substring(0, 80)}... (${imgResp.data.length} bytes)`);
+      } catch (dlErr) {
+        console.error(`${logPrefix} Failed to download ref ${ri} (${refUrl.substring(0, 80)}): ${dlErr.message}, falling back to file_urls`);
+        form.append('file_urls', refUrl);
+      }
     }
   }
   
-  const logPrefix = options.logPrefix || '[GEMINIGEN-IMG]';
   console.log(`${logPrefix} Request: model=${model}, aspect=${aspectRatio}, res=${resolution}, refs=${refImageUrls ? refImageUrls.length : 0}`);
   
-  const response = await axios.post(
-    `${GEMINIGEN_API_BASE}/generate_image`,
-    form,
-    {
-      headers: { 'x-api-key': geminiKey, ...form.getHeaders() },
-      timeout: 120000
-    }
-  );
+  let response;
+  try {
+    response = await axios.post(
+      `${GEMINI_IMG_BASE}/generate_image`,
+      form,
+      {
+        headers: { 'x-api-key': geminiKey, ...form.getHeaders() },
+        timeout: 120000
+      }
+    );
+  } catch (apiErr) {
+    const errBody = apiErr.response?.data;
+    const errStatus = apiErr.response?.status;
+    console.error(`${logPrefix} API error ${errStatus}:`, typeof errBody === 'string' ? errBody.substring(0, 500) : JSON.stringify(errBody || apiErr.message).substring(0, 500));
+    throw new Error(`GeminiGen image API error ${errStatus}: ${typeof errBody === 'object' ? JSON.stringify(errBody).substring(0, 200) : (errBody || apiErr.message)}`);
+  }
   
   const respData = response.data;
   const uuid = respData.uuid || respData.id;
