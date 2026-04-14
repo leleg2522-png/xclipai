@@ -1,241 +1,54 @@
-# Xclip - AI-Powered Creative Suite
+# Xclip - AI Video Clipper & Chat
 
 ## Overview
-Xclip is an AI-powered creative suite designed to transform content creation. It features tools for video clipping, consistent character image generation, image-to-video conversion, motion transfer, voice over, and AI chat. The project aims to provide users with a comprehensive platform for leveraging AI in visual content production and communication.
+Xclip is an AI-powered platform for video clipping, image generation, and chat built by MANAZIL. It enables users to generate AI videos (using models like Kling, Veo, Seedance via Freepik API), create AI images, analyze videos for virality, and interact with AI chat models (via OpenRouter/OpenAI).
 
-## User Preferences
-- Clean, premium UI with white theme and gradient accents
-- Indonesian language support prioritized
-- MANAZIL credit prominently displayed
-- Animated elements and glassmorphism effects
-- Navigation menu for switching between Video Clipper, X Image, and AI Chat
+## Architecture
+- **Runtime**: Node.js (>=18.0.0)
+- **Backend**: Express.js v5 serving both API and frontend static files from a single process
+- **Frontend**: Vanilla JavaScript (no build step) served from `client/` directory
+- **Database**: PostgreSQL via Replit's built-in database (`DATABASE_URL`)
+- **Sessions**: `connect-pg-simple` storing sessions in `sessions` table
+- **Media Processing**: `fluent-ffmpeg` for video/audio manipulation
+- **Port**: 5000 (both frontend and backend served together)
 
-## System Architecture
-The application is built on a Node.js Express.js server, combining frontend and API functionalities. It uses FFmpeg for video processing and Multer for handling file uploads. The UI/UX features a modern SaaS-style design with a dark theme, neon glow effects, cyber grid background, and animated components. Key features include:
+## Project Structure
+```
+├── server.js          # Main Express server (~15k lines) - API + static file serving
+├── client/            # Frontend assets
+│   ├── index.html     # Main entry point
+│   ├── src/main.js    # Frontend JS logic (~14k lines)
+│   └── styles/        # CSS
+├── droplet-proxy/     # DigitalOcean droplet proxy sub-project (optional)
+├── database_backup.sql # Original DB schema reference
+└── package.json
+```
 
-- **Video Clipper**: AI-driven viral content detection, speech-to-text transcription, multi-language subtitle translation, and customizable video output settings (resolution, aspect ratio, clip duration).
-- **Video Gen (Image to Video)**: Converts static images to dynamic videos with real-time updates via Webhooks and Server-Sent Events (SSE). It offers multiple AI models and control over duration and aspect ratios. Uses Freepik API with room-based key rotation.
-- **X Image (ApiModels Image Generator)**: AI-powered image generation with text-to-image and image-to-image modes. All models route through ApiModels.app. Uses room-based API key system (XIMAGE_ROOM{N}_KEY_{1-3}) or XIMAGE_API_KEY fallback. Features include:
-  - 13 AI models via ApiModels.app (verified active March 2026):
-    - gemini-3-pro-image: Gemini 3 Pro Image (Google) - highest quality, 99% success rate, resolution 1K/2K/4K
-    - gemini-3-pro-image-lite: Gemini 3 Pro Lite (Google) - 97% success rate, resolution 1K/2K/4K
-    - gemini-2.5-flash-image: Gemini 2.5 Flash (Google) - fast generation, resolution 1K/2K/4K
-    - nanobanana2: Nanobanana 2 (Google Gemini 3.1 Flash) - text-to-image & I2I, resolution 1K/2K/4K
-    - nanobanana2-beta: Nanobanana 2 Beta (Google) - budget, resolution 1K/2K/4K
-    - seedream-5.0: Seedream 5.0 Lite (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/3K
-    - seedream-4.5: Seedream 4.5 (ByteDance/Doubao) - text-to-image & I2I, resolution 2K/4K
-    - grok-4.2-image: Grok 4.2 Image (xAI) - text-to-image & I2I
-    - grok-imagine: Grok Imagine (xAI) - text-to-image & I2I
-    - grok-imagine-pro: Grok Imagine Pro (xAI) - higher quality text-to-image & I2I
-    - kling-omni-image: Kling Omni-Image (Kling) - text-to-image & I2I, resolution 1K/2K
-    - p-image: P-Image (Pruna AI) - text-only, sub-1s generation
-    - p-image-edit: P-Image Edit (Pruna AI) - image editing, sub-1s
-  - API paths (all via ApiModels.app):
-    - Async: POST https://apimodels.app/api/v1/images/generations
-    - Sync (P-Image): POST https://apimodels.app/api/v1/images/generations-sync
-    - Edit (P-Image-Edit): POST https://apimodels.app/api/v1/images/edit
-  - Background polling type: apimodels-image
-  - Auto model selection when switching to image-to-image mode
-  - Image history persistence in database (ximage_history table)
-  - Room assignment via Xclip API key (ximage_room_id in subscriptions table)
-- **Vidgen3 (GeminiGen.AI Video Generator)**: Advanced video generation via GeminiGen.AI API. Uses GEMINIGEN_API_KEY env var. Also integrated into Ads Studio and Automation as "Veo 3.1 Fast FHD" and "Grok 3 (10s, Audio)" options. Features include:
-  - 5 AI models via GeminiGen.AI (api.geminigen.ai), all $0.015/gen:
-    - Veo 3.1 Fast (veo-3.1-fast): Google, 8 seconds, 720p, fast generation
-    - Veo 3.1 Fast FHD (veo-3.1-fast-fhd): Google, 8 seconds, 1080p, fast generation (also available in Ads Studio & Automation)
-    - Veo 3.1 Lite (veo-3.1-lite): Google, 8 seconds, 720p, audio sync
-    - Veo 3.1 Lite FHD (veo-3.1-lite-fhd): Google, 8 seconds, 1080p, audio sync
-    - Grok 3 (grok-3): xAI, 10 seconds, 480p/720p, audio, landscape/portrait/square
-  - GeminiGen API endpoints:
-    - Veo models: POST https://api.geminigen.ai/uapi/v1/video-gen/veo (multipart/form-data)
-    - Grok model: POST https://api.geminigen.ai/uapi/v1/video-gen/grok (multipart/form-data)
-    - History/polling: GET https://api.geminigen.ai/uapi/v1/history/{uuid}
-  - Auth: x-api-key header (NOT Bearer token)
-  - Request format: multipart/form-data with prompt, model, resolution, aspect_ratio, ref_images, duration
-  - Response: Returns uuid, status (1=processing, 2=completed, 3=failed), media_url for video
-  - Architecture: Returns taskId immediately, background polls GeminiGen history API, DB updated on completion/failure, client SSE events emitted
-  - Frontend: prompt (required) + optional image reference, landscape/portrait orientation
-  - Database tables: vidgen3_rooms, vidgen3_tasks
-  - Room assignment via vidgen3_room_id in subscriptions
-  - Key rotation: GEMINIGEN_API_KEY (primary) or VIDGEN3_ROOM{N}_GEMINIGEN_KEY_{1-3}
-  - SSE events: vidgen3_completed, vidgen3_failed
-  - Video history persistence in database
-  - Timeout: 10 minutes max polling
-- **Vidgen2 (Poyo AI Video Generator)**: Video generation using Poyo AI API. Uses room-based API key system (VIDGEN2_ROOM{N}_KEY_{1-3}) or POYO_API_KEY fallback. Features include:
-  - 2 AI models:
-    - Sora 2 Stable (720p, 10/15 seconds, text-to-video + image-to-video, style presets)
-    - Veo 3.1 Fast (max 4K, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
-  - Sora 2 Stable playground: aspect_ratio (16:9/9:16), duration (10/15s), style (none/anime/comic/news/selfie/nostalgic/thanksgiving), storyboard, watermark
-  - Veo 3.1 Fast playground: aspect_ratio (16:9/9:16), duration (8s fixed), resolution (720p/1080p/4k), generation_type (frame/reference), enable_gif
-  - Database tables: vidgen2_rooms, vidgen2_tasks
-  - Room assignment via vidgen2_room_id in subscriptions
-  - Poyo AI API: POST /api/generate/submit to create, GET /api/generate/status/{task_id} to poll
-  - Request format: { model, input: { prompt, duration, aspect_ratio, image_urls, resolution, generation_type, enable_gif, style, storyboard } }
-  - Response format: { code: 200, data: { task_id, status } }, poll: { code: 200, data: { status, progress, files: [{ file_url }] } }
-  - Video history persistence in database
-  - 4-minute cooldown timer between generations
-- **Vidgen4 (Apimart.ai Video Generator)**: Video generation using Apimart.ai API. Uses room-based API key system (VIDGEN4_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
-  - 3 AI models:
-    - Sora 2 VIP (720p, 10/15 seconds, text-to-video + image-to-video, premium quality)
-    - Veo 3.1 Fast (max 1080p, 8 seconds, text-to-video + start/end frame + reference image, GIF output)
-    - Grok Video (480p/720p, 6/10 seconds, image reference)
-  - Sora 2 playground: aspect_ratio (16:9/9:16), duration (10/15s), watermark, thumbnail, private, style (thanksgiving/comic/news/selfie/nostalgic/anime), storyboard
-  - Veo 3.1 Fast playground: aspect_ratio (16:9/9:16), duration (8s fixed), resolution (720p/1080p), generation_type (frame/reference), enable_gif
-  - Veo 3.1 frame mode: image_urls[0]=start frame, image_urls[1]=end frame
-  - Veo 3.1 reference mode: image_urls for style reference (max 3)
-  - Image reference via `image_urls` array
-  - Database tables: vidgen4_rooms, vidgen4_tasks
-  - Room assignment via vidgen4_room_id in subscriptions
-  - Apimart.ai API: POST /v1/videos/generations to create, GET /v1/tasks/{task_id} to poll
-  - Response format: `{ code: 200, data: [{ task_id, status }] }`, poll supports both object and array data formats
-  - Deep URL extraction: scans result object keys for HTTP URLs, handles array data responses
-  - Background polling via startServerBgPoll with apiType 'apimart'
-  - Anti-flicker: isPolling flag prevents full re-render during active polling, progress updates via DOM manipulation
-  - Video history persistence in database
-  - 3-minute cooldown timer between generations
-- **X Image2 (Apimart.ai Image Generator)**: AI-powered image generation using Apimart.ai API with 11 models. Uses room-based API key system (XIMAGE2_ROOM{N}_KEY_{1-3}) or APIMART_API_KEY fallback. Features include:
-  - 11 AI models:
-    - GPT-4o Image (OpenAI, sizes: 1024x1024/1536x1024/1024x1536/auto, n: 1-4)
-    - Nano Banana (Google Gemini 2.5 Flash, sizes: 1:1/16:9/9:16/4:3/3:4)
-    - Nano Banana 2 (Google Gemini 3 Pro Preview, sizes: 1:1/4:3/3:4/16:9/9:16/3:2/2:3/21:9/9:21, resolution: 1K/2K/3K/4K, n: 1-4, max 5 refs, mask image support (PNG only, max 4MB))
-    - Seedream 4.0 (ByteDance, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, n: 1-4, watermark, sequential_generation)
-    - Seedream 4.5 (ByteDance, same as 4.0 but latest version)
-    - Seedream 5.0 Lite (ByteDance, sizes: 1:1/4:3/3:4/16:9/9:16/3:2/2:3/21:9/9:21, resolution: 1K/2K/3K/4K, n: 1-15, watermark, sequential, 4K output, perfect text rendering)
-    - Flux Kontext Pro (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, safety_tolerance: 0-6, input_mode: auto/image/text, max 4 refs)
-    - Flux Kontext Max (Black Forest Labs, same as Pro but highest quality)
-    - Flux 2.0 Flex (Black Forest Labs, sizes: 1:1/16:9/9:16/4:3/3:4/3:2/2:3, resolution: 1K/2K)
-    - Flux 2.0 Pro (Black Forest Labs, same as Flex plus prompt_upsampling)
-  - Text-to-image and image-to-image modes with model-specific reference image limits
-  - Per-model playground settings (watermark, sequential, safety tolerance, input mode, prompt upsampling)
-  - Database tables: ximage2_rooms, ximage2_history
-  - Room assignment via ximage2_room_id in subscriptions
-  - Apimart.ai API: POST /v1/images/generations, GET /v1/tasks/{task_id}
-  - Supports both synchronous (direct URL) and asynchronous (task polling) responses
-  - 2-minute cooldown timer between generations
-  - Image history persistence in database
-- **X Image3 (GeminiGen AI Image Generator)**: AI-powered image generation using GeminiGen.AI API (api.geminigen.ai). Uses GEMINIGEN_API_KEY env var. Features include:
-  - 3 AI models via GeminiGen.AI API:
-    - Nano Banana Pro (nano-banana-pro): GeminiGen flagship, text-to-image & I2I, up to 8 refs, free
-    - Nano Banana 2 (nano-banana-2): Latest Banana model, enhanced quality, text-to-image & I2I, up to 8 refs, free
-    - Imagen 4 (imagen-4): Google Imagen 4, highest quality, text-to-image & I2I, up to 8 refs
-  - Text-to-image and image-to-image modes (up to 8 reference images via file_urls)
-  - GeminiGen API auth: x-api-key header
-  - Generate: POST https://api.geminigen.ai/uapi/v1/generate_image (multipart/form-data: prompt, model, aspect_ratio, file_urls)
-  - Polling: GET https://api.geminigen.ai/uapi/v1/history/{uuid} (status: 1=processing, 2=completed, 3=failed)
-  - Background polling type: geminigen-image (via pollGeminiGenImageTask)
-  - Aspect ratios: 1:1, 16:9, 9:16, 3:4, 4:3
-  - Cost: ~2 credits per generation on GeminiGen
-  - Database tables: ximage3_rooms, ximage3_history
-  - Room assignment via ximage3_room_id in subscriptions
-  - 5-minute cooldown timer between generations
-  - Image history persistence in database
-  - Status endpoint enforces user ownership (user_id filter on all queries)
-- **Scene Studio (Simple Batch Image Generation)**: Generate multiple images at once with optional character/style consistency. Uses Apimart.ai API (same as X Image2). Features include:
-  - Simple single-page UI: character/style description (global prefix) + reference image upload + list of prompts + model/size picker + generate button
-  - Character description automatically prepended to all prompts for visual consistency
-  - Character reference images (up to 4): uploaded as base64, saved server-side via saveBase64ToFile, sent as image_urls with every prompt for face/appearance consistency
-  - Previous completed images combined with reference images as image_urls for consistency across batch
-  - All X Image2 models available (GPT-4o, Seedream, Flux, Nano Banana, etc.)
-  - Real-time SSE progress updates during batch generation (per-prompt completion/failure)
-  - Async server-side processing with inline polling for task-based APIs
-  - Results grid + batch history with thumbnails
-  - Database table: scene_studio_batches (stores prompts, results as JSONB)
-  - Reuses XIMAGE2_ROOM{N}_KEY_{1-3} keys or APIMART_API_KEY fallback
-  - API: POST /api/scene-studio/generate (batch), GET /api/scene-studio/history, DELETE /api/scene-studio/history/:id
-- **Automation (Automated Content Creation)**: Fully automated video content pipeline. User provides a niche/topic, AI generates a video script, then produces video for each scene. Supports Shorts (9:16) and Landscape (16:9) formats. Features include:
-  - Step 1: Create project (niche, format, video model, scene count, language)
-  - Step 2: AI generates script via ApiModels.app (GPT-5, endpoint: api.apimodels.app) with narration + visual prompts per scene
-  - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially via GeminiGen AI (nano-banana-2, 4K resolution) for character consistency, Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
-  - Image generation: Uses `generateImageWithGeminiGen()` helper (model: nano-banana-2, resolution: 4K, multipart form to GeminiGen API with file_urls for references)
-  - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik), Wan 2.7 R2V (Freepik Reference-to-Video)
-  - Wan 2.7 R2V: Reference-to-Video model that skips image generation entirely — uses uploaded reference image directly to generate videos. Requires reference image upload. API: POST /v1/ai/reference-to-video/wan-2-7 with reference_images[] array. Prompt auto-prepends "Image1" to reference character. Resolution always 1080P.
-  - Freepik models use Key Pool system with automatic rotation on exhaustion, fallback to ApiModels if all keys exhausted
-  - Real-time SSE updates for project and scene status changes
-  - Scene retry for failed scenes (supports both ApiModels and Freepik paths)
-  - Database tables: automation_projects, automation_scenes
-  - API endpoints: CRUD projects, generate-script, start production, update-scene, retry-scene
-  - Languages: Bahasa Indonesia, English
-  - SSE events: automation_update, automation_scene_update, youtube_upload_start, youtube_upload_progress, youtube_upload_complete
-  - **YouTube Auto-Upload**: OAuth2 integration to upload completed scene videos directly to YouTube. Requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET env vars. Tokens stored in `youtube_tokens` DB table. OAuth popup flow with channel name display. Upload form with title, description, tags, privacy setting. Real-time SSE progress updates per scene upload.
-- **Ads Studio (AI Affiliate Ad Creator)**: Creates product advertisement videos with AI. User provides product name, description, optional character reference image + product image. AI generates ad script (soft/hard selling) with multiple scenes, then produces scene images and videos. Features include:
-  - Step 1: Create project (product info, ad type soft/hard, format shorts/landscape, video model, duration, scene count, language, voice over toggle)
-  - Step 2: AI generates ad script via ApiModels Claude Sonnet (with Gemini/GPT fallbacks) - narration, text overlay, visual prompt per scene
-  - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially via GeminiGen AI (nano-banana-2, 4K resolution, with retry up to 3x) for character/product consistency with reference images, Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
-  - Image generation: Uses `generateImageWithGeminiGen()` helper (model: nano-banana-2, resolution: 4K, multipart form to GeminiGen API with file_urls for character/product references)
-  - Step 5: Merge all scene videos into final ad video via FFmpeg
-  - Character reference + product image upload support (FormData with multer)
-  - Video models: Wan 2.6 Pro (default, Freepik Key Pool), Kling 2.6 Pro (Freepik Key Pool), Kling V3 (Freepik Key Pool), Veo 3.1 Fast (ApiModels)
-  - Real-time SSE updates: ads_studio_update, ads_studio_scene_update
-  - Database tables: ads_studio_projects, ads_studio_scenes
-  - API endpoints: CRUD projects, generate-script, update scene, start production, merge
-  - Languages: Bahasa Indonesia, English
-  - Voice over toggle (UI + DB ready, TTS pipeline not yet implemented)
-- **Motion Control**: Transfers motion from reference videos to character images using Freepik's Kling 2.6 Motion Control API, with options for character and video orientation. Uses a separate room-based API key system (independent from Video Gen rooms) where users must join a Motion Room via Xclip API key to access the feature. Supports bulk keys: either `MOTION_ROOM{N}_KEYS=key1,key2,...,key100` (comma-separated) or individual `MOTION_ROOM{N}_KEY_{1-100}`. Motion generation uses Webshare proxy for submit, but polling uses direct connection (no proxy) for reliability.
-- **AI Chat**: Integrates with multiple LLM models from OpenRouter, offering file and image upload support, real-time typing indicators, and code syntax highlighting.
-- **User Authentication**: Secure user registration and login with bcrypt hashing, session management using PostgreSQL-backed sessions, and personal API key storage.
-- **Subscription System**: A tiered subscription model with feature locking, countdown timers, and manual QRIS payment verification.
-- **Admin Dashboard**: Provides functionalities for managing payments, user subscriptions, and Freepik Key Pool management.
-- **Freepik Key Pool**: Centralized API key management system for Freepik-powered features. Features include:
-  - DB table `freepik_key_pool` with keys loaded from `FREEPIK_KEY_POOL` env var (comma-separated)
-  - Per-user key assignment: 5 keys per user per feature (automation, vidgen, motion)
-  - Automatic key rotation on 402/429/403 errors (credit exhausted)
-  - Key replacement from pool when active key exhausted
-  - Fallback to ApiModels if all pool keys exhausted
-  - 24-hour automatic reset of exhausted keys
-  - 48-hour automatic unassignment of inactive keys
-  - Admin panel: bulk add keys, view status (available/assigned/exhausted), delete/reset individual keys, reset all exhausted, unassign all
-  - Admin API: GET/POST/DELETE `/api/admin/key-pool`, POST `/api/admin/key-pool/:id/reset`, POST `/api/admin/key-pool/reset-all-exhausted`, POST `/api/admin/key-pool/unassign-all`
-  - Core functions: `assignKeysToUser()`, `getActiveKeyForUser()`, `markKeyExhausted()`, `replaceExhaustedKey()`, `generateVideoWithFreepik()`, `pollFreepikAutomationTask()`
-- **Rate Limiting System** (Video Gen & Motion): Three-layer API protection:
-  - **Random Jitter**: Random delay (1-3s Video Gen, 2-5s Motion) between requests to avoid rate limiting patterns
-  - **Daily Quota**: Max requests per API key per day (50/key Video Gen, 30/key Motion) with automatic daily reset
-  - **User Cooldown**: Per-user wait time after generate (75s Video Gen, 180s Motion) with frontend countdown timer
-- **Server-Side Background Polling**: All generation tasks (vidgen2, vidgen3, vidgen4, ximage, ximage2, ximage3, videogen, motion) are polled server-side every 15 seconds. Tasks continue processing even when users switch apps or close browser. On server restart, pending tasks from the last hour are automatically resumed from database. Uses `serverBgPolls` Map with polling functions for kie.ai, Apimart.ai, Poyo AI, and Freepik APIs.
+## Key Features
+- AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API
+- AI Image Generation via Freepik API
+- Room-based API key management system
+- Subscription and credit system
+- Session-based authentication with bcrypt
+- PWA support with service worker
 
-## External Dependencies
-- **Database**: PostgreSQL
-- **AI/ML APIs**:
-    - ElevenLabs API (for speech-to-text transcription)
-    - OpenRouter API (for viral content analysis, image generation, translation, and AI chat with various LLMs like GPT-4o, Claude 3.5 Sonnet, Gemini Pro, Llama 3.1)
-    - Freepik API (for image-to-video generation and motion control with Kling models)
-    - Poyo AI API (for Vidgen2 video generation with Sora 2 Stable and Veo 3.1 Fast models)
-    - GeminiGen AI Image API (for X Image3 image generation with 3 models: Nano Banana Pro, Nano Banana 2, Imagen 4)
-    - Apimart.ai API (for Vidgen4 video generation with Sora 2 and Veo 3.1 Fast models, and X Image2 image generation with GPT-4o, Nano Banana, Seedream, Flux Kontext, Flux 2.0 models)
-- **Deployment & Utilities**:
-    - Multer (for file uploads)
-    - FFmpeg (for video processing)
-    - bcrypt (for password hashing)
+## Environment Variables Required
+- `DATABASE_URL` - PostgreSQL connection string (set automatically by Replit)
+- `SESSION_SECRET` - Express session secret (optional, has default)
+- Various API keys for AI features (FREEPIK_API_KEY, OPENROUTER_API_KEY, etc.)
 
-## Replit Environment Setup
-- **Runtime**: Node.js 18 (nodejs-18 nix module)
-- **Database**: Railway PostgreSQL (via DATABASE_PUBLIC_URL secret); fallback to Replit built-in PostgreSQL (DATABASE_URL)
-- **Port**: 5000 (Express server serves both API and static frontend on 0.0.0.0:5000)
-- **Workflow**: `npm start` runs `node server.js`
-- **Deployment**: Configured for autoscale deployment (`node server.js`)
+## Database Tables
+- `users` - User accounts with admin flag
+- `rooms` - API key management rooms
+- `subscriptions` - User subscription records
+- `subscription_plans` - Available plans
+- `sessions` - Express sessions (managed by connect-pg-simple)
+- `video_generation_tasks` - AI video generation job tracking
+- `xclip_api_keys` - Per-user API keys
+- `payments` - Payment records
 
-## Security Fixes Applied (March 2026)
-- **Vidgen4/Vidgen2 Proxy & Download Auth**: Added API key validation + ownership verification + URL domain allowlist to `/api/vidgen4/proxy-video`, `/api/vidgen4/download`, `/api/vidgen2/proxy-video`, `/api/vidgen2/download`. Only the video owner can access/download their own videos.
-- **CDN Redirect Optimization (Bandwidth Savings)**: Video proxy endpoints (`/api/videogen/proxy-video`, `/api/vidgen2/proxy-video`, `/api/vidgen4/proxy-video`) now use `res.redirect(302, videoUrl)` instead of downloading+piping video through the server. This eliminates double bandwidth (download from CDN + upload to user) and saves ~80% of Railway network costs. Download endpoints still pipe through server for proper `Content-Disposition: attachment` headers. URL health check via `HEAD` request before redirect; if expired, refreshes URL from Freepik API then redirects.
-- **Download Proxy Hardened**: `/api/download-video` now requires session auth + HTTPS-only URL domain allowlist (prevents SSRF attacks).
-- **Open Redirect Fixed**: Proxy-video endpoints now validate URL hostname against allowed CDN domains before redirecting.
-- **localStorage Per-User Isolation**: All localStorage keys (pending tasks, user inputs, API keys) are now prefixed with user ID via `getUserStorageKey()`. Prevents data leaking between users sharing the same browser.
-- **Logout State Cleanup**: `handleLogout()` now clears all sensitive state including customApiKey, generatedVideos, tasks, and room manager API keys for all features (vidgen2/3/4, ximage/2/3, motion, voiceover).
-- **Upload Security Headers**: Added `X-Content-Type-Options: nosniff` to `/uploads` static route. Files use UUID filenames and auto-cleanup after 1 hour.
-
-## Known Fixes Applied
-- **Loading Stuck Issue**: Changed `client/src/main.js` script tag from `type="module"` to `defer`. ES module loading caused silent failures in some environments (Railway, mobile), resulting in the page stuck at "Loading Xclip..." indefinitely.
-- **X-Frame-Options Removed**: Removed `X-Frame-Options: SAMEORIGIN` header from server.js that was blocking the Replit preview iframe.
-- **render() Error Handling**: Added try-catch in `render()` function with a `showFallbackLoginUI()` fallback to prevent silent render failures.
-- **checkAuth() Timeout**: Added 8-second AbortController timeout to the auth check fetch to prevent indefinite hanging.
-- **initApp() Fallback**: Added 10-second timeout fallback in `initApp()` to force-show the login UI if loading takes too long.
-- **Service Worker Cache**: Updated CACHE_NAME to 'xclip-v2' to bust old cached JS files.
-- **Mobile Hamburger Menu**: On screens ≤768px, nav buttons are hidden and replaced by a hamburger (☰) button that opens a fullscreen overlay menu with large, tappable nav items. Close via × button or tapping a menu item. Desktop nav unchanged. Resize to desktop auto-closes mobile menu.
-
-## Running the Application
-The application starts with `npm start` which runs `node server.js`. The server:
-- Listens on 0.0.0.0:5000
-- Serves static files from the `client/` directory
-- Provides API endpoints for all features
-- Connects to Railway PostgreSQL via DATABASE_PUBLIC_URL
-- Uses PostgreSQL for sessions, users, subscriptions, and payments
+## Running
+```bash
+npm start  # or: node server.js
+```
+The server runs on port 5000, serving both the API and static frontend files.
