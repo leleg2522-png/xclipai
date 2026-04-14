@@ -3084,18 +3084,8 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
   const logPrefix = options.logPrefix || '[GEMINIGEN-IMG]';
   
   if (refImageUrls && refImageUrls.length > 0) {
-    for (let ri = 0; ri < Math.min(refImageUrls.length, 8); ri++) {
-      const refUrl = refImageUrls[ri];
-      try {
-        const imgResp = await axios.get(refUrl, { responseType: 'arraybuffer', timeout: 30000 });
-        const contentType = imgResp.headers['content-type'] || 'image/png';
-        const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
-        form.append('image', Buffer.from(imgResp.data), { filename: `ref_${ri}.${ext}`, contentType });
-        console.log(`${logPrefix} Downloaded ref ${ri}: ${refUrl.substring(0, 80)}... (${imgResp.data.length} bytes)`);
-      } catch (dlErr) {
-        console.error(`${logPrefix} Failed to download ref ${ri} (${refUrl.substring(0, 80)}): ${dlErr.message}, falling back to file_urls`);
-        form.append('file_urls', refUrl);
-      }
+    for (const refUrl of refImageUrls.slice(0, 8)) {
+      form.append('file_urls', refUrl);
     }
   }
   
@@ -3114,8 +3104,48 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
   } catch (apiErr) {
     const errBody = apiErr.response?.data;
     const errStatus = apiErr.response?.status;
-    console.error(`${logPrefix} API error ${errStatus}:`, typeof errBody === 'string' ? errBody.substring(0, 500) : JSON.stringify(errBody || apiErr.message).substring(0, 500));
-    throw new Error(`GeminiGen image API error ${errStatus}: ${typeof errBody === 'object' ? JSON.stringify(errBody).substring(0, 200) : (errBody || apiErr.message)}`);
+    const errDetail = errBody?.detail || errBody;
+    const isDownloadFailed = JSON.stringify(errDetail || '').includes('FILE_DOWNLOAD_FAILED');
+    
+    if (isDownloadFailed && refImageUrls && refImageUrls.length > 0) {
+      console.log(`${logPrefix} file_urls failed (FILE_DOWNLOAD_FAILED), retrying with direct file upload...`);
+      const retryForm = new FormData();
+      retryForm.append('prompt', prompt);
+      retryForm.append('model', model || 'nano-banana-2');
+      retryForm.append('resolution', resolution || '4K');
+      if (aspectRatio) retryForm.append('aspect_ratio', aspectRatio);
+      
+      for (let ri = 0; ri < Math.min(refImageUrls.length, 8); ri++) {
+        try {
+          const dlResp = await axios.get(refImageUrls[ri], { responseType: 'arraybuffer', timeout: 30000 });
+          const ct = dlResp.headers['content-type'] || 'image/png';
+          const ext = ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
+          const buf = Buffer.from(dlResp.data);
+          retryForm.append('file_urls', buf, { filename: `ref_${ri}.${ext}`, contentType: ct });
+          console.log(`${logPrefix} Downloaded ref ${ri}: ${buf.length} bytes`);
+        } catch (dlErr) {
+          console.error(`${logPrefix} Failed to download ref ${ri}: ${dlErr.message}`);
+        }
+      }
+      
+      try {
+        response = await axios.post(
+          `${GEMINI_IMG_BASE}/generate_image`,
+          retryForm,
+          {
+            headers: { 'x-api-key': geminiKey, ...retryForm.getHeaders() },
+            timeout: 120000
+          }
+        );
+      } catch (retryErr) {
+        const retryBody = retryErr.response?.data;
+        console.error(`${logPrefix} Retry also failed:`, JSON.stringify(retryBody || retryErr.message).substring(0, 500));
+        throw new Error(`GeminiGen image failed after retry: ${retryErr.response?.status || retryErr.message}`);
+      }
+    } else {
+      console.error(`${logPrefix} API error ${errStatus}:`, typeof errBody === 'string' ? errBody.substring(0, 500) : JSON.stringify(errBody || apiErr.message).substring(0, 500));
+      throw new Error(`GeminiGen image API error ${errStatus}: ${typeof errBody === 'object' ? JSON.stringify(errBody).substring(0, 200) : (errBody || apiErr.message)}`);
+    }
   }
   
   const respData = response.data;
