@@ -3121,7 +3121,7 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
           const ct = dlResp.headers['content-type'] || 'image/png';
           const ext = ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
           const buf = Buffer.from(dlResp.data);
-          retryForm.append('file_urls', buf, { filename: `ref_${ri}.${ext}`, contentType: ct });
+          retryForm.append('files', buf, { filename: `ref_${ri}.${ext}`, contentType: ct });
           console.log(`${logPrefix} Downloaded ref ${ri}: ${buf.length} bytes`);
         } catch (dlErr) {
           console.error(`${logPrefix} Failed to download ref ${ri}: ${dlErr.message}`);
