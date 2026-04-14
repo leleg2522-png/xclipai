@@ -145,7 +145,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 1: Create project (niche, format, video model, scene count, language)
   - Step 2: AI generates script via ApiModels.app (GPT-5, endpoint: api.apimodels.app) with narration + visual prompts per scene
   - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially (for character consistency), Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
+  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially via GeminiGen AI (nano-banana-2, 4K resolution) for character consistency, Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
+  - Image generation: Uses `generateImageWithGeminiGen()` helper (model: nano-banana-2, resolution: 4K, multipart form to GeminiGen API with file_urls for references)
   - Video models: Veo 3.1 Fast 5s, Veo 3.1 Fast 8s, Veo 3.1 8s, Grok 3 5s, Grok 3 10s Audio, Kling 2.6 Pro (Freepik), Kling V3 (Freepik), Wan 2.7 R2V (Freepik Reference-to-Video)
   - Wan 2.7 R2V: Reference-to-Video model that skips image generation entirely — uses uploaded reference image directly to generate videos. Requires reference image upload. API: POST /v1/ai/reference-to-video/wan-2-7 with reference_images[] array. Prompt auto-prepends "Image1" to reference character. Resolution always 1080P.
   - Freepik models use Key Pool system with automatic rotation on exhaustion, fallback to ApiModels if all keys exhausted
@@ -160,7 +161,8 @@ The application is built on a Node.js Express.js server, combining frontend and 
   - Step 1: Create project (product info, ad type soft/hard, format shorts/landscape, video model, duration, scene count, language, voice over toggle)
   - Step 2: AI generates ad script via ApiModels Claude Sonnet (with Gemini/GPT fallbacks) - narration, text overlay, visual prompt per scene
   - Step 3: User can review/edit script scenes before production
-  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially (for character/product consistency with reference images), Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
+  - Step 4: Start production - 2-phase pipeline: Phase 1 generates IMAGEs sequentially via GeminiGen AI (nano-banana-2, 4K resolution, with retry up to 3x) for character/product consistency with reference images, Phase 2 generates all VIDEOs in PARALLEL via Promise.allSettled (with 3 retries each)
+  - Image generation: Uses `generateImageWithGeminiGen()` helper (model: nano-banana-2, resolution: 4K, multipart form to GeminiGen API with file_urls for character/product references)
   - Step 5: Merge all scene videos into final ad video via FFmpeg
   - Character reference + product image upload support (FormData with multer)
   - Video models: Wan 2.6 Pro (default, Freepik Key Pool), Kling 2.6 Pro (Freepik Key Pool), Kling V3 (Freepik Key Pool), Veo 3.1 Fast (ApiModels)

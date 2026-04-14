@@ -3069,6 +3069,70 @@ async function pollGeminiGenImageTask(uuid, apiKey) {
   }
 }
 
+async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution, refImageUrls, options = {}) {
+  const geminiKey = process.env.GEMINIGEN_API_KEY;
+  if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
+  
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('prompt', prompt);
+  form.append('model', model || 'nano-banana-2');
+  form.append('resolution', resolution || '4K');
+  if (aspectRatio) form.append('aspect_ratio', aspectRatio);
+  
+  if (refImageUrls && refImageUrls.length > 0) {
+    for (const refUrl of refImageUrls.slice(0, 8)) {
+      form.append('file_urls', refUrl);
+    }
+  }
+  
+  const logPrefix = options.logPrefix || '[GEMINIGEN-IMG]';
+  console.log(`${logPrefix} Request: model=${model}, aspect=${aspectRatio}, res=${resolution}, refs=${refImageUrls ? refImageUrls.length : 0}`);
+  
+  const response = await axios.post(
+    `${GEMINIGEN_API_BASE}/generate_image`,
+    form,
+    {
+      headers: { 'x-api-key': geminiKey, ...form.getHeaders() },
+      timeout: 120000
+    }
+  );
+  
+  const respData = response.data;
+  const uuid = respData.uuid || respData.id;
+  if (!uuid) throw new Error('No UUID from GeminiGen: ' + JSON.stringify(respData).substring(0, 200));
+  
+  let imageUrl = null;
+  if (respData.base64_images) {
+    const baseUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : 'http://localhost:5000'}`;
+    const saved = await saveBase64ToFile(`data:image/png;base64,${respData.base64_images}`, 'image', baseUrl);
+    imageUrl = saved.publicUrl;
+  }
+  if (!imageUrl && respData.generated_image && respData.generated_image.length > 0) {
+    imageUrl = respData.generated_image[0].image_url;
+  }
+  
+  if (imageUrl) {
+    console.log(`${logPrefix} Instant result for ${uuid}`);
+    return { uuid, imageUrl };
+  }
+  
+  console.log(`${logPrefix} Polling ${uuid}...`);
+  const maxAttempts = options.maxPollAttempts || 120;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(r => setTimeout(r, 5000));
+    const pollResult = await pollGeminiGenImageTask(uuid, geminiKey);
+    if (pollResult.status === 'completed' && pollResult.url) {
+      console.log(`${logPrefix} Completed: ${uuid}`);
+      return { uuid, imageUrl: pollResult.url };
+    }
+    if (pollResult.status === 'failed') {
+      throw new Error(pollResult.error || 'Image generation failed');
+    }
+  }
+  throw new Error('Image generation timed out');
+}
+
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   const primaryEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
 
@@ -12180,7 +12244,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = project.image_model || 'nanobanana-2-beta';
+    const imageModel = 'nano-banana-2';
     const imageResolution = '4K';
 
     (async () => {
@@ -12264,59 +12328,16 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                 refPrompt = scene.visual_prompt;
               }
 
-              const genBody = {
-                model: imageModel,
-                prompt: refImages.length > 0 ? refPrompt : scene.visual_prompt,
-                aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
-                resolution: imageResolution
-              };
-              if (refImages.length === 1) {
-                genBody.image_url = refImages[0];
-              } else if (refImages.length > 1) {
-                genBody.image_urls = refImages;
-              }
-              console.log(`[AUTOMATION] Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${scene.scene_index}`);
-              imgResponse = await axios.post(
-                'https://apimodels.app/api/v1/images/generations',
-                genBody,
-                {
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` },
-                  timeout: 60000
-                }
+              const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
+              const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
+              
+              const gemResult = await generateImageWithGeminiGen(genPrompt, imageModel, genAspect, imageResolution, refImages, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}` });
+              const imageUrl = gemResult.imageUrl;
+              
+              await pool.query(
+                `UPDATE automation_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                [projectId, scene.scene_index, gemResult.uuid]
               );
-
-              const imgData = imgResponse.data?.data || imgResponse.data;
-              const imgTaskId = imgData?.taskId || imgData?.task_id;
-
-              let imageUrl = imgData?.url || imgData?.resultUrls?.[0];
-              if (!imageUrl && imgTaskId) {
-                await pool.query(
-                  `UPDATE automation_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                  [projectId, scene.scene_index, imgTaskId]
-                );
-                for (let attempt = 0; attempt < 60; attempt++) {
-                  await new Promise(r => setTimeout(r, 5000));
-                  try {
-                    const pollResp = await axios.get(
-                      `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
-                      { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-                    );
-                    const pData = pollResp.data?.data || pollResp.data;
-                    const pStatus = pData?.state || pData?.status;
-                    if (pStatus === 'completed' || pStatus === 'success') {
-                      imageUrl = pData?.url || pData?.resultUrls?.[0] || pData?.image_url;
-                      break;
-                    }
-                    if (pStatus === 'failed' || pStatus === 'error') {
-                      throw new Error(pData?.failMsg || pData?.error || 'Image generation failed');
-                    }
-                  } catch (pollErr) {
-                    if (pollErr.message.includes('failed') || pollErr.message.includes('Image generation')) throw pollErr;
-                  }
-                }
-              }
-
-              if (!imageUrl) throw new Error('Image generation failed or timed out');
 
               prevSceneImageUrl = imageUrl;
               if (scene.scene_index === 0) scene1ImageUrl = imageUrl;
@@ -12655,7 +12676,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     const isFreepik = vidModel.provider === 'freepik';
     const isGeminiGen = vidModel.provider === 'geminigen';
     const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
-    const imageModel = project.image_model || 'nanobanana-2-beta';
+    const imageModel = 'nano-banana-2';
     const imageResolution = '4K';
 
     (async () => {
@@ -12667,7 +12688,6 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           if (!retryRefImage) throw new Error('Wan 2.7 R2V membutuhkan reference image');
           sceneImageUrl = null;
         } else if (!sceneImageUrl) {
-          let imgResponse;
           const prevSceneRes = await pool.query(
             `SELECT image_url FROM automation_scenes WHERE project_id = $1 AND scene_index < $2 AND image_url IS NOT NULL ORDER BY scene_index DESC LIMIT 1`,
             [projectId, sceneIndex]
@@ -12699,40 +12719,12 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           } else {
             refPrompt = scene.visual_prompt;
           }
-          const genBody = {
-            prompt: refImages.length > 0 ? refPrompt : scene.visual_prompt,
-            model: imageModel,
-            aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
-            resolution: imageResolution
-          };
-          if (refImages.length === 1) {
-            genBody.image_url = refImages[0];
-          } else if (refImages.length > 1) {
-            genBody.image_urls = refImages;
-          }
-          console.log(`[AUTOMATION] Retry: Generating image (${refImages.length} refs, model=${imageModel}, res=${imageResolution}) for ${projectId} scene ${sceneIndex}`);
-          imgResponse = await axios.post(
-            'https://apimodels.app/api/v1/images/generations', genBody,
-            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
-          );
-          const imgData = imgResponse.data?.data || imgResponse.data;
-          const imgTaskId = imgData?.taskId || imgData?.task_id;
-          sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
-
-          if (!sceneImageUrl && imgTaskId) {
-            for (let a = 0; a < 120; a++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const pr = await axios.get(
-                `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
-                { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-              );
-              const pd = pr.data?.data || pr.data;
-              const ps = pd?.state || pd?.status;
-              if (ps === 'completed' || ps === 'success') { sceneImageUrl = pd?.url || pd?.resultUrls?.[0]; break; }
-              if (ps === 'failed' || ps === 'error') throw new Error(pd?.failMsg || 'Image failed');
-            }
-          }
-          if (!sceneImageUrl) throw new Error('Image generation failed');
+          
+          const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
+          const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
+          
+          const gemResult = await generateImageWithGeminiGen(genPrompt, imageModel, genAspect, imageResolution, refImages, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}` });
+          sceneImageUrl = gemResult.imageUrl;
 
           await pool.query(
             `UPDATE automation_scenes SET image_url = $3, status = 'generating_video', updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
@@ -14818,7 +14810,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = 'nanobanana-2-beta';
+    const imageModel = 'nano-banana-2';
     const imageResolution = '4K';
 
     let scriptData = {};
@@ -14889,58 +14881,17 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                 refPrompt = `${scene.visual_prompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
               }
 
-              const genBody = {
-                model: imageModel,
-                prompt: refPrompt,
-                negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, different face, changed face, face change, different hairstyle, changed hairstyle, hair color change, different clothing, outfit change, clothing change, wrong skin tone, skin color change, different background, background change, different room, different location, different lighting, age change, gender change',
-                aspect_ratio: aspectRatio,
-                resolution: imageResolution
-              };
-              if (refImages.length === 1) genBody.image_url = refImages[0];
-              else if (refImages.length > 1) genBody.image_urls = refImages;
-
-              console.log(`[ADS-STUDIO] Generating image (${refImages.length} refs) for ${projectId} scene ${scene.scene_index}`);
-
               let imageUrl = null;
               for (let imgRetry = 0; imgRetry < 3 && !imageUrl; imgRetry++) {
                 try {
                   if (imgRetry > 0) console.log(`[ADS-STUDIO] Image retry #${imgRetry} for scene ${scene.scene_index}`);
-                  const imgResponse = await axios.post(
-                    'https://apimodels.app/api/v1/images/generations',
-                    genBody,
-                    { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
+                  const gemResult = await generateImageWithGeminiGen(refPrompt, imageModel, aspectRatio, imageResolution, refImages, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}` });
+                  imageUrl = gemResult.imageUrl;
+                  
+                  await pool.query(
+                    `UPDATE ads_studio_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
+                    [projectId, scene.scene_index, gemResult.uuid]
                   );
-
-                  const imgData = imgResponse.data?.data || imgResponse.data;
-                  const imgTaskId = imgData?.taskId || imgData?.task_id;
-                  imageUrl = imgData?.url || imgData?.resultUrls?.[0];
-
-                  if (!imageUrl && imgTaskId) {
-                    await pool.query(
-                      `UPDATE ads_studio_scenes SET image_task_id = $3, updated_at = NOW() WHERE project_id = $1 AND scene_index = $2`,
-                      [projectId, scene.scene_index, imgTaskId]
-                    );
-                    for (let attempt = 0; attempt < 120; attempt++) {
-                      await new Promise(r => setTimeout(r, 5000));
-                      try {
-                        const pollResp = await axios.get(
-                          `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
-                          { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-                        );
-                        const pData = pollResp.data?.data || pollResp.data;
-                        const pStatus = pData?.state || pData?.status;
-                        if (pStatus === 'completed' || pStatus === 'success') {
-                          imageUrl = pData?.url || pData?.resultUrls?.[0] || pData?.image_url;
-                          break;
-                        }
-                        if (pStatus === 'failed' || pStatus === 'error') {
-                          throw new Error(pData?.failMsg || pData?.error || 'Image generation failed');
-                        }
-                      } catch (pollErr) {
-                        if (pollErr.message.includes('failed') || pollErr.message.includes('Image generation')) throw pollErr;
-                      }
-                    }
-                  }
                 } catch (retryErr) {
                   console.error(`[ADS-STUDIO] Image attempt ${imgRetry + 1}/3 failed: ${retryErr.message}`);
                   if (imgRetry === 2) throw retryErr;
@@ -15218,7 +15169,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
     }
     const isFreepik = vidModel.provider === 'freepik';
     const isGeminiGen = vidModel.provider === 'geminigen';
-    const imageModel = 'nanobanana-2-beta';
+    const imageModel = 'nano-banana-2';
     const imageResolution = '4K';
 
     let scriptData = {};
@@ -15278,39 +15229,8 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
             refPrompt = `${staticPrompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
-          const genBody = {
-            model: imageModel,
-            prompt: refPrompt,
-            negative_prompt: 'text, titles, captions, subtitles, watermarks, logos, written words, letters, typography, overlay text, floating text, on-screen text, reflection, reflective floor, glossy floor, mirror floor, floor reflection, shiny surface reflection, different person, different face, changed face, face change, different hairstyle, changed hairstyle, hair color change, different clothing, outfit change, clothing change, wrong skin tone, skin color change, different background, background change, different room, different location, different lighting, age change, gender change',
-            aspect_ratio: aspectRatio,
-            resolution: imageResolution
-          };
-          if (refImages.length === 1) genBody.image_url = refImages[0];
-          else if (refImages.length > 1) genBody.image_urls = refImages;
-
-          console.log(`[ADS-STUDIO] Retry: Generating image (${refImages.length} refs) for ${projectId} scene ${sceneIndex}`);
-          const imgResponse = await axios.post(
-            'https://apimodels.app/api/v1/images/generations', genBody,
-            { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 120000 }
-          );
-          const imgData = imgResponse.data?.data || imgResponse.data;
-          const imgTaskId = imgData?.taskId || imgData?.task_id;
-          sceneImageUrl = imgData?.url || imgData?.resultUrls?.[0];
-
-          if (!sceneImageUrl && imgTaskId) {
-            for (let a = 0; a < 120; a++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const pr = await axios.get(
-                `https://apimodels.app/api/v1/images/generations?task_id=${encodeURIComponent(imgTaskId)}`,
-                { headers: { 'Authorization': `Bearer ${apimodelsKey}` }, timeout: 30000 }
-              );
-              const pd = pr.data?.data || pr.data;
-              const ps = pd?.state || pd?.status;
-              if (ps === 'completed' || ps === 'success') { sceneImageUrl = pd?.url || pd?.resultUrls?.[0]; break; }
-              if (ps === 'failed' || ps === 'error') throw new Error(pd?.failMsg || 'Image failed');
-            }
-          }
-          if (!sceneImageUrl) throw new Error('Image generation failed');
+          const gemResult = await generateImageWithGeminiGen(refPrompt, imageModel, aspectRatio, imageResolution, refImages, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}` });
+          sceneImageUrl = gemResult.imageUrl;
 
           if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after image gen, aborting`); return; }
 
