@@ -8685,12 +8685,16 @@ async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelNa
   if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
 
   const isGrok = modelName === 'grok-3' || (options && options.isGrok);
+  const isVeoModel = modelName && modelName.startsWith('veo');
+  const language = options && options.language;
+  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language}. The character speaks in ${language === 'id' ? 'Bahasa Indonesia' : language}, NOT in English.` : '';
+  const finalPrompt = prompt ? prompt + langInstruction : prompt;
   const config = {
     duration: String(duration || (isGrok ? 10 : 8)),
     apiEndpoint: isGrok ? 'video-gen/grok' : 'video-gen/veo',
     useGrokAspect: isGrok
   };
-  const result = await callGeminiGenVideoCreate(geminiKey, modelName, prompt, resolution || (isGrok ? '720p' : '1080p'), aspectRatio, imageUrl, config);
+  const result = await callGeminiGenVideoCreate(geminiKey, modelName, finalPrompt, resolution || (isGrok ? '720p' : '1080p'), aspectRatio, imageUrl, config);
   const resultData = result?.data || result;
   const uuid = resultData?.uuid || result?.uuid || resultData?.id || result?.id;
   if (!uuid) throw new Error('No UUID from GeminiGen: ' + JSON.stringify(result));
@@ -11709,10 +11713,12 @@ setInterval(() => {
   unassignInactiveKeys().catch(e => console.error('[KEY-POOL] Unassign error:', e.message));
 }, 120000);
 
-async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride) {
+async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride, language) {
   const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
+  const isVeoModel = vidModel.apiModel && vidModel.apiModel.startsWith('veo');
+  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language}. The character speaks in ${language === 'id' ? 'Bahasa Indonesia' : language}, NOT in English.` : '';
   const lockedPrompt = scene.visual_prompt
-    ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation`
+    ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation${langInstruction}`
     : 'cinematic video';
   const videoBody = {
     model: vidModel.apiModel,
@@ -12448,7 +12454,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
 
                 if (isGeminiGen) {
                   console.log(`[AUTOMATION] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
                 } else if (isFreepik) {
                   console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
                   const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
@@ -12468,12 +12474,12 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
                   } else if (fpResult.fallback) {
                     console.log(`[AUTOMATION] Freepik keys exhausted, falling back to ApiModels for scene ${scene.scene_index}`);
                     const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel, project.language);
                   } else {
                     throw new Error(fpResult.error || 'Freepik generation failed');
                   }
                 } else {
-                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel, project.language);
                 }
 
                 if (!videoUrl) throw new Error('Video generation failed - no URL');
@@ -12795,7 +12801,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[AUTOMATION] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
         } else if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
           const r2vRefs = isR2V ? [retryRefImage] : undefined;
@@ -12815,13 +12821,13 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
             console.log(`[AUTOMATION] Retry: Freepik keys exhausted, falling back to ApiModels`);
             const retryScene = { ...scene, image_url: sceneImageUrl };
             const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel, project.language);
           } else {
             throw new Error(fpResult.error || 'Freepik generation failed');
           }
         } else {
           const retryScene = { ...scene, image_url: sceneImageUrl };
-          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel);
+          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel, project.language);
         }
         if (!videoUrl) throw new Error('Video generation failed - no URL');
 
@@ -15016,7 +15022,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
                 if (isGeminiGen) {
                   console.log(`[ADS-STUDIO] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
                 } else if (isFreepik) {
                   const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
                   if (fpResult.success) {
@@ -15032,12 +15038,12 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
                     }
                   } else if (fpResult.fallback) {
                     const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+                    videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, fallbackModel, project.language);
                   } else {
                     throw new Error(fpResult.error || 'Freepik generation failed');
                   }
                 } else {
-                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel);
+                  videoUrl = await generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModel, project.language);
                 }
 
                 if (!videoUrl) throw new Error('Video generation failed - no URL');
@@ -15315,7 +15321,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[ADS-STUDIO] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok });
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
         } else if (isFreepik) {
           console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
           const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
@@ -15333,13 +15339,13 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
           } else if (fpResult.fallback) {
             const retryScene = { ...scene, image_url: sceneImageUrl };
             const fallbackModel = { apiModel: 'veo-3.1-fast', duration: vidModel.duration || 5 };
-            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel);
+            videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, fallbackModel, project.language);
           } else {
             throw new Error(fpResult.error || 'Freepik generation failed');
           }
         } else {
           const retryScene = { ...scene, image_url: sceneImageUrl };
-          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel);
+          videoUrl = await generateVideoApiModels(retryScene, projectId, aspectRatio, apimodelsKey, vidModel, project.language);
         }
         if (!videoUrl) throw new Error('Video generation failed - no URL');
 
