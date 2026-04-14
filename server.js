@@ -8687,8 +8687,11 @@ async function generateVideoWithGeminiGen(imageUrl, prompt, aspectRatio, modelNa
   const isGrok = modelName === 'grok-3' || (options && options.isGrok);
   const isVeoModel = modelName && modelName.startsWith('veo');
   const language = options && options.language;
-  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language}. The character speaks in ${language === 'id' ? 'Bahasa Indonesia' : language}, NOT in English.` : '';
-  const finalPrompt = prompt ? prompt + langInstruction : prompt;
+  const narration = options && options.narration;
+  const langName = language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language === 'ms' ? 'Bahasa Melayu' : language;
+  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
+  const narrationInstruction = (isVeoModel && narration) ? `. The character MUST speak this exact dialogue naturally: "${narration}"` : '';
+  const finalPrompt = prompt ? prompt + langInstruction + narrationInstruction : prompt;
   const config = {
     duration: String(duration || (isGrok ? 10 : 8)),
     apiEndpoint: isGrok ? 'video-gen/grok' : 'video-gen/veo',
@@ -11716,9 +11719,11 @@ setInterval(() => {
 async function generateVideoApiModels(scene, projectId, aspectRatio, apimodelsKey, vidModelOverride, language) {
   const vidModel = vidModelOverride || { apiModel: 'veo-3.1-fast', duration: 5 };
   const isVeoModel = vidModel.apiModel && vidModel.apiModel.startsWith('veo');
-  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language}. The character speaks in ${language === 'id' ? 'Bahasa Indonesia' : language}, NOT in English.` : '';
+  const langName = language === 'id' ? 'Bahasa Indonesia (Indonesian language)' : language === 'ms' ? 'Bahasa Melayu' : language;
+  const langInstruction = (isVeoModel && language && language !== 'en') ? `. CRITICAL AUDIO/VOICEOVER LANGUAGE: All speech, dialogue, and voiceover in this video MUST be in ${langName}. The character speaks in ${langName}, NOT in English.` : '';
+  const narrationInstruction = (isVeoModel && scene.narration) ? `. The character MUST speak this exact dialogue naturally: "${scene.narration}"` : '';
   const lockedPrompt = scene.visual_prompt
-    ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation${langInstruction}`
+    ? `${scene.visual_prompt}, maintain exact same character appearance throughout, same face same hair same clothing, no morphing no transformation${langInstruction}${narrationInstruction}`
     : 'cinematic video';
   const videoBody = {
     model: vidModel.apiModel,
@@ -12454,7 +12459,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
 
                 if (isGeminiGen) {
                   console.log(`[AUTOMATION] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language, narration: scene.narration });
                 } else if (isFreepik) {
                   console.log(`[AUTOMATION] Generating Freepik video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
                   const r2vRefs = isR2V ? [referenceImageUrl] : undefined;
@@ -12801,7 +12806,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[AUTOMATION] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language, narration: scene.narration });
         } else if (isFreepik) {
           console.log(`[AUTOMATION] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}${isR2V ? ' (R2V)' : ''}`);
           const r2vRefs = isR2V ? [retryRefImage] : undefined;
@@ -15022,7 +15027,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
                 if (isGeminiGen) {
                   console.log(`[ADS-STUDIO] Generating GeminiGen video for ${projectId} scene ${scene.scene_index} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
+                  videoUrl = await generateVideoWithGeminiGen(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language, narration: scene.narration });
                 } else if (isFreepik) {
                   const fpResult = await generateVideoWithFreepik(scene.image_url, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
                   if (fpResult.success) {
@@ -15321,7 +15326,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
         let videoUrl = null;
         if (isGeminiGen) {
           console.log(`[ADS-STUDIO] Retry GeminiGen video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel} resolution=${vidModel.resolution}`);
-          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language });
+          videoUrl = await generateVideoWithGeminiGen(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, vidModel.duration, vidModel.resolution, { isGrok: vidModel.isGrok, language: project.language, narration: scene.narration });
         } else if (isFreepik) {
           console.log(`[ADS-STUDIO] Retry Freepik video for ${projectId} scene ${sceneIndex} model=${vidModel.apiModel}`);
           const fpResult = await generateVideoWithFreepik(sceneImageUrl, scene.visual_prompt, aspectRatio, vidModel.apiModel, project.user_id, 'ads_studio', vidModel.duration, null, project.language);
