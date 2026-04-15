@@ -6233,6 +6233,15 @@ app.post('/api/admin/key-pool/:id/reset', requireAdmin, async (req, res) => {
   }
 });
 
+app.delete('/api/admin/key-pool/delete-all', requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`DELETE FROM freepik_key_pool RETURNING id`);
+    res.json({ success: true, count: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/key-pool/reset-all-exhausted', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(

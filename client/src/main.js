@@ -2330,6 +2330,7 @@ function renderAdminKeyPool() {
     '<button class="btn btn-primary" id="kpAddKeysBtn">Add Keys</button>' +
     '<button class="btn btn-secondary" id="kpResetAllExhausted">Reset All Exhausted</button>' +
     '<button class="btn btn-secondary" id="kpUnassignAll" style="background:#ef4444;">Unassign All</button>' +
+    '<button class="btn btn-secondary" id="kpDeleteAll" style="background:#dc2626;color:#fff;">Hapus Semua</button>' +
     '</div></div>';
 
   if (kp.isLoading) {
@@ -8341,6 +8342,19 @@ function attachEventListeners() {
         var resp = await fetch(API_URL + '/api/admin/key-pool/unassign-all', { method: 'POST', credentials: 'include' });
         var data = await resp.json();
         showToast('Unassigned ' + data.count + ' keys', 'success');
+        fetchKeyPool();
+      } catch (e) { showToast(e.message, 'error'); }
+    });
+  }
+
+  var kpDeleteAllBtn = document.getElementById('kpDeleteAll');
+  if (kpDeleteAllBtn) {
+    kpDeleteAllBtn.addEventListener('click', async function() {
+      if (!confirm('HAPUS SEMUA API KEY dari pool? Aksi ini tidak bisa dibatalkan!')) return;
+      try {
+        var resp = await fetch(API_URL + '/api/admin/key-pool/delete-all', { method: 'DELETE', credentials: 'include' });
+        var data = await resp.json();
+        showToast('Berhasil hapus ' + data.count + ' keys', 'success');
         fetchKeyPool();
       } catch (e) { showToast(e.message, 'error'); }
     });
