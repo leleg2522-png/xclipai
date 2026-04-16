@@ -11508,7 +11508,7 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     requestBody = {
       image: imageUrl,
       prompt: characterLockPrompt,
-      duration: parseInt(dur),
+      duration: 8,
       resolution: '4k',
       aspect_ratio: rawAR,
       negative_prompt: wanNegPrompt,
