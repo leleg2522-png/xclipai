@@ -1,6 +1,6 @@
 {
   "name": "xclip",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-Powered Video Clipping, Image Generation & Chat Tool by MANAZIL",
   "main": "server.js",
   "engines": {
