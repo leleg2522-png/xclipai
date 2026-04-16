@@ -11367,7 +11367,8 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     'wan-v2.6-720p': { endpoint: '/v1/ai/image-to-video/wan-v2-6-720p', api: 'wan26' },
     'wan-v2.7-1080p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' },
     'wan-v2.7-720p': { endpoint: '/v1/ai/image-to-video/wan-2-7', api: 'wan27' },
-    'wan-v2.7-r2v': { endpoint: '/v1/ai/reference-to-video/wan-2-7', api: 'wan27-r2v' }
+    'wan-v2.7-r2v': { endpoint: '/v1/ai/reference-to-video/wan-2-7', api: 'wan27-r2v' },
+    'veo-3.1-freepik-4k': { endpoint: '/v1/ai/image-to-video/veo-3-1', api: 'veo31' }
   };
   const config = freepikModels[model];
   if (!config) throw new Error(`Unknown Freepik model: ${model}`);
@@ -11502,6 +11503,16 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
       duration: parseInt(dur),
       negative_prompt: wanNegPrompt,
       enable_prompt_expansion: allowExpansion
+    };
+  } else if (config.api === 'veo31') {
+    requestBody = {
+      image: imageUrl,
+      prompt: characterLockPrompt,
+      duration: parseInt(dur),
+      resolution: '4k',
+      aspect_ratio: rawAR,
+      negative_prompt: wanNegPrompt,
+      generate_audio: true
     };
   } else if (config.api === 'wan27') {
     const wanRes = model.includes('1080p') ? '1080p' : '720p';
@@ -11850,7 +11861,7 @@ app.post('/api/automation/projects', async (req, res) => {
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
-  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd', 'grok-3-geminigen'];
+  const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];
   const validDurations = [5, 10];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
@@ -11909,7 +11920,7 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const hasRefImage = !!project.reference_image_url;
 
     const durationMap = {
-      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
+      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8, 'veo-3.1-freepik-4k': 8,
       'kling-v2.6-pro': 5, 'kling-v3': 5,
       'wan-v2.7-pro': 5, 'wan-v2.7-r2v': 5,
       'grok-video-3': 5, 'grok-video-3-10s': 10,
@@ -12307,6 +12318,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-freepik-4k': { apiModel: 'veo-3.1-freepik-4k', duration: 8, provider: 'freepik' },
       'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
       'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
@@ -12742,6 +12754,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.7-r2v': { apiModel: 'wan-v2.7-r2v', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-freepik-4k': { apiModel: 'veo-3.1-freepik-4k', duration: 8, provider: 'freepik' },
       'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
       'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
@@ -14463,7 +14476,7 @@ app.post('/api/ads-studio/projects', upload.fields([
     const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, customNarrations } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
-    const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'grok-3-geminigen'];
+    const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];
     const validatedModel = adsValidModels.includes(videoModel) ? videoModel : 'wan-v2.7-pro';
 
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
@@ -14525,7 +14538,7 @@ app.post('/api/ads-studio/projects/:projectId/generate-script', async (req, res)
 
     const isSoft = project.ad_type !== 'hard_selling';
     const adsDurationMap = {
-      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8,
+      'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8, 'veo-3.1-freepik-4k': 8,
       'kling-v2.1-pro': 5, 'kling-v2.6-pro': 5, 'kling-v3': 5,
       'wan-v2.6-pro': 5, 'wan-v2.7-pro': 5,
       'grok-video-3': 5, 'grok-video-3-10s': 10,
@@ -14884,6 +14897,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-freepik-4k': { apiModel: 'veo-3.1-freepik-4k', duration: 8, provider: 'freepik' },
       'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
       'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
@@ -15246,6 +15260,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
       'kling-v3': { apiModel: 'kling-v3', duration: 5, provider: 'freepik' },
       'wan-v2.6-pro': { apiModel: 'wan-v2.6-1080p', duration: 5, provider: 'freepik' },
       'wan-v2.7-pro': { apiModel: 'wan-v2.7-1080p', duration: 5, provider: 'freepik' },
+      'veo-3.1-freepik-4k': { apiModel: 'veo-3.1-freepik-4k', duration: 8, provider: 'freepik' },
       'veo-3.1-fast-fhd': { apiModel: 'veo-3.1-fast', duration: 8, provider: 'geminigen', resolution: '1080p' },
       'grok-3-geminigen': { apiModel: 'grok-3', duration: 10, provider: 'geminigen', resolution: '720p', isGrok: true }
     };
