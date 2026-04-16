@@ -3224,23 +3224,40 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
     console.log(`${logPrefix} Request: aspect=${aspectRatio}, res=${resolution}, refs=${refImageUrls ? refImageUrls.length : 0}`);
 
     let createResp;
-    try {
-      createResp = await axios.post(
-        `https://api.freepik.com${endpoint}`,
-        requestBody,
-        { headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey }, timeout: 120000 }
-      );
-    } catch (apiErr) {
-      const errStatus = apiErr.response?.status;
-      const errBody = apiErr.response?.data;
-      lastError = new Error(`Freepik nano-banana-pro error ${errStatus}: ${typeof errBody === 'object' ? JSON.stringify(errBody).substring(0, 200) : (errBody || apiErr.message)}`);
-      console.error(`${logPrefix} Create error ${errStatus}:`, JSON.stringify(errBody || apiErr.message).substring(0, 300));
-      if ((errStatus === 402 || errStatus === 429) && selectedKey.poolId) {
-        await handlePoolKeyExhausted(selectedKey.poolId, userId, 'ximage2', `HTTP ${errStatus}`);
-        continue; // try next key
+    let createSucceeded = false;
+    const maxCreateRetries = 4;
+    for (let createAttempt = 0; createAttempt < maxCreateRetries && !createSucceeded; createAttempt++) {
+      try {
+        createResp = await axios.post(
+          `https://api.freepik.com${endpoint}`,
+          requestBody,
+          { headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey }, timeout: 120000 }
+        );
+        createSucceeded = true;
+      } catch (apiErr) {
+        const errStatus = apiErr.response?.status;
+        const errBody = apiErr.response?.data;
+        const bodyStr = typeof errBody === 'string' ? errBody : JSON.stringify(errBody || apiErr.message);
+        const isHtml = typeof errBody === 'string' && errBody.trim().startsWith('<');
+        const isTransient = errStatus >= 500 || errStatus === 502 || errStatus === 503 || errStatus === 504 || isHtml || apiErr.code === 'ECONNRESET' || apiErr.code === 'ETIMEDOUT';
+
+        lastError = new Error(`Freepik nano-banana-pro error ${errStatus}: ${isHtml ? 'Freepik server 5xx (HTML response)' : bodyStr.substring(0, 200)}`);
+        console.error(`${logPrefix} Create error ${errStatus} (attempt ${createAttempt + 1}/${maxCreateRetries}):`, isHtml ? '[HTML 5xx page from Freepik]' : bodyStr.substring(0, 300));
+
+        if ((errStatus === 402 || errStatus === 429) && selectedKey.poolId) {
+          await handlePoolKeyExhausted(selectedKey.poolId, userId, 'ximage2', `HTTP ${errStatus}`);
+          break; // break create-retry loop, outer loop will pick next key
+        }
+        if (isTransient && createAttempt < maxCreateRetries - 1) {
+          const backoff = Math.min(30000, 5000 * Math.pow(2, createAttempt)); // 5s, 10s, 20s
+          console.log(`${logPrefix} Transient Freepik error, retrying in ${backoff}ms...`);
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+        throw lastError;
       }
-      throw lastError;
     }
+    if (!createSucceeded) continue; // pool key was rotated, try next key
 
     const respData = createResp.data?.data || createResp.data;
     const taskId = respData.task_id || respData.id;
