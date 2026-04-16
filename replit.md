@@ -26,8 +26,8 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 
 ## Key Features
 - AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API
-- AI Image Generation via Freepik API
-- Room-based API key management system
+- AI Image Generation (X Image 2) via Freepik Nano Banana Pro API
+- Pool-based API key management for image generation (Freepik key pool)
 - Subscription and credit system
 - Session-based authentication with bcrypt
 - PWA support with service worker

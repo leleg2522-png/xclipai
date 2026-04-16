@@ -359,7 +359,7 @@ const state = {
   ximage2: {
     sourceImages: [],
     prompt: '',
-    selectedModel: 'gpt-4o-image',
+    selectedModel: 'nano-banana-pro',
     size: '1:1',
     mode: 'text-to-image',
     isGenerating: false,
@@ -4342,15 +4342,7 @@ function renderXImageGallery() {
 
 function renderXImage2Page() {
   var ximage2Models = [
-    { id: 'gpt-4o-image', name: 'GPT-4o Image', icon: 'openai', supportsI2I: true, badge: 'POPULAR', hasN: true, maxN: 4, sizes: ['1:1', '2:3', '3:2'], maxRefs: 5, group: 'openai' },
-    { id: 'gemini-2.5-flash-image-preview', name: 'Nano Banana', icon: 'google', supportsI2I: true, hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 14, group: 'google' },
-    { id: 'doubao-seedance-4-0', name: 'Seedream 4.0', icon: 'bytedance', supportsI2I: true, hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], hasResolution: true, resolutions: ['1K', '2K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
-    { id: 'doubao-seedance-4-5', name: 'Seedream 4.5', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], hasResolution: true, resolutions: ['2K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
-    { id: 'seedream-5-0-lite', name: 'Seedream 5.0 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: true, maxN: 15, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], hasResolution: true, resolutions: ['1K', '2K', '3K', '4K'], maxRefs: 10, hasWatermark: true, hasSequential: true, group: 'bytedance' },
-    { id: 'flux-kontext-pro', name: 'FLUX Kontext Pro', icon: 'flux', supportsI2I: true, hasN: false, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], hasSafetyTolerance: true, hasPromptUpsampling: true, maxRefs: 1, group: 'flux' },
-    { id: 'flux-kontext-max', name: 'FLUX Kontext Max', icon: 'flux', supportsI2I: true, badge: 'MAX', hasN: false, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'match_input_image'], hasSafetyTolerance: true, hasPromptUpsampling: true, maxRefs: 1, group: 'flux' },
-    { id: 'flux-2-flex', name: 'FLUX 2.0 Flex', icon: 'flux', supportsI2I: true, hasN: false, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 8, group: 'flux' },
-    { id: 'flux-2-pro', name: 'FLUX 2.0 Pro', icon: 'flux', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], hasResolution: true, resolutions: ['1K', '2K'], maxRefs: 8, group: 'flux' }
+    { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'google', hasResolution: true, resolutions: ['1K', '2K', '4K'] }
   ];
 
   var currentModelConfig = ximage2Models.find(function(m) { return m.id === state.ximage2.selectedModel; }) || ximage2Models[0];

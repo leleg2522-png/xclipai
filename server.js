@@ -3544,7 +3544,7 @@ async function resumePendingTaskPolling() {
       { table: 'vidgen2_tasks', apiType: 'apimodels', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'vidgen4_tasks', apiType: 'apimart', urlCol: 'video_url', keyCol: 'used_key_name' },
       { table: 'ximage_history', apiType: 'apimodels-image', urlCol: 'image_url', keyCol: null },
-      { table: 'ximage2_history', apiType: 'apimart', urlCol: 'image_url', keyCol: null },
+      { table: 'ximage2_history', apiType: 'freepik-image', urlCol: 'image_url', keyCol: null },
       { table: 'ximage3_history', apiType: 'geminigen-image', urlCol: 'image_url', keyCol: null },
       { table: 'video_generation_tasks', apiType: 'freepik-auto', urlCol: 'video_url', keyCol: 'used_key_name' }
     ];
@@ -3625,7 +3625,8 @@ async function resumePendingTaskPolling() {
               urlColumn: urlCol,
               model: row.model,
               userId: row.user_id || null,
-              usedKeyName: keyCol ? row[keyCol] : null
+              usedKeyName: keyCol ? row[keyCol] : null,
+              endpoint: (resolvedType === 'freepik-image' && XIMAGE2_MODELS[row.model]) ? XIMAGE2_MODELS[row.model].freepikEndpoint : undefined
             };
             if (isMotionTask && row.retry_data) {
               const dbRetry = row.retry_data;
@@ -9505,105 +9506,39 @@ app.delete('/api/ximage/history', async (req, res) => {
   }
 });
 
-// ============ X IMAGE2 (Apimart.ai Image Generation) ============
+// ============ X IMAGE2 (Freepik Image Generation) ============
 
 const XIMAGE2_MODELS = {
-  'gpt-4o-image': { 
-    name: 'GPT-4o Image', provider: 'OpenAI', supportsI2I: true, 
-    sizes: ['1:1', '2:3', '3:2'], maxN: 4, maxRefs: 5,
-    desc: 'OpenAI GPT-4o image generation'
-  },
-  'gemini-2.5-flash-image-preview': { 
-    name: 'Nano Banana', provider: 'Google', supportsI2I: true,
-    sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxN: 1, maxRefs: 14,
-    desc: 'Google Gemini 2.5 Flash'
-  },
-  'doubao-seedance-4-0': { 
-    name: 'Seedream 4.0', provider: 'ByteDance', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
-    resolutions: ['1K', '2K', '4K'],
-    hasWatermark: true, hasSequential: true,
-    desc: 'ByteDance Seedream 4.0'
-  },
-  'doubao-seedance-4-5': { 
-    name: 'Seedream 4.5', provider: 'ByteDance', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21', 'auto'], maxN: 15, maxRefs: 10,
-    resolutions: ['2K', '4K'], defaultResolution: '2K',
-    hasWatermark: true, hasSequential: true,
-    desc: 'ByteDance Seedream 4.5 latest (no 1K support)'
-  },
-  'seedream-5-0-lite': { 
-    name: 'Seedream 5.0 Lite', provider: 'ByteDance', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 15, maxRefs: 10,
-    resolutions: ['1K', '2K', '3K', '4K'], defaultResolution: '2K',
-    hasWatermark: true, hasSequential: true,
-    desc: 'ByteDance Seedream 5.0 Lite - 4K output, perfect text rendering'
-  },
-  'flux-kontext-pro': { 
-    name: 'Flux Kontext Pro', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
-    hasSafetyTolerance: true, hasPromptUpsampling: true, noBase64: true,
-    desc: 'FLUX Kontext Pro - only public image URLs'
-  },
-  'flux-kontext-max': { 
-    name: 'Flux Kontext Max', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['match_input_image', '1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9', '9:21'], maxN: 1, maxRefs: 1,
-    hasSafetyTolerance: true, hasPromptUpsampling: true, noBase64: true,
-    desc: 'FLUX Kontext Max highest quality - only public URLs'
-  },
-  'flux-2-flex': { 
-    name: 'Flux 2.0 Flex', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
-    resolutions: ['1K', '2K'], noBase64: true,
-    desc: 'FLUX 2.0 Flex - only public image URLs'
-  },
-  'flux-2-pro': { 
-    name: 'Flux 2.0 Pro', provider: 'Black Forest Labs', supportsI2I: true,
-    sizes: ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'], maxN: 1, maxRefs: 8,
-    resolutions: ['1K', '2K'], noBase64: true,
-    desc: 'FLUX 2.0 Pro higher quality - only public URLs'
+  'nano-banana-pro': {
+    name: 'Nano Banana Pro', provider: 'Freepik (Google)', supportsI2I: true,
+    sizes: ['1:1', '2:3', '3:2', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '21:9'],
+    maxN: 1, maxRefs: 3,
+    resolutions: ['1K', '2K', '4K'], defaultResolution: '2K',
+    freepikEndpoint: '/v1/ai/text-to-image/nano-banana-pro',
+    desc: 'Google Nano Banana Pro via Freepik - high quality, supports reference images'
   }
 };
 
-async function getXImage2RoomApiKey(xclipApiKey) {
+async function getXImage2PoolKey(xclipApiKey) {
   const keyInfo = await validateXclipApiKey(xclipApiKey);
   if (!keyInfo) {
     return { error: 'Xclip API key tidak valid' };
   }
-  
-  const subResult = await pool.query(`
-    SELECT s.ximage2_room_id 
-    FROM subscriptions s 
-    WHERE s.user_id = $1 AND s.ximage2_room_id IS NOT NULL
-    ORDER BY s.created_at DESC LIMIT 1
-  `, [keyInfo.user_id]);
-  
-  const ximage2RoomId = subResult.rows[0]?.ximage2_room_id || 1;
-  
-  const roomKeyPrefix = `XIMAGE2_ROOM${ximage2RoomId}_KEY_`;
-  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
-  
-  if (availableKeys.length === 0) {
-    if (process.env.APIMART_API_KEY) {
-      return { 
-        apiKey: process.env.APIMART_API_KEY, 
-        keyName: 'APIMART_API_KEY',
-        roomId: ximage2RoomId,
-        userId: keyInfo.user_id,
-        keyInfoId: keyInfo.id
-      };
-    }
-    return { error: 'Tidak ada API key X Image2 yang tersedia. Hubungi admin.' };
+
+  const poolKeys = await getPoolKeysForFeature(keyInfo.user_id, 'ximage2', 3);
+  if (poolKeys.length > 0) {
+    const selectedKey = poolKeys[0];
+    return {
+      apiKey: selectedKey.key,
+      keyName: selectedKey.name,
+      poolId: selectedKey.poolId,
+      isPool: true,
+      userId: keyInfo.user_id,
+      keyInfoId: keyInfo.id
+    };
   }
-  
-  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
-  return { 
-    apiKey: process.env[randomKeyName], 
-    keyName: randomKeyName,
-    roomId: ximage2RoomId,
-    userId: keyInfo.user_id,
-    keyInfoId: keyInfo.id
-  };
+
+  return { error: 'Tidak ada API key X Image2 yang tersedia di pool. Hubungi admin.' };
 }
 
 app.get('/api/ximage2/models', (req, res) => {
@@ -9723,19 +9658,20 @@ app.post('/api/ximage2/join-room', async (req, res) => {
 });
 
 app.post('/api/ximage2/generate', async (req, res) => {
+  let poolKeyResult = null;
   try {
     const xclipApiKey = req.headers['x-xclip-key'];
-    
+
     if (!xclipApiKey) {
       return res.status(401).json({ error: 'Xclip API key diperlukan' });
     }
-    
-    const roomKeyResult = await getXImage2RoomApiKey(xclipApiKey);
-    if (roomKeyResult.error) {
-      return res.status(400).json({ error: roomKeyResult.error });
+
+    poolKeyResult = await getXImage2PoolKey(xclipApiKey);
+    if (poolKeyResult.error) {
+      return res.status(400).json({ error: poolKeyResult.error });
     }
-    
-    const ximage2Cooldown = getUserCooldownRemaining(roomKeyResult.userId, 'ximage2');
+
+    const ximage2Cooldown = getUserCooldownRemaining(poolKeyResult.userId, 'ximage2');
     if (ximage2Cooldown > 0) {
       const cooldownSec = Math.ceil(ximage2Cooldown / 1000);
       return res.status(429).json({
@@ -9744,119 +9680,90 @@ app.post('/api/ximage2/generate', async (req, res) => {
         cooldownMs: ximage2Cooldown
       });
     }
-    
-    const { model, prompt, images, size, resolution, 
-            watermark, sequentialGeneration, safetyTolerance, inputMode, promptUpsampling, maskImage } = req.body;
-    const n = req.body.numberOfImages || req.body.n || 1;
-    
+
+    const { model, prompt, images, size, resolution } = req.body;
+
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt diperlukan' });
     }
-    
+
     const modelConfig = XIMAGE2_MODELS[model];
     if (!modelConfig) {
       return res.status(400).json({ error: 'Model tidak valid' });
     }
-    
+
     const isI2I = images && images.length > 0;
     if (isI2I && !modelConfig.supportsI2I) {
       return res.status(400).json({ error: `Model ${modelConfig.name} tidak mendukung image-to-image` });
     }
-    
-    console.log(`[XIMAGE2] Generating with model: ${model}, size: ${size || 'default'}, n: ${n || 1}, i2i: ${isI2I}`);
-    
+
+    console.log(`[XIMAGE2] Generating with Freepik model: ${model}, size: ${size || 'default'}, i2i: ${isI2I}`);
+
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const baseUrl = `${protocol}://${host}`;
-    
-    let imageUrls = [];
+
+    const requestBody = { prompt: prompt };
+
+    if (size) requestBody.aspect_ratio = size;
+    requestBody.resolution = resolution || modelConfig.defaultResolution || '2K';
+
     if (isI2I) {
-      for (let i = 0; i < images.length; i++) {
+      const refImages = [];
+      for (let i = 0; i < Math.min(images.length, modelConfig.maxRefs || 3); i++) {
         const img = images[i];
+        let imgUrl = img;
         if (img && img.startsWith('data:')) {
           const uploaded = await saveBase64ToFile(img, 'image', baseUrl);
-          imageUrls.push(uploaded.publicUrl);
-          console.log(`[XIMAGE2] Image ${i + 1} uploaded: ${uploaded.publicUrl}`);
-        } else if (img) {
-          imageUrls.push(img);
+          imgUrl = uploaded.publicUrl;
+          console.log(`[XIMAGE2] Image ${i + 1} uploaded: ${imgUrl}`);
+        }
+        if (imgUrl) {
+          const mimeType = imgUrl.includes('.png') ? 'image/png' : imgUrl.includes('.webp') ? 'image/webp' : 'image/jpeg';
+          refImages.push({ image: imgUrl, text: 'Reference image', mime_type: mimeType });
         }
       }
+      if (refImages.length > 0) requestBody.reference_images = refImages;
     }
-    
-    const requestBody = {
-      model: model,
-      prompt: prompt
-    };
-    
-    if (size) requestBody.size = size;
-    requestBody.n = Math.min(parseInt(n) || 1, modelConfig.maxN || 1);
-    if (imageUrls.length > 0) requestBody.image_urls = imageUrls.slice(0, modelConfig.maxRefs);
-    
-    if (modelConfig.resolutions && resolution) {
-      requestBody.resolution = resolution;
-    }
-    if (modelConfig.hasWatermark && watermark !== undefined) {
-      requestBody.watermark = watermark;
-    }
-    if (modelConfig.hasSequential && sequentialGeneration !== undefined) {
-      requestBody.sequential_image_generation = sequentialGeneration ? 'auto' : 'disabled';
-    }
-    if (modelConfig.hasSafetyTolerance && safetyTolerance !== undefined) {
-      requestBody.safety_tolerance = parseInt(safetyTolerance);
-    }
-    if (modelConfig.hasPromptUpsampling && promptUpsampling !== undefined) {
-      requestBody.prompt_upsampling = promptUpsampling;
-    }
-    if (modelConfig.hasMask && maskImage) {
-      let maskUrl = maskImage;
-      if (maskImage.startsWith('data:')) {
-        const maskUploaded = await saveBase64ToFile(maskImage, 'image', baseUrl);
-        maskUrl = maskUploaded.publicUrl;
-        console.log(`[XIMAGE2] Mask image uploaded: ${maskUrl}`);
-      }
-      requestBody.mask_url = maskUrl;
-    }
-    
-    console.log('[XIMAGE2] Request body:', JSON.stringify({ ...requestBody, image_urls: requestBody.image_urls ? ['[IMAGES]'] : undefined }));
-    
+
+    console.log('[XIMAGE2] Freepik request:', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }));
+
+    const freepikEndpoint = modelConfig.freepikEndpoint;
     const response = await axios.post(
-      'https://api.apimart.ai/v1/images/generations',
+      `https://api.freepik.com${freepikEndpoint}`,
       requestBody,
       {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${roomKeyResult.apiKey}`
-        },
-        timeout: 600000
+        headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': poolKeyResult.apiKey },
+        timeout: 120000
       }
     );
-    
-    console.log('[XIMAGE2] Apimart.ai response:', JSON.stringify(response.data));
-    
-    const respData = response.data;
-    
+
+    console.log('[XIMAGE2] Freepik response:', JSON.stringify(response.data).substring(0, 500));
+
+    const respData = response.data?.data || response.data;
+
     let directImageUrl = null;
-    if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
-      if (respData.data[0].url) {
-        directImageUrl = respData.data[0].url;
-      } else if (respData.data[0].b64_json) {
-        directImageUrl = `data:image/png;base64,${respData.data[0].b64_json}`;
+    if (respData.generated && Array.isArray(respData.generated) && respData.generated.length > 0) {
+      const g = respData.generated[0];
+      directImageUrl = typeof g === 'string' ? g : g.url || g.image_url;
+      if (!directImageUrl && g.base64) {
+        directImageUrl = `data:image/png;base64,${g.base64}`;
       }
     }
-    
+
     if (directImageUrl) {
       await pool.query(`
         INSERT INTO ximage2_history (user_id, task_id, model, prompt, mode, size, image_url, status, completed_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', NOW())
-      `, [roomKeyResult.userId, 'direct-' + Date.now(), model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', directImageUrl]);
-      
-      setUserCooldown(roomKeyResult.userId, 'ximage2');
-      
+      `, [poolKeyResult.userId, 'direct-' + Date.now(), model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', directImageUrl]);
+
+      setUserCooldown(poolKeyResult.userId, 'ximage2');
+      if (poolKeyResult.poolId) await recordKeyUsage(poolKeyResult.poolId);
       await pool.query(
         'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [roomKeyResult.keyInfoId]
+        [poolKeyResult.keyInfoId]
       );
-      
+
       return res.json({
         success: true,
         direct: true,
@@ -9865,35 +9772,35 @@ app.post('/api/ximage2/generate', async (req, res) => {
         cooldown: Math.ceil(RATE_LIMIT_CONFIG.ximage2.cooldownMs / 1000)
       });
     }
-    
-    const taskId = respData.data?.[0]?.task_id || 
-                   respData.task_id || 
-                   respData.id;
-    
+
+    const taskId = respData.task_id || respData.id;
+
     if (!taskId) {
       console.error('[XIMAGE2] No task ID or direct image in response:', respData);
-      return res.status(500).json({ error: 'Tidak mendapat task ID dari Apimart.ai' });
+      return res.status(500).json({ error: 'Tidak mendapat task ID dari Freepik' });
     }
-    
+
     await pool.query(`
       INSERT INTO ximage2_history (user_id, task_id, model, prompt, mode, size, reference_image, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing')
-    `, [roomKeyResult.userId, taskId, model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', imageUrls.length > 0 ? imageUrls[0] : null]);
-    
+    `, [poolKeyResult.userId, taskId, model, prompt, isI2I ? 'image-to-image' : 'text-to-image', size || '1:1', isI2I ? 'ref_uploaded' : null]);
+
+    if (poolKeyResult.poolId) await recordKeyUsage(poolKeyResult.poolId);
     await pool.query(
       'UPDATE xclip_api_keys SET requests_count = requests_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1',
-      [roomKeyResult.keyInfoId]
+      [poolKeyResult.keyInfoId]
     );
-    
-    setUserCooldown(roomKeyResult.userId, 'ximage2');
-    
-    startServerBgPoll(taskId, 'apimart', roomKeyResult.apiKey, {
+
+    setUserCooldown(poolKeyResult.userId, 'ximage2');
+
+    startServerBgPoll(taskId, 'freepik-image', poolKeyResult.apiKey, {
       dbTable: 'ximage2_history',
       urlColumn: 'image_url',
       model: model,
-      userId: roomKeyResult.userId
+      userId: poolKeyResult.userId,
+      endpoint: freepikEndpoint
     });
-    
+
     res.json({
       success: true,
       taskId: taskId,
@@ -9901,24 +9808,29 @@ app.post('/api/ximage2/generate', async (req, res) => {
       cooldown: Math.ceil(RATE_LIMIT_CONFIG.ximage2.cooldownMs / 1000),
       message: 'Image generation dimulai'
     });
-    
+
   } catch (error) {
     const errData = error.response?.data;
-    const rawMsg = errData?.error?.message || errData?.message || errData?.error || error.message;
-    const errCode = errData?.error?.code || errData?.code || '';
+    const rawMsg = errData?.detail || errData?.message || errData?.error || error.message;
+    const httpStatus = error.response?.status;
     console.error('[XIMAGE2] Generate error:', JSON.stringify(errData || error.message));
-    console.error('[XIMAGE2] Status:', error.response?.status, 'Model:', req.body?.model);
-    
-    let userMsg = typeof rawMsg === 'string' ? rawMsg : 'Gagal generate image';
-    if (userMsg.includes('OOM') || userMsg.includes('maxmemory') || userMsg.includes('redis')) {
-      userMsg = 'Server Apimart.ai sedang overload. Silakan coba lagi dalam beberapa menit.';
-    } else if (userMsg.includes('timeout') || userMsg.includes('ETIMEDOUT')) {
-      userMsg = 'Request timeout. Server Apimart.ai terlalu lama merespon, coba lagi.';
-    } else if (errCode === 'enqueue_task_failed') {
-      userMsg = 'Server Apimart.ai gagal memproses request. Silakan coba lagi.';
+    console.error('[XIMAGE2] Status:', httpStatus, 'Model:', req.body?.model);
+
+    if (httpStatus === 402 || httpStatus === 429) {
+      if (poolKeyResult && poolKeyResult.poolId) {
+        const replacement = await handlePoolKeyExhausted(poolKeyResult.poolId, poolKeyResult.userId, 'ximage2', `HTTP ${httpStatus}`);
+        if (replacement) {
+          return res.status(429).json({ error: 'API key kena rate limit, silakan coba lagi.' });
+        }
+      }
     }
-    
-    res.status(error.response?.status || 500).json({ error: userMsg });
+
+    let userMsg = typeof rawMsg === 'string' ? rawMsg : 'Gagal generate image';
+    if (userMsg.includes('timeout') || userMsg.includes('ETIMEDOUT')) {
+      userMsg = 'Request timeout. Freepik terlalu lama merespon, coba lagi.';
+    }
+
+    res.status(httpStatus || 500).json({ error: userMsg });
   }
 });
 
@@ -9931,106 +9843,46 @@ app.get('/api/ximage2/status/:taskId', async (req, res) => {
       return res.status(401).json({ error: 'Xclip API key diperlukan' });
     }
     
-    const roomKeyResult = await getXImage2RoomApiKey(xclipApiKey);
-    if (roomKeyResult.error) {
-      return res.status(400).json({ error: roomKeyResult.error });
+    const poolKeyResult = await getXImage2PoolKey(xclipApiKey);
+    if (poolKeyResult.error) {
+      return res.status(400).json({ error: poolKeyResult.error });
     }
-    
+
     const localTask = await pool.query(
       'SELECT * FROM ximage2_history WHERE task_id = $1 AND user_id = $2',
-      [taskId, roomKeyResult.userId]
+      [taskId, poolKeyResult.userId]
     );
-    
+
     if (localTask.rows.length > 0 && localTask.rows[0].status === 'completed') {
-      return res.json({
-        status: 'completed',
-        imageUrl: localTask.rows[0].image_url
-      });
+      return res.json({ status: 'completed', imageUrl: localTask.rows[0].image_url });
     }
-    
+
     if (localTask.rows.length > 0 && localTask.rows[0].status === 'failed') {
-      return res.json({
-        status: 'failed',
-        error: 'Image generation failed'
-      });
+      return res.json({ status: 'failed', error: 'Image generation failed' });
     }
-    
-    let statusResponse;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        statusResponse = await axios.get(
-          `https://api.apimart.ai/v1/tasks/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` },
-            timeout: 30000
-          }
-        );
-        break;
-      } catch (retryErr) {
-        const msg = (retryErr.message || '').toLowerCase();
-        const isNetErr = !retryErr.response && (msg.includes('socket hang up') || msg.includes('econnreset') || msg.includes('etimedout'));
-        if (isNetErr && attempt < 2) {
-          console.log(`[XIMAGE2] Status poll network error, retry ${attempt + 1}/3`);
-          await new Promise(r => setTimeout(r, 2000));
-          continue;
-        }
-        throw retryErr;
-      }
-    }
-    
-    console.log('[XIMAGE2] Status response:', JSON.stringify(statusResponse.data));
-    
-    const rawData = statusResponse.data;
-    const data = rawData.data || rawData;
-    const status = data.status || data.state;
-    
-    if (status === 'completed' || status === 'finished' || status === 'success') {
-      let imageUrl = data.result?.images?.[0]?.url || 
-                     data.result?.image_url ||
-                     data.images?.[0]?.url ||
-                     data.image_url ||
-                     data.url ||
-                     data.output?.images?.[0]?.url ||
-                     data.output?.image_url ||
-                     data.media_url;
-      
-      if (!imageUrl && data.result?.images?.[0]) {
-        imageUrl = typeof data.result.images[0] === 'string' ? data.result.images[0] : null;
-      }
-      
-      if (!imageUrl) {
-        console.error('[XIMAGE2] Completed but no image URL:', rawData);
-        return res.status(500).json({ status: 'failed', error: 'No image URL in response' });
-      }
-      
+
+    const model = localTask.rows[0]?.model || 'nano-banana-pro';
+    const modelConfig = XIMAGE2_MODELS[model] || XIMAGE2_MODELS['nano-banana-pro'];
+    const pollEndpoint = modelConfig.freepikEndpoint || '/v1/ai/text-to-image/nano-banana-pro';
+
+    const pollResult = await pollFreepikImageTask(taskId, poolKeyResult.apiKey, pollEndpoint);
+
+    if (pollResult.status === 'completed' && pollResult.url) {
       await pool.query(`
-        UPDATE ximage2_history 
-        SET status = 'completed', image_url = $1, completed_at = NOW()
-        WHERE task_id = $2
-      `, [imageUrl, taskId]);
-      
-      return res.json({ status: 'completed', imageUrl });
+        UPDATE ximage2_history SET status = 'completed', image_url = $1, completed_at = NOW() WHERE task_id = $2
+      `, [pollResult.url, taskId]);
+      return res.json({ status: 'completed', imageUrl: pollResult.url });
     }
-    
-    if (status === 'failed' || status === 'error') {
-      const errorMsg = data.error?.message || data.error_message || data.message || 'Generation failed';
-      
+
+    if (pollResult.status === 'failed') {
       await pool.query(`
-        UPDATE ximage2_history 
-        SET status = 'failed', completed_at = NOW()
-        WHERE task_id = $1
+        UPDATE ximage2_history SET status = 'failed', completed_at = NOW() WHERE task_id = $1
       `, [taskId]);
-      
-      return res.json({ status: 'failed', error: errorMsg });
+      return res.json({ status: 'failed', error: pollResult.error || 'Generation failed' });
     }
-    
-    const progress = data.progress || data.percent || 0;
-    res.json({
-      status: 'processing',
-      progress,
-      message: 'Image sedang diproses...'
-    });
-    
+
+    res.json({ status: 'processing', progress: 0, message: 'Image sedang diproses...' });
+
   } catch (error) {
     console.error('[XIMAGE2] Status check error:', error.response?.data || error.message);
     res.status(500).json({ error: 'Gagal check status' });
