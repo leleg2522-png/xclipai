@@ -9727,15 +9727,6 @@ app.post('/api/ximage2/generate', async (req, res) => {
       return res.status(400).json({ error: poolKeyResult.error });
     }
 
-    const ximage2Cooldown = getUserCooldownRemaining(poolKeyResult.userId, 'ximage2');
-    if (ximage2Cooldown > 0) {
-      const cooldownSec = Math.ceil(ximage2Cooldown / 1000);
-      return res.status(429).json({
-        error: `Mohon tunggu ${cooldownSec} detik sebelum generate gambar berikutnya`,
-        cooldown: cooldownSec,
-        cooldownMs: ximage2Cooldown
-      });
-    }
 
     const { model, prompt, images, size, resolution } = req.body;
 
