@@ -3191,6 +3191,94 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
   throw new Error('Image generation timed out');
 }
 
+async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageUrls, userId, options = {}) {
+  const logPrefix = options.logPrefix || '[FREEPIK-NBP]';
+  const endpoint = '/v1/ai/text-to-image/nano-banana-pro';
+  const resolution = options.resolution || '4K';
+
+  const maxKeyRetries = 3;
+  let lastError = null;
+
+  for (let keyAttempt = 0; keyAttempt < maxKeyRetries; keyAttempt++) {
+    const poolKeys = await getPoolKeysForFeature(userId, 'ximage2', 3);
+    if (!poolKeys || poolKeys.length === 0) {
+      throw new Error('Tidak ada API key Freepik (X Image 2) yang tersedia di pool. Hubungi admin.');
+    }
+    const selectedKey = poolKeys[0];
+    const apiKey = selectedKey.key;
+
+    const requestBody = { prompt, resolution };
+    if (aspectRatio) requestBody.aspect_ratio = aspectRatio;
+
+    if (refImageUrls && refImageUrls.length > 0) {
+      const refs = [];
+      for (let i = 0; i < Math.min(refImageUrls.length, 3); i++) {
+        const url = refImageUrls[i];
+        if (!url) continue;
+        const mimeType = url.includes('.png') ? 'image/png' : url.includes('.webp') ? 'image/webp' : 'image/jpeg';
+        refs.push({ image: url, text: 'Reference image', mime_type: mimeType });
+      }
+      if (refs.length > 0) requestBody.reference_images = refs;
+    }
+
+    console.log(`${logPrefix} Request: aspect=${aspectRatio}, res=${resolution}, refs=${refImageUrls ? refImageUrls.length : 0}`);
+
+    let createResp;
+    try {
+      createResp = await axios.post(
+        `https://api.freepik.com${endpoint}`,
+        requestBody,
+        { headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey }, timeout: 120000 }
+      );
+    } catch (apiErr) {
+      const errStatus = apiErr.response?.status;
+      const errBody = apiErr.response?.data;
+      lastError = new Error(`Freepik nano-banana-pro error ${errStatus}: ${typeof errBody === 'object' ? JSON.stringify(errBody).substring(0, 200) : (errBody || apiErr.message)}`);
+      console.error(`${logPrefix} Create error ${errStatus}:`, JSON.stringify(errBody || apiErr.message).substring(0, 300));
+      if ((errStatus === 402 || errStatus === 429) && selectedKey.poolId) {
+        await handlePoolKeyExhausted(selectedKey.poolId, userId, 'ximage2', `HTTP ${errStatus}`);
+        continue; // try next key
+      }
+      throw lastError;
+    }
+
+    const respData = createResp.data?.data || createResp.data;
+    const taskId = respData.task_id || respData.id;
+
+    // Direct image (rare for nano-banana-pro, but handle it)
+    if (respData.generated && Array.isArray(respData.generated) && respData.generated.length > 0) {
+      const g = respData.generated[0];
+      const directUrl = typeof g === 'string' ? g : g.url || g.image_url;
+      if (directUrl) {
+        console.log(`${logPrefix} Direct result for ${taskId}`);
+        return { uuid: taskId, imageUrl: directUrl };
+      }
+    }
+
+    if (!taskId) {
+      lastError = new Error('No task_id from Freepik nano-banana-pro: ' + JSON.stringify(respData).substring(0, 200));
+      throw lastError;
+    }
+
+    console.log(`${logPrefix} Polling ${taskId}...`);
+    const maxAttempts = options.maxPollAttempts || 120;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const pollResult = await pollFreepikImageTask(taskId, apiKey, endpoint);
+      if (pollResult.status === 'completed' && pollResult.url) {
+        console.log(`${logPrefix} Completed: ${taskId}`);
+        return { uuid: taskId, imageUrl: pollResult.url };
+      }
+      if (pollResult.status === 'failed') {
+        throw new Error(pollResult.error || 'Image generation failed');
+      }
+    }
+    throw new Error('Image generation timed out');
+  }
+
+  throw lastError || new Error('All Freepik pool keys exhausted');
+}
+
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
   const primaryEndpoint = `/v1/ai/image-to-video/kling-v2-6/${taskId}`;
 
@@ -12302,7 +12390,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
               const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
               const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
               
-              const gemResult = await generateImageWithGeminiGen(genPrompt, imageModel, genAspect, imageResolution, refImages, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}` });
+              const gemResult = await generateImageWithFreepikNanoBanana(genPrompt, genAspect, refImages, project.user_id, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}`, resolution: '4K' });
               const imageUrl = gemResult.imageUrl;
               
               await pool.query(
@@ -12694,7 +12782,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
           const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
           
-          const gemResult = await generateImageWithGeminiGen(genPrompt, imageModel, genAspect, imageResolution, refImages, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}` });
+          const gemResult = await generateImageWithFreepikNanoBanana(genPrompt, genAspect, refImages, project.user_id, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}`, resolution: '4K' });
           sceneImageUrl = gemResult.imageUrl;
 
           await pool.query(
@@ -14866,7 +14954,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               for (let imgRetry = 0; imgRetry < 3 && !imageUrl; imgRetry++) {
                 try {
                   if (imgRetry > 0) console.log(`[ADS-STUDIO] Image retry #${imgRetry} for scene ${scene.scene_index}`);
-                  const gemResult = await generateImageWithGeminiGen(refPrompt, imageModel, aspectRatio, imageResolution, refImages, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}` });
+                  const gemResult = await generateImageWithFreepikNanoBanana(refPrompt, aspectRatio, refImages, project.user_id, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}`, resolution: '4K' });
                   imageUrl = gemResult.imageUrl;
                   
                   await pool.query(
@@ -15210,7 +15298,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
             refPrompt = `${staticPrompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
-          const gemResult = await generateImageWithGeminiGen(refPrompt, imageModel, aspectRatio, imageResolution, refImages, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}` });
+          const gemResult = await generateImageWithFreepikNanoBanana(refPrompt, aspectRatio, refImages, project.user_id, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}`, resolution: '4K' });
           sceneImageUrl = gemResult.imageUrl;
 
           if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after image gen, aborting`); return; }
