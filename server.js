@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -513,19 +514,48 @@ app.use(async (req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, 'client')));
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    const type = res.getHeader('Content-Type') || '';
+    if (/^(video|audio|image)\//.test(type)) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+app.use(express.static(path.join(__dirname, 'client'), {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    } else if (/\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    }
+  }
+}));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   acceptRanges: true,
+  maxAge: '7d',
   setHeaders: (res) => {
     res.set('Accept-Ranges', 'bytes');
     res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cache-Control', 'public, max-age=604800, immutable');
   }
 }));
 const processedDir = path.join(__dirname, 'processed');
 if (!fs.existsSync(processedDir)) {
   fs.mkdirSync(processedDir, { recursive: true });
 }
-app.use('/processed', express.static(processedDir));
+app.use('/processed', express.static(processedDir, {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'public, max-age=604800, immutable');
+  }
+}));
 
 // Handle common HTTP errors gracefully
 app.use((err, req, res, next) => {
