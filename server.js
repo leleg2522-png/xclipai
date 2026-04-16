@@ -9764,8 +9764,12 @@ app.post('/api/ximage2/generate', async (req, res) => {
     if (size) requestBody.aspect_ratio = size;
     requestBody.resolution = resolution || modelConfig.defaultResolution || '2K';
 
+    let freepikEndpoint = modelConfig.freepikEndpoint;
+    const isSeedream = model === 'seedream-v5-lite';
+
     if (isI2I) {
-      const refImages = [];
+      const refUrls = [];
+      const refObjs = [];
       for (let i = 0; i < Math.min(images.length, modelConfig.maxRefs || 3); i++) {
         const img = images[i];
         let imgUrl = img;
@@ -9776,15 +9780,20 @@ app.post('/api/ximage2/generate', async (req, res) => {
         }
         if (imgUrl) {
           const mimeType = imgUrl.includes('.png') ? 'image/png' : imgUrl.includes('.webp') ? 'image/webp' : 'image/jpeg';
-          refImages.push({ image: imgUrl, text: 'Reference image', mime_type: mimeType });
+          refUrls.push(imgUrl);
+          refObjs.push({ image: imgUrl, text: 'Reference image', mime_type: mimeType });
         }
       }
-      if (refImages.length > 0) requestBody.reference_images = refImages;
+      if (isSeedream && refUrls.length > 0) {
+        // Seedream i2i uses the -edit endpoint with array of URL strings
+        freepikEndpoint = '/v1/ai/text-to-image/seedream-v5-lite-edit';
+        requestBody.reference_images = refUrls;
+      } else if (refObjs.length > 0) {
+        requestBody.reference_images = refObjs;
+      }
     }
 
-    console.log('[XIMAGE2] Freepik request:', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }));
-
-    const freepikEndpoint = modelConfig.freepikEndpoint;
+    console.log('[XIMAGE2] Freepik request:', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }), 'endpoint:', freepikEndpoint);
     const response = await axios.post(
       `https://api.freepik.com${freepikEndpoint}`,
       requestBody,
@@ -9918,8 +9927,13 @@ app.get('/api/ximage2/status/:taskId', async (req, res) => {
     }
 
     const model = localTask.rows[0]?.model || 'nano-banana-pro';
+    const taskMode = localTask.rows[0]?.mode || 'text-to-image';
     const modelConfig = XIMAGE2_MODELS[model] || XIMAGE2_MODELS['nano-banana-pro'];
-    const pollEndpoint = modelConfig.freepikEndpoint || '/v1/ai/text-to-image/nano-banana-pro';
+    let pollEndpoint = modelConfig.freepikEndpoint || '/v1/ai/text-to-image/nano-banana-pro';
+    // Seedream i2i tasks live under the -edit endpoint
+    if (model === 'seedream-v5-lite' && taskMode === 'image-to-image') {
+      pollEndpoint = '/v1/ai/text-to-image/seedream-v5-lite-edit';
+    }
 
     const pollResult = await pollFreepikImageTask(taskId, poolKeyResult.apiKey, pollEndpoint);
 
