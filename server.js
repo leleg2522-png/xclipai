@@ -3060,10 +3060,11 @@ async function pollFreepikImageTask(taskId, apiKey, endpoint) {
     }
     return { status: 'processing' };
   } catch (err) {
-    console.error(`[FREEPIK-IMG] Poll error for ${taskId}:`, err.message, 'status:', err.response?.status);
     if (err.response?.status === 404) {
+      // Freepik sering balas 404 sebentar setelah create sampai task siap di-query — bukan error
       return { status: 'processing', notReady: true };
     }
+    console.error(`[FREEPIK-IMG] Poll error for ${taskId}:`, err.message, 'status:', err.response?.status);
     return { status: 'processing' };
   }
 }
