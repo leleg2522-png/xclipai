@@ -3060,8 +3060,10 @@ async function pollFreepikImageTask(taskId, apiKey, endpoint) {
     }
     return { status: 'processing' };
   } catch (err) {
-    console.error(`[XIMAGE3] Poll error for ${taskId}:`, err.message);
-    if (err.response?.status === 404) return { status: 'failed', error: 'Task not found' };
+    console.error(`[FREEPIK-IMG] Poll error for ${taskId}:`, err.message, 'status:', err.response?.status);
+    if (err.response?.status === 404) {
+      return { status: 'processing', notReady: true };
+    }
     return { status: 'processing' };
   }
 }
