@@ -4343,8 +4343,8 @@ function renderXImageGallery() {
 function renderXImage2Page() {
   var ximage2Models = [
     { id: 'nano-banana-pro', name: 'Nano Banana Pro', icon: 'google', supportsI2I: true, badge: 'PRO', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'google', hasResolution: true, resolutions: ['1K', '2K', '4K'] },
-    { id: 'nano-banana-flash', name: 'Nano Banana Flash', icon: 'google', supportsI2I: true, badge: 'FAST', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'google', hasResolution: true, resolutions: ['1K', '2K', '4K'] },
-    { id: 'seedream-5-lite', name: 'Seedream 5 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'bytedance', hasResolution: true, resolutions: ['1K', '2K', '4K'] },
+    { id: 'nano-banana-pro-flash', name: 'Nano Banana Pro Flash', icon: 'google', supportsI2I: true, badge: 'FAST', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'google', hasResolution: true, resolutions: ['1K', '2K', '4K'] },
+    { id: 'seedream-v5-lite', name: 'Seedream V5 Lite', icon: 'bytedance', supportsI2I: true, badge: 'NEW', hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], maxRefs: 3, group: 'bytedance', hasResolution: true, resolutions: ['1K', '2K', '4K'] },
     { id: 'flux', name: 'Flux', icon: 'flux', supportsI2I: false, hasN: false, sizes: ['1:1', '2:3', '3:2', '3:4', '4:3', '16:9', '9:16'], maxRefs: 0, group: 'flux', hasResolution: true, resolutions: ['1K', '2K', '4K'] }
   ];
 

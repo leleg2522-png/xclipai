@@ -9549,21 +9549,21 @@ const XIMAGE2_MODELS = {
     freepikEndpoint: '/v1/ai/text-to-image/nano-banana-pro',
     desc: 'Google Nano Banana Pro via Freepik - high quality, supports reference images'
   },
-  'nano-banana-flash': {
-    name: 'Nano Banana Flash', provider: 'Freepik (Google)', supportsI2I: true,
+  'nano-banana-pro-flash': {
+    name: 'Nano Banana Pro Flash', provider: 'Freepik (Google)', supportsI2I: true,
     sizes: ['1:1', '2:3', '3:2', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '21:9'],
     maxN: 1, maxRefs: 3,
     resolutions: ['1K', '2K', '4K'], defaultResolution: '2K',
-    freepikEndpoint: '/v1/ai/text-to-image/nano-banana-flash',
-    desc: 'Google Nano Banana Flash via Freepik - fast generation'
+    freepikEndpoint: '/v1/ai/text-to-image/nano-banana-pro-flash',
+    desc: 'Google Nano Banana Pro Flash via Freepik - fast generation'
   },
-  'seedream-5-lite': {
-    name: 'Seedream 5 Lite', provider: 'Freepik (ByteDance)', supportsI2I: true,
+  'seedream-v5-lite': {
+    name: 'Seedream V5 Lite', provider: 'Freepik (ByteDance)', supportsI2I: true,
     sizes: ['1:1', '2:3', '3:2', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '21:9'],
     maxN: 1, maxRefs: 3,
     resolutions: ['1K', '2K', '4K'], defaultResolution: '2K',
-    freepikEndpoint: '/v1/ai/text-to-image/seedream-5-lite',
-    desc: 'ByteDance Seedream 5 Lite via Freepik - balanced quality'
+    freepikEndpoint: '/v1/ai/text-to-image/seedream-v5-lite',
+    desc: 'ByteDance Seedream V5 Lite via Freepik - balanced quality'
   },
   'flux': {
     name: 'Flux', provider: 'Freepik (Black Forest Labs)', supportsI2I: false,
