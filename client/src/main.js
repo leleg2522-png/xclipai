@@ -7072,7 +7072,7 @@ function renderAdsStudioPage() {
   html += '<option value="wan-v2.6-pro"' + (state.adsStudio.newProject.videoModel === 'wan-v2.6-pro' ? ' selected' : '') + '>Wan 2.6 Pro</option>';
   html += '<option value="kling-v2.1-pro"' + (state.adsStudio.newProject.videoModel === 'kling-v2.1-pro' ? ' selected' : '') + '>Kling 2.1 Pro</option>';
   html += '<option value="veo-3.1-fast-fhd"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast-fhd' ? ' selected' : '') + '>Veo 3.1 Fast FHD</option>';
-  html += '<option value="veo-3.1-freepik-4k"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K (Freepik)</option>';
+  html += '<option value="veo-3.1-freepik-4k"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K</option>';
   html += '<option value="grok-3-geminigen"' + (state.adsStudio.newProject.videoModel === 'grok-3-geminigen' ? ' selected' : '') + '>Grok 3 (10s, Audio)</option>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
@@ -7296,7 +7296,7 @@ function renderAutomationPage() {
   html += '<option value="wan-v2.7-pro"' + (state.automation.newProject.videoModel === 'wan-v2.7-pro' ? ' selected' : '') + '>Wan 2.7 Pro I2V</option>';
   html += '<option value="wan-v2.7-r2v"' + (state.automation.newProject.videoModel === 'wan-v2.7-r2v' ? ' selected' : '') + '>Wan 2.7 R2V</option>';
   html += '<option value="veo-3.1-fast-fhd"' + (state.automation.newProject.videoModel === 'veo-3.1-fast-fhd' ? ' selected' : '') + '>Veo 3.1 Fast FHD</option>';
-  html += '<option value="veo-3.1-freepik-4k"' + (state.automation.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K (Freepik)</option>';
+  html += '<option value="veo-3.1-freepik-4k"' + (state.automation.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K</option>';
   html += '<option value="grok-3-geminigen"' + (state.automation.newProject.videoModel === 'grok-3-geminigen' ? ' selected' : '') + '>Grok 3 (10s, Audio)</option>';
   html += '</select>';
   html += '<select class="form-input auto-select" id="autoDuration">';
