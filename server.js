@@ -3032,9 +3032,14 @@ async function pollKieFluxKontextTask(taskId, apiKey) {
 
 async function pollFreepikImageTask(taskId, apiKey, endpoint) {
   try {
-    const resp = await axios.get(
+    const resp = await makeFreepikRequest(
+      'GET',
       `https://api.freepik.com${endpoint}/${taskId}`,
-      { headers: freepikHeaders(apiKey), timeout: 30000 }
+      apiKey,
+      null,
+      true,
+      taskId,
+      'decodo'
     );
     const taskData = resp.data?.data || resp.data;
     const status = (taskData.status || '').toUpperCase();
@@ -3228,10 +3233,14 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
     const maxCreateRetries = 4;
     for (let createAttempt = 0; createAttempt < maxCreateRetries && !createSucceeded; createAttempt++) {
       try {
-        createResp = await axios.post(
+        createResp = await makeFreepikRequest(
+          'POST',
           `https://api.freepik.com${endpoint}`,
+          apiKey,
           requestBody,
-          { headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': apiKey }, timeout: 120000 }
+          true,
+          null,
+          'decodo'
         );
         createSucceeded = true;
       } catch (apiErr) {
@@ -11564,19 +11573,15 @@ async function generateVideoWithFreepik(imageUrl, prompt, aspectRatio, model, us
     }
 
     try {
-      console.log(`[KEY-POOL] Trying key ${keyRecord.id} (${keyRecord.api_key.substring(0, 8)}...) for ${feature}`);
-      const proxy = getNextProxy();
-      if (proxy) await waitForProxySlot(proxy);
-      const axiosConfig = {
-        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': keyRecord.api_key },
-        timeout: 60000
-      };
-      applyProxyToConfig(axiosConfig, proxy);
-      if (proxy) console.log(`[KEY-POOL] Using proxy ${proxy.proxy_address}:${proxy.port} for automation freepik`);
-      const response = await axios.post(
+      console.log(`[KEY-POOL] Trying key ${keyRecord.id} (${keyRecord.api_key.substring(0, 8)}...) for ${feature} via Decodo`);
+      const response = await makeFreepikRequest(
+        'POST',
         `https://api.freepik.com${config.endpoint}`,
+        keyRecord.api_key,
         requestBody,
-        axiosConfig
+        true,
+        null,
+        'decodo'
       );
       await recordKeyUsage(keyRecord.id);
       const taskData = response.data?.data || response.data;
@@ -11631,16 +11636,14 @@ async function pollFreepikAutomationTask(taskId, apiKey, endpoint, userId, featu
 
     await new Promise(r => setTimeout(r, attempt < 30 ? 5000 : attempt < 90 ? 8000 : 10000));
     try {
-      const proxy = getNextProxy();
-      if (proxy) await waitForProxySlot(proxy);
-      const axiosConfig = {
-        headers: { ...FREEPIK_HEADERS_BASE, 'x-freepik-api-key': currentApiKey },
-        timeout: 30000
-      };
-      applyProxyToConfig(axiosConfig, proxy);
-      const resp = await axios.get(
+      const resp = await makeFreepikRequest(
+        'GET',
         `https://api.freepik.com${pollEndpoint}/${taskId}`,
-        axiosConfig
+        currentApiKey,
+        null,
+        true,
+        taskId,
+        'decodo'
       );
       consecutiveKeyErrors = 0;
       const data = resp.data?.data || resp.data;
