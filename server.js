@@ -683,6 +683,35 @@ function initVpsProxy() {
     });
   }
 
+  // Decodo helper: auto-expand multiple ports
+  // DECODO_HOST=gate.decodo.com
+  // DECODO_USER=spg18hu8zx
+  // DECODO_PASS=xxx
+  // DECODO_PORTS=10001-10010   (range)  OR  10001,10002,10003 (list)
+  const dHost = process.env.DECODO_HOST;
+  const dUser = process.env.DECODO_USER;
+  const dPass = process.env.DECODO_PASS;
+  const dPorts = process.env.DECODO_PORTS;
+  if (dHost && dPorts) {
+    const portList = [];
+    if (dPorts.includes('-')) {
+      const [start, end] = dPorts.split('-').map(p => parseInt(p.trim()));
+      for (let p = start; p <= end; p++) portList.push(p);
+    } else {
+      dPorts.split(',').map(p => parseInt(p.trim())).filter(Boolean).forEach(p => portList.push(p));
+    }
+    portList.forEach(p => {
+      VPS_PROXIES.push({
+        proxy_address: dHost,
+        port: p,
+        username: dUser || null,
+        password: dPass || null,
+        provider: 'vps',
+        configured: true
+      });
+    });
+  }
+
   if (VPS_PROXIES.length > 0) {
     console.log(`[PROXY] Initialized ${VPS_PROXIES.length} VPS proxy/proxies (HIGHEST PRIORITY)`);
     VPS_PROXIES.forEach((p, i) => console.log(`  [VPS-${i+1}] ${p.proxy_address}:${p.port}`));
