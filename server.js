@@ -718,10 +718,52 @@ function initVpsProxy() {
   }
 }
 
+// ============ PROXY COOLDOWN (WAF Penalty Box) ============
+// Track proxies that got WAF-blocked so we skip them temporarily
+const proxyCooldownMap = new Map(); // key: "ip:port" -> cooldownUntilTimestamp
+const PROXY_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+
+function proxyKey(proxy) {
+  return `${proxy.proxy_address}:${proxy.port}`;
+}
+
+function isProxyOnCooldown(proxy) {
+  if (!proxy) return false;
+  const until = proxyCooldownMap.get(proxyKey(proxy));
+  if (!until) return false;
+  if (Date.now() >= until) {
+    proxyCooldownMap.delete(proxyKey(proxy));
+    return false;
+  }
+  return true;
+}
+
+function markProxyBlocked(proxy, durationMs = PROXY_COOLDOWN_MS) {
+  if (!proxy) return;
+  const until = Date.now() + durationMs;
+  proxyCooldownMap.set(proxyKey(proxy), until);
+  const mins = Math.round(durationMs / 60000);
+  console.log(`[PROXY] 🚫 Cooldown ${proxy.proxy_address}:${proxy.port} for ${mins}min (WAF/penalty box)`);
+}
+
 function getNextVpsProxy() {
-  const proxy = VPS_PROXIES[vpsIndex % VPS_PROXIES.length];
-  vpsIndex++;
-  return proxy;
+  if (VPS_PROXIES.length === 0) return null;
+  // Try up to N times to find a non-cooldown proxy
+  for (let i = 0; i < VPS_PROXIES.length; i++) {
+    const proxy = VPS_PROXIES[vpsIndex % VPS_PROXIES.length];
+    vpsIndex++;
+    if (!isProxyOnCooldown(proxy)) return proxy;
+  }
+  // All proxies are on cooldown — pick the one whose cooldown expires soonest
+  let bestProxy = VPS_PROXIES[0];
+  let bestUntil = Infinity;
+  for (const p of VPS_PROXIES) {
+    const until = proxyCooldownMap.get(proxyKey(p)) || 0;
+    if (until < bestUntil) { bestUntil = until; bestProxy = p; }
+  }
+  console.log(`[PROXY] ⚠️  All ${VPS_PROXIES.length} proxies on cooldown — using least-recently-cooled (${bestProxy.proxy_address}:${bestProxy.port})`);
+  proxyCooldownMap.delete(proxyKey(bestProxy));
+  return bestProxy;
 }
 
 function isVpsAvailable() {
@@ -733,8 +775,8 @@ function isVpsAvailable() {
 // Prevents proxy IPs from getting banned by external APIs
 const proxyRateLimiter = {
   usage: new Map(), // key: "ip:port" -> { count, windowStart, lastUsed }
-  MAX_PER_MINUTE: 12,   // max outbound requests per proxy per minute
-  MIN_INTERVAL_MS: 2500 // minimum 2.5s between requests through same proxy
+  MAX_PER_MINUTE: 6,    // max outbound requests per proxy per minute (lowered to avoid Akamai WAF)
+  MIN_INTERVAL_MS: 5000 // minimum 5s between requests through same proxy
 };
 
 function canUseProxy(proxy) {
@@ -870,7 +912,11 @@ function applyProxyToConfig(config, proxy) {
 function isFreepikBlocked(response) {
   if (!response) return false;
   const data = response.data;
-  if (typeof data === 'string' && (data.includes('Access denied') || data.includes('<!DOCTYPE') || data.includes('edgesuite') || data.includes('AkamaiGHost'))) return true;
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data || '');
+  const lower = dataStr.toLowerCase();
+  if (lower.includes('access denied') || lower.includes('<!doctype') || lower.includes('edgesuite') ||
+      lower.includes('akamaighost') || lower.includes('penalty box') || lower.includes('waf') ||
+      lower.includes('reference #')) return true;
   if (response.status === 403 && typeof data === 'string') return true;
   return false;
 }
@@ -991,7 +1037,14 @@ async function makeFreepikRequest(method, url, apiKey, body = null, useProxy = t
       }
 
       if (blocked || socketErr) {
-        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked'} on Decodo. Rotating IP... (attempt ${proxyAttempt}/${MAX_PROXY_ATTEMPTS})`);
+        console.log(`[PROXY] ${socketErr ? 'Socket error' : 'IP blocked/penalty box'} on Decodo (${usedProxy.proxy_address}:${usedProxy.port}). Rotating... (attempt ${proxyAttempt}/${MAX_PROXY_ATTEMPTS})`);
+        if (blocked) {
+          // WAF/penalty box → 15min cooldown so we skip this IP from rotation
+          markProxyBlocked(usedProxy);
+        } else {
+          // Socket error → shorter cooldown (2min) so we don't keep retrying flaky exit
+          markProxyBlocked(usedProxy, 2 * 60 * 1000);
+        }
         if (taskId) releaseProxyForTask(taskId);
         await sleep(1500);
         continue;
