@@ -3283,6 +3283,10 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
   const endpoint = '/v1/ai/text-to-image/nano-banana-pro';
   const resolution = options.resolution || '4K';
 
+  // Anti-defect quality guard appended to prompt (nano-banana-pro doesn't support negative_prompt parameter)
+  const QUALITY_GUARD = ' IMPORTANT QUALITY RULES: photorealistic, anatomically correct, natural human proportions, exactly two hands with five fingers each, exactly two feet, symmetrical face, clean limbs, sharp focus, professional photography. AVOID: deformed body, extra limbs, missing limbs, extra fingers, missing fingers, fused fingers, mutated hands, distorted face, asymmetrical eyes, cross-eyed, malformed limbs, floating body parts, disconnected body parts, blurry, low quality, low resolution, watermark, text artifacts, jpeg artifacts, oversaturated, plastic skin, uncanny valley.';
+  const enhancedPrompt = (prompt || '').trim() + QUALITY_GUARD;
+
   const maxKeyRetries = 3;
   let lastError = null;
 
@@ -3294,7 +3298,7 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
     const selectedKey = poolKeys[0];
     const apiKey = selectedKey.key;
 
-    const requestBody = { prompt, resolution };
+    const requestBody = { prompt: enhancedPrompt, resolution };
     if (aspectRatio) requestBody.aspect_ratio = aspectRatio;
 
     if (refImageUrls && refImageUrls.length > 0) {
