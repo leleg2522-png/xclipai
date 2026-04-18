@@ -7277,6 +7277,7 @@ function renderAutomationPage() {
     html += '<div class="auto-ref-preview" id="autoRefPreviewWrap">';
     html += '<img src="' + state.automation.newProject.referenceImagePreview + '" class="auto-ref-thumb"/>';
     html += '<button class="auto-ref-remove" id="autoRefRemove" title="Hapus">&times;</button>';
+    html += '<span class="auto-ref-preview-label">✓ Gambar referensi siap dipakai</span>';
     html += '</div>';
   } else {
     html += '<button class="btn-secondary auto-ref-btn" id="autoRefBtn">';
@@ -7638,6 +7639,12 @@ function attachAutomationListeners() {
   if (nicheInput) {
     nicheInput.addEventListener('input', function() {
       state.automation.newProject.niche = nicheInput.value;
+    });
+  }
+  var customNarrInputLive = document.getElementById('autoCustomNarrations');
+  if (customNarrInputLive) {
+    customNarrInputLive.addEventListener('input', function() {
+      state.automation.newProject.customNarrations = customNarrInputLive.value;
     });
   }
 
