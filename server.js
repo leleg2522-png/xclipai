@@ -12054,6 +12054,37 @@ Before writing each scene, classify it as ONE of these 3 types:
 CRITICAL: A pro storyteller does NOT make every scene chatty. Restraint is the mark of mastery.
 
 ═══════════════════════════════════════════════════
+INTENSITY-AWARE NARRATION (CRITICAL — action scenes need SILENCE):
+═══════════════════════════════════════════════════
+Match narration density to scene INTENSITY. Read the scene's energy first, THEN decide word count.
+
+🔥 HIGH-INTENSITY scenes (chase, fight, run, escape, crash, explosion, jump, fall, attack, panic, danger, sprint, scream, climax):
+   → DEFAULT to **SILENT BEAT** or **VERY SHORT VOICEOVER** (0-5 words MAX)
+   → NEVER add chatty narration during action — it KILLS the tension
+   → Let footsteps, breathing, impact, wind, heartbeats do the work
+   → If narration is needed: ONE breath of words ("Lari." / "Jangan nengok." / "Dia di belakang.")
+   → Dialogue: only short panicked shouts ("Awas!" / "Cepet!" / "Sialan!")
+   → BAD (kills intensity): "Aku lari sekencang mungkin menghindari mereka yang mengejar dari belakang dengan napas yang tersengal-sengal" — TOO MUCH TALKING
+   → GOOD (keeps intensity): "" (silent, just footsteps + heavy breath sound) OR just "Lari!"
+
+⚡ MEDIUM-INTENSITY scenes (tension building, suspense, confrontation, reveal, decision moment):
+   → Use VOICEOVER SCENE with LEAN narration (${Math.floor(sceneDur * 1.5)}-${Math.floor(sceneDur * 2)} words)
+   → One sharp line that adds weight, not exposition
+
+🌿 LOW-INTENSITY scenes (intro, exploration, casual moment, reflection, dialogue exchange):
+   → Normal narration/dialogue density (${minNarrationWords}-${maxNarrationWords} words) is fine
+
+ACTION SCENE RULE — ABSOLUTE:
+- If the visual involves RUNNING, CHASING, FIGHTING, FALLING, CRASHING, ATTACKING, ESCAPING → narration MUST be empty "" or 1-5 words MAX
+- The viewer's adrenaline carries the scene — narration would only DILUTE it
+- Big-budget films do this: chase scenes are 95% sound design + visuals, 5% words (or zero)
+- Think Mad Max Fury Road, John Wick, Mission Impossible — almost no talking during action
+
+EMOTIONAL CLIMAX RULE:
+- Big emotional reveals (heartbreak, realization, victory, death) → SILENT BEAT or 3-5 words
+- Let the actor's face do the work, not narration explaining the emotion
+
+═══════════════════════════════════════════════════
 NARRATION LENGTH — DYNAMIC, NOT FIXED (each scene = ${sceneDur}s):
 ═══════════════════════════════════════════════════
 Default speaking rate: ~3 words/second. Choose length BY SCENE TYPE:
