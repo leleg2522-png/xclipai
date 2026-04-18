@@ -2594,7 +2594,7 @@ const RATE_LIMIT_CONFIG = {
     label: 'Vidgen4'
   },
   ximage2: {
-    cooldownMs: 300 * 1000,
+    cooldownMs: 30 * 1000,
     dailyQuotaPerKey: 50,
     jitterMinMs: 1000,
     jitterMaxMs: 3000,
