@@ -2601,7 +2601,7 @@ const RATE_LIMIT_CONFIG = {
     label: 'X Image2'
   },
   ximage: { cooldownMs: 120 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image' },
-  ximage3: { cooldownMs: 300 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image3' },
+  ximage3: { cooldownMs: 30 * 1000, dailyQuotaPerKey: 50, jitterMinMs: 1000, jitterMaxMs: 3000, label: 'X Image3' },
   voiceover: {
     cooldownMs: 120 * 1000,
     label: 'Voice Over'
