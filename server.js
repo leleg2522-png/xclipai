@@ -11946,8 +11946,9 @@ app.delete('/api/automation/projects/:projectId', async (req, res) => {
 
 app.post('/api/automation/projects', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
-  const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage } = req.body;
+  const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage, customNarrations } = req.body;
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
+  const customNarrationsClean = (customNarrations && typeof customNarrations === 'string') ? customNarrations.trim() : '';
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
   const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];
@@ -11974,9 +11975,9 @@ app.post('/api/automation/projects', async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, reference_image_url, scene_count, language, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft')`,
-      [req.session.userId, projectId, niche.trim(), fmt, model, duration, refImageUrl, scenes, lang]
+      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, reference_image_url, scene_count, language, status, custom_narrations)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10)`,
+      [req.session.userId, projectId, niche.trim(), fmt, model, duration, refImageUrl, scenes, lang, customNarrationsClean || null]
     );
     res.json({ projectId, message: 'Project created' });
   } catch (error) {
@@ -12007,6 +12008,32 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const formatDesc = project.format === 'shorts' ? 'YouTube Shorts (vertical 9:16, 30-60 detik total)' : 'YouTube video (landscape 16:9, 1-2 menit total)';
     const langName = project.language === 'en' ? 'English' : project.language === 'id' ? 'Bahasa Indonesia' : project.language;
     const hasRefImage = !!project.reference_image_url;
+
+    // User-provided custom narrations (one per line, format: "Scene 1: ..." or just "...")
+    const customNarrationText = (project.custom_narrations || '').trim();
+    const customNarrationLines = customNarrationText
+      ? customNarrationText.split('\n')
+          .map(l => l.replace(/^\s*scene\s*\d+\s*[:：\-]\s*/i, '').trim())
+          .filter(l => l.length > 0)
+      : [];
+    const hasCustomNarrations = customNarrationLines.length > 0;
+    const customNarrationBlock = hasCustomNarrations ? `
+
+═══════════════════════════════════════════════════
+🎙️  USER-PROVIDED CUSTOM NARRATIONS — ABSOLUTE PRIORITY (override LLM creativity)
+═══════════════════════════════════════════════════
+The user wrote their own narrations. You MUST use them EXACTLY AS WRITTEN — word for word — in the "narration" field. DO NOT rewrite, paraphrase, shorten, or "improve" them.
+
+User's narrations (in order):
+${customNarrationLines.map((n, i) => `Scene ${i + 1}: "${n}"`).join('\n')}
+
+RULES:
+- Copy each narration EXACTLY into the matching scene's "narration" field — do not change a single word
+- Build the visual_prompt + dialogue + scene structure AROUND these narrations to match their tone, pacing, and meaning
+- If a narration is short → make that scene a SILENT BEAT or quiet visual; if it's long → keep visual calm so voiceover can breathe
+- Do NOT add a "dialogue" field for scenes with custom narration unless the narration itself reads like spoken dialogue
+${customNarrationLines.length < project.scene_count ? `- Only ${customNarrationLines.length} narrations provided. For Scene ${customNarrationLines.length + 1} to Scene ${project.scene_count}, generate narrations yourself in the SAME tone/voice as the user's lines.` : '- All scenes have user narrations — use them all exactly.'}
+` : '';
 
     const durationMap = {
       'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8, 'veo-3.1-freepik-4k': 8,
@@ -12208,7 +12235,7 @@ CONTINUITY ANCHORS:
 - Every scene after Scene 1 must reference specific environmental details from previous scene
 - Same props stay visible (same backpack, same tree, same rock formation)
 - Same lighting direction and color temperature
-- Body position logically connected: if crouching → must stand before walking`;
+- Body position logically connected: if crouching → must stand before walking${customNarrationBlock}`;
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
@@ -12253,7 +12280,7 @@ GOOD narration: "Kaki mulai protes di kilometer ketiga. Tapi pemandangan ini bik
 CONTINUITY ANCHORS:
 - Every scene after Scene 1 references specific details from previous scene
 - Same props stay visible, same lighting direction, same color temperature
-- Body position logically connected`;
+- Body position logically connected${customNarrationBlock}`;
     }
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
@@ -14403,6 +14430,7 @@ async function initDatabase() {
 
     await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS reference_image_url TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS video_duration INTEGER DEFAULT 5`).catch(() => {});
+    await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS custom_narrations TEXT`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS automation_scenes (

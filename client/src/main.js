@@ -6850,11 +6850,11 @@ async function createAutomationProject() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language, referenceImage: np.referenceImage })
+      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language, referenceImage: np.referenceImage, customNarrations: np.customNarrations || '' })
     });
     var data = await response.json();
     if (data.projectId) {
-      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id', referenceImage: null, referenceImagePreview: null };
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id', referenceImage: null, referenceImagePreview: null, customNarrations: '' };
       showToast('Project dibuat!', 'success');
       await loadAutomationProjects();
       loadAutomationProjectDetail(data.projectId);
@@ -7285,6 +7285,11 @@ function renderAutomationPage() {
     html += '</button>';
   }
   html += '</div>';
+  html += '<details class="auto-custom-narration-wrap" style="margin:8px 0;">';
+  html += '<summary style="cursor:pointer;color:var(--accent);font-size:13px;padding:6px 0;">🎙️ Tulis Narasi Sendiri (opsional) — biar voice over sesuai keinginan lo</summary>';
+  html += '<textarea class="form-input" id="autoCustomNarrations" rows="5" placeholder="Tulis narasi per scene (1 baris = 1 scene). Contoh:&#10;Scene 1: Ada momen yang gak pernah lo lupa.&#10;Scene 2: Yang ini, salah satunya.&#10;&#10;Atau langsung tanpa label:&#10;Hari itu hujan deras&#10;Aku jalan tanpa payung" style="margin-top:6px;font-family:monospace;font-size:13px;line-height:1.5;">' + escapeHtml(state.automation.newProject.customNarrations || '') + '</textarea>';
+  html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">💡 Kosongkan kalo mau LLM yang nulis narasi. Kalo diisi, narasi lo dipake EXACT kata per kata, visual + dialog disesuaikan.</div>';
+  html += '</details>';
   html += '<div class="auto-settings-row">';
   html += '<select class="form-input auto-select" id="autoFormat">';
   html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts</option>';
@@ -7520,12 +7525,14 @@ function attachAutomationListeners() {
       var durationSelect = document.getElementById('autoDuration');
       var sceneSelect = document.getElementById('autoSceneCount');
       var langSelect = document.getElementById('autoLanguage');
+      var customNarrInput = document.getElementById('autoCustomNarrations');
       if (nicheInput) state.automation.newProject.niche = nicheInput.value;
       if (formatSelect) state.automation.newProject.format = formatSelect.value;
       if (modelSelect) state.automation.newProject.videoModel = modelSelect.value;
       if (durationSelect) state.automation.newProject.videoDuration = parseInt(durationSelect.value);
       if (sceneSelect) state.automation.newProject.sceneCount = parseInt(sceneSelect.value);
       if (langSelect) state.automation.newProject.language = langSelect.value;
+      if (customNarrInput) state.automation.newProject.customNarrations = customNarrInput.value;
       createAutomationProject();
     });
   }
