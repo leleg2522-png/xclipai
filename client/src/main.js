@@ -7546,13 +7546,24 @@ function attachAutomationListeners() {
   if (refInput) {
     refInput.addEventListener('change', function(e) {
       var file = e.target.files[0];
+      console.log('[AUTO-REF] File selected:', file ? (file.name + ' ' + file.size + 'B ' + file.type) : 'NONE');
       if (!file) return;
       if (file.size > 10 * 1024 * 1024) { showToast('Ukuran gambar maks 10MB', 'error'); return; }
       var reader = new FileReader();
+      reader.onerror = function(err) {
+        console.error('[AUTO-REF] FileReader error:', err);
+        showToast('Gagal baca file gambar', 'error');
+      };
       reader.onload = function(ev) {
+        console.log('[AUTO-REF] FileReader done, dataURL length:', (ev.target.result || '').length);
         state.automation.newProject.referenceImage = ev.target.result;
         state.automation.newProject.referenceImagePreview = ev.target.result;
-        render();
+        render(true);
+        setTimeout(function() {
+          var img = document.querySelector('.auto-ref-thumb');
+          console.log('[AUTO-REF] After render, .auto-ref-thumb exists?', !!img, 'src len:', img ? (img.src || '').length : 0);
+        }, 100);
+        showToast('Gambar referensi tersimpan ✓', 'success');
       };
       reader.readAsDataURL(file);
     });
