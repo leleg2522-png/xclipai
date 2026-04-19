@@ -9985,14 +9985,15 @@ app.post('/api/ximage2/generate', async (req, res) => {
       }
     }
 
-    console.log('[XIMAGE2] Freepik request:', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }), 'endpoint:', freepikEndpoint);
-    const response = await axios.post(
+    console.log('[XIMAGE2] Freepik request (via Decodo):', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }), 'endpoint:', freepikEndpoint);
+    const response = await makeFreepikRequest(
+      'POST',
       `https://api.freepik.com${freepikEndpoint}`,
+      poolKeyResult.apiKey,
       requestBody,
-      {
-        headers: { 'Content-Type': 'application/json', 'x-freepik-api-key': poolKeyResult.apiKey },
-        timeout: 120000
-      }
+      true,
+      null,
+      'decodo'
     );
 
     console.log('[XIMAGE2] Freepik response:', JSON.stringify(response.data).substring(0, 500));
