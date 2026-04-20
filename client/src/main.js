@@ -7294,9 +7294,12 @@ function renderAutomationPage() {
   }
   html += '</div>';
   html += '<div class="auto-custom-narration-wrap" style="margin:8px 0;">';
-  html += '<label style="display:block;color:var(--accent);font-size:13px;font-weight:600;margin-bottom:4px;">🎙️ Narasi per Scene (1 baris = 1 scene)</label>';
-  html += '<textarea class="form-input" id="autoCustomNarrations" rows="5" placeholder="Tulis narasi lo sendiri. 1 baris = 1 scene. Contoh:&#10;Scene 1: Ada momen yang gak pernah lo lupa.&#10;Scene 2: Yang ini, salah satunya.&#10;&#10;Atau tanpa label:&#10;Hari itu hujan deras&#10;Aku jalan tanpa payung" style="font-family:monospace;font-size:13px;line-height:1.5;">' + escapeHtml(state.automation.newProject.customNarrations || '') + '</textarea>';
-  html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">💡 Narasi 100% dari lo — AI gak bikin narasi otomatis lagi. Scene yang kosong = silent (cuma ambient sound). AI cuma handle visual & lip-sync.</div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px;flex-wrap:wrap;">';
+  html += '<label style="color:var(--accent);font-size:13px;font-weight:600;">🎙️ Narasi per Scene (1 baris = 1 scene)</label>';
+  html += '<button type="button" class="btn-secondary" id="autoGenerateNarrationBtn" style="font-size:12px;padding:4px 10px;">✨ Generate Narasi pakai AI</button>';
+  html += '</div>';
+  html += '<textarea class="form-input" id="autoCustomNarrations" rows="5" placeholder="Tulis narasi lo sendiri ATAU klik tombol ✨ Generate AI di atas. 1 baris = 1 scene." style="font-family:monospace;font-size:13px;line-height:1.5;">' + escapeHtml(state.automation.newProject.customNarrations || '') + '</textarea>';
+  html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">💡 Narasi diisi manual atau pakai tombol AI di atas. Scene kosong = silent (ambient sound). Hasil AI bisa lo edit lagi.</div>';
   html += '</div>';
   html += '<div class="auto-settings-row">';
   html += '<select class="form-input auto-select" id="autoFormat">';
@@ -7663,6 +7666,51 @@ function attachAutomationListeners() {
   if (customNarrInputLive) {
     customNarrInputLive.addEventListener('input', function() {
       state.automation.newProject.customNarrations = customNarrInputLive.value;
+    });
+  }
+  var genNarrBtn = document.getElementById('autoGenerateNarrationBtn');
+  if (genNarrBtn) {
+    genNarrBtn.addEventListener('click', async function() {
+      var nicheEl = document.getElementById('autoNiche');
+      var sceneCountEl = document.getElementById('autoSceneCount');
+      var langEl = document.getElementById('autoLanguage');
+      var fmtEl = document.getElementById('autoFormat');
+      var durEl = document.getElementById('autoDuration');
+      var taEl = document.getElementById('autoCustomNarrations');
+      var niche = nicheEl ? nicheEl.value.trim() : (state.automation.newProject.niche || '');
+      if (!niche) { showToast('Isi dulu Niche/Topik di atas', 'error'); return; }
+      var sceneCount = sceneCountEl ? parseInt(sceneCountEl.value) : (state.automation.newProject.sceneCount || 3);
+      var language = langEl ? langEl.value : (state.automation.newProject.language || 'id');
+      var format = fmtEl ? fmtEl.value : (state.automation.newProject.format || 'shorts');
+      var sceneDuration = durEl ? parseInt(durEl.value) : 5;
+      var origText = genNarrBtn.textContent;
+      genNarrBtn.disabled = true;
+      genNarrBtn.textContent = '⏳ Generating...';
+      try {
+        var resp = await fetch('/api/automation/generate-narration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ niche: niche, sceneCount: sceneCount, language: language, format: format, sceneDuration: sceneDuration })
+        });
+        var data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.error || 'Gagal generate');
+        var lines = (data.narrations || []).map(function(s) { return (s || '').replace(/\r?\n/g, ' '); });
+        var joined = lines.join('\n');
+        if (taEl) {
+          if (taEl.value.trim() && !confirm('Textarea sudah ada isi. Replace dengan narasi AI?')) {
+            return;
+          }
+          taEl.value = joined;
+          state.automation.newProject.customNarrations = joined;
+        }
+        showToast('✅ Narasi AI berhasil di-generate (' + lines.length + ' scene). Edit kalau perlu.', 'success');
+      } catch (e) {
+        showToast('❌ ' + (e.message || 'Gagal generate narasi'), 'error');
+      } finally {
+        genNarrBtn.disabled = false;
+        genNarrBtn.textContent = origText;
+      }
     });
   }
 
