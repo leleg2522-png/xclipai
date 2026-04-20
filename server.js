@@ -12742,7 +12742,7 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
               const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
               const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
               
-              const gemResult = await generateImageWithFreepikNanoBanana(genPrompt, genAspect, refImages, project.user_id, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}`, resolution: '4K' });
+              const gemResult = await generateImageWithGeminiGen(genPrompt, 'nano-banana-pro', genAspect, '4K', refImages, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}` });
               const imageUrl = gemResult.imageUrl;
               
               await pool.query(
@@ -13135,7 +13135,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
           const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
           
-          const gemResult = await generateImageWithFreepikNanoBanana(genPrompt, genAspect, refImages, project.user_id, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}`, resolution: '4K' });
+          const gemResult = await generateImageWithGeminiGen(genPrompt, 'nano-banana-pro', genAspect, '4K', refImages, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}` });
           sceneImageUrl = gemResult.imageUrl;
 
           await pool.query(
@@ -13597,7 +13597,7 @@ app.post('/api/automation/projects/:projectId/upload-youtube', async (req, res) 
 
 // ============ SCENE STUDIO (Simple Batch Image Generation) ============
 
-const SCENE_STUDIO_MODELS = { ...XIMAGE2_MODELS };
+const SCENE_STUDIO_MODELS = { ...XIMAGE3_MODELS };
 
 function safeParseJsonb(val, fallback = []) {
   if (Array.isArray(val)) return val;
@@ -13730,8 +13730,7 @@ app.post('/api/scene-studio/generate', async (req, res) => {
 
     (async () => {
       const results = [];
-      // Track current pool key (rotates if invalid/exhausted)
-      let currentPoolKey = roomKeyResult;
+      const userId = roomKeyResult.userId;
       try {
         for (let i = 0; i < prompts.length; i++) {
           const promptText = prompts[i];
@@ -13743,13 +13742,6 @@ app.post('/api/scene-studio/generate', async (req, res) => {
             fullPrompt = `${characterDesc.trim()}\n\n${fullPrompt}`;
           }
 
-          // Build Freepik request body (same shape as X Image 2)
-          const isSeedream = model === 'seedream-v5-lite';
-          let freepikEndpoint = modelConfig.freepikEndpoint;
-          const requestBody = { prompt: fullPrompt };
-          if (size) requestBody.aspect_ratio = size;
-          requestBody.resolution = resolution || modelConfig.defaultResolution || '2K';
-
           // Reference images: char + bg + previous result (for continuity if i2i supported)
           const imageRefs = [...refImageUrls, ...bgImageUrls];
           if (i > 0 && modelConfig.supportsI2I) {
@@ -13758,121 +13750,29 @@ app.post('/api/scene-studio/generate', async (req, res) => {
               imageRefs.push(prevCompleted[prevCompleted.length - 1].imageUrl);
             }
           }
-          const cappedRefs = imageRefs.slice(0, modelConfig.maxRefs || 3);
-          if (cappedRefs.length > 0 && modelConfig.supportsI2I) {
-            if (isSeedream) {
-              freepikEndpoint = '/v1/ai/image-to-image/seedream-v5-lite';
-              requestBody.reference_images = cappedRefs;
-            } else {
-              requestBody.reference_images = cappedRefs.map(url => {
-                const mt = url.includes('.png') ? 'image/png' : url.includes('.webp') ? 'image/webp' : 'image/jpeg';
-                return { image: url, text: 'Reference image', mime_type: mt };
-              });
-            }
-          }
+          const maxRefs = modelConfig.maxRefs || 8;
+          const cappedRefs = imageRefs.slice(0, maxRefs);
 
-          console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length} via Freepik (${model}): "${promptText.substring(0, 50)}..."`);
+          console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length} via GeminiGen (${model}): "${promptText.substring(0, 50)}..."`);
+          sendSSEToUser(userId, { type: 'scene_studio_progress', batchId, index: i, status: 'processing', current: i + 1, total: prompts.length });
 
           try {
-            // Key-rotation retry loop (same as X Image 2)
-            let response = null;
-            let lastErr = null;
-            const MAX_KEY_ROTATIONS = 5;
-            for (let attempt = 1; attempt <= MAX_KEY_ROTATIONS; attempt++) {
-              try {
-                response = await makeFreepikRequest(
-                  'POST',
-                  `https://api.freepik.com${freepikEndpoint}`,
-                  currentPoolKey.apiKey,
-                  requestBody,
-                  true,
-                  null,
-                  'decodo'
-                );
-                break;
-              } catch (reqErr) {
-                lastErr = reqErr;
-                const httpStatus = reqErr.response?.status;
-                const isInvalidKey = isInvalidFreepikKey(reqErr);
-                const isQuotaErr = httpStatus === 402 || httpStatus === 429;
-                if ((isInvalidKey || isQuotaErr) && currentPoolKey.poolId && attempt < MAX_KEY_ROTATIONS) {
-                  const reason = isInvalidKey ? `INVALID KEY (HTTP ${httpStatus || 'n/a'})` : `HTTP ${httpStatus}`;
-                  console.warn(`[SCENE-STUDIO] ${reason} on key pool#${currentPoolKey.poolId}, attempt ${attempt}/${MAX_KEY_ROTATIONS} — killing & rotating`);
-                  const replacement = await handlePoolKeyExhausted(currentPoolKey.poolId, currentPoolKey.userId, 'ximage2', reason);
-                  if (replacement) {
-                    currentPoolKey = {
-                      apiKey: replacement.key,
-                      poolId: replacement.poolId,
-                      userId: currentPoolKey.userId,
-                      keyInfoId: currentPoolKey.keyInfoId
-                    };
-                    console.log(`[SCENE-STUDIO] Rotated to new key pool#${replacement.poolId}, retrying...`);
-                    continue;
-                  }
-                  throw reqErr;
-                }
-                throw reqErr;
-              }
-            }
-            if (!response) throw lastErr || new Error('Freepik request failed after key rotation');
-
-            const respData = response.data?.data || response.data;
-
-            // Direct image (rare but possible)
-            let directImageUrl = null;
-            if (respData.generated && Array.isArray(respData.generated) && respData.generated.length > 0) {
-              const g = respData.generated[0];
-              directImageUrl = typeof g === 'string' ? g : g.url || g.image_url;
-              if (!directImageUrl && g.base64) directImageUrl = `data:image/png;base64,${g.base64}`;
-            }
-
-            if (directImageUrl) {
-              results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: directImageUrl });
-              sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: directImageUrl, current: i + 1, total: prompts.length });
-              if (currentPoolKey.poolId) await recordKeyUsage(currentPoolKey.poolId);
-            } else {
-              const taskId = respData.task_id || respData.id;
-              if (!taskId) {
-                results.push({ index: i, prompt: promptText, status: 'failed', error: 'Tidak ada task ID dari Freepik' });
-                sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Tidak ada task ID dari Freepik', current: i + 1, total: prompts.length });
-              } else {
-                sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'processing', taskId, current: i + 1, total: prompts.length });
-                if (currentPoolKey.poolId) await recordKeyUsage(currentPoolKey.poolId);
-
-                // Poll via shared helper (uses Decodo, key-aware)
-                let polled = false;
-                const maxPollAttempts = 120; // 120 * 5s = 10 min
-                for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-                  await new Promise(r => setTimeout(r, 5000));
-                  try {
-                    const pollResult = await pollFreepikImageTask(taskId, currentPoolKey.apiKey, freepikEndpoint);
-                    if (pollResult.status === 'completed' && pollResult.url) {
-                      results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: pollResult.url });
-                      sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: pollResult.url, current: i + 1, total: prompts.length });
-                      polled = true; break;
-                    }
-                    if (pollResult.status === 'failed') {
-                      const failErr = pollResult.error || 'Task failed';
-                      results.push({ index: i, prompt: promptText, status: 'failed', error: failErr });
-                      sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: failErr, current: i + 1, total: prompts.length });
-                      polled = true; break;
-                    }
-                  } catch (pe) {
-                    console.log(`[SCENE-STUDIO] Poll error attempt ${attempt+1}: ${pe.message}`);
-                  }
-                }
-                if (!polled) {
-                  results.push({ index: i, prompt: promptText, status: 'failed', error: 'Timeout' });
-                  sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Timeout', current: i + 1, total: prompts.length });
-                }
-              }
-            }
+            const gemResult = await generateImageWithGeminiGen(
+              fullPrompt,
+              modelConfig.apiModel || model,
+              size || '1:1',
+              resolution || '4K',
+              cappedRefs,
+              { logPrefix: `[SCENE-STUDIO] ${i+1}/${prompts.length}` }
+            );
+            const imageUrl = gemResult.imageUrl;
+            results.push({ index: i, prompt: promptText, status: 'completed', imageUrl });
+            sendSSEToUser(userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl, current: i + 1, total: prompts.length });
           } catch (genErr) {
-            const errMsg = genErr.response?.data?.detail || genErr.response?.data?.message || genErr.response?.data?.error || genErr.message || 'Generation failed';
-            console.error(`[SCENE-STUDIO] Prompt ${i+1} error:`, typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg).substring(0, 300));
-            const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg).substring(0, 200);
-            results.push({ index: i, prompt: promptText, status: 'failed', error: errStr });
-            sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: errStr, current: i + 1, total: prompts.length });
+            const errMsg = genErr.message || 'Generation failed';
+            console.error(`[SCENE-STUDIO] Prompt ${i+1} error:`, errMsg.substring(0, 300));
+            results.push({ index: i, prompt: promptText, status: 'failed', error: errMsg });
+            sendSSEToUser(userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: errMsg, current: i + 1, total: prompts.length });
           }
 
           if (i < prompts.length - 1) await new Promise(resolve => setTimeout(resolve, 2000));
@@ -15324,7 +15224,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               for (let imgRetry = 0; imgRetry < 3 && !imageUrl; imgRetry++) {
                 try {
                   if (imgRetry > 0) console.log(`[ADS-STUDIO] Image retry #${imgRetry} for scene ${scene.scene_index}`);
-                  const gemResult = await generateImageWithFreepikNanoBanana(refPrompt, aspectRatio, refImages, project.user_id, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}`, resolution: '4K' });
+                  const gemResult = await generateImageWithGeminiGen(refPrompt, 'nano-banana-pro', aspectRatio, '4K', refImages, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}` });
                   imageUrl = gemResult.imageUrl;
                   
                   await pool.query(
@@ -15669,7 +15569,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
             refPrompt = `${staticPrompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
-          const gemResult = await generateImageWithFreepikNanoBanana(refPrompt, aspectRatio, refImages, project.user_id, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}`, resolution: '4K' });
+          const gemResult = await generateImageWithGeminiGen(refPrompt, 'nano-banana-pro', aspectRatio, '4K', refImages, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}` });
           sceneImageUrl = gemResult.imageUrl;
 
           if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after image gen, aborting`); return; }
