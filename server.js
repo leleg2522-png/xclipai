@@ -909,6 +909,20 @@ function applyProxyToConfig(config, proxy) {
   return config;
 }
 
+function isInvalidFreepikKey(err) {
+  if (!err) return false;
+  const status = err.response?.status;
+  const data = err.response?.data;
+  const dataStr = (typeof data === 'string' ? data : JSON.stringify(data || '')).toLowerCase();
+  const msg = (err.message || '').toLowerCase();
+  if (status === 401) return true;
+  if (dataStr.includes('api key is invalid') || dataStr.includes('invalid api key') ||
+      dataStr.includes('unauthorized') || dataStr.includes('verify your api key') ||
+      dataStr.includes('api-key') && dataStr.includes('invalid')) return true;
+  if (msg.includes('api key is invalid') || msg.includes('unauthorized')) return true;
+  return false;
+}
+
 function isFreepikBlocked(response) {
   if (!response) return false;
   const data = response.data;
@@ -4252,10 +4266,12 @@ app.post('/api/videogen/proxy', async (req, res) => {
         const errMsg = error.response?.data?.message || error.response?.data?.detail || error.message || '';
         const isTrialExpired = typeof errMsg === 'string' && (errMsg.includes('free trial') || errMsg.includes('limit of the free'));
         
-        if (status === 429 || status === 402 || status === 403 || isTrialExpired) {
-          console.log(`[VIDEOGEN] ❌ Key ${currentKey.name} DEAD (HTTP ${status}): ${errMsg}`);
+        const isInvalidKey = isInvalidFreepikKey(error);
+        if (status === 429 || status === 402 || status === 403 || status === 401 || isTrialExpired || isInvalidKey) {
+          const reason = isInvalidKey ? 'INVALID KEY' : `HTTP ${status}`;
+          console.log(`[VIDEOGEN] ❌ Key ${currentKey.name} DEAD (${reason}): ${errMsg}`);
           if (currentKey.isPool && currentKey.poolId) {
-            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `HTTP ${status}: ${errMsg}`);
+            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'videogen', `${reason}: ${errMsg}`);
             if (replacement) {
               availableKeys.push(replacement);
               maxKeyAttempts = Math.min(availableKeys.length, maxKeyAttempts + 1);
@@ -4779,10 +4795,12 @@ app.post('/api/motion/generate', async (req, res) => {
         const errorMsg = typeof rawErrMsg === 'string' ? rawErrMsg : JSON.stringify(rawErrMsg);
         const isDailyLimit = status === 429 || status === 402 || errorMsg.toLowerCase().includes('daily limit') || errorMsg.toLowerCase().includes('limit') || errorMsg.toLowerCase().includes('free trial');
         const isNetworkError = !status && (errorMsg.includes('socket hang up') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ssl') || errorMsg.includes('bad record mac'));
+        const isInvalidKey = isInvalidFreepikKey(error);
         
-        if (isFreepikTrialExpired(errorMsg) || isDailyLimit) {
+        if (isFreepikTrialExpired(errorMsg) || isDailyLimit || isInvalidKey) {
+          const reason = isInvalidKey ? 'INVALID KEY' : `HTTP ${status}`;
           if (currentKey.isPool && currentKey.poolId) {
-            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'motion', `HTTP ${status}: ${errorMsg}`);
+            const replacement = await handlePoolKeyExhausted(currentKey.poolId, keyInfo.user_id, 'motion', `${reason}: ${errorMsg}`);
             if (replacement) {
               replacement.roomId = selectedRoomId;
               availableMotionKeys.push(replacement);
@@ -9986,15 +10004,49 @@ app.post('/api/ximage2/generate', async (req, res) => {
     }
 
     console.log('[XIMAGE2] Freepik request (via Decodo):', JSON.stringify({ ...requestBody, reference_images: requestBody.reference_images ? '[REFS]' : undefined }), 'endpoint:', freepikEndpoint);
-    const response = await makeFreepikRequest(
-      'POST',
-      `https://api.freepik.com${freepikEndpoint}`,
-      poolKeyResult.apiKey,
-      requestBody,
-      true,
-      null,
-      'decodo'
-    );
+
+    // Key-rotation retry loop: invalid/dead key → mark dead, swap, retry up to 5 times
+    let response = null;
+    let lastErr = null;
+    const MAX_KEY_ROTATIONS = 5;
+    for (let attempt = 1; attempt <= MAX_KEY_ROTATIONS; attempt++) {
+      try {
+        response = await makeFreepikRequest(
+          'POST',
+          `https://api.freepik.com${freepikEndpoint}`,
+          poolKeyResult.apiKey,
+          requestBody,
+          true,
+          null,
+          'decodo'
+        );
+        break;
+      } catch (reqErr) {
+        lastErr = reqErr;
+        const httpStatus = reqErr.response?.status;
+        const isInvalidKey = isInvalidFreepikKey(reqErr);
+        const isQuotaErr = httpStatus === 402 || httpStatus === 429;
+        if ((isInvalidKey || isQuotaErr) && poolKeyResult && poolKeyResult.poolId && attempt < MAX_KEY_ROTATIONS) {
+          const reason = isInvalidKey ? `INVALID KEY (HTTP ${httpStatus || 'n/a'})` : `HTTP ${httpStatus}`;
+          console.warn(`[XIMAGE2] ${reason} on key pool#${poolKeyResult.poolId}, attempt ${attempt}/${MAX_KEY_ROTATIONS} — killing key & rotating to next`);
+          const replacement = await handlePoolKeyExhausted(poolKeyResult.poolId, poolKeyResult.userId, 'ximage2', reason);
+          if (replacement) {
+            poolKeyResult = {
+              apiKey: replacement.key,
+              poolId: replacement.poolId,
+              userId: poolKeyResult.userId,
+              keyInfoId: poolKeyResult.keyInfoId
+            };
+            console.log(`[XIMAGE2] Rotated to new key pool#${replacement.poolId}, retrying...`);
+            continue;
+          }
+          console.error(`[XIMAGE2] No replacement key available after ${attempt} attempts — giving up`);
+          throw reqErr;
+        }
+        throw reqErr;
+      }
+    }
+    if (!response) throw lastErr || new Error('Freepik request failed after key rotation');
 
     console.log('[XIMAGE2] Freepik response:', JSON.stringify(response.data).substring(0, 500));
 
