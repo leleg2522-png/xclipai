@@ -12069,6 +12069,7 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
     const hasRefImage = !!project.reference_image_url;
 
     // User-provided custom narrations (one per line, format: "Scene 1: ..." or just "...")
+    // NARRATION IS NOW 100% USER-DRIVEN — LLM does NOT generate narration anymore.
     const customNarrationText = (project.custom_narrations || '').trim();
     const customNarrationLines = customNarrationText
       ? customNarrationText.split('\n')
@@ -12076,23 +12077,29 @@ app.post('/api/automation/projects/:projectId/generate-script', async (req, res)
           .filter(l => l.length > 0)
       : [];
     const hasCustomNarrations = customNarrationLines.length > 0;
-    const customNarrationBlock = hasCustomNarrations ? `
+    const userNarrationsForLLM = hasCustomNarrations ? `
 
 ═══════════════════════════════════════════════════
-🎙️  USER-PROVIDED CUSTOM NARRATIONS — ABSOLUTE PRIORITY (override LLM creativity)
+🎙️  NARRATIONS PER SCENE (USER-WRITTEN — for visual context only)
 ═══════════════════════════════════════════════════
-The user wrote their own narrations. You MUST use them EXACTLY AS WRITTEN — word for word — in the "narration" field. DO NOT rewrite, paraphrase, shorten, or "improve" them.
+Scenes diisi narasi oleh user di bawah ini. Narasi ini AKAN OTOMATIS digunakan dari sisi server — kamu TIDAK perlu menulis ulang narasi. Tugas kamu: bikin visual_prompt yang COCOK dengan tone & isi narasi tiap scene.
 
-User's narrations (in order):
+Narasi user per scene:
 ${customNarrationLines.map((n, i) => `Scene ${i + 1}: "${n}"`).join('\n')}
+${customNarrationLines.length < project.scene_count ? `Scene ${customNarrationLines.length + 1}..${project.scene_count}: (kosong — silent beat / ambient)` : ''}
 
 RULES:
-- Copy each narration EXACTLY into the matching scene's "narration" field — do not change a single word
-- Build the visual_prompt + dialogue + scene structure AROUND these narrations to match their tone, pacing, and meaning
-- If a narration is short → make that scene a SILENT BEAT or quiet visual; if it's long → keep visual calm so voiceover can breathe
-- Do NOT add a "dialogue" field for scenes with custom narration unless the narration itself reads like spoken dialogue
-${customNarrationLines.length < project.scene_count ? `- Only ${customNarrationLines.length} narrations provided. For Scene ${customNarrationLines.length + 1} to Scene ${project.scene_count}, generate narrations yourself in the SAME tone/voice as the user's lines.` : '- All scenes have user narrations — use them all exactly.'}
-` : '';
+- Set "narration": "" untuk SEMUA scene di JSON output (server akan inject narasi user)
+- Set "dialogue": "" juga (akan di-handle server)
+- visual_prompt HARUS match tone narasi tiap scene di atas
+- Untuk scene yang narasinya kosong → buat visual yang tenang/ambient (silent beat)
+` : `
+
+═══════════════════════════════════════════════════
+🎙️  NARRATION MODE — SILENT (user belum isi narasi)
+═══════════════════════════════════════════════════
+User belum mengisi narasi. Set "narration": "" dan "dialogue": "" untuk SEMUA scene. Fokus 100% di visual_prompt yang kuat dan cinematic. Video akan jalan dengan ambient sound only.
+`;
 
     const durationMap = {
       'veo-3.1-fast-fhd': 8, 'veo-3.1-fast': 8, 'veo-3.1': 8, 'veo-3.1-freepik-4k': 8,
@@ -12108,149 +12115,30 @@ ${customNarrationLines.length < project.scene_count ? `- Only ${customNarrationL
     const systemPrompt = `⚠️ ABSOLUTE OUTPUT RULE — READ FIRST ⚠️
 You are a JSON-OUTPUT-ONLY system. You MUST respond with a single valid JSON object and NOTHING ELSE.
 - DO NOT ask clarifying questions. EVER.
-- DO NOT respond conversationally ("Could you share...", "I'd love to...", "Once I have...", "Here's what I'll do...").
-- DO NOT explain what you're about to do. Just do it.
+- DO NOT respond conversationally.
 - DO NOT use markdown code fences (no \`\`\`json).
-- If information is missing (e.g. no reference image, vague niche), INVENT plausible details and proceed.
-- Your response MUST start with the character "{" and end with "}".
-- Any deviation = system failure. The downstream parser will crash and the user will see an error.
+- If information is missing, INVENT plausible details and proceed.
+- Response MUST start with "{" and end with "}".
 
-You are a TRIPLE-THREAT filmmaker: a SENIOR DIRECTOR (Denis Villeneuve / Cary Fukunaga school), a MASTER CINEMATOGRAPHER (Roger Deakins / Emmanuel Lubezki school), and a DISCIPLINED STORYTELLER (Aaron Sorkin / Bong Joon-ho school). You direct with restraint and intention — every word, every shot, every silence is a deliberate choice.
-
-YOUR PHILOSOPHY:
-- "Show, don't tell" is sacred. The image carries 70% of the story; words carry 30%
-- Silence is a tool, not an absence. A wordless beat is OFTEN more powerful than dialogue
-- You hate filler. You'd rather have ONE perfect line than three mediocre ones
-- You think like a director on set: "Does this scene NEED words, or does the image speak louder?"
-- Pro storytellers know WHEN to shut up — and trust the visuals
+You are a MASTER CINEMATOGRAPHER (Roger Deakins / Emmanuel Lubezki school). Your ONLY job is to write rich, technical visual_prompt for each scene. You DO NOT write narration or dialogue — those come from the user separately.
 
 ═══════════════════════════════════════════════════
-🎬 ABSOLUTE RULE — THIS IS A FILM/ANIMATION, NOT A DOCUMENTARY
+🎙️  NARRATION & DIALOGUE — DO NOT WRITE
 ═══════════════════════════════════════════════════
-You are writing a movie/short film with a CHARACTER, not a travel documentary.
-Every "narration" must be the CHARACTER's OWN VOICE — first-person dialogue, internal monologue, or things they would actually SAY out loud.
-
-❌ BANNED — "TOUR GUIDE / WIKIPEDIA NARRATOR" STYLE (this is what the user HATES):
-   - "Jakarta adalah kota metropolitan dengan jutaan penduduk..." (explaining a city)
-   - "Hutan Amazon merupakan paru-paru dunia..." (encyclopedia voice)
-   - "Kota ini terkenal dengan kulinernya yang beragam..." (tourism brochure)
-   - "Di sini terdapat banyak gedung tinggi..." (describing what's visible)
-   - ANY sentence that sounds like a Wikipedia article, travel vlog narrator, or documentary voiceover
-   - ANY narration that DESCRIBES the location/setting/scenery to the audience
-   → THIS KILLS THE FILM. The visual already shows the location. We don't need to be told what we're seeing.
-
-✅ REQUIRED — "CHARACTER TALKING" STYLE (DIALOG, not narration):
-   - "Gue gak pernah nyangka bakal balik ke sini lagi." (character's thought/feeling about the place)
-   - "Bokap pernah cerita tentang gang ini. Sekarang gue paham kenapa." (personal connection)
-   - "Tiga tahun. Tiga tahun gue pergi dan semuanya tetap sama." (emotion + specificity)
-   - "Lo tau gak yang paling lucu? Gue malah lupa jalan pulang." (talking TO someone)
-   → Every line must come from a PERSON with feelings/memories/opinions, not a narrator explaining facts.
-
-═══════════════════════════════════════════════════
-DIRECTOR'S INTENT — THE 3 SCENE TYPES (use this framework):
-═══════════════════════════════════════════════════
-
-Before writing each scene, classify it as ONE of these 3 types. **DEFAULT TO TALK SCENE** unless action demands silence.
-
-1) **TALK SCENE** (character speaks on camera — DIALOG MODE) — use BOTH "narration" AND "dialogue" fields
-   - **THIS SHOULD BE 60-70% OF YOUR SCENES** (the user wants dialog, not documentary)
-   - Camera framing: medium-close or close-up so lips are visible
-   - The character is SAYING something — to the camera, to themselves, or to someone else
-   - "narration" field = what the character SAYS (will be spoken as the audio voiceover)
-   - "dialogue" field = same content as narration (used by video model for lip-sync)
-   - Lines must be SPECIFIC, OPINIONATED, EMOTIONAL — like a real person talking, never like a narrator
-
-2) **VOICEOVER SCENE** (character's INTERNAL MONOLOGUE while doing something) — use "narration" field
-   - Use for 20-30% of scenes (NOT the default — talk scenes are the default)
-   - Even here, narration must be FIRST-PERSON character thoughts: "Gue inget pertama kali...", "Aneh, padahal udah lama...", "Kalau aja waktu itu gue..."
-   - NEVER third-person descriptive: ❌ "Dia berjalan menyusuri jalan yang sepi" — that's a novel narrator, not a film
-   - NEVER describe the location/scenery to the audience
-
-3) **SILENT BEAT** (no narration at all) — narration: ""
-   - Use for 10-20% of scenes — climax, reveal, emotional landing
-   - Let ambient sound + visual carry the moment
-
-CRITICAL RULE: If you find yourself writing about the LOCATION, the CITY, the PLACE, or DESCRIBING what the camera shows → you're doing it WRONG. Rewrite as character dialog.
-
-═══════════════════════════════════════════════════
-INTENSITY-AWARE NARRATION (CRITICAL — action scenes need SILENCE):
-═══════════════════════════════════════════════════
-Match narration density to scene INTENSITY. Read the scene's energy first, THEN decide word count.
-
-🔥 HIGH-INTENSITY scenes (chase, fight, run, escape, crash, explosion, jump, fall, attack, panic, danger, sprint, scream, climax):
-   → DEFAULT to **SILENT BEAT** or **VERY SHORT VOICEOVER** (0-5 words MAX)
-   → NEVER add chatty narration during action — it KILLS the tension
-   → Let footsteps, breathing, impact, wind, heartbeats do the work
-   → If narration is needed: ONE breath of words ("Lari." / "Jangan nengok." / "Dia di belakang.")
-   → Dialogue: only short panicked shouts ("Awas!" / "Cepet!" / "Sialan!")
-   → BAD (kills intensity): "Aku lari sekencang mungkin menghindari mereka yang mengejar dari belakang dengan napas yang tersengal-sengal" — TOO MUCH TALKING
-   → GOOD (keeps intensity): "" (silent, just footsteps + heavy breath sound) OR just "Lari!"
-
-⚡ MEDIUM-INTENSITY scenes (tension building, suspense, confrontation, reveal, decision moment):
-   → Use VOICEOVER SCENE with LEAN narration (${Math.floor(sceneDur * 1.5)}-${Math.floor(sceneDur * 2)} words)
-   → One sharp line that adds weight, not exposition
-
-🌿 LOW-INTENSITY scenes (intro, exploration, casual moment, reflection, dialogue exchange):
-   → Normal narration/dialogue density (${minNarrationWords}-${maxNarrationWords} words) is fine
-
-ACTION SCENE RULE — ABSOLUTE:
-- If the visual involves RUNNING, CHASING, FIGHTING, FALLING, CRASHING, ATTACKING, ESCAPING → narration MUST be empty "" or 1-5 words MAX
-- The viewer's adrenaline carries the scene — narration would only DILUTE it
-- Big-budget films do this: chase scenes are 95% sound design + visuals, 5% words (or zero)
-- Think Mad Max Fury Road, John Wick, Mission Impossible — almost no talking during action
-
-EMOTIONAL CLIMAX RULE:
-- Big emotional reveals (heartbreak, realization, victory, death) → SILENT BEAT or 3-5 words
-- Let the actor's face do the work, not narration explaining the emotion
-
-═══════════════════════════════════════════════════
-NARRATION LENGTH — DYNAMIC, NOT FIXED (each scene = ${sceneDur}s):
-═══════════════════════════════════════════════════
-Default speaking rate: ~3 words/second. Choose length BY SCENE TYPE:
-
-- TALK SCENE (dialogue): ${minNarrationWords}-${maxNarrationWords} words — fills the scene with character speaking
-- VOICEOVER SCENE (narration): ${Math.floor(sceneDur * 1.5)}-${maxNarrationWords} words — flexible; can be lean
-- SILENT BEAT: 0-${Math.floor(sceneDur * 1.5)} words — short evocative phrase OR empty narration ""
-
-Empty narration ("") IS ALLOWED for silent beats. The video will play with ambient sound only — this is INTENTIONAL cinematic silence, not a bug.
-
-NEVER pad narration with filler ("yang asri", "yang indah", "yang luar biasa") just to hit word count. Better to be SHORT and SHARP than long and bloated.
-
-═══════════════════════════════════════════════════
-DIALOGUE CRAFT (when you DO use it):
-═══════════════════════════════════════════════════
-- Add "dialogue" field ONLY for TALK SCENES (not voiceover, not silent beats)
-- Sound like a real person, not a YouTuber: specific, opinionated, honest
-- Reveals character or insight in ONE punch — no warm-up, no filler
-- BAD: "Halo guys, hari ini aku mau cerita..." (generic intro filler)
-- GOOD: "Orang ngira ini gampang. Padahal yang susah bukan teknisnya." (specific POV, hooks viewer)
-- When dialogue exists → visual_prompt MUST include "character speaking, natural lip movement"
-- When NO dialogue → DO NOT include "speaking" in visual_prompt (silent action only)
-
-═══════════════════════════════════════════════════
-NARRATION = CHARACTER DIALOG (NOT documentary VO):
-═══════════════════════════════════════════════════
-- Narration must sound like a CHARACTER TALKING (in their own voice), NOT a narrator describing things
-- First-person ALWAYS: "gue/aku/saya..." — never third-person "dia/karakter ini..."
-- Each line is something a real person would actually SAY in that moment — emotion, opinion, memory, reaction
-- NEVER describe the location, the visual, or what the audience can already see
-- ❌ BAD (describes scenery — TOUR GUIDE voice): "Hutan ini sangat indah dan asri dengan pohon-pohon tinggi"
-- ❌ BAD (Wikipedia voice): "Hutan ini adalah salah satu hutan tertua di dunia"
-- ✅ GOOD (character talking): "Bokap gue dulu sering bawa gue ke sini. Sekarang dia udah gak ada."
-- ✅ GOOD (character reacting): "Gila. Sumpah gak nyangka masih ada tempat kayak gini di Indonesia."
-- ✅ GOOD (character thinking): "Kalau gue gak balik sekarang, gue gak akan pernah balik lagi."
-- Use rhythm: alternate short punchy lines with longer flowing ones across scenes
+- The "narration" field MUST always be exactly ""  (empty string)
+- The "dialogue" field MUST always be exactly ""  (empty string)
+- The user provides their own narration. Server will inject it. Anything you write in those fields will be DELETED.
+- Just focus on visual_prompt. That's your only craft.
 
 ═══════════════════════════════════════════════════
 CINEMATOGRAPHER'S VISUAL PROMPT (one ${sceneDur}-sec shot):
 ═══════════════════════════════════════════════════
-Write each visual_prompt like a DP's shot list — precise, technical, atmospheric:
+Write each visual_prompt like a DP's shot list — precise, technical, atmospheric.
 
 1) MOTION SPEED — REAL-TIME ONLY (NEVER slowmo):
-   - All motion at natural human speed — say "at normal pace" / "real-time speed"
-   - State explicitly: "normal speed, not slow motion"
-   - BAD trigger words: "slowly", "gradually", "gently drifts", "delicate", "softly"
-   - GOOD words: "naturally", "briskly", "actively", "at normal pace"
+   - "at normal pace" / "real-time speed" / "not slow motion"
+   - BAD: "slowly", "gradually", "gently drifts", "softly"
+   - GOOD: "naturally", "briskly", "actively"
 
 2) Required elements per visual_prompt:
    - SUBJECT ACTION: precise body language + active verb at normal speed
@@ -12260,31 +12148,28 @@ Write each visual_prompt like a DP's shot list — precise, technical, atmospher
    - COLOR GRADE: specific palette (teal-orange, desaturated earth, crushed blacks)
 
 3) Length: 50-80 words per visual_prompt — concise, action-focused
-4) Respond with valid JSON only — no markdown, no code blocks
 
 ═══════════════════════════════════════════════════
 SCENE CONTINUITY (non-negotiable):
 ═══════════════════════════════════════════════════
 - Character's END position in Scene N = START position in Scene N+1
-- Same environment, materials, props, weather across scenes
-- Same lighting direction + color temperature across consecutive scenes
+- Same environment, materials, props, weather, lighting direction across scenes
 - Body logic: if kneeling in Scene 2, must stand before walking in Scene 3
 - Reference "same [specific detail]" in each scene to anchor continuity
 
 ═══════════════════════════════════════════════════
-DIRECTOR'S PACING (build a story arc):
+DIRECTOR'S PACING (story arc through visuals only):
 ═══════════════════════════════════════════════════
-- Scene 1: HOOK — establishing wide or MWS, smooth movement, set world. Often a TALK or VOICEOVER scene.
-- Middle scenes: VARY shot sizes (CU ↔ MS ↔ WS), vary scene types. Mix talk + voiceover + 1 silent beat.
-- Climax scene: Often a SILENT BEAT or short punch — the visual lands harder without words.
-- Final scene: Resolve with memorable composition. Can be TALK (closing line) or SILENT (lasting image).
+- Scene 1: HOOK — establishing wide or MWS, smooth movement, set world
+- Middle: VARY shot sizes (CU ↔ MS ↔ WS) and angles
+- Climax: high-impact composition — close, dramatic, lit hard
+- Final: memorable resolving frame
 
 ═══════════════════════════════════════════════════
-LANGUAGE RULE (ABSOLUTE):
+LANGUAGE RULE:
 ═══════════════════════════════════════════════════
-- All narration + dialogue: ${langName} (casual, conversational if Indonesian — gue/lu or aku/kamu)
 - All visual_prompt: ENGLISH (for AI image/video models)
-- NEVER mix English into Indonesian narration/dialogue`;
+- title + character_description: ${langName}`;
 
     let userPrompt;
     if (hasRefImage) {
@@ -12340,7 +12225,7 @@ CONTINUITY ANCHORS:
 - Every scene after Scene 1 must reference specific environmental details from previous scene
 - Same props stay visible (same backpack, same tree, same rock formation)
 - Same lighting direction and color temperature
-- Body position logically connected: if crouching → must stand before walking${customNarrationBlock}`;
+- Body position logically connected: if crouching → must stand before walking${userNarrationsForLLM}`;
     } else {
       userPrompt = `Create a ${formatDesc} video script about "${project.niche}".
 Exactly ${project.scene_count} scenes. Narration in ${langName}.
@@ -12385,7 +12270,7 @@ GOOD narration: "Kaki mulai protes di kilometer ketiga. Tapi pemandangan ini bik
 CONTINUITY ANCHORS:
 - Every scene after Scene 1 references specific details from previous scene
 - Same props stay visible, same lighting direction, same color temperature
-- Body position logically connected${customNarrationBlock}`;
+- Body position logically connected${userNarrationsForLLM}`;
     }
 
     const apimodelsKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
@@ -12531,21 +12416,37 @@ CONTINUITY ANCHORS:
     );
 
     await pool.query(`DELETE FROM automation_scenes WHERE project_id = $1`, [projectId]);
+    // NARRATION OVERRIDE — narasi 100% dari user input. Apa pun yang LLM tulis di field narration/dialogue dibuang.
     for (let i = 0; i < scriptData.scenes.length; i++) {
       const scene = scriptData.scenes[i];
-      const sceneDialogue = scene.dialogue || null;
+      const userNarration = (customNarrationLines[i] || '').trim();
+      const userDialogue = userNarration; // pakai narasi yg sama buat lip-sync
       let vp = scene.visual_prompt || '';
-      if (sceneDialogue && !vp.toLowerCase().includes('speaking') && !vp.toLowerCase().includes('talking')) {
-        vp = vp.replace(/,\s*(photorealistic|cinematic)/, ', speaking to camera, $1');
-        if (vp === scene.visual_prompt) vp += ', character speaking to camera';
+      // Kalau scene punya narasi user → tambahkan "speaking" ke visual prompt buat lip-sync
+      if (userNarration && !vp.toLowerCase().includes('speaking') && !vp.toLowerCase().includes('talking')) {
+        if (/(,\s*photorealistic|,\s*cinematic)/i.test(vp)) {
+          vp = vp.replace(/,\s*(photorealistic|cinematic)/i, ', speaking to camera, $1');
+        } else {
+          vp += ', character speaking to camera';
+        }
       }
-      const sceneMeta = sceneDialogue ? JSON.stringify({ dialogue: sceneDialogue }) : '{}';
+      const sceneMeta = userDialogue ? JSON.stringify({ dialogue: userDialogue }) : '{}';
       await pool.query(
         `INSERT INTO automation_scenes (project_id, scene_index, narration, visual_prompt, status, metadata)
          VALUES ($1, $2, $3, $4, 'pending', $5)`,
-        [projectId, i, scene.narration || '', vp, sceneMeta]
+        [projectId, i, userNarration, vp, sceneMeta]
       );
     }
+    // Sync scriptData supaya yg disimpan di automation_projects.script juga reflect narasi user
+    for (let i = 0; i < scriptData.scenes.length; i++) {
+      const userNarr = (customNarrationLines[i] || '').trim();
+      scriptData.scenes[i].narration = userNarr;
+      scriptData.scenes[i].dialogue = userNarr || '';
+    }
+    await pool.query(
+      `UPDATE automation_projects SET script = $2 WHERE project_id = $1`,
+      [projectId, JSON.stringify(scriptData)]
+    );
 
     sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_ready' });
     res.json({ success: true, title: scriptData.title, sceneCount: scriptData.scenes.length });

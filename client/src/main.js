@@ -7293,11 +7293,11 @@ function renderAutomationPage() {
     html += '</button>';
   }
   html += '</div>';
-  html += '<details class="auto-custom-narration-wrap" style="margin:8px 0;">';
-  html += '<summary style="cursor:pointer;color:var(--accent);font-size:13px;padding:6px 0;">🎙️ Tulis Narasi Sendiri (opsional) — biar voice over sesuai keinginan lo</summary>';
-  html += '<textarea class="form-input" id="autoCustomNarrations" rows="5" placeholder="Tulis narasi per scene (1 baris = 1 scene). Contoh:&#10;Scene 1: Ada momen yang gak pernah lo lupa.&#10;Scene 2: Yang ini, salah satunya.&#10;&#10;Atau langsung tanpa label:&#10;Hari itu hujan deras&#10;Aku jalan tanpa payung" style="margin-top:6px;font-family:monospace;font-size:13px;line-height:1.5;">' + escapeHtml(state.automation.newProject.customNarrations || '') + '</textarea>';
-  html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">💡 Kosongkan kalo mau LLM yang nulis narasi. Kalo diisi, narasi lo dipake EXACT kata per kata, visual + dialog disesuaikan.</div>';
-  html += '</details>';
+  html += '<div class="auto-custom-narration-wrap" style="margin:8px 0;">';
+  html += '<label style="display:block;color:var(--accent);font-size:13px;font-weight:600;margin-bottom:4px;">🎙️ Narasi per Scene (1 baris = 1 scene)</label>';
+  html += '<textarea class="form-input" id="autoCustomNarrations" rows="5" placeholder="Tulis narasi lo sendiri. 1 baris = 1 scene. Contoh:&#10;Scene 1: Ada momen yang gak pernah lo lupa.&#10;Scene 2: Yang ini, salah satunya.&#10;&#10;Atau tanpa label:&#10;Hari itu hujan deras&#10;Aku jalan tanpa payung" style="font-family:monospace;font-size:13px;line-height:1.5;">' + escapeHtml(state.automation.newProject.customNarrations || '') + '</textarea>';
+  html += '<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">💡 Narasi 100% dari lo — AI gak bikin narasi otomatis lagi. Scene yang kosong = silent (cuma ambient sound). AI cuma handle visual & lip-sync.</div>';
+  html += '</div>';
   html += '<div class="auto-settings-row">';
   html += '<select class="form-input auto-select" id="autoFormat">';
   html += '<option value="shorts"' + (state.automation.newProject.format === 'shorts' ? ' selected' : '') + '>Shorts</option>';
