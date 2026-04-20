@@ -439,7 +439,7 @@ const state = {
     bgRefImages: [],
     selectedStyle: '',
     models: [],
-    selectedModel: 'doubao-seedance-4-5',
+    selectedModel: 'nano-banana-pro',
     selectedSize: '1:1',
     selectedResolution: '2K',
     isGenerating: false,
@@ -6282,6 +6282,13 @@ async function loadSceneStudioModels() {
     const data = await response.json();
     state.sceneStudio.models = data.models || [];
     state.sceneStudio._modelsLoaded = true;
+    // Validate selectedModel — if user has stale model from old version, reset to first available
+    if (state.sceneStudio.models.length > 0) {
+      const ids = state.sceneStudio.models.map(m => m.id);
+      if (!ids.includes(state.sceneStudio.selectedModel)) {
+        state.sceneStudio.selectedModel = ids.includes('nano-banana-pro') ? 'nano-banana-pro' : ids[0];
+      }
+    }
     render(true);
   } catch (e) { console.error('Load scene studio models error:', e); }
 }
