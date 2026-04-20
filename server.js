@@ -12461,6 +12461,139 @@ CONTINUITY ANCHORS:
   }
 });
 
+app.post('/api/automation/generate-narration', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  try {
+    const { niche, sceneCount, language, sceneDuration, format } = req.body;
+    const sc = Math.max(1, Math.min(20, parseInt(sceneCount) || 3));
+    const sceneDur = Math.max(3, Math.min(15, parseInt(sceneDuration) || 5));
+    const lang = (language === 'en') ? 'en' : 'id';
+    const langName = lang === 'en' ? 'English (casual, conversational)' : 'Bahasa Indonesia (casual: gue/lo or aku/kamu)';
+    const fmt = format || 'shorts';
+    if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
+
+    const minWords = Math.floor(sceneDur * 2.5);
+    const maxWords = Math.floor(sceneDur * 3.5);
+
+    const sysPrompt = `⚠️ OUTPUT RULE: Respond with ONLY valid JSON. Start with "{" end with "}". No markdown, no prose, no questions.
+
+You are a SCREENWRITER writing FIRST-PERSON CHARACTER DIALOG for a short film/vlog. NOT a documentary narrator. NOT a tour guide.
+
+═══════════════════════════════════════════════════
+🎬 ABSOLUTE RULES — VIOLATION = REJECTED
+═══════════════════════════════════════════════════
+Every line of narration MUST:
+1. Be in FIRST-PERSON (gue/aku/saya/I) — what the CHARACTER themselves says/thinks
+2. Express EMOTION, MEMORY, OPINION, or REACTION — never describe what's visible
+3. Sound like REAL PERSON TALKING — specific, opinionated, raw
+4. Be ${minWords}-${maxWords} words (~${sceneDur}s of speaking) OR exactly "" for silent beats
+
+❌ BANNED — these patterns = AUTO-REJECT:
+- Sentences with "adalah", "merupakan", "terkenal", "terletak", "memiliki" → Wikipedia voice
+- "Hari ini aku/kita..." (generic vlog opener) — BORING
+- Describing the place/scenery: "Hutan yang indah", "Kota yang ramai", "Pantai yang cantik" — TOUR GUIDE
+- Third-person: "Dia berjalan...", "Karakter ini..." — that's a novel narrator
+- Generic motivational filler: "Hidup itu indah", "Setiap hari adalah perjuangan"
+- "Welcome guys", "Hai semuanya", "Halo guys" — YouTuber filler
+- Listing facts about the location
+
+✅ REQUIRED examples (study these):
+- "Gue gak pernah nyangka bakal balik ke sini lagi. Sepuluh tahun, gila."
+- "Bokap pernah cerita tentang gang ini. Sekarang gue paham kenapa dia diem terus."
+- "Yang aneh, gue kesini bukan buat cari ketenangan. Gue kesini buat dengerin sesuatu yang gue lupa."
+- "Kaki gue mulai protes di kilometer ketiga. Tapi mata gue belum mau berhenti."
+- "Gak ada sinyal, gak ada notif. Pertama kali otak gue tenang dalam dua tahun."
+
+═══════════════════════════════════════════════════
+PACING (${sc} scenes total, ${sceneDur}s each):
+═══════════════════════════════════════════════════
+- Scene 1: HOOK — open with intrigue, NOT introduction. ${minWords}-${maxWords} words.
+- Middle scenes: build emotion/memory. Mix talk + occasional silent beat ("").
+- 1-2 scenes (max 30%): set narration to "" (silent beat — climax/reveal moment)
+- Last scene: closing punch — memorable line OR silent beat
+
+LANGUAGE: ${langName}. NEVER mix English into Indonesian (or vice versa).
+
+═══════════════════════════════════════════════════
+OUTPUT FORMAT (strict):
+═══════════════════════════════════════════════════
+{
+  "narrations": ["scene1 narration", "scene2 narration", ...]
+}
+- Array length MUST be exactly ${sc}
+- Each item: a string (the character's spoken line) OR empty "" for silent beat
+- NO scene labels, NO numbering inside the strings — just raw narration text`;
+
+    const userPrompt = `Topic/Niche: "${niche.trim()}"
+Format: ${fmt === 'shorts' ? 'YouTube Shorts (9:16 vertical, fast-paced)' : 'Landscape video (16:9, more breathing room)'}
+Scenes: ${sc}
+Language: ${langName}
+
+Write ${sc} narration lines as if YOU are the main character living this moment. NO tour guide voice. NO Wikipedia. Just raw human emotion.
+
+Output the JSON now.`;
+
+    const apiKey = process.env.APIMODELS_API_KEY || process.env.XIMAGE_ROOM1_KEY_1;
+    if (!apiKey) return res.status(500).json({ error: 'ApiModels API key tidak terkonfigurasi' });
+
+    const BAD_PATTERNS = [
+      /\b(adalah|merupakan|terkenal|terletak|memiliki|menjadi salah satu)\b/i,
+      /^hari ini (aku|gue|kita|saya)\b/i,
+      /^(hai|halo|welcome)\b/i,
+      /\b(yang indah|yang cantik|yang ramai|yang menakjubkan|yang luar biasa)\b/i,
+    ];
+    function badNarrationCount(arr) {
+      let bad = 0;
+      for (const line of arr) {
+        if (!line) continue;
+        if (BAD_PATTERNS.some(rx => rx.test(line))) bad++;
+      }
+      return bad;
+    }
+
+    const chatModels = ['claude-sonnet-4-5-20250929', 'gemini-2.5-pro', 'gpt-4.1', 'claude-sonnet-4-20250514'];
+    let narrations = null;
+    let lastErr = null;
+
+    for (let attempt = 0; attempt < 2 && !narrations; attempt++) {
+      const extraNag = attempt > 0 ? '\n\n🚨 ATTEMPT 2: Sebelumnya kamu pakai bahasa tour-guide/Wikipedia. WAJIB first-person character (gue/aku). Gak boleh deskripsi tempat. Setiap line harus berasa kayak orang asli ngomong tentang perasaan/memori/reaksi mereka.' : '';
+      for (const model of chatModels) {
+        try {
+          const resp = await axios.post('https://apimodels.app/api/v1/messages', {
+            model, max_tokens: 2000,
+            system: sysPrompt + extraNag,
+            messages: [{ role: 'user', content: userPrompt }],
+            temperature: 0.85
+          }, { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 60000 });
+          const text = resp.data?.content?.find(b => b.type === 'text')?.text;
+          if (!text) continue;
+          const m = text.match(/\{[\s\S]*\}/);
+          if (!m) continue;
+          const parsed = JSON.parse(m[0]);
+          if (!Array.isArray(parsed.narrations)) continue;
+          const arr = parsed.narrations.slice(0, sc).map(s => typeof s === 'string' ? s.trim() : '');
+          while (arr.length < sc) arr.push('');
+          const bad = badNarrationCount(arr);
+          if (bad === 0 || attempt > 0) { narrations = arr; break; }
+          console.log(`[AUTOMATION-NARR] Model ${model} produced ${bad} bad lines, retrying...`);
+        } catch (e) {
+          lastErr = e;
+          console.error(`[AUTOMATION-NARR] Model ${model} failed:`, e.response?.data?.error?.message || e.message);
+        }
+      }
+    }
+
+    if (!narrations) {
+      const msg = lastErr?.response?.data?.error?.message || lastErr?.message || 'Semua model AI gagal';
+      return res.status(500).json({ error: 'Gagal generate narasi: ' + msg });
+    }
+    res.json({ success: true, narrations });
+  } catch (error) {
+    console.error('[AUTOMATION-NARR] Error:', error.message);
+    res.status(500).json({ error: 'Gagal generate narasi: ' + error.message });
+  }
+});
+
 app.post('/api/automation/projects/:projectId/update-scene', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { projectId } = req.params;
