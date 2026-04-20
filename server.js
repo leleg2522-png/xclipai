@@ -12047,7 +12047,17 @@ ${customNarrationLines.length < project.scene_count ? `- Only ${customNarrationL
     const minNarrationWords = Math.floor(sceneDur * 2.5);
     const maxNarrationWords = Math.floor(sceneDur * 3.5);
 
-    const systemPrompt = `You are a TRIPLE-THREAT filmmaker: a SENIOR DIRECTOR (Denis Villeneuve / Cary Fukunaga school), a MASTER CINEMATOGRAPHER (Roger Deakins / Emmanuel Lubezki school), and a DISCIPLINED STORYTELLER (Aaron Sorkin / Bong Joon-ho school). You direct with restraint and intention — every word, every shot, every silence is a deliberate choice.
+    const systemPrompt = `⚠️ ABSOLUTE OUTPUT RULE — READ FIRST ⚠️
+You are a JSON-OUTPUT-ONLY system. You MUST respond with a single valid JSON object and NOTHING ELSE.
+- DO NOT ask clarifying questions. EVER.
+- DO NOT respond conversationally ("Could you share...", "I'd love to...", "Once I have...", "Here's what I'll do...").
+- DO NOT explain what you're about to do. Just do it.
+- DO NOT use markdown code fences (no \`\`\`json).
+- If information is missing (e.g. no reference image, vague niche), INVENT plausible details and proceed.
+- Your response MUST start with the character "{" and end with "}".
+- Any deviation = system failure. The downstream parser will crash and the user will see an error.
+
+You are a TRIPLE-THREAT filmmaker: a SENIOR DIRECTOR (Denis Villeneuve / Cary Fukunaga school), a MASTER CINEMATOGRAPHER (Roger Deakins / Emmanuel Lubezki school), and a DISCIPLINED STORYTELLER (Aaron Sorkin / Bong Joon-ho school). You direct with restraint and intention — every word, every shot, every silence is a deliberate choice.
 
 YOUR PHILOSOPHY:
 - "Show, don't tell" is sacred. The image carries 70% of the story; words carry 30%
@@ -12353,13 +12363,48 @@ CONTINUITY ANCHORS:
       if (!jsonMatch) throw new Error('No JSON found in AI response');
       scriptData = JSON.parse(jsonMatch[0]);
     } catch (parseErr) {
-      console.error('[AUTOMATION] Script parse error:', parseErr.message, 'Raw:', aiContent.substring(0, 500));
-      await pool.query(
-        `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
-        [projectId, 'Failed to parse AI script: ' + parseErr.message]
-      );
-      sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
-      return res.status(500).json({ error: 'Gagal parsing script dari AI' });
+      console.warn('[AUTOMATION] First parse failed, retrying with stricter nag:', parseErr.message, 'Raw:', aiContent.substring(0, 300));
+      let retryContent = null;
+      for (const model of chatModels) {
+        try {
+          const retryResp = await axios.post(
+            'https://apimodels.app/api/v1/messages',
+            {
+              model: model,
+              max_tokens: 8192,
+              system: systemPrompt + '\n\n🚨 PREVIOUS ATTEMPT FAILED — you responded conversationally instead of with JSON. This is your final chance. Output ONLY the JSON object. No prose. No questions. No apologies. Start your response with "{" right now.',
+              messages: [
+                { role: 'user', content: userPrompt },
+                { role: 'assistant', content: aiContent },
+                { role: 'user', content: 'Your previous reply was not valid JSON. Output the JSON object now and nothing else. Start with { and end with }. Do NOT ask questions, do NOT explain — just the JSON.' }
+              ],
+              temperature: 0.3
+            },
+            { headers: { 'Authorization': `Bearer ${apimodelsKey}`, 'Content-Type': 'application/json' }, timeout: 120000 }
+          );
+          const tb = retryResp.data?.content?.find(b => b.type === 'text');
+          if (tb?.text) { retryContent = tb.text; console.log(`[AUTOMATION] Retry success with ${model}`); break; }
+        } catch (e) { console.error(`[AUTOMATION] Retry ${model} failed:`, e.response?.data?.error?.message || e.message); }
+      }
+      if (retryContent) {
+        try {
+          const retryMatch = retryContent.match(/\{[\s\S]*\}/);
+          if (retryMatch) {
+            scriptData = JSON.parse(retryMatch[0]);
+            aiContent = retryContent;
+            console.log('[AUTOMATION] Retry produced valid JSON ✓');
+          }
+        } catch (e) { console.error('[AUTOMATION] Retry parse also failed:', e.message); }
+      }
+      if (!scriptData) {
+        console.error('[AUTOMATION] Script parse error (after retry):', parseErr.message, 'Raw:', aiContent.substring(0, 500));
+        await pool.query(
+          `UPDATE automation_projects SET status = 'script_failed', error_message = $2, updated_at = NOW() WHERE project_id = $1`,
+          [projectId, 'Failed to parse AI script: ' + parseErr.message]
+        );
+        sendSSEToUser(req.session.userId, { type: 'automation_update', projectId, status: 'script_failed' });
+        return res.status(500).json({ error: 'Gagal parsing script dari AI' });
+      }
     }
 
     if (!scriptData.scenes || !Array.isArray(scriptData.scenes) || scriptData.scenes.length === 0) {
