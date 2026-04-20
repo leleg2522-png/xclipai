@@ -13648,12 +13648,18 @@ app.post('/api/scene-studio/generate', async (req, res) => {
     const roomKeyResult = await getSceneStudioApiKey(xclipApiKey);
     if (roomKeyResult.error) return res.status(400).json({ error: roomKeyResult.error });
 
-    const { prompts, characterDesc, characterRefImages, bgRefImages, stylePreset, model, size, resolution } = req.body;
+    const { prompts, characterDesc, characterRefImages, bgRefImages, stylePreset, size, resolution } = req.body;
+    let { model } = req.body;
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) return res.status(400).json({ error: 'Minimal 1 prompt diperlukan' });
     if (prompts.length > 20) return res.status(400).json({ error: 'Maksimal 20 prompt per batch' });
 
+    // Forgiving model fallback: invalid/missing/legacy model → default ke nano-banana-pro
+    if (!model || !SCENE_STUDIO_MODELS[model]) {
+      console.log(`[SCENE-STUDIO] Invalid/missing model "${model}" — fallback ke nano-banana-pro`);
+      model = 'nano-banana-pro';
+    }
     const modelConfig = SCENE_STUDIO_MODELS[model];
-    if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid' });
+    if (!modelConfig) return res.status(400).json({ error: 'Model tidak valid (fallback gagal)' });
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     let refImageUrls = [];
