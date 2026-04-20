@@ -13607,24 +13607,8 @@ function safeParseJsonb(val, fallback = []) {
 }
 
 async function getSceneStudioApiKey(xclipApiKey) {
-  const keyInfo = await validateXclipApiKey(xclipApiKey);
-  if (!keyInfo) return { error: 'Xclip API key tidak valid' };
-  const subResult = await pool.query(`
-    SELECT s.ximage2_room_id FROM subscriptions s 
-    WHERE s.user_id = $1 AND s.ximage2_room_id IS NOT NULL
-    ORDER BY s.created_at DESC LIMIT 1
-  `, [keyInfo.user_id]);
-  const roomId = subResult.rows[0]?.ximage2_room_id || 1;
-  const roomKeyPrefix = `XIMAGE2_ROOM${roomId}_KEY_`;
-  const availableKeys = [1, 2, 3].map(i => `${roomKeyPrefix}${i}`).filter(k => process.env[k]);
-  if (availableKeys.length === 0) {
-    if (process.env.APIMART_API_KEY) {
-      return { apiKey: process.env.APIMART_API_KEY, keyName: 'APIMART_API_KEY', roomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
-    }
-    return { error: 'Tidak ada API key yang tersedia untuk Scene Studio.' };
-  }
-  const randomKeyName = availableKeys[Math.floor(Math.random() * availableKeys.length)];
-  return { apiKey: process.env[randomKeyName], keyName: randomKeyName, roomId, userId: keyInfo.user_id, keyInfoId: keyInfo.id };
+  // Scene Studio sekarang pake pool key yang sama dengan X Image 2 (Freepik direct + Decodo)
+  return await getXImage2PoolKey(xclipApiKey);
 }
 
 app.get('/api/scene-studio/models', (req, res) => {
@@ -13740,6 +13724,8 @@ app.post('/api/scene-studio/generate', async (req, res) => {
 
     (async () => {
       const results = [];
+      // Track current pool key (rotates if invalid/exhausted)
+      let currentPoolKey = roomKeyResult;
       try {
         for (let i = 0; i < prompts.length; i++) {
           const promptText = prompts[i];
@@ -13751,11 +13737,14 @@ app.post('/api/scene-studio/generate', async (req, res) => {
             fullPrompt = `${characterDesc.trim()}\n\n${fullPrompt}`;
           }
 
-          const requestBody = { model, prompt: fullPrompt, n: 1 };
-          if (size) requestBody.size = size;
-          if (modelConfig.resolutions && resolution) requestBody.resolution = resolution;
-          if (modelConfig.hasSequential) requestBody.sequential_image_generation = 'auto';
+          // Build Freepik request body (same shape as X Image 2)
+          const isSeedream = model === 'seedream-v5-lite';
+          let freepikEndpoint = modelConfig.freepikEndpoint;
+          const requestBody = { prompt: fullPrompt };
+          if (size) requestBody.aspect_ratio = size;
+          requestBody.resolution = resolution || modelConfig.defaultResolution || '2K';
 
+          // Reference images: char + bg + previous result (for continuity if i2i supported)
           const imageRefs = [...refImageUrls, ...bgImageUrls];
           if (i > 0 && modelConfig.supportsI2I) {
             const prevCompleted = results.filter(r => r.status === 'completed' && r.imageUrl);
@@ -13763,101 +13752,121 @@ app.post('/api/scene-studio/generate', async (req, res) => {
               imageRefs.push(prevCompleted[prevCompleted.length - 1].imageUrl);
             }
           }
-          if (imageRefs.length > 0) {
-            requestBody.image_urls = imageRefs;
+          const cappedRefs = imageRefs.slice(0, modelConfig.maxRefs || 3);
+          if (cappedRefs.length > 0 && modelConfig.supportsI2I) {
+            if (isSeedream) {
+              freepikEndpoint = '/v1/ai/image-to-image/seedream-v5-lite';
+              requestBody.reference_images = cappedRefs;
+            } else {
+              requestBody.reference_images = cappedRefs.map(url => {
+                const mt = url.includes('.png') ? 'image/png' : url.includes('.webp') ? 'image/webp' : 'image/jpeg';
+                return { image: url, text: 'Reference image', mime_type: mt };
+              });
+            }
           }
 
-          console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length}: "${promptText.substring(0, 50)}..."`);
+          console.log(`[SCENE-STUDIO] Generating ${i+1}/${prompts.length} via Freepik (${model}): "${promptText.substring(0, 50)}..."`);
 
           try {
-            const response = await axios.post(
-              'https://api.apimart.ai/v1/images/generations',
-              requestBody,
-              { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 600000 }
-            );
+            // Key-rotation retry loop (same as X Image 2)
+            let response = null;
+            let lastErr = null;
+            const MAX_KEY_ROTATIONS = 5;
+            for (let attempt = 1; attempt <= MAX_KEY_ROTATIONS; attempt++) {
+              try {
+                response = await makeFreepikRequest(
+                  'POST',
+                  `https://api.freepik.com${freepikEndpoint}`,
+                  currentPoolKey.apiKey,
+                  requestBody,
+                  true,
+                  null,
+                  'decodo'
+                );
+                break;
+              } catch (reqErr) {
+                lastErr = reqErr;
+                const httpStatus = reqErr.response?.status;
+                const isInvalidKey = isInvalidFreepikKey(reqErr);
+                const isQuotaErr = httpStatus === 402 || httpStatus === 429;
+                if ((isInvalidKey || isQuotaErr) && currentPoolKey.poolId && attempt < MAX_KEY_ROTATIONS) {
+                  const reason = isInvalidKey ? `INVALID KEY (HTTP ${httpStatus || 'n/a'})` : `HTTP ${httpStatus}`;
+                  console.warn(`[SCENE-STUDIO] ${reason} on key pool#${currentPoolKey.poolId}, attempt ${attempt}/${MAX_KEY_ROTATIONS} — killing & rotating`);
+                  const replacement = await handlePoolKeyExhausted(currentPoolKey.poolId, currentPoolKey.userId, 'ximage2', reason);
+                  if (replacement) {
+                    currentPoolKey = {
+                      apiKey: replacement.key,
+                      poolId: replacement.poolId,
+                      userId: currentPoolKey.userId,
+                      keyInfoId: currentPoolKey.keyInfoId
+                    };
+                    console.log(`[SCENE-STUDIO] Rotated to new key pool#${replacement.poolId}, retrying...`);
+                    continue;
+                  }
+                  throw reqErr;
+                }
+                throw reqErr;
+              }
+            }
+            if (!response) throw lastErr || new Error('Freepik request failed after key rotation');
 
-            const respData = response.data;
-            console.log(`[SCENE-STUDIO] Prompt ${i+1} API response keys:`, Object.keys(respData), respData.data ? `data[0] keys: ${Object.keys(respData.data[0] || {})}` : 'no data array');
+            const respData = response.data?.data || response.data;
+
+            // Direct image (rare but possible)
             let directImageUrl = null;
-            if (respData.data && Array.isArray(respData.data) && respData.data.length > 0) {
-              const item = respData.data[0];
-              if (item.url) directImageUrl = item.url;
-              else if (item.b64_json) directImageUrl = `data:image/png;base64,${item.b64_json}`;
-              else if (item.image_url) directImageUrl = item.image_url;
+            if (respData.generated && Array.isArray(respData.generated) && respData.generated.length > 0) {
+              const g = respData.generated[0];
+              directImageUrl = typeof g === 'string' ? g : g.url || g.image_url;
+              if (!directImageUrl && g.base64) directImageUrl = `data:image/png;base64,${g.base64}`;
             }
 
             if (directImageUrl) {
               results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: directImageUrl });
-              sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: directImageUrl, current: i + 1, total: prompts.length });
+              sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: directImageUrl, current: i + 1, total: prompts.length });
+              if (currentPoolKey.poolId) await recordKeyUsage(currentPoolKey.poolId);
             } else {
-              const taskId = respData.data?.[0]?.task_id || respData.task_id || respData.id;
-              if (taskId) {
-                sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'processing', taskId, current: i + 1, total: prompts.length });
+              const taskId = respData.task_id || respData.id;
+              if (!taskId) {
+                results.push({ index: i, prompt: promptText, status: 'failed', error: 'Tidak ada task ID dari Freepik' });
+                sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Tidak ada task ID dari Freepik', current: i + 1, total: prompts.length });
+              } else {
+                sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'processing', taskId, current: i + 1, total: prompts.length });
+                if (currentPoolKey.poolId) await recordKeyUsage(currentPoolKey.poolId);
+
+                // Poll via shared helper (uses Decodo, key-aware)
                 let polled = false;
-                for (let attempt = 0; attempt < 60; attempt++) {
+                const maxPollAttempts = 120; // 120 * 5s = 10 min
+                for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
                   await new Promise(r => setTimeout(r, 5000));
                   try {
-                    const pollRes = await axios.get(`https://api.apimart.ai/v1/tasks/${taskId}`, { headers: { 'Authorization': `Bearer ${roomKeyResult.apiKey}` }, timeout: 30000 });
-                    const rawPd = pollRes.data;
-                    const pd = rawPd.data || rawPd;
-                    const ts = pd.status || pd.state || rawPd.status;
-                    console.log(`[SCENE-STUDIO] Poll ${taskId} attempt ${attempt+1}: status=${ts}, keys=${Object.keys(pd)}, result keys: ${pd.result ? Object.keys(pd.result) : 'none'}`);
-                    if (ts === 'completed' || ts === 'success' || ts === 'succeeded' || ts === 'finished') {
-                      let url = pd.result?.images?.[0]?.url ||
-                                pd.result?.image_url ||
-                                pd.result?.url ||
-                                pd.result?.outputs?.[0]?.url ||
-                                pd.result?.output?.url ||
-                                pd.result?.output?.image_url ||
-                                pd.images?.[0]?.url ||
-                                pd.image_url ||
-                                pd.url ||
-                                pd.output?.url ||
-                                pd.output?.image_url ||
-                                pd.output?.images?.[0]?.url ||
-                                pd.media_url ||
-                                rawPd.data?.url ||
-                                rawPd.data?.image_url;
-                      if (Array.isArray(url)) url = url[0];
-                      if (!url && pd.result?.images?.[0]) {
-                        url = typeof pd.result.images[0] === 'string' ? pd.result.images[0] : null;
-                      }
-                      if (!url && Array.isArray(pd.images) && pd.images[0]) {
-                        url = typeof pd.images[0] === 'string' ? pd.images[0] : (pd.images[0].url || pd.images[0].image_url);
-                      }
-                      if (url) {
-                        results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: url });
-                        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: url, current: i + 1, total: prompts.length });
-                        polled = true; break;
-                      } else {
-                        console.log(`[SCENE-STUDIO] Task ${taskId} completed but no URL found. Full response:`, JSON.stringify(rawPd).substring(0, 800));
-                        results.push({ index: i, prompt: promptText, status: 'failed', error: 'Task completed but no image URL found' });
-                        sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Gambar selesai tapi URL tidak ditemukan', current: i + 1, total: prompts.length });
-                        polled = true; break;
-                      }
-                    }
-                    if (ts === 'failed' || ts === 'error') {
-                      const failErr = pd.error || pd.message || pd.result?.error || 'Task failed';
-                      results.push({ index: i, prompt: promptText, status: 'failed', error: failErr });
-                      sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: failErr, current: i + 1, total: prompts.length });
+                    const pollResult = await pollFreepikImageTask(taskId, currentPoolKey.apiKey, freepikEndpoint);
+                    if (pollResult.status === 'completed' && pollResult.url) {
+                      results.push({ index: i, prompt: promptText, status: 'completed', imageUrl: pollResult.url });
+                      sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'completed', imageUrl: pollResult.url, current: i + 1, total: prompts.length });
                       polled = true; break;
                     }
-                  } catch (pe) {}
+                    if (pollResult.status === 'failed') {
+                      const failErr = pollResult.error || 'Task failed';
+                      results.push({ index: i, prompt: promptText, status: 'failed', error: failErr });
+                      sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: failErr, current: i + 1, total: prompts.length });
+                      polled = true; break;
+                    }
+                  } catch (pe) {
+                    console.log(`[SCENE-STUDIO] Poll error attempt ${attempt+1}: ${pe.message}`);
+                  }
                 }
                 if (!polled) {
                   results.push({ index: i, prompt: promptText, status: 'failed', error: 'Timeout' });
-                  sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Timeout', current: i + 1, total: prompts.length });
+                  sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'Timeout', current: i + 1, total: prompts.length });
                 }
-              } else {
-                results.push({ index: i, prompt: promptText, status: 'failed', error: 'No result' });
-                sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: 'No result from API', current: i + 1, total: prompts.length });
               }
             }
           } catch (genErr) {
-            const errMsg = genErr.response?.data?.error?.message || genErr.response?.data?.message || genErr.message || 'Generation failed';
-            console.error(`[SCENE-STUDIO] Prompt ${i+1} error:`, errMsg);
-            results.push({ index: i, prompt: promptText, status: 'failed', error: errMsg });
-            sendSSEToUser(roomKeyResult.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: errMsg, current: i + 1, total: prompts.length });
+            const errMsg = genErr.response?.data?.detail || genErr.response?.data?.message || genErr.response?.data?.error || genErr.message || 'Generation failed';
+            console.error(`[SCENE-STUDIO] Prompt ${i+1} error:`, typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg).substring(0, 300));
+            const errStr = typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg).substring(0, 200);
+            results.push({ index: i, prompt: promptText, status: 'failed', error: errStr });
+            sendSSEToUser(currentPoolKey.userId, { type: 'scene_studio_progress', batchId, index: i, status: 'failed', error: errStr, current: i + 1, total: prompts.length });
           }
 
           if (i < prompts.length - 1) await new Promise(resolve => setTimeout(resolve, 2000));
