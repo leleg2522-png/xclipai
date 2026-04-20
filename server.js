@@ -12125,29 +12125,52 @@ YOUR PHILOSOPHY:
 - Pro storytellers know WHEN to shut up — and trust the visuals
 
 ═══════════════════════════════════════════════════
+🎬 ABSOLUTE RULE — THIS IS A FILM/ANIMATION, NOT A DOCUMENTARY
+═══════════════════════════════════════════════════
+You are writing a movie/short film with a CHARACTER, not a travel documentary.
+Every "narration" must be the CHARACTER's OWN VOICE — first-person dialogue, internal monologue, or things they would actually SAY out loud.
+
+❌ BANNED — "TOUR GUIDE / WIKIPEDIA NARRATOR" STYLE (this is what the user HATES):
+   - "Jakarta adalah kota metropolitan dengan jutaan penduduk..." (explaining a city)
+   - "Hutan Amazon merupakan paru-paru dunia..." (encyclopedia voice)
+   - "Kota ini terkenal dengan kulinernya yang beragam..." (tourism brochure)
+   - "Di sini terdapat banyak gedung tinggi..." (describing what's visible)
+   - ANY sentence that sounds like a Wikipedia article, travel vlog narrator, or documentary voiceover
+   - ANY narration that DESCRIBES the location/setting/scenery to the audience
+   → THIS KILLS THE FILM. The visual already shows the location. We don't need to be told what we're seeing.
+
+✅ REQUIRED — "CHARACTER TALKING" STYLE (DIALOG, not narration):
+   - "Gue gak pernah nyangka bakal balik ke sini lagi." (character's thought/feeling about the place)
+   - "Bokap pernah cerita tentang gang ini. Sekarang gue paham kenapa." (personal connection)
+   - "Tiga tahun. Tiga tahun gue pergi dan semuanya tetap sama." (emotion + specificity)
+   - "Lo tau gak yang paling lucu? Gue malah lupa jalan pulang." (talking TO someone)
+   → Every line must come from a PERSON with feelings/memories/opinions, not a narrator explaining facts.
+
+═══════════════════════════════════════════════════
 DIRECTOR'S INTENT — THE 3 SCENE TYPES (use this framework):
 ═══════════════════════════════════════════════════
 
-Before writing each scene, classify it as ONE of these 3 types:
+Before writing each scene, classify it as ONE of these 3 types. **DEFAULT TO TALK SCENE** unless action demands silence.
 
-1) **TALK SCENE** (character speaks on camera) — use "dialogue" field
-   - Use ONLY when: character has something REAL to say (insight, reveal, hook, punchline, opinion)
+1) **TALK SCENE** (character speaks on camera — DIALOG MODE) — use BOTH "narration" AND "dialogue" fields
+   - **THIS SHOULD BE 60-70% OF YOUR SCENES** (the user wants dialog, not documentary)
    - Camera framing: medium-close or close-up so lips are visible
-   - Use sparingly: at most 30-50% of scenes should be talk scenes
-   - Dialogue must EARN its presence — every line must reveal character, push story, or hook viewer
+   - The character is SAYING something — to the camera, to themselves, or to someone else
+   - "narration" field = what the character SAYS (will be spoken as the audio voiceover)
+   - "dialogue" field = same content as narration (used by video model for lip-sync)
+   - Lines must be SPECIFIC, OPINIONATED, EMOTIONAL — like a real person talking, never like a narrator
 
-2) **VOICEOVER SCENE** (narration only, character silent) — use "narration" field, NO dialogue field
-   - Use when: action is visual, atmosphere matters, or narration adds a LAYER beyond what's seen
-   - Character is doing/observing/feeling something — voiceover comments from outside the frame
-   - Most common scene type in cinematic storytelling — use 30-50% of scenes for this
+2) **VOICEOVER SCENE** (character's INTERNAL MONOLOGUE while doing something) — use "narration" field
+   - Use for 20-30% of scenes (NOT the default — talk scenes are the default)
+   - Even here, narration must be FIRST-PERSON character thoughts: "Gue inget pertama kali...", "Aneh, padahal udah lama...", "Kalau aja waktu itu gue..."
+   - NEVER third-person descriptive: ❌ "Dia berjalan menyusuri jalan yang sepi" — that's a novel narrator, not a film
+   - NEVER describe the location/scenery to the audience
 
-3) **SILENT BEAT** (no dialogue, MINIMAL or zero narration) — use SHORT narration (or empty string)
-   - Use when: a moment is too powerful for words — climax, reveal, emotional landing, dramatic pause
-   - Let the image breathe. Let ambient sound (wind, breath, footstep) do the work
-   - Use for 10-20% of scenes — these are the moments viewers remember
-   - Narration if any: ONE short evocative phrase (3-8 words) that lingers
+3) **SILENT BEAT** (no narration at all) — narration: ""
+   - Use for 10-20% of scenes — climax, reveal, emotional landing
+   - Let ambient sound + visual carry the moment
 
-CRITICAL: A pro storyteller does NOT make every scene chatty. Restraint is the mark of mastery.
+CRITICAL RULE: If you find yourself writing about the LOCATION, the CITY, the PLACE, or DESCRIBING what the camera shows → you're doing it WRONG. Rewrite as character dialog.
 
 ═══════════════════════════════════════════════════
 INTENSITY-AWARE NARRATION (CRITICAL — action scenes need SILENCE):
@@ -12205,13 +12228,17 @@ DIALOGUE CRAFT (when you DO use it):
 - When NO dialogue → DO NOT include "speaking" in visual_prompt (silent action only)
 
 ═══════════════════════════════════════════════════
-NARRATION CRAFT (voiceover quality):
+NARRATION = CHARACTER DIALOG (NOT documentary VO):
 ═══════════════════════════════════════════════════
-- Sound like a premium documentary VO or A24 film narration
-- Each line must do ONE of: reveal, intrigue, contrast, or land an emotion
-- NEVER describe what's visible on screen — narration adds MEANING beyond the visual
-- BAD: "Aku berjalan di hutan yang sangat indah dan asri." (describes visual + filler adjectives)
-- GOOD: "Hutan ini lebih tua dari semua yang aku tahu." (adds layer of meaning)
+- Narration must sound like a CHARACTER TALKING (in their own voice), NOT a narrator describing things
+- First-person ALWAYS: "gue/aku/saya..." — never third-person "dia/karakter ini..."
+- Each line is something a real person would actually SAY in that moment — emotion, opinion, memory, reaction
+- NEVER describe the location, the visual, or what the audience can already see
+- ❌ BAD (describes scenery — TOUR GUIDE voice): "Hutan ini sangat indah dan asri dengan pohon-pohon tinggi"
+- ❌ BAD (Wikipedia voice): "Hutan ini adalah salah satu hutan tertua di dunia"
+- ✅ GOOD (character talking): "Bokap gue dulu sering bawa gue ke sini. Sekarang dia udah gak ada."
+- ✅ GOOD (character reacting): "Gila. Sumpah gak nyangka masih ada tempat kayak gini di Indonesia."
+- ✅ GOOD (character thinking): "Kalau gue gak balik sekarang, gue gak akan pernah balik lagi."
 - Use rhythm: alternate short punchy lines with longer flowing ones across scenes
 
 ═══════════════════════════════════════════════════
@@ -12283,20 +12310,29 @@ Return ONLY valid JSON:
 VISUAL PROMPT STRUCTURE (include ALL elements):
 "[PRECISE ACTION + body language], [environment with MATERIAL TEXTURES: wood grain, rough stone, wet leaves, brushed metal], [CAMERA: shot size + movement type], [LIGHTING: source + direction + quality], [COLOR GRADE: specific palette], [ATMOSPHERE: depth of field, haze, particles], photorealistic cinematic, ${project.format === 'shorts' ? '9:16 vertical' : '16:9 widescreen'}"
 
-PROFESSIONAL EXAMPLE (5-scene hiking vlog):
-Scene 1 visual: "silhouette figure stepping onto a narrow dirt trail between towering moss-covered pine trunks, camera starts as a wide full shot then steadicam glides forward following from behind, golden hour backlight piercing through canopy creating volumetric light shafts and long shadows on damp earth, teal shadows with warm amber highlights, shallow depth of field blurring distant fog, photorealistic cinematic, 9:16 vertical"
-Scene 1 narration: "Ada sesuatu tentang hutan yang belum disentuh manusia — udara terasa berbeda di sini."
-Scene 1 dialogue: "Ini bukan trail biasa. Yang ini nggak ada di Google Maps."
+PROFESSIONAL EXAMPLE (5-scene story — narration = CHARACTER TALKING, not describing places):
+Scene 1 visual: "medium close-up of character standing at the edge of a narrow dirt trail between towering moss-covered pine trunks, character looking forward then turning to camera as if talking to a friend, golden hour backlight, character speaking with natural lip movement, photorealistic cinematic, 9:16 vertical"
+Scene 1 narration: "Lo tau gak, terakhir kali gue ke sini gue masih SMA. Gila, udah sepuluh tahun."
+Scene 1 dialogue: "Lo tau gak, terakhir kali gue ke sini gue masih SMA. Gila, udah sepuluh tahun."
 
-Scene 2 visual: "same moss-covered pine trail from Scene 1, now pausing at a massive fallen oak trunk blocking the path, right hand reaching out to touch the rough bark surface, medium close-up shot with slow orbit from left revealing the forest depth behind, same golden hour light now casting long diagonal shadows across the decomposing trunk, warm earth tones with deep green undertones, dust particles floating in light beams, photorealistic cinematic, 9:16 vertical"
-Scene 2 narration: "Pohon ini mungkin sudah di sini lebih lama dari umur kakek kita."
+Scene 2 visual: "same character pausing at a massive fallen oak trunk blocking the path, right hand reaching out to touch the rough bark, medium close-up with slow orbit, same golden light, photorealistic cinematic, 9:16 vertical"
+Scene 2 narration: "Pohon ini... gue inget. Bokap pernah bilang umurnya lebih tua dari republik ini."
 
-Scene 3 visual: "stepping over the same fallen trunk, boots landing on wet leaf-covered ground creating a subtle splash, low angle cowboy shot looking up with canopy framing the subject, same golden light now softer as clouds pass, rack focus from muddy boot treads in foreground to face in background, desaturated greens with warm skin tones, photorealistic cinematic, 9:16 vertical"
-Scene 3 narration: "Setiap langkah di sini punya suara sendiri. Dan kalau kamu diam cukup lama, hutannya mulai bicara balik."
+Scene 3 visual: "character stepping over the same fallen trunk, boots landing on wet leaf-covered ground, low angle cowboy shot with canopy framing, photorealistic cinematic, 9:16 vertical"
+Scene 3 narration: "" (silent beat — just footsteps + ambient sound)
 
-BAD vs GOOD comparison:
-BAD narration: "Hari ini aku hiking di gunung yang indah" (boring, obvious, describes what's visible)
-GOOD narration: "Kaki mulai protes di kilometer ketiga. Tapi mataku belum mau berhenti." (personal, creates tension)
+Scene 4 visual: "character sitting on a moss-covered log, looking down at hands then up to camera, medium close-up, character speaking, soft side light, photorealistic cinematic, 9:16 vertical"
+Scene 4 narration: "Yang aneh tuh, gue ke sini bukan buat cari ketenangan. Gue ke sini buat dengerin sesuatu yang gue lupa."
+Scene 4 dialogue: "Yang aneh tuh, gue ke sini bukan buat cari ketenangan. Gue ke sini buat dengerin sesuatu yang gue lupa."
+
+❌ BAD vs ✅ GOOD narration:
+❌ BAD: "Hutan ini sangat indah dengan pohon-pohon yang menjulang tinggi" (DESCRIBES what's visible — TOUR GUIDE voice — KILLS THE FILM)
+❌ BAD: "Gunung ini terkenal sebagai destinasi hiking favorit" (Wikipedia narrator — BANNED)
+❌ BAD: "Hari ini aku hiking di gunung yang indah" (boring + describes visual)
+✅ GOOD: "Kaki gue mulai protes di kilometer ketiga. Tapi mata gue belum mau berhenti." (character's body + feeling, FIRST PERSON)
+✅ GOOD: "Bokap selalu bilang gunung ngajarin lebih banyak daripada sekolah. Gue baru ngerti sekarang." (memory, personal)
+✅ GOOD: "Gak ada sinyal. Gak ada notif. Pertama kali otak gue tenang dalam dua tahun." (specific reaction)
+
 BAD visual: "walking on forest trail, wide shot, natural light, cinematic" (empty, no texture, no atmosphere)
 GOOD visual: "striding along muddy single-track trail between moss-draped cedar trunks, steadicam tracking shot from 45-degree side angle, overcast diffused light with occasional sun breaks creating shifting shadow patterns on wet fern undergrowth, muted olive and brown palette with cool blue shadows" (rich, specific, atmospheric)
 
