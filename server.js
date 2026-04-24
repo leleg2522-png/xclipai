@@ -3422,21 +3422,68 @@ function parseProjectImageModel(s) {
   return fallback;
 }
 
-async function generateImageForProject({ prompt, imageModelStr, aspectRatio, refImages, userId, logPrefix }) {
+async function generateImageForProject({ prompt, imageModelStr, aspectRatio, refImages, userId, logPrefix, maxRetries }) {
   const { family, modelId } = parseProjectImageModel(imageModelStr);
   const refs = Array.isArray(refImages) ? refImages.filter(Boolean) : [];
-  if (family === 'x2') {
-    const limitedRefs = refs.slice(0, 3);
-    const result = await generateImageWithFreepikNanoBanana(
-      prompt, aspectRatio, limitedRefs, userId,
-      { logPrefix: logPrefix || '[FREEPIK-NBP]', resolution: '4K', modelId }
-    );
-    return { imageUrl: result.imageUrl, uuid: result.uuid || null };
+  const tag = logPrefix || (family === 'x2' ? '[FREEPIK-NBP]' : '[GEMINIGEN]');
+
+  // X3 (GeminiGen) — minimal retry (existing behavior was 1 attempt; allow 1 transient retry)
+  if (family === 'x3') {
+    const x3Attempts = (typeof maxRetries === 'number' ? maxRetries : 1) + 1;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= x3Attempts; attempt++) {
+      try {
+        if (attempt > 1) {
+          await new Promise(r => setTimeout(r, 5000));
+          console.log(`${tag} X3 retry ${attempt - 1}/${x3Attempts - 1}`);
+        }
+        return await generateImageWithGeminiGen(
+          prompt, modelId, aspectRatio, '4K', refs,
+          { logPrefix: tag }
+        );
+      } catch (e) {
+        lastErr = e;
+        if (attempt >= x3Attempts) throw e;
+      }
+    }
+    throw lastErr || new Error('X3 image generation failed');
   }
-  return await generateImageWithGeminiGen(
-    prompt, modelId, aspectRatio, '4K', refs,
-    { logPrefix: logPrefix || '[GEMINIGEN]' }
-  );
+
+  // X2 (Freepik) — AGGRESSIVE retry: auto-rotate keys, keep retrying on any error
+  // including key-exhaustion (waits long enough for admin to add keys / quota to reset).
+  const limitedRefs = refs.slice(0, 3);
+  const x2Attempts = (typeof maxRetries === 'number' ? maxRetries : 15) + 1; // ~16 total
+  let lastErr = null;
+  for (let attempt = 1; attempt <= x2Attempts; attempt++) {
+    try {
+      if (attempt > 1) {
+        const lastMsg = lastErr ? String(lastErr.message || '').toLowerCase() : '';
+        const isExhausted = lastMsg.includes('tidak ada api key') || lastMsg.includes('all freepik pool keys exhausted') || lastMsg.includes('pool keys');
+        // Longer waits for key-exhaustion (gives admin time to add keys / dead keys to be replaced)
+        let backoff;
+        if (isExhausted) {
+          backoff = Math.min(300000, 60000 * Math.pow(1.5, attempt - 2)); // 60s, 90s, 135s ... cap 5min
+        } else {
+          backoff = Math.min(60000, 8000 * Math.pow(2, attempt - 2)); // 8s, 16s, 32s, cap 60s
+        }
+        console.log(`${tag} X2 retry ${attempt - 1}/${x2Attempts - 1} in ${Math.round(backoff/1000)}s (reason: ${(lastErr && lastErr.message || '').substring(0, 180)})`);
+        await new Promise(r => setTimeout(r, backoff));
+      }
+      const result = await generateImageWithFreepikNanoBanana(
+        prompt, aspectRatio, limitedRefs, userId,
+        { logPrefix: tag, resolution: '4K', modelId }
+      );
+      if (attempt > 1) console.log(`${tag} X2 succeeded on attempt ${attempt}`);
+      return { imageUrl: result.imageUrl, uuid: result.uuid || null };
+    } catch (e) {
+      lastErr = e;
+      const msg = String((e && e.message) || '').toLowerCase();
+      // Hard-fail only for truly unrecoverable config problems
+      if (msg.includes('not configured')) throw e;
+      if (attempt >= x2Attempts) throw e;
+    }
+  }
+  throw lastErr || new Error('X2 image generation failed after retries');
 }
 
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
