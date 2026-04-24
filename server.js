@@ -3360,7 +3360,7 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
         console.error(`${logPrefix} Create error ${errStatus} (attempt ${createAttempt + 1}/${maxCreateRetries}):`, isHtml ? '[HTML 5xx page from Freepik]' : bodyStr.substring(0, 300));
 
         const isInvalidKey = isInvalidFreepikKey(apiErr);
-        if ((errStatus === 402 || errStatus === 429 || errStatus === 401 || isInvalidKey) && selectedKey.poolId) {
+        if ((errStatus === 402 || errStatus === 429 || errStatus === 401 || errStatus === 403 || isInvalidKey) && selectedKey.poolId) {
           const reason = isInvalidKey ? `INVALID KEY (HTTP ${errStatus || 'n/a'})` : `HTTP ${errStatus}`;
           console.warn(`${logPrefix} Killing dead key pool#${selectedKey.poolId}: ${reason}`);
           await handlePoolKeyExhausted(selectedKey.poolId, userId, 'ximage2', reason);
