@@ -3294,7 +3294,11 @@ async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution
 
 async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageUrls, userId, options = {}) {
   const logPrefix = options.logPrefix || '[FREEPIK-NBP]';
-  const endpoint = '/v1/ai/text-to-image/nano-banana-pro';
+  const modelId = options.modelId || 'nano-banana-pro';
+  const modelCfg = (typeof XIMAGE2_MODELS !== 'undefined' && XIMAGE2_MODELS[modelId]) ? XIMAGE2_MODELS[modelId] : null;
+  const endpoint = (modelCfg && modelCfg.freepikEndpoint) ? modelCfg.freepikEndpoint : '/v1/ai/text-to-image/nano-banana-pro';
+  const supportsRefs = modelCfg ? (modelCfg.maxRefs > 0) : true;
+  const maxRefs = modelCfg ? modelCfg.maxRefs : 3;
   const resolution = options.resolution || '4K';
 
   // Anti-defect quality guard appended to prompt (nano-banana-pro doesn't support negative_prompt parameter)
@@ -3315,18 +3319,20 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
     const requestBody = { prompt: enhancedPrompt, resolution };
     if (aspectRatio) requestBody.aspect_ratio = aspectRatio;
 
-    if (refImageUrls && refImageUrls.length > 0) {
+    if (supportsRefs && refImageUrls && refImageUrls.length > 0) {
       const refs = [];
-      for (let i = 0; i < Math.min(refImageUrls.length, 3); i++) {
+      for (let i = 0; i < Math.min(refImageUrls.length, maxRefs); i++) {
         const url = refImageUrls[i];
         if (!url) continue;
         const mimeType = url.includes('.png') ? 'image/png' : url.includes('.webp') ? 'image/webp' : 'image/jpeg';
         refs.push({ image: url, text: 'Reference image', mime_type: mimeType });
       }
       if (refs.length > 0) requestBody.reference_images = refs;
+    } else if (!supportsRefs && refImageUrls && refImageUrls.length > 0) {
+      console.log(`${logPrefix} Model ${modelId} does not support reference_images — ignoring ${refImageUrls.length} ref(s)`);
     }
 
-    console.log(`${logPrefix} Request: aspect=${aspectRatio}, res=${resolution}, refs=${refImageUrls ? refImageUrls.length : 0}`);
+    console.log(`${logPrefix} Request: model=${modelId}, endpoint=${endpoint}, aspect=${aspectRatio}, res=${resolution}, refs=${supportsRefs ? (refImageUrls ? refImageUrls.length : 0) : 'unsupported'}`);
 
     let createResp;
     let createSucceeded = false;
@@ -3406,6 +3412,31 @@ async function generateImageWithFreepikNanoBanana(prompt, aspectRatio, refImageU
   }
 
   throw lastError || new Error('All Freepik pool keys exhausted');
+}
+
+function parseProjectImageModel(s) {
+  const fallback = { family: 'x3', modelId: 'nano-banana-pro' };
+  if (!s || typeof s !== 'string') return fallback;
+  const m = s.match(/^(x2|x3):(.+)$/);
+  if (m) return { family: m[1], modelId: m[2] };
+  return fallback;
+}
+
+async function generateImageForProject({ prompt, imageModelStr, aspectRatio, refImages, userId, logPrefix }) {
+  const { family, modelId } = parseProjectImageModel(imageModelStr);
+  const refs = Array.isArray(refImages) ? refImages.filter(Boolean) : [];
+  if (family === 'x2') {
+    const limitedRefs = refs.slice(0, 3);
+    const result = await generateImageWithFreepikNanoBanana(
+      prompt, aspectRatio, limitedRefs, userId,
+      { logPrefix: logPrefix || '[FREEPIK-NBP]', resolution: '4K', modelId }
+    );
+    return { imageUrl: result.imageUrl, uuid: result.uuid || null };
+  }
+  return await generateImageWithGeminiGen(
+    prompt, modelId, aspectRatio, '4K', refs,
+    { logPrefix: logPrefix || '[GEMINIGEN]' }
+  );
 }
 
 async function pollFreepikMotionTask(taskId, apiKey, model, usedKeyName) {
@@ -12005,18 +12036,23 @@ app.delete('/api/automation/projects/:projectId', async (req, res) => {
 
 app.post('/api/automation/projects', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
-  const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage, customNarrations } = req.body;
+  const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage, customNarrations, imageModel } = req.body;
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const customNarrationsClean = (customNarrations && typeof customNarrations === 'string') ? customNarrations.trim() : '';
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
   const validFormats = ['shorts', 'landscape'];
   const validModels = ['kling-v2.6-pro', 'kling-v3', 'wan-v2.7-r2v', 'wan-v2.7-pro', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];
   const validDurations = [5, 10];
+  const validImageModels = [
+    'x3:nano-banana-pro', 'x3:nano-banana-2', 'x3:imagen-4',
+    'x2:nano-banana-pro', 'x2:nano-banana-pro-flash', 'x2:seedream-v5-lite', 'x2:flux'
+  ];
   const fmt = validFormats.includes(format) ? format : 'shorts';
   const model = validModels.includes(videoModel) ? videoModel : 'kling-v2.6-pro';
   const duration = validDurations.includes(parseInt(videoDuration)) ? parseInt(videoDuration) : 5;
   const scenes = Math.min(Math.max(parseInt(sceneCount) || 3, 2), 180);
   const lang = language || 'id';
+  const imgModel = validImageModels.includes(imageModel) ? imageModel : 'x3:nano-banana-pro';
 
   let refImageUrl = null;
   if (referenceImage && referenceImage.startsWith('data:image')) {
@@ -12034,9 +12070,9 @@ app.post('/api/automation/projects', async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, reference_image_url, scene_count, language, status, custom_narrations)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10)`,
-      [req.session.userId, projectId, niche.trim(), fmt, model, duration, refImageUrl, scenes, lang, customNarrationsClean || null]
+      `INSERT INTO automation_projects (user_id, project_id, niche, format, video_model, video_duration, reference_image_url, scene_count, language, status, custom_narrations, image_model)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11)`,
+      [req.session.userId, projectId, niche.trim(), fmt, model, duration, refImageUrl, scenes, lang, customNarrationsClean || null, imgModel]
     );
     res.json({ projectId, message: 'Project created' });
   } catch (error) {
@@ -12689,7 +12725,7 @@ app.post('/api/automation/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = 'nano-banana-2';
+    const projectImageModel = project.image_model || 'x3:nano-banana-pro';
     const imageResolution = '4K';
 
     (async () => {
@@ -12776,7 +12812,10 @@ The character must have the EXACT SAME face, hair, clothing, and body as shown i
               const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
               const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
               
-              const gemResult = await generateImageWithGeminiGen(genPrompt, 'nano-banana-pro', genAspect, '4K', refImages, { logPrefix: `[AUTOMATION] Scene ${scene.scene_index}` });
+              const gemResult = await generateImageForProject({
+                prompt: genPrompt, imageModelStr: projectImageModel, aspectRatio: genAspect,
+                refImages, userId: project.user_id, logPrefix: `[AUTOMATION] Scene ${scene.scene_index}`
+              });
               const imageUrl = gemResult.imageUrl;
               
               await pool.query(
@@ -13122,7 +13161,7 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
     const isFreepik = vidModel.provider === 'freepik';
     const isGeminiGen = vidModel.provider === 'geminigen';
     const isR2V = vidModel.apiModel === 'wan-v2.7-r2v';
-    const imageModel = 'nano-banana-2';
+    const projectImageModel = project.image_model || 'x3:nano-banana-pro';
     const imageResolution = '4K';
 
     (async () => {
@@ -13169,7 +13208,10 @@ app.post('/api/automation/projects/:projectId/retry-scene', async (req, res) => 
           const genPrompt = refImages.length > 0 ? refPrompt : scene.visual_prompt;
           const genAspect = aspectRatio === '9:16' ? '9:16' : '16:9';
           
-          const gemResult = await generateImageWithGeminiGen(genPrompt, 'nano-banana-pro', genAspect, '4K', refImages, { logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}` });
+          const gemResult = await generateImageForProject({
+            prompt: genPrompt, imageModelStr: projectImageModel, aspectRatio: genAspect,
+            refImages, userId: project.user_id, logPrefix: `[AUTOMATION] Retry scene ${sceneIndex}`
+          });
           sceneImageUrl = gemResult.imageUrl;
 
           await pool.query(
@@ -14520,6 +14562,7 @@ async function initDatabase() {
     await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS reference_image_url TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS video_duration INTEGER DEFAULT 5`).catch(() => {});
     await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS custom_narrations TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE automation_projects ADD COLUMN IF NOT EXISTS image_model VARCHAR(100) DEFAULT 'x3:nano-banana-pro'`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS automation_scenes (
@@ -14649,6 +14692,7 @@ async function initDatabase() {
     `);
     await pool.query(`ALTER TABLE ads_studio_projects ADD COLUMN IF NOT EXISTS text_overlay_enabled BOOLEAN DEFAULT true`);
     await pool.query(`ALTER TABLE ads_studio_scenes ADD COLUMN IF NOT EXISTS retry_gen_id VARCHAR(32)`);
+    await pool.query(`ALTER TABLE ads_studio_projects ADD COLUMN IF NOT EXISTS image_model VARCHAR(100) DEFAULT 'x3:nano-banana-pro'`).catch(() => {});
     console.log('Ads Studio tables created');
 
     console.log('[DB] Database initialized successfully');
@@ -14746,11 +14790,16 @@ app.post('/api/ads-studio/projects', upload.fields([
 ]), async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   try {
-    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, customNarrations } = req.body;
+    const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, customNarrations, imageModel } = req.body;
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
     const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];
     const validatedModel = adsValidModels.includes(videoModel) ? videoModel : 'wan-v2.7-pro';
+    const validImageModels = [
+      'x3:nano-banana-pro', 'x3:nano-banana-2', 'x3:imagen-4',
+      'x2:nano-banana-pro', 'x2:nano-banana-pro-flash', 'x2:seedream-v5-lite', 'x2:flux'
+    ];
+    const validatedImageModel = validImageModels.includes(imageModel) ? imageModel : 'x3:nano-banana-pro';
 
     const projectId = 'ads_' + uuidv4().replace(/-/g, '').substring(0, 16);
     const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -14771,9 +14820,9 @@ app.post('/api/ads-studio/projects', upload.fields([
     }
 
     await pool.query(
-      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, metadata, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')`,
-      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', validatedModel, parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true, JSON.stringify(projectMetadata)]
+      `INSERT INTO ads_studio_projects (user_id, project_id, product_name, product_description, ad_type, format, video_model, video_duration, character_image_url, product_image_url, scene_count, language, voice_over_enabled, metadata, status, image_model)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft', $15)`,
+      [req.session.userId, projectId, productName, productDescription || '', adType || 'soft_selling', format || 'shorts', validatedModel, parseInt(videoDuration) || 5, characterImageUrl, productImageUrl, parseInt(sceneCount) || 4, language || 'id', voiceOverEnabled === 'true' || voiceOverEnabled === true, JSON.stringify(projectMetadata), validatedImageModel]
     );
 
     res.json({ success: true, projectId });
@@ -15183,7 +15232,7 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
 
     res.json({ success: true, message: 'Produksi dimulai', sceneCount: scenes.rows.length });
 
-    const imageModel = 'nano-banana-2';
+    const projectImageModel = project.image_model || 'x3:nano-banana-pro';
     const imageResolution = '4K';
 
     let scriptData = {};
@@ -15258,7 +15307,10 @@ app.post('/api/ads-studio/projects/:projectId/start', async (req, res) => {
               for (let imgRetry = 0; imgRetry < 3 && !imageUrl; imgRetry++) {
                 try {
                   if (imgRetry > 0) console.log(`[ADS-STUDIO] Image retry #${imgRetry} for scene ${scene.scene_index}`);
-                  const gemResult = await generateImageWithGeminiGen(refPrompt, 'nano-banana-pro', aspectRatio, '4K', refImages, { logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}` });
+                  const gemResult = await generateImageForProject({
+                    prompt: refPrompt, imageModelStr: projectImageModel, aspectRatio,
+                    refImages, userId: project.user_id, logPrefix: `[ADS-STUDIO] Scene ${scene.scene_index}`
+                  });
                   imageUrl = gemResult.imageUrl;
                   
                   await pool.query(
@@ -15543,7 +15595,7 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
     }
     const isFreepik = vidModel.provider === 'freepik';
     const isGeminiGen = vidModel.provider === 'geminigen';
-    const imageModel = 'nano-banana-2';
+    const projectImageModel = project.image_model || 'x3:nano-banana-pro';
     const imageResolution = '4K';
 
     let scriptData = {};
@@ -15603,7 +15655,10 @@ app.post('/api/ads-studio/projects/:projectId/retry-scene', async (req, res) => 
             refPrompt = `${staticPrompt}${charDesc ? `\nCharacter: ${charDesc}` : ''}${settingDesc ? `\nSetting: ${settingDesc}` : ''}${prodVisual ? `\nProduct: ${prodVisual}` : ''}\nRULES: Never add any text, titles, captions, subtitles, watermarks, logos, or written words. Use a natural realistic background — no reflective floors, no glossy surfaces.`;
           }
 
-          const gemResult = await generateImageWithGeminiGen(refPrompt, 'nano-banana-pro', aspectRatio, '4K', refImages, { logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}` });
+          const gemResult = await generateImageForProject({
+            prompt: refPrompt, imageModelStr: projectImageModel, aspectRatio,
+            refImages, userId: project.user_id, logPrefix: `[ADS-STUDIO] Retry scene ${sceneIndex}`
+          });
           sceneImageUrl = gemResult.imageUrl;
 
           if (!(await checkStillValid())) { console.log(`[ADS-STUDIO] Retry ${retryGenId} superseded after image gen, aborting`); return; }

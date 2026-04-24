@@ -6426,6 +6426,7 @@ async function createAdsStudioProject() {
   var adTypeEl = document.getElementById('adsAdType');
   var formatEl = document.getElementById('adsFormat');
   var modelEl = document.getElementById('adsVideoModel');
+  var imgModelEl = document.getElementById('adsImageModel');
   var durEl = document.getElementById('adsDuration');
   var sceneEl = document.getElementById('adsSceneCount');
   var langEl = document.getElementById('adsLanguage');
@@ -6443,6 +6444,7 @@ async function createAdsStudioProject() {
   var adType = (adTypeEl ? adTypeEl.value : '') || 'soft_selling';
   var format = (formatEl ? formatEl.value : '') || 'shorts';
   var videoModel = (modelEl ? modelEl.value : '') || 'wan-v2.7-pro';
+  var imageModel = (imgModelEl ? imgModelEl.value : '') || 'x3:nano-banana-pro';
   var videoDuration = (durEl ? parseInt(durEl.value) : 5) || 5;
   var sceneCount = (sceneEl ? parseInt(sceneEl.value) : 4) || 4;
   var language = (langEl ? langEl.value : '') || 'id';
@@ -6465,6 +6467,7 @@ async function createAdsStudioProject() {
     formData.append('adType', adType);
     formData.append('format', format);
     formData.append('videoModel', videoModel);
+    formData.append('imageModel', imageModel);
     formData.append('videoDuration', String(videoDuration));
     formData.append('sceneCount', String(sceneCount));
     formData.append('language', language);
@@ -6490,7 +6493,7 @@ async function createAdsStudioProject() {
 
     var data = await response.json();
     if (data.success) {
-      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.7-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null, customNarrations: '' };
+      state.adsStudio.newProject = { productName: '', productDescription: '', adType: 'soft_selling', format: 'shorts', videoModel: 'wan-v2.7-pro', imageModel: 'x3:nano-banana-pro', videoDuration: 5, sceneCount: 4, language: 'id', voiceOverEnabled: false, characterImage: null, characterImagePreview: null, productImage: null, productImagePreview: null, customNarrations: '' };
       state.adsStudio.isCreating = false;
       state.adsStudio._loaded = false;
       await loadAdsStudioProjects();
@@ -6672,6 +6675,8 @@ function attachAdsStudioListeners() {
   if (adsFormat) adsFormat.addEventListener('change', function() { state.adsStudio.newProject.format = adsFormat.value; });
   var adsVideoModel = document.getElementById('adsVideoModel');
   if (adsVideoModel) adsVideoModel.addEventListener('change', function() { state.adsStudio.newProject.videoModel = adsVideoModel.value; });
+  var adsImageModelEl = document.getElementById('adsImageModel');
+  if (adsImageModelEl) adsImageModelEl.addEventListener('change', function() { state.adsStudio.newProject.imageModel = adsImageModelEl.value; });
   var adsDuration = document.getElementById('adsDuration');
   if (adsDuration) adsDuration.addEventListener('change', function() { state.adsStudio.newProject.videoDuration = parseInt(adsDuration.value); });
   var adsSceneCount = document.getElementById('adsSceneCount');
@@ -6857,11 +6862,11 @@ async function createAutomationProject() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language, referenceImage: np.referenceImage, customNarrations: np.customNarrations || '' })
+      body: JSON.stringify({ niche: np.niche, format: np.format, videoModel: np.videoModel, videoDuration: np.videoDuration, sceneCount: np.sceneCount, language: np.language, referenceImage: np.referenceImage, customNarrations: np.customNarrations || '', imageModel: np.imageModel || 'x3:nano-banana-pro' })
     });
     var data = await response.json();
     if (data.projectId) {
-      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id', referenceImage: null, referenceImagePreview: null, customNarrations: '' };
+      state.automation.newProject = { niche: '', format: 'shorts', videoModel: 'kling-v2.6-pro', videoDuration: 5, sceneCount: 3, language: 'id', referenceImage: null, referenceImagePreview: null, customNarrations: '', imageModel: 'x3:nano-banana-pro' };
       showToast('Project dibuat!', 'success');
       await loadAutomationProjects();
       loadAutomationProjectDetail(data.projectId);
@@ -7081,6 +7086,20 @@ function renderAdsStudioPage() {
   html += '<option value="veo-3.1-fast-fhd"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-fast-fhd' ? ' selected' : '') + '>Veo 3.1 Fast FHD</option>';
   html += '<option value="veo-3.1-freepik-4k"' + (state.adsStudio.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K</option>';
   html += '<option value="grok-3-geminigen"' + (state.adsStudio.newProject.videoModel === 'grok-3-geminigen' ? ' selected' : '') + '>Grok 3 (10s, Audio)</option>';
+  html += '</select>';
+  var adsImgModel = state.adsStudio.newProject.imageModel || 'x3:nano-banana-pro';
+  html += '<select class="form-input ads-select" id="adsImageModel" title="Model untuk generate gambar scene">';
+  html += '<optgroup label="X Image 3 (GeminiGen)">';
+  html += '<option value="x3:nano-banana-pro"' + (adsImgModel === 'x3:nano-banana-pro' ? ' selected' : '') + '>X3 · Nano Banana Pro</option>';
+  html += '<option value="x3:nano-banana-2"' + (adsImgModel === 'x3:nano-banana-2' ? ' selected' : '') + '>X3 · Nano Banana 2</option>';
+  html += '<option value="x3:imagen-4"' + (adsImgModel === 'x3:imagen-4' ? ' selected' : '') + '>X3 · Imagen 4</option>';
+  html += '</optgroup>';
+  html += '<optgroup label="X Image 2 (Freepik)">';
+  html += '<option value="x2:nano-banana-pro"' + (adsImgModel === 'x2:nano-banana-pro' ? ' selected' : '') + '>X2 · Nano Banana Pro</option>';
+  html += '<option value="x2:nano-banana-pro-flash"' + (adsImgModel === 'x2:nano-banana-pro-flash' ? ' selected' : '') + '>X2 · Nano Banana Pro Flash</option>';
+  html += '<option value="x2:seedream-v5-lite"' + (adsImgModel === 'x2:seedream-v5-lite' ? ' selected' : '') + '>X2 · Seedream V5 Lite</option>';
+  html += '<option value="x2:flux"' + (adsImgModel === 'x2:flux' ? ' selected' : '') + '>X2 · Flux</option>';
+  html += '</optgroup>';
   html += '</select>';
   html += '<select class="form-input ads-select" id="adsDuration">';
   html += '<option value="5"' + (state.adsStudio.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
@@ -7315,6 +7334,20 @@ function renderAutomationPage() {
   html += '<option value="veo-3.1-freepik-4k"' + (state.automation.newProject.videoModel === 'veo-3.1-freepik-4k' ? ' selected' : '') + '>Veo 3.1 4K</option>';
   html += '<option value="grok-3-geminigen"' + (state.automation.newProject.videoModel === 'grok-3-geminigen' ? ' selected' : '') + '>Grok 3 (10s, Audio)</option>';
   html += '</select>';
+  var autoImgModel = state.automation.newProject.imageModel || 'x3:nano-banana-pro';
+  html += '<select class="form-input auto-select" id="autoImageModel" title="Model untuk generate gambar scene">';
+  html += '<optgroup label="X Image 3 (GeminiGen)">';
+  html += '<option value="x3:nano-banana-pro"' + (autoImgModel === 'x3:nano-banana-pro' ? ' selected' : '') + '>X3 · Nano Banana Pro</option>';
+  html += '<option value="x3:nano-banana-2"' + (autoImgModel === 'x3:nano-banana-2' ? ' selected' : '') + '>X3 · Nano Banana 2</option>';
+  html += '<option value="x3:imagen-4"' + (autoImgModel === 'x3:imagen-4' ? ' selected' : '') + '>X3 · Imagen 4</option>';
+  html += '</optgroup>';
+  html += '<optgroup label="X Image 2 (Freepik)">';
+  html += '<option value="x2:nano-banana-pro"' + (autoImgModel === 'x2:nano-banana-pro' ? ' selected' : '') + '>X2 · Nano Banana Pro</option>';
+  html += '<option value="x2:nano-banana-pro-flash"' + (autoImgModel === 'x2:nano-banana-pro-flash' ? ' selected' : '') + '>X2 · Nano Banana Pro Flash</option>';
+  html += '<option value="x2:seedream-v5-lite"' + (autoImgModel === 'x2:seedream-v5-lite' ? ' selected' : '') + '>X2 · Seedream V5 Lite</option>';
+  html += '<option value="x2:flux"' + (autoImgModel === 'x2:flux' ? ' selected' : '') + '>X2 · Flux</option>';
+  html += '</optgroup>';
+  html += '</select>';
   html += '<select class="form-input auto-select" id="autoDuration">';
   html += '<option value="5"' + (state.automation.newProject.videoDuration === 5 ? ' selected' : '') + '>5 detik</option>';
   html += '<option value="10"' + (state.automation.newProject.videoDuration === 10 ? ' selected' : '') + '>10 detik</option>';
@@ -7533,6 +7566,7 @@ function attachAutomationListeners() {
       var nicheInput = document.getElementById('autoNiche');
       var formatSelect = document.getElementById('autoFormat');
       var modelSelect = document.getElementById('autoVideoModel');
+      var imageModelSelect = document.getElementById('autoImageModel');
       var durationSelect = document.getElementById('autoDuration');
       var sceneSelect = document.getElementById('autoSceneCount');
       var langSelect = document.getElementById('autoLanguage');
@@ -7540,6 +7574,7 @@ function attachAutomationListeners() {
       if (nicheInput) state.automation.newProject.niche = nicheInput.value;
       if (formatSelect) state.automation.newProject.format = formatSelect.value;
       if (modelSelect) state.automation.newProject.videoModel = modelSelect.value;
+      if (imageModelSelect) state.automation.newProject.imageModel = imageModelSelect.value;
       if (durationSelect) state.automation.newProject.videoDuration = parseInt(durationSelect.value);
       if (sceneSelect) state.automation.newProject.sceneCount = parseInt(sceneSelect.value);
       if (langSelect) state.automation.newProject.language = langSelect.value;
