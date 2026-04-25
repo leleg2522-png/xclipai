@@ -335,16 +335,24 @@ try {
   });
 }
 
+// Cookie config: 'lax' for direct production access (Railway), 'none' for cross-site iframe (Replit dev preview).
+// 'none' triggers browser third-party cookie blocking on Chrome/Safari/Brave => users get logged out on refresh.
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || (IS_PRODUCTION ? 'lax' : 'none');
+const COOKIE_SECURE = process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : true;
+console.log(`[STARTUP] Session cookie config: sameSite=${COOKIE_SAMESITE}, secure=${COOKIE_SECURE}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
+
 app.use(session({
   store: sessionStore,
   secret: process.env.SESSION_SECRET || 'xclip-secret-key-2024',
   resave: false,
   saveUninitialized: false,
+  rolling: true,
   proxy: true,
   cookie: {
-    secure: true,
+    secure: COOKIE_SECURE,
     httpOnly: true,
-    sameSite: 'none',
+    sameSite: COOKIE_SAMESITE,
     maxAge: 30 * 24 * 60 * 60 * 1000
   }
 }));
