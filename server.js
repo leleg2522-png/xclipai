@@ -12081,9 +12081,32 @@ app.delete('/api/automation/projects/:projectId', async (req, res) => {
   }
 });
 
+app.patch('/api/automation/projects/:projectId/image-model', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { imageModel } = req.body;
+  const validImageModels = [
+    'x3:nano-banana-pro', 'x3:nano-banana-2', 'x3:imagen-4',
+    'x2:nano-banana-pro', 'x2:nano-banana-pro-flash', 'x2:seedream-v5-lite', 'x2:flux'
+  ];
+  if (!validImageModels.includes(imageModel)) return res.status(400).json({ error: 'Model gambar tidak valid' });
+  try {
+    const result = await pool.query(
+      `UPDATE automation_projects SET image_model = $1, updated_at = NOW() WHERE project_id = $2 AND user_id = $3 RETURNING image_model`,
+      [imageModel, req.params.projectId, req.session.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    console.log(`[AUTOMATION] Updated image_model for ${req.params.projectId} -> ${imageModel}`);
+    res.json({ success: true, imageModel: result.rows[0].image_model });
+  } catch (error) {
+    console.error('[AUTOMATION] Update image-model error:', error.message);
+    res.status(500).json({ error: 'Gagal update model gambar' });
+  }
+});
+
 app.post('/api/automation/projects', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const { niche, format, videoModel, videoDuration, sceneCount, language, referenceImage, customNarrations, imageModel } = req.body;
+  console.log(`[AUTOMATION-CREATE] Received: niche=${(niche||'').substring(0,40)}, videoModel=${videoModel}, imageModel=${imageModel || '(none/default)'}`);
   if (!niche || !niche.trim()) return res.status(400).json({ error: 'Niche/topik wajib diisi' });
   const customNarrationsClean = (customNarrations && typeof customNarrations === 'string') ? customNarrations.trim() : '';
   const projectId = `auto-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -14831,6 +14854,28 @@ app.delete('/api/ads-studio/projects/:projectId', async (req, res) => {
   }
 });
 
+app.patch('/api/ads-studio/projects/:projectId/image-model', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const { imageModel } = req.body;
+  const validImageModels = [
+    'x3:nano-banana-pro', 'x3:nano-banana-2', 'x3:imagen-4',
+    'x2:nano-banana-pro', 'x2:nano-banana-pro-flash', 'x2:seedream-v5-lite', 'x2:flux'
+  ];
+  if (!validImageModels.includes(imageModel)) return res.status(400).json({ error: 'Model gambar tidak valid' });
+  try {
+    const result = await pool.query(
+      `UPDATE ads_studio_projects SET image_model = $1, updated_at = NOW() WHERE project_id = $2 AND user_id = $3 RETURNING image_model`,
+      [imageModel, req.params.projectId, req.session.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+    console.log(`[ADS-STUDIO] Updated image_model for ${req.params.projectId} -> ${imageModel}`);
+    res.json({ success: true, imageModel: result.rows[0].image_model });
+  } catch (error) {
+    console.error('[ADS-STUDIO] Update image-model error:', error.message);
+    res.status(500).json({ error: 'Gagal update model gambar' });
+  }
+});
+
 app.post('/api/ads-studio/projects', upload.fields([
   { name: 'characterImage', maxCount: 1 },
   { name: 'productImage', maxCount: 1 }
@@ -14838,6 +14883,7 @@ app.post('/api/ads-studio/projects', upload.fields([
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   try {
     const { productName, productDescription, adType, format, videoModel, videoDuration, sceneCount, language, voiceOverEnabled, customNarrations, imageModel } = req.body;
+    console.log(`[ADS-CREATE] Received: product=${(productName||'').substring(0,40)}, videoModel=${videoModel}, imageModel=${imageModel || '(none/default)'}`);
     if (!productName) return res.status(400).json({ error: 'Nama produk diperlukan' });
 
     const adsValidModels = ['wan-v2.7-pro', 'wan-v2.6-pro', 'kling-v2.1-pro', 'kling-v2.6-pro', 'kling-v3', 'veo-3.1-fast-fhd', 'veo-3.1-freepik-4k', 'grok-3-geminigen'];

@@ -6715,6 +6715,31 @@ function attachAdsStudioListeners() {
     deleteAdsStudioProject(deleteBtn.dataset.projectId);
   });
 
+  var adsDetailImgModelSel = document.getElementById('adsDetailImageModel');
+  if (adsDetailImgModelSel) {
+    adsDetailImgModelSel.addEventListener('change', function() {
+      var newVal = adsDetailImgModelSel.value;
+      var pid = adsDetailImgModelSel.getAttribute('data-project-id');
+      var statusEl = document.getElementById('adsDetailImageModelStatus');
+      if (statusEl) statusEl.textContent = 'Menyimpan...';
+      fetch(API_URL + '/api/ads-studio/projects/' + pid + '/image-model', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageModel: newVal })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data && data.success) {
+          if (state.adsStudio.currentProject) state.adsStudio.currentProject.image_model = data.imageModel;
+          if (statusEl) { statusEl.textContent = '✓ Tersimpan'; statusEl.style.color = '#4ade80'; setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 2500); }
+        } else {
+          if (statusEl) { statusEl.textContent = '✗ ' + (data && data.error || 'Gagal'); statusEl.style.color = '#f87171'; }
+        }
+      }).catch(function(err) {
+        if (statusEl) { statusEl.textContent = '✗ ' + err.message; statusEl.style.color = '#f87171'; }
+      });
+    });
+  }
+
   document.querySelectorAll('[data-ads-project]').forEach(function(card) {
     card.addEventListener('click', function() {
       loadAdsStudioProjectDetail(card.dataset.adsProject);
@@ -7168,6 +7193,25 @@ function renderAdsStudioDetailPage() {
   html += '<button class="btn-danger-sm" id="adsDeleteBtn" data-project-id="' + project.project_id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
   html += '</div></div>';
 
+  var adsDetImgModel = project.image_model || 'x3:nano-banana-pro';
+  html += '<div class="section-card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;">';
+  html += '<span style="font-size:13px;color:#aaa;">🖼️ Model gambar scene:</span>';
+  html += '<select class="form-input" id="adsDetailImageModel" data-project-id="' + project.project_id + '" style="flex:1;min-width:220px;max-width:340px;">';
+  html += '<optgroup label="X Image 3">';
+  html += '<option value="x3:nano-banana-pro"' + (adsDetImgModel === 'x3:nano-banana-pro' ? ' selected' : '') + '>X Image 3 — Nano Banana Pro</option>';
+  html += '<option value="x3:nano-banana-2"' + (adsDetImgModel === 'x3:nano-banana-2' ? ' selected' : '') + '>X Image 3 — Nano Banana 2</option>';
+  html += '<option value="x3:imagen-4"' + (adsDetImgModel === 'x3:imagen-4' ? ' selected' : '') + '>X Image 3 — Imagen 4</option>';
+  html += '</optgroup>';
+  html += '<optgroup label="X Image 2">';
+  html += '<option value="x2:nano-banana-pro"' + (adsDetImgModel === 'x2:nano-banana-pro' ? ' selected' : '') + '>X Image 2 — Nano Banana Pro</option>';
+  html += '<option value="x2:nano-banana-pro-flash"' + (adsDetImgModel === 'x2:nano-banana-pro-flash' ? ' selected' : '') + '>X Image 2 — Nano Banana Pro Flash</option>';
+  html += '<option value="x2:seedream-v5-lite"' + (adsDetImgModel === 'x2:seedream-v5-lite' ? ' selected' : '') + '>X Image 2 — Seedream V5 Lite</option>';
+  html += '<option value="x2:flux"' + (adsDetImgModel === 'x2:flux' ? ' selected' : '') + '>X Image 2 — Flux</option>';
+  html += '</optgroup>';
+  html += '</select>';
+  html += '<span id="adsDetailImageModelStatus" style="font-size:12px;color:#888;"></span>';
+  html += '</div>';
+
   if (project.status === 'draft' || project.status === 'script_failed') {
     html += '<div class="section-card auto-action-simple">';
     if (project.status === 'script_failed' && project.error_message) {
@@ -7405,6 +7449,25 @@ function renderAutomationDetailPage() {
   html += getAutomationStatusBadge(project.status);
   html += '<button class="btn-danger-sm" id="autoDeleteBtn" data-project-id="' + project.project_id + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
   html += '</div></div>';
+
+  var detImgModel = project.image_model || 'x3:nano-banana-pro';
+  html += '<div class="section-card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;">';
+  html += '<span style="font-size:13px;color:#aaa;">🖼️ Model gambar scene:</span>';
+  html += '<select class="form-input" id="autoDetailImageModel" data-project-id="' + project.project_id + '" style="flex:1;min-width:220px;max-width:340px;">';
+  html += '<optgroup label="X Image 3">';
+  html += '<option value="x3:nano-banana-pro"' + (detImgModel === 'x3:nano-banana-pro' ? ' selected' : '') + '>X Image 3 — Nano Banana Pro</option>';
+  html += '<option value="x3:nano-banana-2"' + (detImgModel === 'x3:nano-banana-2' ? ' selected' : '') + '>X Image 3 — Nano Banana 2</option>';
+  html += '<option value="x3:imagen-4"' + (detImgModel === 'x3:imagen-4' ? ' selected' : '') + '>X Image 3 — Imagen 4</option>';
+  html += '</optgroup>';
+  html += '<optgroup label="X Image 2">';
+  html += '<option value="x2:nano-banana-pro"' + (detImgModel === 'x2:nano-banana-pro' ? ' selected' : '') + '>X Image 2 — Nano Banana Pro</option>';
+  html += '<option value="x2:nano-banana-pro-flash"' + (detImgModel === 'x2:nano-banana-pro-flash' ? ' selected' : '') + '>X Image 2 — Nano Banana Pro Flash</option>';
+  html += '<option value="x2:seedream-v5-lite"' + (detImgModel === 'x2:seedream-v5-lite' ? ' selected' : '') + '>X Image 2 — Seedream V5 Lite</option>';
+  html += '<option value="x2:flux"' + (detImgModel === 'x2:flux' ? ' selected' : '') + '>X Image 2 — Flux</option>';
+  html += '</optgroup>';
+  html += '</select>';
+  html += '<span id="autoDetailImageModelStatus" style="font-size:12px;color:#888;"></span>';
+  html += '</div>';
 
   if (project.status === 'draft' || project.status === 'script_failed') {
     html += '<div class="section-card auto-action-simple">';
@@ -7662,6 +7725,31 @@ function attachAutomationListeners() {
   if (deleteBtn) {
     deleteBtn.addEventListener('click', function() {
       deleteAutomationProject(deleteBtn.getAttribute('data-project-id'));
+    });
+  }
+
+  var detailImgModelSel = document.getElementById('autoDetailImageModel');
+  if (detailImgModelSel) {
+    detailImgModelSel.addEventListener('change', function() {
+      var newVal = detailImgModelSel.value;
+      var pid = detailImgModelSel.getAttribute('data-project-id');
+      var statusEl = document.getElementById('autoDetailImageModelStatus');
+      if (statusEl) statusEl.textContent = 'Menyimpan...';
+      fetch(API_URL + '/api/automation/projects/' + pid + '/image-model', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageModel: newVal })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data && data.success) {
+          if (state.automation.currentProject) state.automation.currentProject.image_model = data.imageModel;
+          if (statusEl) { statusEl.textContent = '✓ Tersimpan'; statusEl.style.color = '#4ade80'; setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 2500); }
+        } else {
+          if (statusEl) { statusEl.textContent = '✗ ' + (data && data.error || 'Gagal'); statusEl.style.color = '#f87171'; }
+        }
+      }).catch(function(err) {
+        if (statusEl) { statusEl.textContent = '✗ ' + err.message; statusEl.style.color = '#f87171'; }
+      });
     });
   }
 
