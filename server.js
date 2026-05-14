@@ -2564,6 +2564,29 @@ async function saveBase64ToFile(base64Data, type, baseUrl) {
   return { filepath, publicUrl, filename };
 }
 
+// Dedicated save function for X Image 3 — stored in uploads/ximage3/ (no auto-cleanup)
+async function saveBase64ToXImage3File(base64Data, baseUrl) {
+  const uploadsDir = path.join(__dirname, 'uploads', 'ximage3');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  let cleanData = base64Data;
+  let ext = 'png';
+  if (base64Data.includes(',')) {
+    const parts = base64Data.split(',');
+    cleanData = parts[1];
+    const mimeMatch = parts[0].match(/data:(\w+)\/(\w+)/);
+    if (mimeMatch) {
+      ext = mimeMatch[2] === 'jpeg' ? 'jpg' : mimeMatch[2];
+    }
+  }
+  const filename = `${uuidv4()}.${ext}`;
+  const filepath = path.join(uploadsDir, filename);
+  fs.writeFileSync(filepath, Buffer.from(cleanData, 'base64'));
+  const publicUrl = `${baseUrl}/uploads/ximage3/${filename}`;
+  return { filepath, publicUrl, filename };
+}
+
 // Cleanup old motion files (older than 1 hour)
 function cleanupMotionFiles() {
   const uploadsDir = path.join(__dirname, 'uploads', 'motion');
@@ -11064,7 +11087,7 @@ app.post('/api/ximage3/generate', async (req, res) => {
       for (const img of images.filter(Boolean)) {
         let url = null;
         if (img.startsWith('data:')) {
-          const saved = await saveBase64ToFile(img, 'image', baseUrl);
+          const saved = await saveBase64ToXImage3File(img, baseUrl);
           url = saved.publicUrl;
         } else if (img.startsWith('http')) {
           url = img;
@@ -11111,7 +11134,7 @@ app.post('/api/ximage3/generate', async (req, res) => {
     let imageUrl = null;
     if (respData.base64_images) {
       const b64Data = `data:image/png;base64,${respData.base64_images}`;
-      const saved = await saveBase64ToFile(b64Data, 'image', baseUrl);
+      const saved = await saveBase64ToXImage3File(b64Data, baseUrl);
       imageUrl = saved.publicUrl;
     }
     if (!imageUrl && respData.generated_image && respData.generated_image.length > 0) {
@@ -11269,7 +11292,7 @@ app.get('/api/ximage3/status/:taskId', async (req, res) => {
         const prot = req.headers['x-forwarded-proto'] || 'https';
         const hst = req.headers['x-forwarded-host'] || req.headers.host;
         const bUrl = `${prot}://${hst}`;
-        const saved = await saveBase64ToFile(b64Data, 'image', bUrl);
+        const saved = await saveBase64ToXImage3File(b64Data, bUrl);
         imageUrl = saved.publicUrl;
       }
       
@@ -11366,6 +11389,21 @@ app.get('/api/ximage3/proxy-image', async (req, res) => {
     if (!imageUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
     }
+    // Serve local files directly from disk (avoids self-referencing HTTP requests)
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const urlPath = parsedUrl.pathname;
+      if (urlPath.startsWith('/uploads/')) {
+        const localFilePath = path.join(__dirname, urlPath);
+        if (fs.existsSync(localFilePath)) {
+          const ext = path.extname(localFilePath).replace('.', '').toLowerCase() || 'png';
+          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.sendFile(localFilePath);
+        }
+      }
+    } catch (e) {}
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
       timeout: 60000,
@@ -11392,6 +11430,22 @@ app.get('/api/ximage3/download', async (req, res) => {
     if (!imageUrl) {
       return res.status(400).json({ error: 'URL diperlukan' });
     }
+    // Serve local files directly from disk (avoids self-referencing HTTP requests)
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const urlPath = parsedUrl.pathname;
+      if (urlPath.startsWith('/uploads/')) {
+        const localFilePath = path.join(__dirname, urlPath);
+        if (fs.existsSync(localFilePath)) {
+          const ext = path.extname(localFilePath).replace('.', '').toLowerCase() || 'png';
+          const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Content-Disposition', `attachment; filename="ximage3-${Date.now()}.${ext}"`);
+          res.setHeader('Cache-Control', 'no-cache');
+          return res.sendFile(localFilePath);
+        }
+      }
+    } catch (e) {}
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
       timeout: 60000,
