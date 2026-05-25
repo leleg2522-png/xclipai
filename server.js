@@ -14259,7 +14259,7 @@ async function initDatabase() {
           ('1 Hari', 1, 30000, 'Akses semua fitur selama 1 hari'),
           ('3 Hari', 3, 65000, 'Akses semua fitur selama 3 hari'),
           ('1 Minggu', 7, 100000, 'Akses semua fitur selama 7 hari'),
-          ('1 Bulan', 30, 200000, 'Akses semua fitur selama 30 hari')
+          ('1 Bulan', 30, 350000, 'Akses semua fitur selama 30 hari')
       `);
       console.log('Subscription plans seeded');
     } else {
@@ -14267,7 +14267,7 @@ async function initDatabase() {
       await pool.query(`UPDATE subscription_plans SET price_idr = 65000 WHERE name = '3 Hari' AND price_idr != 65000`);
       await pool.query(`UPDATE subscription_plans SET name = '1 Minggu', price_idr = 100000 WHERE name = '7 Hari'`);
       await pool.query(`UPDATE subscription_plans SET price_idr = 100000 WHERE name = '1 Minggu' AND price_idr != 100000`);
-      await pool.query(`UPDATE subscription_plans SET price_idr = 200000 WHERE name = '1 Bulan' AND price_idr != 200000`);
+      await pool.query(`UPDATE subscription_plans SET price_idr = 350000 WHERE name = '1 Bulan' AND price_idr != 350000`);
       const has3Hari = await pool.query(`SELECT id FROM subscription_plans WHERE name = '3 Hari'`);
       if (has3Hari.rows.length === 0) {
         await pool.query(`INSERT INTO subscription_plans (name, duration_days, price_idr, description) VALUES ('3 Hari', 3, 65000, 'Akses semua fitur selama 3 hari')`);
