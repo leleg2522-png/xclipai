@@ -8986,7 +8986,8 @@ async function callGeminiGenVideoCreate(apiKey, modelName, prompt, resolution, a
   } catch (apiErr) {
     const errData = apiErr.response?.data;
     const errStatus = apiErr.response?.status;
-    console.error(`[VIDGEN3] GeminiGen API error ${errStatus}: ${JSON.stringify(errData).substring(0, 1000)}`);
+    const errDataStr = errData !== undefined ? JSON.stringify(errData) : `(no response body) ${apiErr.code || ''} ${apiErr.message || ''}`.trim();
+    console.error(`[VIDGEN3] GeminiGen API error ${errStatus || 'NO_RESPONSE'}: ${String(errDataStr).substring(0, 1000)}`);
     console.error(`[VIDGEN3] Request params: model=${modelName}, resolution=${resolution}, aspect=${aspectRatio}, endpoint=${apiEndpoint}, duration=${config.duration}`);
     throw apiErr;
   }
