@@ -3235,7 +3235,7 @@ async function pollGeminiGenImageTask(uuid, apiKey) {
 }
 
 async function generateImageWithGeminiGen(prompt, model, aspectRatio, resolution, refImageUrls, options = {}) {
-  const GEMINI_IMG_BASE = 'https://api.geminigen.ai/uapi/v1';
+  const GEMINI_IMG_BASE = 'https://api.snapgen.ai/uapi/v1';
   const geminiKey = process.env.GEMINIGEN_API_KEY;
   if (!geminiKey) throw new Error('GEMINIGEN_API_KEY not configured');
   
@@ -7401,7 +7401,7 @@ const VIDGEN3_MODEL_CONFIGS = {
   },
 };
 
-const GEMINIGEN_API_BASE = 'https://api.geminigen.ai/uapi/v1';
+const GEMINIGEN_API_BASE = 'https://api.snapgen.ai/uapi/v1';
 
 function geminiGenHeaders(apiKey) {
   return {
