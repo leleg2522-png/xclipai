@@ -27,6 +27,12 @@ New developers must register first, then log in before accessing the developer p
 
 **How to apply:** Offer login directly for existing accounts and registration for genuinely new developers. Reuse existing Railway accounts and passwords; do not require old users to register again or create a separate developer identity. Gate portal menus behind authentication. Local prototype transitions do not constitute real account registration or backend access control.
 
+Users who forget their password should register a new account instead of using password recovery.
+
+**Why:** When asked about login options for legacy passwordless accounts, the user said “akun yg lupa pasworrd ya daftar ulang saja”.
+
+**How to apply:** Do not add Telegram login or password recovery for this request. Keep existing-account login for users who know their password. New registration is not permission to overwrite an existing identity, delete old accounts, or transfer balances, subscriptions, or API keys.
+
 Include a Top up menu in the developer portal.
 
 **Why:** The user explicitly requested “tambahkan juga menu top up”.
