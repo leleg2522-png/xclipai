@@ -1,0 +1,47 @@
+2026-10-14 17:58:04.227 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:04.227 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:04.227 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:09.072 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:09.072 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:09.072 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:16.357 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:16.357 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:16.357 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:25.345 UTC [57652] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:25.345 UTC [57652] DETAIL:  text versus character varying
+2026-10-14 17:58:25.345 UTC [57652] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:27.164 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:27.164 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:27.164 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:38.098 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:38.098 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:38.098 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:38.956 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:38.956 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:38.956 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+	          WHERE task_id = $3 RETURNING *
+2026-10-14 17:58:49.358 UTC [57657] ERROR:  inconsistent types deduced for parameter $1 at character 44
+2026-10-14 17:58:49.358 UTC [57657] DETAIL:  text versus character varying
+2026-10-14 17:58:49.358 UTC [57657] STATEMENT:  UPDATE video_generation_tasks SET status = $1, video_url = $2,
+	          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
+	          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
