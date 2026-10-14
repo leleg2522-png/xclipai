@@ -2,7 +2,7 @@ const express = require('express');
 const { PaymentError, sameSignature } = require('./klikqris-provider');
 const { publicInvoice } = require('./klikqris-service');
 
-function paymentRoutes({ service, provider, pool }) {
+function paymentRoutes({ service, provider, pool, wallet }) {
   const router = express.Router();
   function failure(res, error) {
     if (!(error instanceof PaymentError)) console.error('KlikQRIS request failed:', error.code || error.name);
@@ -18,6 +18,11 @@ function paymentRoutes({ service, provider, pool }) {
     res.set('Cache-Control', 'private, no-store');
     try { await fn(req, res); } catch (error) { failure(res, error); }
   };
+  router.get('/api/developer/wallet', route(async (req, res) => {
+    const userId = owner(req);
+    if (!wallet) throw new PaymentError(503, 'Saldo API belum tersedia.');
+    res.json(await wallet.get(userId));
+  }));
   router.get('/api/payments/klikqris/config', route(async (req, res) => {
     owner(req);
     res.json(service.config());
@@ -26,7 +31,7 @@ function paymentRoutes({ service, provider, pool }) {
     res.json({ invoice: publicInvoice(await service.current(owner(req))) });
   }));
   router.post('/api/payments/klikqris/create', route(async (req, res) => {
-    const row = await service.create(owner(req), Number(req.body?.planId), req.headers['idempotency-key']);
+    const row = await service.create(owner(req), Number(req.body?.amount), req.headers['idempotency-key']);
     res.json({ success: true, invoice: publicInvoice(row) });
   }));
   router.get('/api/payments/klikqris/:id/qr', route(async (req, res) => {

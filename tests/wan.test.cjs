@@ -96,8 +96,9 @@ test('upstream failures are sanitized; uncertain paid POST is never automaticall
 async function routeFixture(t, opts = {}) {
   const rows = new Map();
   const locks = new Map();
-  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0 };
+  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0 };
   async function query(sql, p = []) {
+    if (['BEGIN','COMMIT','ROLLBACK'].includes(sql)) return { rows: [] };
     if (sql.includes('pg_advisory_unlock')) {
       locks.get(p.join(':'))?.resolvers.shift()?.();
       return { rows: [] };
@@ -145,6 +146,23 @@ async function routeFixture(t, opts = {}) {
     throw new Error('Unexpected fixture SQL: ' + sql);
   }
   const pool = { query, async connect() { return { query, release() { stats.released++; } }; } };
+  const wallet = {
+    assertReady() {},
+    async reserve() {
+      if (opts.noSubscription && !opts.activeSubscription) {
+        const { WalletError } = require('../server/api-wallet');
+        throw new WalletError(402, 'Saldo API tidak cukup.');
+      }
+      stats.reservations++;
+    },
+    async finish(row, result) {
+      const current = rows.get(row.task_id);
+      if (['completed','failed'].includes(current.status)) return structuredClone(current);
+      if (result.status === 'failed' && current.retry_data.billing === 'wallet') stats.refunds++;
+      Object.assign(current, { status: result.status, video_url: result.videoUrl });
+      return structuredClone(current);
+    },
+  };
   const provider = {
     async context() { if (opts.unavailable) throw new ServiceError(503, 'Layanan sementara tidak tersedia.'); },
     async prepare() { return { keyId: 7, body: {} }; },
@@ -160,10 +178,11 @@ async function routeFixture(t, opts = {}) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
-  app.use(wanRoutes({ pool, provider, validateKey: async key =>
+  const router = wanRoutes({ pool, provider, wallet, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
-    saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } }));
+    saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
+  app.use(router);
   app.post('/api/videogen/proxy', (_req, res) => res.json({ legacy: true }));
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
@@ -176,7 +195,7 @@ async function routeFixture(t, opts = {}) {
   }
   const generate = (body = {}, headers = {}) => call('/api/videogen/proxy',
     { model: MODEL, prompt: 'test', ...body }, { 'X-Xclip-Key': 'owner', 'Idempotency-Key': 'request-one', ...headers });
-  return { rows, stats, call, generate };
+  return { rows, stats, call, generate, router };
 }
 
 test('catalog requires authentication and only returns the public Xclip projection', async t => {
@@ -194,6 +213,7 @@ test('paid API subscribers can use the Wan pool without a legacy generator room'
   const h = await routeFixture(t, { noSubscription: true, activeSubscription: true });
   assert.equal((await h.generate()).status, 202);
   assert.equal(h.stats.starts, 1);
+  assert.equal(h.stats.reservations, 0);
 });
 
 test('parallel idempotent requests create and charge only once; changed body conflicts', async t => {
@@ -203,6 +223,7 @@ test('parallel idempotent requests create and charge only once; changed body con
   assert.equal(results[0].data.taskId, results[1].data.taskId);
   assert.equal(h.stats.starts, 1);
   assert.equal(h.stats.counts, 1);
+  assert.equal(h.stats.reservations, 1);
   assert.equal(h.stats.released, 2);
   assert.equal((await h.generate({ prompt: 'changed' })).status, 409);
   assert.equal((await h.generate({}, { 'Idempotency-Key': 'request-two' })).status, 429);
@@ -225,9 +246,9 @@ test('task polling enforces key/session ownership, sanitizes output and survives
   assert.equal(h.stats.polls, 1);
 });
 
-test('subscription, quota, revoked keys, and unknown Wan model are blocked before a paid call', async t => {
+test('insufficient wallet, quota, revoked keys, and unknown Wan model are blocked before a paid call', async t => {
   const h = await routeFixture(t, { noSubscription: true });
-  assert.equal((await h.generate()).status, 403);
+  assert.equal((await h.generate()).status, 402);
   assert.equal((await h.generate({}, { 'X-Xclip-Key': 'revoked' })).status, 401);
   assert.equal(h.stats.starts, 0);
   const q = await routeFixture(t, { quotaUsed: 50 });
@@ -251,6 +272,8 @@ test('uncertain delivery stays pending, blocks new requests, and never regenerat
   assert.equal((await h.call(`/api/videogen/tasks/${r.data.taskId}`, null, { 'X-Xclip-Key': 'owner' })).data.status, 'pending');
   assert.equal(h.stats.starts, 1);
   assert.equal(h.stats.polls, 0);
+  assert.equal(h.stats.reservations, 1);
+  assert.equal(h.stats.refunds, 0);
 });
 
 test('definite submission failure is retained as failed; idempotent retry does not charge again', async t => {
@@ -259,11 +282,21 @@ test('definite submission failure is retained as failed; idempotent retry does n
   const retried = await h.generate();
   assert.equal(retried.data.status, 'failed');
   assert.equal(h.stats.starts, 1);
+  assert.equal(h.stats.refunds, 1);
 });
 
 test('legacy workers and webhook cannot dispatch or mutate Wan tasks', () => {
   const source = fs.readFileSync('server.js', 'utf8');
   assert.ok(source.includes("if (row.model === 'wan-3.0-uncensored') continue"));
   assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored')"));
-  assert.ok(source.indexOf("app.use(require('./server/wan-routes')") < source.indexOf("app.post('/api/videogen/proxy'"));
+  assert.ok(source.indexOf("app.use(wanRouter)") < source.indexOf("app.post('/api/videogen/proxy'"));
+});
+
+test('both two-second and thirty-second videos reserve one fixed-price generation', async t => {
+  for (const duration of [2,30]) {
+    const h=await routeFixture(t);
+    assert.equal((await h.generate({duration})).status,202);
+    assert.equal(h.stats.reservations,1);
+    assert.equal([...h.rows.values()][0].retry_data.price,6000);
+  }
 });

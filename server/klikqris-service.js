@@ -1,18 +1,20 @@
 const { randomUUID } = require('node:crypto');
 const { PaymentError } = require('./klikqris-provider');
+const { MIN_TOPUP, MAX_TOPUP } = require('./api-wallet');
 
 const OPEN = ['creating', 'pending', 'uncertain'];
 function publicInvoice(row) {
   if (!row) return null;
   return {
     id: row.id, provider: 'klikqris', package: row.package, planId: row.plan_id,
+    billing_type: row.billing_type || 'subscription',
     amount: Number(row.amount), total_amount: row.total_amount == null ? null : Number(row.total_amount),
     status: row.status, created_at: row.created_at, expires_at: row.expires_at, paid_at: row.paid_at,
     qr_url: row.status === 'pending' && (row.qr_image || row.qr_url)
       ? `/api/payments/klikqris/${row.id}/qr` : null,
   };
 }
-function createPaymentService(pool, provider) {
+function createPaymentService(pool, provider, wallet) {
   let ready = false, reconciling = false;
   const checks = new Map();
   function requireReady() {
@@ -40,7 +42,10 @@ function createPaymentService(pool, provider) {
         throw new PaymentError(409, 'Tagihan memerlukan pemeriksaan admin.');
       }
       // Sandbox payments must never grant real subscription time.
-      if (row.mode !== 'sandbox') {
+      if (row.mode !== 'sandbox' && row.billing_type === 'wallet') {
+        if (!wallet) throw new PaymentError(503, 'Saldo API belum tersedia.');
+        await wallet.credit(client, row);
+      } else if (row.mode !== 'sandbox') {
         const subscriptions = (await client.query(
           'SELECT id, expired_at FROM subscriptions WHERE user_id = $1 FOR UPDATE', [row.user_id])).rows;
         const dates = [Date.now(), user.subscription_expired_at, ...subscriptions.map(s => s.expired_at)]
@@ -102,19 +107,29 @@ function createPaymentService(pool, provider) {
       )`);
       await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_qris_one_open_per_user
         ON portal_qris_invoices (user_id) WHERE status IN ('creating','pending','uncertain')`);
+      // Additive transition: existing invoices keep their original subscription entitlement.
+      await pool.query(`ALTER TABLE portal_qris_invoices
+        ADD COLUMN IF NOT EXISTS billing_type TEXT NOT NULL DEFAULT 'subscription'
+        CHECK (billing_type IN ('subscription','wallet'))`);
+      await pool.query(`ALTER TABLE portal_qris_invoices
+        ALTER COLUMN plan_id DROP NOT NULL, ALTER COLUMN duration_days DROP NOT NULL`);
       ready = true;
     },
     config() {
       requireReady();
+      if (!wallet) throw new PaymentError(503, 'Saldo API belum tersedia.');
+      wallet.assertReady();
       const { mode, callbackConfigured } = provider.configuration();
       return { available: true, provider: 'klikqris', sandbox: mode === 'sandbox', callbackConfigured };
     },
-    async create(userId, planId, idem) {
+    async create(userId, amount, idem) {
       requireReady();
-      if (!Number.isSafeInteger(planId) || planId <= 0 ||
+      if (!Number.isSafeInteger(amount) || amount < MIN_TOPUP || amount > MAX_TOPUP ||
           typeof idem !== 'string' || !/^[\w.-]{1,128}$/.test(idem)) {
-        throw new PaymentError(400, 'Paket dan Idempotency-Key yang valid diperlukan.');
+        throw new PaymentError(400, 'Nominal top up harus rupiah bulat, minimal Rp100.000 dan maksimal Rp100.000.000. Idempotency-Key wajib.');
       }
+      if (!wallet) throw new PaymentError(503, 'Saldo API belum tersedia.');
+      wallet.assertReady();
       const config = provider.configuration();
       const client = await pool.connect();
       let locked = false, invoice;
@@ -124,27 +139,22 @@ function createPaymentService(pool, provider) {
         const existing = (await client.query(
           'SELECT * FROM portal_qris_invoices WHERE user_id = $1 AND idempotency_key = $2', [userId, idem])).rows[0];
         if (existing) {
-          if (existing.plan_id !== planId) throw new PaymentError(409, 'Idempotency-Key sudah digunakan untuk paket lain.');
+          if (existing.billing_type !== 'wallet' || Number(existing.amount) !== amount) {
+            throw new PaymentError(409, 'Idempotency-Key sudah digunakan untuk nominal atau jenis tagihan lain.');
+          }
           return existing;
         }
         const active = (await client.query(
           'SELECT id FROM portal_qris_invoices WHERE user_id = $1 AND status = ANY($2::text[]) LIMIT 1', [userId, OPEN])).rows[0];
         if (active) throw new PaymentError(409, 'Masih ada tagihan aktif. Perbarui data dan periksa statusnya.');
-        const plan = (await client.query(
-          'SELECT id, name, price_idr, duration_days FROM subscription_plans WHERE id = $1 AND is_active = true', [planId])).rows[0];
-        if (!plan) throw new PaymentError(404, 'Paket tidak ditemukan.');
-        if (!Number.isSafeInteger(plan.price_idr) || plan.price_idr <= 0 ||
-            !Number.isSafeInteger(plan.duration_days) || plan.duration_days < 1 || plan.duration_days > 3660) {
-          throw new PaymentError(503, 'Konfigurasi paket perlu diperiksa admin.');
-        }
         const id = 'xq_' + randomUUID().replaceAll('-', '');
         invoice = (await client.query(`INSERT INTO portal_qris_invoices
-          (id, order_id, user_id, idempotency_key, plan_id, package, duration_days, amount, mode, merchant_id, status)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'creating') RETURNING *`,
-        [id, 'XCWEB-' + id.slice(3), userId, idem, plan.id, plan.name, plan.duration_days, plan.price_idr,
+          (id, order_id, user_id, idempotency_key, plan_id, package, duration_days, amount, mode, merchant_id, status, billing_type)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'creating','wallet') RETURNING *`,
+        [id, 'XCWEB-' + id.slice(3), userId, idem, null, 'Top up saldo API', null, amount,
           config.mode, config.merchantId])).rows[0];
         let created;
-        try { created = await provider.create(invoice.order_id, plan.price_idr, `Xclip — ${plan.name}`); }
+        try { created = await provider.create(invoice.order_id, amount, 'Xclip — top up saldo API'); }
         catch (error) {
           await client.query(`UPDATE portal_qris_invoices SET status = $2, updated_at = NOW() WHERE id = $1`,
             [id, error.definite ? 'failed' : 'uncertain']);

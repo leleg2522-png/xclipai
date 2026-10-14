@@ -210,6 +210,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
   ssl: dbUrl && (dbUrl.includes('railway') || dbUrl.includes('neon') || dbUrl.includes('supabase') || dbUrl.includes('render')) ? { rejectUnauthorized: false } : false
 });
+const apiWallet = require('./server/api-wallet').createApiWallet(pool);
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -4020,15 +4021,16 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
 }
 
 const wanProvider = require('./server/wan-provider').createWanProvider(pool);
-app.use(require('./server/wan-routes')({
-  pool, provider: wanProvider, validateKey: validateXclipApiKey,
+const wanRouter = require('./server/wan-routes')({
+  pool, provider: wanProvider, wallet: apiWallet, validateKey: validateXclipApiKey,
   cooldownMs: RATE_LIMIT_CONFIG.videogen.cooldownMs,
   dailyQuota: RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey,
   saveImage: async (image, req) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     return (await saveBase64ToFile(image, 'image', baseUrl)).publicUrl;
   }
-}));
+});
+app.use(wanRouter);
 
 app.post('/api/videogen/proxy', async (req, res) => {
   try {
@@ -6102,8 +6104,8 @@ app.get('/api/subscription/plans', async (req, res) => {
 // ==================== QRIS PAYMENT API ====================
 
 const klikQrisProvider = require('./server/klikqris-provider').createKlikQrisProvider();
-const klikQrisPayments = require('./server/klikqris-service').createPaymentService(pool, klikQrisProvider);
-app.use(require('./server/klikqris-routes')({ service: klikQrisPayments, provider: klikQrisProvider, pool }));
+const klikQrisPayments = require('./server/klikqris-service').createPaymentService(pool, klikQrisProvider, apiWallet);
+app.use(require('./server/klikqris-routes')({ service: klikQrisPayments, provider: klikQrisProvider, pool, wallet: apiWallet }));
 
 // Submit payment with proof
 app.post('/api/payments/submit', uploadPaymentProof.single('proof'), async (req, res) => {
@@ -15934,8 +15936,10 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('[STARTUP] Database init completed');
     try {
       await klikQrisPayments.initialize();
+      await apiWallet.initialize();
       console.log('[STARTUP] KlikQRIS payment storage ready');
       setInterval(() => klikQrisPayments.reconcile(), 30000).unref();
+      setInterval(() => wanRouter.reconcile(), 30000).unref();
     } catch (error) {
       console.error('[STARTUP] KlikQRIS payment storage unavailable:', error.code || error.name);
     }

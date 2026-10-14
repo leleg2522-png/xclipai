@@ -45,6 +45,12 @@ Portal top up must add API balance without an active-period limit, rather than p
 
 **How to apply:** Use a non-expiring portal API wallet and charge it for API generation usage under a confirmed tariff. Keep the portal balance separate from other bots' balances. This choice does not authorize deleting historical subscriptions, transferring bot funds, or inventing usage prices.
 
+Wan 3.0 480p costs Rp6.000 per video, not per second; minimum portal top up is Rp100.000.
+
+**Why:** The user chose “Per video” and Rp6.000, then corrected the top-up minimum with “minimum top up 100 k”.
+
+**How to apply:** Apply the fixed price to supported 2–30-second videos. Do not use the initially entered Rp100 minimum or silently reinterpret the rate as per second.
+
 The existing KlikQRIS merchant account uses PG KlikQRIS, not MY PG.
 
 **Why:** The user explicitly confirmed “PG KlikQRIS” when asked which mode their account already uses.

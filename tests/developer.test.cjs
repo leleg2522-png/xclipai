@@ -147,14 +147,16 @@ function browserHarness(overrides = {}) {
       providers: [{ name: 'Picsart', configured: true, connected: false }], generationProvider: 'Freepik',
     };
     if (path === '/api/subscription/status') data = { hasSubscription: false };
+    if (path === '/api/developer/wallet') data = { balance: invoice?.status === 'paid' ? 100000 : 0,
+      reserved: 0, videoPrice: 6000, minimumTopup: 100000, maximumTopup: 100000000, expires: false };
     if (path === '/api/subscription/plans') data = { plans: [{ id: 1, name: '1 Hari', price_idr: 30000, duration_days: 1 }] };
     if (path === '/api/payments/my') data = { payments };
     if (path === '/api/payments/klikqris/config') data = { available: true, sandbox: false };
     if (path === '/api/payments/klikqris/current') data = { invoice };
     if (path === '/api/developer/models') data = { models: [{ id: 'wan-3.0-uncensored', status: 'available' }] };
     if (path === '/api/payments/klikqris/create') {
-      invoice = { id: 'xq_test', provider: 'klikqris', package: '1 Hari', amount: 30000,
-        total_amount: 30021, status: 'pending', qr_url: '/api/payments/klikqris/xq_test/qr',
+      invoice = { id: 'xq_test', provider: 'klikqris', billing_type: 'wallet', package: 'Top up saldo API', amount: 100000,
+        total_amount: 100021, status: 'pending', qr_url: '/api/payments/klikqris/xq_test/qr',
         expires_at: '2030-01-01T00:00:00Z' };
       payments = [invoice];
       data = { success: true, invoice };
@@ -270,20 +272,36 @@ test('top up creates dynamic KlikQRIS and confirms server status without proof u
   h.controller.state.authMode = 'login';
   h.submit('auth-form', { email: 'dev@example.test', password: 'password123' });
   await h.settle();
-  h.submit('payment-form', { planId: '1' });
+  h.submit('payment-form', { amount: '100000' });
   await h.settle();
   const create = h.calls.find(c => c.path === '/api/payments/klikqris/create');
   assert.ok(create);
   assert.ok(create.options.headers['Idempotency-Key']);
-  assert.deepEqual(JSON.parse(create.options.body), { planId: '1' });
+  assert.deepEqual(JSON.parse(create.options.body), { amount: 100000 });
   assert.ok(!h.root.innerHTML.includes('type="file"'));
   assert.ok(h.root.innerHTML.includes('Masih ada tagihan aktif'));
-  assert.ok(h.root.innerHTML.includes('30.021'));
+  assert.ok(h.root.innerHTML.includes('100.021'));
+  assert.ok(h.root.innerHTML.includes('tanpa masa aktif'));
+  assert.ok(!h.root.innerHTML.includes('1 Hari'));
+  assert.equal(h.controller.state.wallet.balance, 0);
   assert.equal(h.controller.state.payments[0].status, 'pending');
   h.click('payment-check');
   await h.settle();
   assert.equal(h.controller.state.checkout.status, 'paid');
   assert.ok(h.root.innerHTML.includes('Pembayaran dikonfirmasi'));
+  assert.equal(h.controller.state.wallet.balance, 100000);
+});
+
+test('existing daily invoices are clearly distinguished from new non-expiring wallet deposits', () => {
+  const {portalView}=loadViews();
+  const h=browserHarness(),s=h.controller.state;
+  s.user={id:1,username:'test'};
+  s.checkout={id:'old',billing_type:'subscription',package:'1 Hari',amount:30000,
+    total_amount:30021,status:'pending'};
+  const html=portalView(s);
+  assert.ok(html.includes('Tagihan langganan lama, bukan top up saldo API'));
+  assert.ok(html.includes('tidak menambah saldo API'));
+  assert.ok(!html.includes('Saldo yang ditambahkan:'));
 });
 
 test('revoked state has no create button and docs describe the Wan API contract', () => {

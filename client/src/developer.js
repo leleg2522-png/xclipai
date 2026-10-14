@@ -3,7 +3,7 @@ import { authView, portalView, curlExample } from './developer-views.js';
 const root = document.getElementById('developer-app');
 const state = {
   user: null, authMode: 'login', authDraft: { username: '', email: '' },
-  overview: null, subscription: null, plans: [], payments: [], selectedPlan: '',
+  overview: null, subscription: null, wallet: null, walletError: '', payments: [], topupAmount: '100000',
   models: [], modelError: '',
   paymentConfig: null, checkout: null, checkoutError: '', paymentAttempt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
@@ -66,11 +66,12 @@ function render() {
 }
 
 async function loadData() {
-  state.subscriptionError = state.topupError = state.historyError = '';
+  state.subscriptionError = state.walletError = state.historyError = '';
   state.models = [];
   state.modelError = '';
   // Do not replace failed data with fake zeros or an invented balance.
   state.overview = null;
+  state.wallet = null;
   state.paymentConfig = state.checkout = null;
   state.checkoutError = '';
   await Promise.all([
@@ -81,12 +82,10 @@ async function loadData() {
     }).catch(error => { state.modelError = error.message; }),
     api('/api/subscription/status').then(data => { state.subscription = data; })
       .catch(error => { state.subscription = null; state.subscriptionError = error.message; }),
-    api('/api/subscription/plans').then(data => {
-      state.plans = data.plans;
-      if (!state.plans.some(p => String(p.id) === String(state.selectedPlan))) {
-        state.selectedPlan = state.plans.length ? String(state.plans[0].id) : '';
-      }
-    }).catch(error => { state.plans = []; state.topupError = error.message; }),
+    api('/api/developer/wallet').then(data => {
+      if (!Number.isSafeInteger(data.balance) || !Number.isSafeInteger(data.reserved)) throw new Error('Data saldo tidak valid.');
+      state.wallet = data;
+    }).catch(error => { state.walletError = error.message; }),
     api('/api/payments/my').then(data => { state.payments = data.payments; })
       .catch(error => { state.payments = []; state.historyError = error.message; }),
     api('/api/payments/klikqris/config').then(data => { state.paymentConfig = data; })
@@ -111,8 +110,9 @@ async function checkPayment(automatic = false) {
       await loadData();
       if (state.user?.id !== userId) return;
       state.notice = invoice.status === 'paid'
-        ? state.paymentConfig?.sandbox ? 'Simulasi pembayaran berhasil. Langganan nyata tidak diubah.'
-          : 'Pembayaran dikonfirmasi. Langganan Xclip sudah diperpanjang.'
+        ? state.paymentConfig?.sandbox ? 'Simulasi pembayaran berhasil. Saldo nyata tidak diubah.'
+          : invoice.billing_type === 'subscription' ? 'Pembayaran langganan lama dikonfirmasi.'
+            : 'Pembayaran dikonfirmasi. Saldo API sudah ditambahkan.'
         : invoice.status === 'expired' ? 'Tagihan kedaluwarsa. Buat QRIS baru jika ingin melanjutkan.' : 'Tagihan gagal.';
     }
   } catch (error) {
@@ -172,17 +172,21 @@ root.addEventListener('submit', event => {
     });
   } else if (form.id === 'payment-form') {
     perform(async () => {
-      const planId = String(data.get('planId') || state.selectedPlan);
+      const amount = Number(data.get('amount'));
+      state.topupAmount = String(data.get('amount'));
+      if (!state.wallet || !Number.isSafeInteger(amount) || amount < state.wallet.minimumTopup || amount > state.wallet.maximumTopup) {
+        throw new Error('Nominal top up harus rupiah bulat sesuai batas yang ditampilkan.');
+      }
       if (!state.paymentConfig?.available || state.checkoutError) throw new Error('Pembayaran belum siap. Perbarui data terlebih dahulu.');
-      if (!state.paymentAttempt || state.paymentAttempt.planId !== planId) {
-        state.paymentAttempt = { planId, key: typeof crypto !== 'undefined' && crypto.randomUUID
+      if (!state.paymentAttempt || state.paymentAttempt.amount !== amount) {
+        state.paymentAttempt = { amount, key: typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID() : `web_${Date.now()}_${Math.random().toString(36).slice(2)}` };
       }
       let result;
       try {
         result = await api('/api/payments/klikqris/create', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': state.paymentAttempt.key },
-          body: JSON.stringify({ planId }),
+          body: JSON.stringify({ amount }),
         });
       } finally {
         // Recover the persisted invoice even if the browser missed the POST response.
@@ -197,10 +201,7 @@ root.addEventListener('submit', event => {
 });
 
 root.addEventListener('change', event => {
-  if (event.target.id === 'payment-plan') {
-    state.selectedPlan = event.target.value;
-    render();
-  }
+  if (event.target.id === 'payment-amount') state.topupAmount = event.target.value;
 });
 
 root.addEventListener('click', event => {
@@ -236,7 +237,8 @@ root.addEventListener('click', event => {
       if (action === 'logout') {
         await post('/api/auth/logout', {});
         state.user = state.overview = state.subscription = null;
-        state.payments = state.plans = [];
+        state.payments = [];
+        state.wallet = null;
         state.checkout = state.paymentConfig = state.paymentAttempt = null;
         state.checkoutError = '';
         state.keyVisible = state.confirmRevoke = state.renaming = false;

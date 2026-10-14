@@ -117,14 +117,15 @@ function fixture({ mode = 'pg', createError } = {}) {
     subscriptions: [], legacy: [{ id: 7, user_id: 1, package: 'Paket lama', amount: 5000,
       status: 'approved', created_at: new Date('2020-01-01') }],
     createCalls: 0, statusCalls: 0, renewals: 0, gatewayStatus: 'pending', failRenewal: false,
+    balances: new Map(), credited: new Set(),
   };
   const copy = row => row ? { ...row } : undefined;
   const provider = {
     configuration: () => ({ mode, merchantId: 'fake-merchant', callbackConfigured: false }),
-    async create() {
+    async create(_order, amount) {
       state.createCalls++;
       if (createError) throw createError;
-      return { total: 30021, signature: 'fake-original-signature', qrImage: png, qrUrl: null,
+      return { total: amount + 21, signature: 'fake-original-signature', qrImage: png, qrUrl: null,
         expiresAt: '2030-01-01T03:00:00Z' };
     },
     async status() { state.statusCalls++; return { status: state.gatewayStatus }; },
@@ -133,7 +134,7 @@ function fixture({ mode = 'pg', createError } = {}) {
   async function query(sql, args = [], client = {}) {
     const text = sql.replace(/\s+/g, ' ').trim();
     const rows = value => ({ rows: value });
-    if (text.startsWith('CREATE ')) return rows([]);
+    if (text.startsWith('CREATE ') || text.startsWith('ALTER ')) return rows([]);
     if (text.includes('pg_advisory_lock(')) { client.unlock = await acquire('create-' + args[1]); return rows([]); }
     if (text.includes('pg_advisory_unlock(')) { client.unlock?.(); client.unlock = null; return rows([]); }
     if (text === 'BEGIN') {
@@ -169,7 +170,7 @@ function fixture({ mode = 'pg', createError } = {}) {
     if (text.startsWith('INSERT INTO portal_qris_invoices')) {
       const row = { id: args[0], order_id: args[1], user_id: args[2], idempotency_key: args[3],
         plan_id: args[4], package: args[5], duration_days: args[6], amount: args[7], mode: args[8],
-        merchant_id: args[9], status: 'creating', created_at: new Date(), total_amount: null, signature: null };
+        merchant_id: args[9], billing_type: 'wallet', status: 'creating', created_at: new Date(), total_amount: null, signature: null };
       state.invoices.set(row.id, row);
       return rows([copy(row)]);
     }
@@ -220,18 +221,30 @@ function fixture({ mode = 'pg', createError } = {}) {
       return client;
     },
   };
-  return { pool, provider, state, service: createPaymentService(pool, provider) };
+  const wallet = {
+    assertReady() {},
+    async get(userId) { return { balance: state.balances.get(userId) || 0, reserved: 0 }; },
+    async credit(_client, invoice) {
+      if (state.failRenewal) throw new Error('simulated credit failure');
+      if (state.credited.has(invoice.id)) return;
+      state.credited.add(invoice.id);
+      state.balances.set(invoice.user_id, (state.balances.get(invoice.user_id) || 0) + Number(invoice.amount));
+    },
+  };
+  return { pool, provider, wallet, state, service: createPaymentService(pool, provider, wallet) };
 }
 
-test('concurrent creates and replay create one invoice; plan prices are loaded from DB, not the client', async () => {
+test('concurrent creates and replay create one wallet invoice with a validated deposit amount', async () => {
   const h = fixture();
   await h.service.initialize();
-  const [a, b] = await Promise.all([h.service.create(1, 1, 'same-key'), h.service.create(1, 1, 'same-key')]);
+  const [a, b] = await Promise.all([h.service.create(1, 100000, 'same-key'), h.service.create(1, 100000, 'same-key')]);
   assert.equal(a.id, b.id);
-  assert.equal(a.amount, 30000);
+  assert.equal(a.amount, 100000);
+  assert.equal(a.billing_type, 'wallet');
+  assert.equal(a.duration_days, null);
   assert.equal(h.state.createCalls, 1);
-  await assert.rejects(h.service.create(1, 2, 'same-key'), error => error.status === 409);
-  await assert.rejects(h.service.create(1, 1, 'different-key'), error => error.status === 409);
+  await assert.rejects(h.service.create(1, 100001, 'same-key'), error => error.status === 409);
+  await assert.rejects(h.service.create(1, 100000, 'different-key'), error => error.status === 409);
   const data = JSON.stringify(publicInvoice(a));
   assert.ok(!/signature|merchant|idempotency|original|fake-api/.test(data));
 });
@@ -239,29 +252,52 @@ test('concurrent creates and replay create one invoice; plan prices are loaded f
 test('uncertain create is persisted, blocks new creates, and never gets submitted again', async () => {
   const h = fixture({ createError: new PaymentError(502, 'Unknown delivery') });
   await h.service.initialize();
-  await assert.rejects(h.service.create(1, 1, 'one'), PaymentError);
+  await assert.rejects(h.service.create(1, 100000, 'one'), PaymentError);
   assert.equal((await h.service.current(1)).status, 'uncertain');
-  assert.equal((await h.service.create(1, 1, 'one')).status, 'uncertain');
-  await assert.rejects(h.service.create(1, 1, 'two'), error => error.status === 409);
+  assert.equal((await h.service.create(1, 100000, 'one')).status, 'uncertain');
+  await assert.rejects(h.service.create(1, 100000, 'two'), error => error.status === 409);
   assert.equal(h.state.createCalls, 1);
   assert.equal(h.state.renewals, 0);
 });
 
-test('verified paid callbacks across service instances extend legacy subscription exactly once', async () => {
+test('minimum top up Rp100.000 is enforced before sending anything to the gateway', async () => {
+  const h=fixture();await h.service.initialize();
+  for(const amount of [100,99999,100000.5,NaN,100000001]) {
+    await assert.rejects(h.service.create(1,amount,'invalid'),e=>e.status===400);
+  }
+  assert.equal(h.state.createCalls,0);
+  assert.equal(h.state.invoices.size,0);
+});
+
+test('historical subscription invoices keep their original entitlement and never become wallet credits', async () => {
+  const h=fixture();await h.service.initialize();
+  const row=await h.service.create(1,100000,'old-invoice');
+  Object.assign(h.state.invoices.get(row.id),{billing_type:'subscription',plan_id:1,duration_days:3});
+  const base=h.state.users.get(1).subscription_expired_at.getTime();
+  h.state.gatewayStatus='paid';
+  await h.service.synchronize(row);
+  assert.equal(h.state.users.get(1).subscription_expired_at.getTime(),base+3*86400000);
+  assert.equal(h.state.credited.size,0);
+});
+
+test('verified paid callbacks credit the deposit exactly once without extending legacy subscriptions', async () => {
   const h = fixture();
   await h.service.initialize();
-  const row = await h.service.create(1, 1, 'one');
+  const row = await h.service.create(1, 100000, 'one');
+  const originalExpiry = h.state.users.get(1).subscription_expired_at.getTime();
   const base = h.state.users.get(1).subscription_expired_at.getTime() + 86400000;
   h.state.subscriptions.push({ id: 4, user_id: 1, room_id: 7, expired_at: new Date(base), status: 'active' });
   h.state.gatewayStatus = 'paid';
-  const other = createPaymentService(h.pool, h.provider);
+  const other = createPaymentService(h.pool, h.provider, h.wallet);
   await other.initialize();
   await Promise.all([h.service.synchronize(row), other.synchronize(row)]);
-  assert.equal(h.state.renewals, 1);
-  assert.equal(h.state.users.get(1).subscription_expired_at.getTime(), base + 3 * 86400000);
+  assert.equal(h.state.renewals, 0);
+  assert.equal(h.state.balances.get(1), 100000); // never credits the gateway's unique code
+  assert.equal(h.state.users.get(1).subscription_expired_at.getTime(), originalExpiry);
+  assert.equal(h.state.subscriptions[0].expired_at.getTime(), base);
   assert.equal(h.state.subscriptions[0].room_id, 7);
   assert.equal(h.state.invoices.get(row.id).status, 'paid');
-  const replay = await h.service.create(1, 1, 'one');
+  const replay = await h.service.create(1, 100000, 'one');
   assert.equal(replay.status, 'paid');
   assert.equal(h.state.createCalls, 1);
   const history = await h.service.history(1);
@@ -269,35 +305,37 @@ test('verified paid callbacks across service instances extend legacy subscriptio
   assert.ok(!JSON.stringify(history).includes('fake-original-signature'));
 });
 
-test('subscription and invoice roll back together if activation fails', async () => {
+test('wallet and invoice roll back together if crediting fails', async () => {
   const h = fixture();
   await h.service.initialize();
-  const row = await h.service.create(1, 1, 'one');
+  const row = await h.service.create(1, 100000, 'one');
   const before = h.state.users.get(1).subscription_expired_at.getTime();
   h.state.failRenewal = true;
   h.state.gatewayStatus = 'paid';
   await assert.rejects(h.service.synchronize(row));
   assert.equal(h.state.invoices.get(row.id).status, 'pending');
   assert.equal(h.state.users.get(1).subscription_expired_at.getTime(), before);
+  assert.equal(h.state.credited.size, 0);
 });
 
 test('expired invoices can be replaced; sandbox paid never credits a real subscription', async () => {
   const h = fixture({ mode: 'sandbox' });
   await h.service.initialize();
-  const a = await h.service.create(1, 1, 'one');
+  const a = await h.service.create(1, 100000, 'one');
   h.state.gatewayStatus = 'expired';
   assert.equal((await h.service.synchronize(a)).status, 'expired');
   assert.equal(publicInvoice(await h.service.find(a.id)).qr_url, null);
-  const b = await h.service.create(1, 1, 'two');
+  const b = await h.service.create(1, 100000, 'two');
   h.state.gatewayStatus = 'paid';
   assert.equal((await h.service.synchronize(b)).status, 'paid');
   assert.equal(h.state.renewals, 0);
+  assert.equal(h.state.credited.size, 0);
 });
 
 test('routes enforce ownership, reject forged callbacks, and independently verify a signed PAID claim', async t => {
   const h = fixture();
   await h.service.initialize();
-  const row = await h.service.create(1, 1, 'one');
+  const row = await h.service.create(1, 100000, 'one');
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
@@ -307,6 +345,7 @@ test('routes enforce ownership, reject forged callbacks, and independently verif
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(base + '/api/payments/klikqris/config')).status, 401);
+  assert.equal((await fetch(base + '/api/developer/wallet')).status, 401);
   assert.equal((await fetch(base + '/api/payments/klikqris/' + row.id, { headers: { 'x-test-user': '2' } })).status, 404);
   assert.equal((await fetch(base + '/api/payments/klikqris/' + row.id + '/qr', { headers: { 'x-test-user': '2' } })).status, 404);
   const callback = async signature => fetch(base + '/api/payments/klikqris/webhook', {
@@ -320,7 +359,12 @@ test('routes enforce ownership, reject forged callbacks, and independently verif
   h.state.gatewayStatus = 'paid';
   assert.equal((await callback(row.signature)).status, 200);
   assert.equal((await callback(row.signature)).status, 200);
-  assert.equal(h.state.renewals, 1);
+  assert.equal(h.state.renewals, 0);
+  assert.equal(h.state.balances.get(1), 100000);
+  const ownerWallet = await (await fetch(base+'/api/developer/wallet',{headers:{'x-test-user':'1'}})).json();
+  const otherWallet = await (await fetch(base+'/api/developer/wallet',{headers:{'x-test-user':'2'}})).json();
+  assert.equal(ownerWallet.balance,100000);
+  assert.equal(otherWallet.balance,0);
   const history = await (await fetch(base + '/api/payments/my', { headers: { 'x-test-user': '1' } })).json();
   assert.ok(!JSON.stringify(history).includes('fake-original-signature'));
   assert.equal((await fetch(base + '/api/payments/submit', {
