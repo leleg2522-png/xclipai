@@ -7,7 +7,7 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 - **Runtime**: Node.js (>=18.0.0)
 - **Backend**: Express.js v5 serving both API and frontend static files from a single process
 - **Frontend**: Vanilla JavaScript (no build step) served from `client/` directory
-- **Database**: PostgreSQL via Replit's built-in database (`DATABASE_URL`)
+- **Database**: PostgreSQL via Railway (`RAILWAY_DATABASE_URL` on Replit; `DATABASE_URL` in Railway). The server also accepts `DATABASE_PUBLIC_URL` and falls back to `DATABASE_URL`.
 - **Sessions**: `connect-pg-simple` storing sessions in `sessions` table
 - **Media Processing**: `fluent-ffmpeg` for video/audio manipulation
 - **Port**: 5000 (both frontend and backend served together)
@@ -33,7 +33,7 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 - PWA support with service worker
 
 ## Environment Variables Required
-- `DATABASE_URL` - PostgreSQL connection string (set automatically by Replit)
+- `RAILWAY_DATABASE_URL` - Railway PostgreSQL connection string when running this imported project on Replit; stored as a Replit Secret. In Railway itself, the server reads Railway's `DATABASE_URL`.
 - `SESSION_SECRET` - Express session secret (optional, has default)
 - Various API keys for AI features (FREEPIK_API_KEY, OPENROUTER_API_KEY, etc.)
 
@@ -51,4 +51,4 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ```bash
 npm start  # or: node server.js
 ```
-The server runs on port 5000, serving both the API and static frontend files.
+The server runs on port 5000, serving both the API and static frontend files. On Replit, add the Railway Postgres `DATABASE_URL` value as the `RAILWAY_DATABASE_URL` secret before starting the app.
