@@ -10,6 +10,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const bcrypt = require('bcryptjs');
 const { createUserKey } = require('./server/xclip-key-service');
+const { publicVideoUrl, publicTask, streamVideo } = require('./server/public-video');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
@@ -4316,12 +4317,12 @@ app.post('/api/videogen/proxy', async (req, res) => {
     }
     
     if (allKeys.length === 0) {
-      return res.status(500).json({ error: 'Tidak ada API key yang tersedia di key pool. Hubungi admin.' });
+      return res.status(503).json({ error: 'Layanan generasi sementara tidak tersedia. Hubungi dukungan Xclip.' });
     }
     
     const availableKeys = filterKeysByDailyQuota(allKeys, 'videogen');
     if (availableKeys.length === 0 && allKeys.length > 0) {
-      return res.status(429).json({ error: 'Semua API key sudah mencapai batas harian. Coba lagi besok.' });
+      return res.status(429).json({ error: 'Layanan generasi sedang sibuk. Coba lagi nanti.' });
     }
     
     await applyRandomJitter('videogen');
@@ -4390,8 +4391,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       if (pendingId) releaseProxyForTask(pendingId);
       console.error('[VIDEOGEN] All API keys exhausted or failed');
       console.error('[VIDEOGEN] Last error:', JSON.stringify(lastError?.response?.data, null, 2) || lastError?.message);
-      const errorMsg = lastError?.response?.data?.detail || lastError?.response?.data?.message || lastError?.response?.data?.error || lastError?.message;
-      return res.status(500).json({ error: 'Semua API key sudah mencapai limit bulanan. ' + errorMsg });
+      return res.status(503).json({ error: 'Layanan generasi sementara tidak tersedia. Coba lagi nanti.' });
     }
     
     if (successKey.isPool && successKey.poolId) {
@@ -4444,8 +4444,7 @@ app.post('/api/videogen/proxy', async (req, res) => {
       data: error.response?.data,
       message: error.message
     });
-    const errorMsg = error.response?.data?.detail || error.response?.data?.message || error.response?.data?.error || error.message;
-    res.status(500).json({ error: 'Gagal memproses permintaan: ' + errorMsg });
+    res.status(500).json({ error: 'Gagal memproses generasi. Periksa parameter atau coba lagi nanti.' });
   }
 });
 
@@ -4615,7 +4614,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     
     if (!freepikApiKey) {
       console.error(`[STATUS] No API key found for task ${taskId}, used_key_name: ${savedTask.used_key_name}`);
-      return res.status(503).json({ error: 'API key tidak ditemukan untuk task ini. Pastikan ROOM_FREEPIK_KEYS sudah dikonfigurasi.' });
+      return res.status(503).json({ error: 'Layanan generasi tidak tersedia untuk tugas ini. Hubungi dukungan Xclip.' });
     }
 
     const pollStart = Date.now();
@@ -4674,19 +4673,21 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       return res.json({
         status: 'completed',
         progress: 100,
-        videoUrl: videoUrl,
+        videoUrl: publicVideoUrl(taskId),
         taskId: taskId
       });
     }
     
-    const normalizedStatus = (data.status || 'processing').toLowerCase();
+    const rawStatus = String(data.status || 'processing').toLowerCase();
+    const normalizedStatus = ['completed', 'success', 'processing', 'pending', 'queued', 'failed', 'error'].includes(rawStatus)
+      ? rawStatus : 'processing';
     if (normalizedStatus === 'failed' || normalizedStatus === 'error') {
       releaseProxyForTask(taskId);
     }
     res.json({
       status: normalizedStatus === 'completed' || normalizedStatus === 'success' ? 'completed' : normalizedStatus,
-      progress: data.progress || 0,
-      videoUrl: videoUrl,
+      progress: Math.min(100, Math.max(0, Number(data.progress) || 0)),
+      videoUrl: videoUrl ? publicVideoUrl(taskId) : null,
       taskId: taskId
     });
     
@@ -4697,7 +4698,7 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     if (isHtmlError) {
       console.error('Freepik server error (HTML response) - server may be down');
       return res.status(503).json({ 
-        error: 'Freepik server sedang bermasalah. Coba lagi dalam beberapa saat.',
+        error: 'Layanan Xclip sedang bermasalah. Coba lagi dalam beberapa saat.',
         retryable: true
       });
     }
@@ -5305,7 +5306,8 @@ app.get('/api/xclip-keys/tasks', async (req, res) => {
   
   try {
     const result = await pool.query(
-      `SELECT t.*, k.label as key_label, k.api_key
+      `SELECT t.id, t.task_id, t.model, t.status, t.video_url, t.created_at,
+              t.completed_at, k.label as key_label
        FROM video_generation_tasks t
        JOIN xclip_api_keys k ON k.id = t.xclip_api_key_id
        WHERE k.user_id = $1
@@ -5314,7 +5316,7 @@ app.get('/api/xclip-keys/tasks', async (req, res) => {
       [req.session.userId]
     );
     
-    res.json({ tasks: result.rows });
+    res.json({ tasks: result.rows.map(publicTask) });
     
   } catch (error) {
     console.error('Get tasks error:', error);
@@ -5355,7 +5357,7 @@ app.get('/api/videogen/history', async (req, res) => {
       videos: completedResult.rows.map(row => ({
         taskId: row.task_id,
         model: row.model,
-        url: row.video_url,
+        url: publicVideoUrl(row.task_id),
         createdAt: row.completed_at || row.created_at
       })),
       processing: processingResult.rows.map(row => ({
@@ -5385,24 +5387,32 @@ setInterval(() => {
 }, 60000);
 
 app.get('/api/videogen/proxy-video', async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   try {
     const { taskId } = req.query;
     if (!taskId) {
       return res.status(400).json({ error: 'taskId diperlukan' });
     }
 
-    if (!req.session.userId) {
-      return res.status(401).json({ error: 'Silakan login terlebih dahulu' });
+    const xclipApiKey = req.headers['x-xclip-key'];
+    const keyInfo = xclipApiKey ? await validateXclipApiKey(xclipApiKey) : null;
+    if (xclipApiKey && !keyInfo) {
+      return res.status(401).json({ error: 'Xclip API key tidak valid atau sudah tidak aktif' });
     }
+    if (!keyInfo && !req.session.userId) {
+      return res.status(401).json({ error: 'Login atau Xclip API key diperlukan' });
+    }
+    const ownerColumn = keyInfo ? 'xclip_api_key_id' : 'user_id';
+    const ownerId = keyInfo ? keyInfo.id : req.session.userId;
 
     let taskResult = await pool.query(
-      'SELECT task_id, model, video_url, used_key_name, room_id FROM video_generation_tasks WHERE task_id = $1 AND status = $2 AND user_id = $3',
-      [taskId, 'completed', req.session.userId]
+      `SELECT task_id, model, video_url, used_key_name, room_id FROM video_generation_tasks WHERE task_id = $1 AND status = $2 AND ${ownerColumn} = $3`,
+      [taskId, 'completed', ownerId]
     );
     if (taskResult.rows.length === 0) {
       taskResult = await pool.query(
-        'SELECT task_id, model, video_url, used_key_name, room_id FROM vidgen3_tasks WHERE task_id = $1 AND status = $2 AND user_id = $3',
-        [taskId, 'completed', req.session.userId]
+        `SELECT task_id, model, video_url, used_key_name, room_id FROM vidgen3_tasks WHERE task_id = $1 AND status = $2 AND ${ownerColumn} = $3`,
+        [taskId, 'completed', ownerId]
       );
     }
     if (taskResult.rows.length === 0) {
@@ -5424,15 +5434,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     if (videoUrl && isR2Url) {
       console.log(`[VIDEOGEN] Proxying R2 video for task ${taskId}`);
       try {
-        const videoResp = await axios.get(videoUrl, { responseType: 'stream', timeout: 120000 });
-        res.setHeader('Content-Type', 'video/mp4');
-        if (videoResp.headers['content-length']) {
-          res.setHeader('Content-Length', videoResp.headers['content-length']);
-        }
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        videoResp.data.pipe(res);
-        return;
+        return await streamVideo(req, res, videoUrl);
       } catch (proxyErr) {
         console.error(`[VIDEOGEN] R2 proxy error: ${proxyErr.message}`);
         return res.status(502).json({ error: 'Failed to proxy video' });
@@ -5440,13 +5442,11 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     }
 
     if (videoUrl && !cached) {
-      console.log(`[VIDEOGEN] Redirecting to CDN for task ${taskId}`);
-      return res.redirect(302, videoUrl);
+      return await streamVideo(req, res, videoUrl);
     }
 
     if (videoUrl && cached && Date.now() - cached.at < 30 * 60 * 1000) {
-      console.log(`[VIDEOGEN] Redirecting to cached CDN URL for task ${taskId}`);
-      return res.redirect(302, videoUrl);
+      return await streamVideo(req, res, videoUrl);
     }
 
     if (cached && Date.now() - cached.at < 10 * 60 * 1000) {
@@ -5545,7 +5545,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     await pool.query('UPDATE video_generation_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
     await pool.query('UPDATE vidgen3_tasks SET video_url = $1 WHERE task_id = $2', [freshUrl, taskId]);
     console.log(`[VIDEOGEN] Refreshed video URL for task ${taskId}, redirecting to CDN`);
-    return res.redirect(302, freshUrl);
+    return await streamVideo(req, res, freshUrl);
   } catch (error) {
     console.error('[VIDEOGEN] Proxy video error:', error.message);
     if (!res.headersSent) res.status(500).json({ error: 'Gagal memuat video' });
@@ -5562,6 +5562,32 @@ app.get('/api/download-video', async (req, res) => {
   
   if (!url) {
     return res.status(400).json({ error: 'URL diperlukan' });
+  }
+
+  // Preserve the generator's download flow for Xclip's own protected media paths.
+  if (typeof url === 'string' && url.startsWith('/api/videogen/proxy-video?')) {
+    try {
+      const taskId = new URL(url, 'https://xclip.invalid').searchParams.get('taskId');
+      if (!taskId) return res.status(400).json({ error: 'taskId diperlukan' });
+      let result = await pool.query(
+        `SELECT video_url FROM video_generation_tasks
+         WHERE task_id = $1 AND user_id = $2 AND status = 'completed'`,
+        [taskId, req.session.userId]
+      );
+      if (!result.rows.length) {
+        result = await pool.query(
+          `SELECT video_url FROM vidgen3_tasks
+           WHERE task_id = $1 AND user_id = $2 AND status = 'completed'`,
+          [taskId, req.session.userId]
+        );
+      }
+      if (!result.rows[0]?.video_url) return res.status(404).json({ error: 'Video tidak ditemukan' });
+      res.setHeader('Content-Disposition', 'attachment; filename="xclip-video.mp4"');
+      return await streamVideo(req, res, result.rows[0].video_url);
+    } catch (error) {
+      if (!res.headersSent) return res.status(502).json({ error: 'Gagal memuat video Xclip' });
+      return res.destroy();
+    }
   }
 
   const downloadAllowedDomains = ['apimart.ai', 'cdn.apimart.ai', 'apimodels.app', 'cdn.apimodels.app', 'poyo.ai', 'cdn.poyo.ai', 'storage.googleapis.com', 'replicate.delivery', 'pbxt.replicate.delivery', 'fal.media', 'v3.fal.media', 'freepik.com', 'cdn.freepik.com', 'elevenlabs.io', 'api.elevenlabs.io'];

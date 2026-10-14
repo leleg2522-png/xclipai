@@ -38,8 +38,7 @@ test('overview is scoped to session owner and never returns provider secrets', a
         { id: 2, status: 'revoked', requests_count: 6 },
       ] };
     }
-    if (sql.includes('to_regclass')) return { rows: [{ picsart: true, flora: true }] };
-    return { rows: [{ configured: true, refresh_token: 'SECRET_MUST_NOT_LEAK', api_key: 'SECRET_MUST_NOT_LEAK' }] };
+    throw new Error('Portal must not query provider storage');
   } };
   await withServer(pool, async base => {
     const response = await fetch(base + '/api/developer/overview', { headers: { 'x-test-user': '42' } });
@@ -49,18 +48,20 @@ test('overview is scoped to session owner and never returns provider secrets', a
     const data = JSON.parse(text);
     assert.equal(data.totalRequests, 10);
     assert.equal(data.hasLifetimeKey, true);
-    assert.equal(data.providers.length, 2);
-    assert.equal(data.providers[0].connected, false);
+    assert.deepEqual(Object.keys(data).sort(), ['hasLifetimeKey', 'keys', 'totalRequests']);
+    assert.ok(!/picsart|flora|freepik|provider/i.test(text));
+    assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].params, [42]);
   });
 });
 
-test('missing provider tables are explicit, database failures are not fake zeros', async () => {
-  await withServer({ async query(sql) {
-    return { rows: sql.includes('to_regclass') ? [{ picsart: false, flora: false }] : [] };
+test('overview does not require provider storage; database failures are not fake zeros', async () => {
+  await withServer({ async query() {
+    return { rows: [] };
   } }, async base => {
     const data = await (await fetch(base + '/api/developer/overview', { headers: { 'x-test-user': '3' } })).json();
-    assert.equal(data.providers[0].configured, false);
+    assert.equal(data.totalRequests, 0);
+    assert.equal(data.providers, undefined);
     assert.equal(data.hasLifetimeKey, false);
   });
   await withServer({ async query() { throw Object.assign(new Error('secret detail'), { code: 'TEST_DB_FAILURE' }); } }, async base => {
@@ -190,6 +191,7 @@ test('signup -> login -> portal -> logout uses real endpoints and escapes accoun
   h.submit('auth-form', { email: 'dev@example.test', password: 'password123' });
   await h.settle();
   assert.ok(h.root.innerHTML.includes('id="topup"'));
+  assert.ok(!/picsart|flora|freepik/i.test(h.root.innerHTML));
   assert.ok(h.root.innerHTML.includes('&lt;script&gt;unsafe&lt;/script&gt;'));
   assert.ok(!h.root.innerHTML.includes('<script>unsafe'));
   h.click('logout');

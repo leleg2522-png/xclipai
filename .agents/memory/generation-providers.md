@@ -14,3 +14,9 @@ Configuration existing in Railway is not proof that the imported source can use 
 **Why:** Read-only schema inspection confirmed provider storage, while the imported source lacked the corresponding adapters. Database and source can be from different stages of the product.
 
 **How to apply:** Check both database configuration and adapter code before calling a provider ready. Do not silently substitute another provider or invent a provider contract; obtain the current source or documented integration contract when the adapter is missing.
+
+Provider identity must remain internal: developer users should see Xclip, not Picsart or Flora AI, in portal content or API metadata.
+
+**Why:** The user explicitly said “backend nya seperti picsart dan flora ai ga ketauan user”.
+
+**How to apply:** Keep names, pool/configuration details, upstream error payloads, and provider media domains out of the public interface. Merely hiding credential values is insufficient; preserve this boundary when adding adapters and diagnostic views.

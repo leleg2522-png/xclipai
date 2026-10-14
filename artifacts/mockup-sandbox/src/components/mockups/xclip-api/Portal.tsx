@@ -488,7 +488,7 @@ export function Portal() {
           </div>
           <aside
             role="note"
-            aria-label="Catatan konfigurasi provider"
+            aria-label="Layanan Xclip"
             style={{
               marginTop: 14,
               padding: "16px 18px",
@@ -498,13 +498,13 @@ export function Portal() {
             }}
           >
             <div style={{ marginBottom: 5, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "#526b5e" }}>
-              KONFIGURASI PROVIDER · BELUM DIVERIFIKASI
+              LAYANAN XCLIP
             </div>
             <h3 style={{ margin: "0 0 5px", fontSize: 15, fontWeight: 650, color: "#202a25" }}>
               Generasi dikelola oleh Xclip
             </h3>
             <p style={{ maxWidth: 820, margin: 0, fontSize: 13, lineHeight: 1.6, color: "#5c6c63" }}>
-              Menurut informasi dari Anda, generasi memakai akun Picsart dan key Flora AI. Konfigurasi ini belum diverifikasi terhadap Railway. Key provider tidak ditampilkan di portal; aplikasi pihak ketiga cukup memakai API key Xclip.
+              Aplikasi Anda cukup memakai API key Xclip. Proses generasi dan hasil video diakses melalui layanan Xclip, tanpa pengaturan layanan lain di sisi pengguna.
             </p>
           </aside>
         </section>
