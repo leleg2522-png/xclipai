@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const express = require('express');
 const { MODEL, ServiceError, validateInput, createWanProvider } = require('../server/wan-provider');
 const wanRoutes = require('../server/wan-routes');
+const {createGenerationLogger}=require('../server/generation-log');
 
 const png = 'data:image/png;base64,iVBORw0KGgo=';
 const catalog = () => ({
@@ -95,6 +96,8 @@ test('upstream failures are sanitized; uncertain paid POST is never automaticall
 
 async function routeFixture(t, opts = {}) {
   const rows = new Map();
+  const events = [];
+  const logger=createGenerationLogger({write:(_level,record)=>events.push(record)});
   const locks = new Map();
   const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0 };
   async function query(sql, p = []) {
@@ -117,6 +120,10 @@ async function routeFixture(t, opts = {}) {
     }
     if (sql.startsWith('SELECT COUNT')) return { rows: [{ count: opts.quotaUsed || 0 }] };
     if (sql.includes('SELECT * FROM video_generation_tasks')) {
+      if (sql.includes("retry_data->>'runId' IS NOT NULL")) {
+        if (opts.workerFailure) throw Object.assign(new Error('private SQL details'),{code:'42703'});
+        return {rows:[...rows.values()].filter(r=>['pending','processing'].includes(r.status)&&r.retry_data.runId)};
+      }
       const row = rows.get(p[0]);
       const column = sql.includes('AND user_id') ? 'user_id' : 'xclip_api_key_id';
       return { rows: row && row[column] === p[1] ? [structuredClone(row)] : [] };
@@ -156,6 +163,7 @@ async function routeFixture(t, opts = {}) {
       stats.reservations++;
     },
     async finish(row, result) {
+      if (opts.finishFailure) throw Object.assign(new Error('secret database message fake_secret'),{code:'42P08'});
       const current = rows.get(row.task_id);
       if (['completed','failed'].includes(current.status)) return structuredClone(current);
       if (result.status === 'failed' && current.retry_data.billing === 'wallet') stats.refunds++;
@@ -172,13 +180,18 @@ async function routeFixture(t, opts = {}) {
         { deliveryUncertain: opts.uncertain });
       return 'run_test';
     },
-    async poll() { stats.polls++; return { status: opts.failed ? 'failed' : 'completed',
+    async poll() {
+      stats.polls++;
+      if (opts.pollFailure) throw Object.assign(new ServiceError(503,'Layanan sementara tidak tersedia.'),
+        {diagnostic:{reason:'upstream_rate_limited',upstreamStatus:429}});
+      return { status: opts.processing ? 'processing' : opts.failed ? 'failed' : 'completed',
+      ...(opts.processing ? {progress:40} : {}),
       videoUrl: opts.failed ? null : 'https://media.flora.ai/a.mp4?secret=fake' }; },
   };
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
-  const router = wanRoutes({ pool, provider, wallet, validateKey: async key =>
+  const router = wanRoutes({ pool, provider, wallet, logger, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
@@ -195,7 +208,7 @@ async function routeFixture(t, opts = {}) {
   }
   const generate = (body = {}, headers = {}) => call('/api/videogen/proxy',
     { model: MODEL, prompt: 'test', ...body }, { 'X-Xclip-Key': 'owner', 'Idempotency-Key': 'request-one', ...headers });
-  return { rows, stats, call, generate, router };
+  return { rows, stats, call, generate, router, events };
 }
 
 test('catalog requires authentication and only returns the public Xclip projection', async t => {
@@ -298,5 +311,105 @@ test('both two-second and thirty-second videos reserve one fixed-price generatio
     assert.equal((await h.generate({duration})).status,202);
     assert.equal(h.stats.reservations,1);
     assert.equal([...h.rows.values()][0].retry_data.price,6000);
+  }
+});
+
+test('generation lifecycle logs queued, accepted, completed and replay without secret content', async t => {
+  const h=await routeFixture(t);
+  const created=await h.generate();
+  await h.generate();
+  await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  for(const name of ['request_received','task_queued','generation_dispatch_started',
+    'generation_accepted','request_replayed','task_completed','task_status_read']) {
+    assert.ok(h.events.some(e=>e.event===name),name);
+  }
+  assert.equal(h.events.filter(e=>e.event==='generation_dispatch_started').length,1);
+  assert.equal(h.stats.starts,1);
+  assert.ok(!/flora|secret=|run_test|prompt|authorization/i.test(JSON.stringify(h.events)));
+});
+
+test('worker reports idle heartbeat and progress without making another generation',async t=>{
+  const h=await routeFixture(t,{processing:true});
+  await h.router.reconcile();
+  assert.equal(h.events.at(-1).event,'worker_heartbeat');
+  assert.equal(h.events.at(-1).checkedTasks,0);
+  await h.generate();
+  const cycle=h.router.reconcile();
+  await h.router.reconcile();
+  assert.ok(h.events.some(e=>e.event==='worker_heartbeat'&&e.stage==='worker_busy'));
+  await cycle;
+  assert.equal(h.events.at(-1).checkedTasks,1);
+  assert.equal(h.events.at(-1).failedChecks,0);
+  assert.ok(h.events.some(e=>e.event==='task_in_progress'&&e.progress===40));
+  assert.equal(h.stats.starts,1);
+});
+
+test('worker logs SQL type failure with stage and keeps public errors sanitized',async t=>{
+  const h=await routeFixture(t,{finishFailure:true});
+  const created=await h.generate();
+  await h.router.reconcile();
+  const failure=h.events.find(e=>e.event==='task_poll_failed');
+  assert.equal(failure.code,'42P08');
+  assert.equal(failure.stage,'persist_task_status');
+  assert.equal(failure.reason,'database_parameter_type_conflict');
+  assert.equal(h.events.at(-1).failedChecks,1);
+  const status=await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  assert.equal(status.status,503);
+  assert.ok(!/42P08|fake_secret|database|diagnostic/i.test(JSON.stringify(status.data)));
+  assert.ok(!/fake_secret|secret database/i.test(JSON.stringify(h.events)));
+  assert.equal(h.stats.starts,1);
+});
+
+test('worker logs upstream HTTP failures and query failures rather than swallowing them',async t=>{
+  const h=await routeFixture(t,{pollFailure:true});
+  await h.generate();await h.router.reconcile();
+  const failure=h.events.find(e=>e.event==='task_poll_failed');
+  assert.equal(failure.upstreamStatus,429);
+  assert.equal(failure.reason,'upstream_rate_limited');
+  assert.equal(failure.stage,'poll_upstream');
+  const q=await routeFixture(t,{workerFailure:true});
+  await q.router.reconcile();
+  assert.ok(q.events.some(e=>e.event==='worker_failed'&&e.code==='42703'));
+  assert.equal(q.events.at(-1).failedChecks,1);
+});
+
+test('uncertain dispatch is logged without retry or leaking provider response',async t=>{
+  const h=await routeFixture(t,{startFailure:true,uncertain:true});
+  await h.generate();await h.generate();
+  assert.ok(h.events.some(e=>e.event==='generation_delivery_uncertain'));
+  assert.equal(h.stats.starts,1);assert.equal(h.stats.refunds,0);
+  const f=await routeFixture(t,{startFailure:true});
+  await f.generate();
+  assert.ok(f.events.some(e=>e.event==='generation_dispatch_failed'));
+  assert.ok(f.events.some(e=>e.event==='wallet_reservation_refunded'&&e.amount===6000));
+});
+
+test('confirmed video failure logs refunded state, without dispatching a second video',async t=>{
+  const h=await routeFixture(t,{failed:true});
+  const created=await h.generate();
+  await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  const failure=h.events.find(e=>e.event==='task_failed');
+  assert.equal(failure.level,'error');
+  assert.equal(failure.walletState,'refunded');
+  assert.equal(failure.reason,'upstream_generation_failed');
+  assert.equal(h.stats.refunds,1);
+  assert.equal(h.stats.starts,1);
+});
+
+test('adapter diagnostic categories preserve upstream auth and timeout causes without raw payloads',async()=>{
+  for(const [status,code,reason] of [[401,undefined,'upstream_auth_failed'],
+    [429,undefined,'upstream_rate_limited'],[undefined,'ETIMEDOUT','upstream_timeout']]){
+    const h=providerFixture({request:async()=>{
+      throw Object.assign(new Error('raw private secret URL'),{code,
+        response:status?{status,data:{secret:'private upstream payload'}}:undefined,
+        config:{headers:{Authorization:'Bearer fake_secret'}}});
+    }});
+    await assert.rejects(h.provider.context(),e=>{
+      assert.equal(e.diagnostic.reason,reason);
+      assert.ok(!/fake_secret|private|payload|Authorization/i.test(JSON.stringify(e)));
+      return e.status===503;
+    });
+    assert.equal(h.calls.length,1);
   }
 });

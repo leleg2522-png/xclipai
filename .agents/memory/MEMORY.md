@@ -1,5 +1,6 @@
 - [Portal scope](portal-scope.md) — API portal is the homepage; legacy UI removed; top up must become a non-expiring API wallet, not daily subscriptions.
 - [Generation providers](generation-providers.md) — Picsart/Flora configuration stays internal; developer users should only see Xclip.
+- [Operator observability](operator-observability.md) — “Railway logs tidak gerak” means visible progress/error reporting, not merely explaining or fixing a SQL error.
 - [Sandbox runtime](sandbox-runtime.md) — Node 18 imports can leave the mockup sandbox missing native optional dependencies.
 - [Production package portability](production-package-portability.md) — External builds need portable lockfile URLs, preserving vetted versions and integrity.
 - [Preview auth verification](preview-auth-verification.md) — HTTP health, browser connectivity, and authenticated session persistence require distinct verification.
