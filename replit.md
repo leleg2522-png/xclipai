@@ -25,6 +25,9 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ```
 
 ## Key Features
+- Developer portal at `/developer`, linked from generator navigation. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
+- Portal API keys, request totals, subscription status, and QRIS payments use account data. Top up currently buys/renews access with proof uploaded for admin approval, not a separate wallet.
+- Railway contains Picsart/Flora configuration, but this imported backend has no adapters for them. Generation remains Freepik; do not claim integration is complete.
 - AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API
 - AI Image Generation (X Image 2) via Freepik Nano Banana Pro API
 - Pool-based API key management for image generation (Freepik key pool)
@@ -52,3 +55,6 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 npm start  # or: node server.js
 ```
 The server runs on port 5000, serving both the API and static frontend files. On Replit, add the Railway Postgres `DATABASE_URL` value as the `RAILWAY_DATABASE_URL` secret before starting the app.
+
+## Portal verification
+Run `node --test tests/developer.test.cjs`. Tests use fake sessions, provider responses, and database clients; they do not create Railway accounts, submit real payments, or perform paid generation.

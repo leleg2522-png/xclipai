@@ -2960,6 +2960,10 @@ function render(force = false) {
 function renderNavMenu() {
   return `
     <button class="mobile-close-btn" id="mobileCloseBtn">×</button>
+    <a class="nav-btn" href="/developer" style="text-decoration:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 8-4 4 4 4m8-8 4 4-4 4m-3-10-2 20"/></svg>
+      Portal API
+    </a>
     <button class="nav-btn ${state.currentPage === 'video' ? 'active' : ''}" data-page="video">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="23 7 16 12 23 17 23 7"/>

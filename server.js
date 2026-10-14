@@ -9,6 +9,7 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const bcrypt = require('bcryptjs');
+const { createUserKey } = require('./server/xclip-key-service');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { Pool } = require('pg');
@@ -538,7 +539,7 @@ app.use(express.static(path.join(__dirname, 'client'), {
   etag: true,
   lastModified: true,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
+    if (filePath.endsWith('.html') || /(?:developer(?:-views|-icons)?\.js|developer\.css)$/.test(filePath)) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     } else if (/\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
@@ -2174,7 +2175,8 @@ app.post('/api/auth/register', async (req, res) => {
     );
     
     const user = result.rows[0];
-    req.session.userId = user.id;
+    // Portal registration is followed by a separate login. Keep legacy signup behavior.
+    if (req.body.portal !== true) req.session.userId = user.id;
 
     registerTracker.set(ip, now);
     dayData.count++;
@@ -2219,6 +2221,9 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Email atau password salah' });
     }
     
+    await new Promise((resolve, reject) => {
+      req.session.regenerate(error => error ? reject(error) : resolve());
+    });
     req.session.userId = user.id;
     
     req.session.save((err) => {
@@ -2227,7 +2232,7 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(500).json({ error: 'Login gagal - session error' });
       }
       
-      console.log('Login successful for:', user.username, 'Session ID:', req.sessionID);
+      console.log('Login successful');
       res.json({ 
         success: true, 
         user: { 
@@ -2330,14 +2335,7 @@ app.get('/api/auth/get-api-key', async (req, res) => {
   }
 });
 
-function generateXclipApiKey() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let key = 'xclip_';
-  for (let i = 0; i < 32; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return key;
-}
+app.use(require('./server/developer')(pool));
 
 app.post('/api/xclip-keys/create', async (req, res) => {
   if (!req.session.userId) {
@@ -2345,32 +2343,17 @@ app.post('/api/xclip-keys/create', async (req, res) => {
   }
   
   try {
-    // Check if user already has any API key (active or revoked)
-    const existingKey = await pool.query(
-      'SELECT id FROM xclip_api_keys WHERE user_id = $1 LIMIT 1',
-      [req.session.userId]
-    );
-    
-    if (existingKey.rows.length > 0) {
-      return res.status(400).json({ 
-        error: 'Anda sudah memiliki Xclip API Key. Setiap user hanya bisa memiliki 1 API key seumur hidup.' 
-      });
+    const label = typeof req.body.label === 'string' ? req.body.label.trim() : 'Default Key';
+    if (!label || label.length > 80) {
+      return res.status(400).json({ error: 'Nama key harus 1–80 karakter' });
     }
-    
-    const { label } = req.body;
-    const apiKey = generateXclipApiKey();
-    
-    const result = await pool.query(
-      'INSERT INTO xclip_api_keys (user_id, api_key, label) VALUES ($1, $2, $3) RETURNING id, api_key, label, created_at',
-      [req.session.userId, apiKey, label || 'Default Key']
-    );
-    
-    res.json({
-      success: true,
-      key: result.rows[0]
-    });
+    const key = await createUserKey(pool, req.session.userId, label);
+    res.json({ success: true, key });
     
   } catch (error) {
+    if (error.code === 'KEY_ALREADY_EXISTS') {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Create Xclip API key error:', error);
     res.status(500).json({ error: 'Gagal membuat Xclip API key' });
   }
@@ -2404,7 +2387,7 @@ app.post('/api/xclip-keys/:id/revoke', async (req, res) => {
     const { id } = req.params;
     
     const result = await pool.query(
-      'UPDATE xclip_api_keys SET status = $1, revoked_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING id',
+      'UPDATE xclip_api_keys SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING id',
       ['revoked', id, req.session.userId]
     );
     
@@ -2427,7 +2410,10 @@ app.post('/api/xclip-keys/:id/rename', async (req, res) => {
   
   try {
     const { id } = req.params;
-    const { label } = req.body;
+    const label = typeof req.body.label === 'string' ? req.body.label.trim() : '';
+    if (!label || label.length > 80) {
+      return res.status(400).json({ error: 'Nama key harus 1–80 karakter' });
+    }
     
     const result = await pool.query(
       'UPDATE xclip_api_keys SET label = $1 WHERE id = $2 AND user_id = $3 RETURNING id, label',
