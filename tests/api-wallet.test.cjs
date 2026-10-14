@@ -49,6 +49,8 @@ function fixture(balance = 100000) {
       const row=state.tasks.get(p[0]);return rows(row?[structuredClone(row)]:[]);
     }
     if (s.startsWith('UPDATE video_generation_tasks')) {
+      assert.equal((s.match(/\$1::text/g) || []).length, 3,
+        'Repeated status parameters require consistent explicit PostgreSQL types');
       if (client.failTaskUpdate) throw new Error('simulated task update failure');
       const row=state.tasks.get(p[2]); Object.assign(row,{status:p[0],video_url:p[1]});return rows([structuredClone(row)]);
     }
@@ -125,6 +127,16 @@ test('completed tasks cannot be refunded or overwritten by a late failed/pending
   await h.wallet.finish(row,{status:'processing'});
   assert.equal(h.state.balance,94000);assert.equal(h.state.tasks.get('one').status,'completed');
   assert.equal(h.state.charges.get('one').status,'spent');
+});
+
+test('legacy task completion uses typed status SQL without creating a wallet charge', async () => {
+  const h=fixture();await h.wallet.initialize();
+  const row={task_id:'legacy',user_id:1,status:'processing',retry_data:{billing:'legacy'}};
+  h.state.tasks.set(row.task_id,row);
+  const completed=await h.wallet.finish(row,{status:'completed',videoUrl:'/video'});
+  assert.equal(completed.status,'completed');
+  assert.equal(h.state.balance,100000);
+  assert.equal(h.state.charges.size,0);
 });
 
 test('failed task persistence rolls refund and task state back together', async () => {

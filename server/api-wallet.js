@@ -113,9 +113,9 @@ function createApiWallet(pool) {
               WHERE task_id = $1`, [row.task_id, result.status === 'completed' ? 'spent' : 'refunded']);
           }
         }
-        const updated = (await client.query(`UPDATE video_generation_tasks SET status = $1, video_url = $2,
-          completed_at = CASE WHEN $1 IN ('completed','failed') THEN NOW() ELSE completed_at END,
-          error_message = CASE WHEN $1 = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
+        const updated = (await client.query(`UPDATE video_generation_tasks SET status = $1::text, video_url = $2,
+          completed_at = CASE WHEN $1::text IN ('completed','failed') THEN NOW() ELSE completed_at END,
+          error_message = CASE WHEN $1::text = 'failed' THEN 'Generasi video gagal.' ELSE NULL END
           WHERE task_id = $3 RETURNING *`,
         [result.status, result.videoUrl || null, row.task_id])).rows[0];
         await client.query('COMMIT');

@@ -14,3 +14,17 @@ uri = "file://freepik_keys.txt"
 type = "text"
 title = "100 Freepik API Keys (koma separated)"
 logical_id = "7e17d242-3ec8-418c-9118-a2365e0af87b"
+
+[[outputs]]
+id = "Dj49AkIWeX30u7DWDWHDn"
+uri = "file://generated-artifacts/xclip-api-test.mp4"
+type = "video"
+title = "Hasil tes API Xclip — Wan 3.0, 480p, 2 detik"
+description = "Video nyata dari satu request generasi memakai API key milikmu lewat Railway. File MP4 H.264, resolusi 854×480, durasi tepat 2 detik. Tidak ada generasi ulang."
+logical_id = "6a13e9b6-5d61-4757-aea6-d60f358149e0"
+content_hash = "sha256:1b44e9d97066a9906fc7638e60c8c019d943ee00fe655b5ebce22b01b01e580e"
+size = 582163
+mtime_ms = 1792001081090
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:4d6c99d7-546b-477d-872d-9a887a5fbdbb/6a13e9b6-5d61-4757-aea6-d60f358149e0/f84333fe-6b2b-4db4-8ee8-1d1cc53e4749"
+storage_version_token = "1792001135332029"
+content_type = "video/mp4"
