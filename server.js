@@ -200,7 +200,7 @@ const PORT = process.env.PORT || 5000;
 console.log(`[STARTUP] Xclip server starting... PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 console.log(`[STARTUP] Database URL configured: ${!!(process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL)}`);
 
-const dbUrl = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
+const dbUrl = process.env.RAILWAY_DATABASE_URL || process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
 const pool = new Pool({
   connectionString: dbUrl,
   max: 10,
