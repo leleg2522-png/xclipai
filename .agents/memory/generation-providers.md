@@ -20,3 +20,9 @@ Provider identity must remain internal: developer users should see Xclip, not Pi
 **Why:** The user explicitly said “backend nya seperti picsart dan flora ai ga ketauan user”.
 
 **How to apply:** Keep names, pool/configuration details, upstream error payloads, and provider media domains out of the public interface. Merely hiding credential values is insufficient; preserve this boundary when adding adapters and diagnostic views.
+
+The user wants a public video-model category showing “Wan 3.0 Uncensored”; its intended internal provider is Flora AI, which must not be named to developer users.
+
+**Why:** The user specified the model and explicitly said not to mention Flora AI.
+
+**How to apply:** Use the requested public model name and category without provider branding. Verify the provider's actual model identifier and integration contract before making it callable or claiming availability.

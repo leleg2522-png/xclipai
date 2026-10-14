@@ -337,6 +337,7 @@ export function Portal() {
           <span className="xp-brand-name">xclip<span> / developers</span></span>
         </a>
         <nav className="xp-top-links" aria-label="Navigasi utama">
+          <a href="#model">Model</a>
           <a href="#dokumentasi">Dokumentasi</a>
           <a href="#akses">Akses & paket</a>
           <a href="#topup">Top up</a>
@@ -350,6 +351,7 @@ export function Portal() {
       </header>
 
       <nav className="xp-mobile-menu" aria-label="Menu developer">
+        <a href="#model">Model</a>
         <a href="#dokumentasi">Dokumentasi</a>
         <a href="#akses">Akses & paket</a>
         <a href="#topup">Top up</a>
@@ -432,6 +434,19 @@ export function Portal() {
             )}
             <div className="xp-key-footnote"><span>i</span> Maksimal satu API key per pengguna, termasuk setelah dinonaktifkan.</div>
           </div>
+        </section>
+
+        <section className="xp-model-section" id="model" aria-labelledby="model-heading">
+          <div className="xp-section-heading">
+            <div><span className="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div>
+          </div>
+          <article className="xp-model-card">
+            <div className="xp-model-title">
+              <div><span className="xp-model-category">VIDEO · UNCENSORED</span><h3>Wan 3.0 Uncensored</h3></div>
+              <span className="xp-model-status">Segera tersedia</span>
+            </div>
+            <p>Model video dalam katalog Xclip. Belum aktif untuk request API; parameter integrasi akan ditampilkan saat model tersedia.</p>
+          </article>
         </section>
 
         <section className="xp-docs-section" id="dokumentasi">

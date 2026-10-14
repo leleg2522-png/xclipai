@@ -347,3 +347,11 @@
 @media (prefers-reduced-motion: reduce) {
   .xp-portal *, .xp-portal *::before, .xp-portal *::after { animation-duration: .01ms!important; transition-duration: .01ms!important; scroll-behavior: auto!important; }
 }
+
+.xp-model-section { margin-block: 36px; scroll-margin-top: 24px; }
+.xp-model-card { padding: 24px; border: 1px solid #dfe7e1; border-radius: 14px; background: #fafcfb; }
+.xp-model-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.xp-model-category { color: #526b5e; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.xp-model-card h3 { margin: 8px 0 0; color: #20312b; font-size: 22px; }
+.xp-model-status { padding: 7px 12px; border-radius: 20px; background: #f9f0da; color: #765b25; font-size: 12px; font-weight: 600; }
+.xp-model-card p { margin: 16px 0 0; max-width: 680px; color: #5c6c63; font-size: 13px; line-height: 1.65; }

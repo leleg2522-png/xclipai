@@ -220,6 +220,11 @@ test('revoked state has no create button and docs preserve the existing contract
   s.user = { username: 'dev' };
   s.overview = { keys: [{ status: 'revoked', api_key: 'hidden' }], hasLifetimeKey: true, totalRequests: 3, providers: [], generationProvider: 'Freepik' };
   const html = portalView(s);
+  assert.ok(html.includes('Wan 3.0 Uncensored'));
+  assert.ok(html.includes('VIDEO · UNCENSORED'));
+  assert.ok(html.includes('href="#model"'));
+  assert.ok(html.includes('Segera tersedia'));
+  assert.ok(!/flora|picsart|freepik/i.test(html));
   assert.ok(html.includes('API key telah dinonaktifkan'));
   assert.ok(!html.includes('id="key-form"'));
   assert.ok(!html.includes('hidden</code>'));

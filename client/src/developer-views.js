@@ -86,6 +86,13 @@ function docsView(s) {
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 
+function modelsView() {
+  return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
+    <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>
+    <article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">VIDEO · UNCENSORED</span><h3>Wan 3.0 Uncensored</h3></div><span class="xp-model-status">Segera tersedia</span></div><p>Model video dalam katalog Xclip. Belum aktif untuk request API; parameter integrasi akan ditampilkan saat model tersedia.</p></article>
+  </section>`;
+}
+
 function topupView(s) {
   const selected = s.plans.find(p => String(p.id) === String(s.selectedPlan));
   const pending = s.payments.some(p => p.status === 'pending');
@@ -100,12 +107,13 @@ function topupView(s) {
 }
 
 export function portalView(s) {
-  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav><a class="xp-generator-link" href="/">${i('ArrowLeft')} Ke generator ${i('ExternalLink')}</a><button class="xp-signout" data-action="logout">Keluar</button></header>
-    <nav class="xp-mobile-menu" aria-label="Menu developer"><a href="#kunci">API key</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav>
+  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav><a class="xp-generator-link" href="/">${i('ArrowLeft')} Ke generator ${i('ExternalLink')}</a><button class="xp-signout" data-action="logout">Keluar</button></header>
+    <nav class="xp-mobile-menu" aria-label="Menu developer"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav>
     ${s.error || s.notice ? `<div class="xp-alert" role="${s.error ? 'alert' : 'status'}">${e(s.error || s.notice)} <button data-action="dismiss" aria-label="Tutup pemberitahuan">×</button></div>` : ''}
     <main id="home" class="xp-main"><section class="xp-intro"><div class="xp-eyebrow"><span>PORTAL DEVELOPER</span><i></i> API VIDEO XCLIP</div><div class="xp-intro-row"><div><h1>Mulai bangun<br><em>dengan video AI.</em></h1><p class="xp-lede">Halo, ${e(s.user.username)}. Kelola integrasi Xclip melalui satu portal yang terhubung ke akun Anda.</p></div><div class="xp-intro-aside"><div class="xp-aside-icon">${i('Code2')}</div><span>DIRANCANG UNTUK INTEGRASI</span><p>Gunakan API key Xclip di server aplikasi Anda.</p><a href="#dokumentasi">Lihat quickstart ${i('ArrowDownRight')}</a></div></div><div class="xp-step-line"><span><b>01</b> Buat kunci</span><i></i><span><b>02</b> Kirim request</span><i></i><span><b>03</b> Cek status tugas</span></div></section>
     <section class="xp-overview" aria-label="Penggunaan API"><div class="xp-overview-title"><span class="xp-overview-icon">${i('Activity')}</span><span>AKTIVITAS PORTAL</span></div><div class="xp-overview-number">${s.overview ? Number(s.overview.totalRequests).toLocaleString('id-ID') : '—'}</div><div class="xp-overview-caption">total request API akun Anda</div><div class="xp-overview-foot"><button class="xp-copy-button" data-action="refresh">Perbarui data</button></div></section>
     <section class="xp-key-section" id="kunci"><div class="xp-section-heading"><div><span class="xp-kicker">01 / KREDENSIAL</span><h2>API key Anda</h2></div><span class="xp-single-rule">${i('LockKeyhole')} Satu kunci seumur hidup</span></div><div class="xp-key-card">${keyView(s)}<div class="xp-key-footnote"><span>i</span> Maksimal satu API key per pengguna, termasuk setelah dinonaktifkan.</div></div></section>
+    ${modelsView()}
     ${docsView(s)}
     <section class="xp-access-section" id="akses"><div class="xp-section-heading"><div><span class="xp-kicker">03 / AKSES</span><h2>Akses mengikuti akun Xclip</h2></div></div><div class="xp-access-card"><div class="xp-access-main"><div class="xp-access-icon">${i('ShieldCheck')}</div><div><span class="xp-access-label">LANGGANAN ANDA</span><h3>${s.subscriptionError ? 'Status belum tersedia' : s.subscription?.hasSubscription ? 'Langganan aktif' : 'Belum ada langganan aktif'}</h3><p>${s.subscriptionError ? e(s.subscriptionError) : s.subscription?.subscription?.expiredAt ? 'Berakhir: '+e(date(s.subscription.subscription.expiredAt)) : 'Lihat pilihan paket untuk mengaktifkan akses akun.'}</p></div></div><div class="xp-access-divider"></div><div class="xp-access-side"><a href="#topup">Lihat paket & Top up ${i('ArrowRight')}</a></div></div></section>
     ${topupView(s)}
