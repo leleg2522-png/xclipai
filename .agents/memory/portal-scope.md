@@ -3,11 +3,17 @@ name: Xclip portal redesign scope
 description: User-selected scope and visual direction for the developer portal.
 ---
 
-The user selected “Portal API saja” and requested a simpler appearance. Preserve the existing generator application when integrating or iterating on this redesign.
+The user selected a simpler API portal, then changed the scope to removing the old generator UI.
 
-**Why:** The user explicitly chose portal-only rather than redesigning the entire Xclip application.
+**Why:** After initially retaining the generator, the user explicitly said “generator lama hapus saja”.
 
-**How to apply:** Keep API-portal changes separate from generator functionality. A canvas prototype is not yet a live, Railway-connected portal; integrating it requires preserving the existing account and API behavior.
+**How to apply:** Remove the legacy generator interface without interpreting this as permission to delete Railway data or the generation backend used by the API. Account, API, and payment operations are separate concerns from retiring the old generator UI.
+
+The API portal should be the default homepage; retaining the old generator at `/generator` is no longer the desired product scope.
+
+**Why:** The user chose the API portal as homepage, then superseded the generator-retention choice with “generator lama hapus saja”.
+
+**How to apply:** Treat the portal as the main entry point and do not reintroduce public generator navigation.
 
 New developers must register first, then log in before accessing the developer portal menus. Existing registered users can log in directly.
 

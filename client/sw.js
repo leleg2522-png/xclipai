@@ -1,9 +1,9 @@
-const CACHE_NAME = 'xclip-v4';
+const CACHE_NAME = 'xclip-v5';
 const STATIC_ASSETS = [
-  '/',
+  '/generator',
   '/index.html',
-  '/styles/main.css',
-  '/src/main.js',
+  '/styles/main.css?v=38',
+  '/src/main.js?v=39',
   '/manifest.json'
 ];
 
@@ -30,7 +30,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/sse')) {
+  if (event.request.method !== 'GET' ||
+      url.pathname === '/' || url.pathname === '/developer' ||
+      url.pathname === '/developer/' || url.pathname === '/developer.html' ||
+      url.pathname.startsWith('/src/developer') || url.pathname === '/styles/developer.css' ||
+      url.pathname.startsWith('/api/') || url.pathname.startsWith('/sse')) {
     return;
   }
 
@@ -47,7 +51,7 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         return caches.match(event.request).then((cached) => {
-          return cached || caches.match('/');
+           return cached || caches.match('/generator');
         });
       })
   );

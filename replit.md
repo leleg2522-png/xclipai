@@ -25,7 +25,7 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ```
 
 ## Key Features
-- Developer portal at `/developer`, linked from generator navigation. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
+- Developer portal is the homepage `/`, with `/developer` retained as an alias. The existing generator is served at `/generator`. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
 - Portal API keys, request totals, subscription status, and QRIS payments use account data. Top up currently buys/renews access with proof uploaded for admin approval, not a separate wallet.
 - Railway contains Picsart/Flora configuration, but this imported backend has no adapters for them. Generation remains Freepik; do not claim integration is complete.
 - AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API

@@ -535,12 +535,14 @@ app.use(compression({
   }
 }));
 
+// Explicit entry pages must precede static middleware's default index.html.
+app.use(require('./server/pages')());
 app.use(express.static(path.join(__dirname, 'client'), {
   maxAge: '7d',
   etag: true,
   lastModified: true,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html') || /(?:developer(?:-views|-icons)?\.js|developer\.css)$/.test(filePath)) {
+    if (filePath.endsWith('.html') || path.basename(filePath) === 'sw.js' || /(?:developer(?:-views|-icons)?\.js|developer\.css)$/.test(filePath)) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     } else if (/\.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
