@@ -25,6 +25,7 @@ import {
   Terminal,
   UserPlus,
   Video,
+  Wallet,
   X,
 } from "lucide-react";
 import "./Portal.css";
@@ -338,6 +339,7 @@ export function Portal() {
         <nav className="xp-top-links" aria-label="Navigasi utama">
           <a href="#dokumentasi">Dokumentasi</a>
           <a href="#akses">Akses & paket</a>
+          <a href="#topup">Top up</a>
         </nav>
         <a className="xp-generator-link" href="#generator" onClick={() => setNotice("Tautan generator aplikasi ditampilkan sebagai prototipe.")}>
           <ArrowLeft size={15} /> Ke generator <ExternalLink size={13} />
@@ -346,6 +348,12 @@ export function Portal() {
           Keluar
         </button>
       </header>
+
+      <nav className="xp-mobile-menu" aria-label="Menu developer">
+        <a href="#dokumentasi">Dokumentasi</a>
+        <a href="#akses">Akses & paket</a>
+        <a href="#topup">Top up</a>
+      </nav>
 
       <div className="xp-demo-banner">
         <span className="xp-demo-pip" />
@@ -499,6 +507,28 @@ export function Portal() {
               Menurut informasi dari Anda, generasi memakai akun Picsart dan key Flora AI. Konfigurasi ini belum diverifikasi terhadap Railway. Key provider tidak ditampilkan di portal; aplikasi pihak ketiga cukup memakai API key Xclip.
             </p>
           </aside>
+        </section>
+
+        <section className="xp-topup-section" id="topup">
+          <div className="xp-section-heading">
+            <div><span className="xp-kicker">04 / SALDO</span><h2>Top up akun Xclip</h2></div>
+          </div>
+          <div className="xp-topup-card">
+            <div className="xp-topup-main">
+              <div className="xp-topup-icon"><Wallet size={19} /></div>
+              <div>
+                <span className="xp-access-label">TOP UP AKUN</span>
+                <h3>Isi saldo melalui Xclip</h3>
+                <p>Top up dikelola lewat akun Xclip Anda. Portal ini tidak membuat saldo API terpisah atau menampilkan nilai saldo yang belum terhubung.</p>
+              </div>
+            </div>
+            <div className="xp-topup-action">
+              <span><LockKeyhole size={13} /> Pembayaran tetap di akun Xclip</span>
+              <button onClick={() => setNotice("Menu top up Xclip ditampilkan sebagai pratinjau. Pembayaran belum tersambung.")}>
+                Buka menu top up <ArrowUpRight size={15} />
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="xp-bottom-cta" id="generator">

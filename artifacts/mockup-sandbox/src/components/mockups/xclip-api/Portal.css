@@ -92,6 +92,7 @@
 .xp-top-links { display: flex; align-items: center; gap: 34px; height: 100%; margin-left: auto; margin-right: 42px; }
 .xp-top-links a { color: #64716d; font-size: 13px; transition: color .16s ease; }
 .xp-top-links a:hover { color: var(--xp-green); }
+.xp-mobile-menu { display: none; }
 .xp-generator-link { display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 600; color: var(--xp-green-deep)!important; }
 .xp-generator-link svg:last-child { color: #8a9992; }
 .xp-demo-banner { min-height: 34px; padding: 7px 24px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #64726c; background: #e9f0eb; font-size: 11px; letter-spacing: .01em; }
@@ -225,6 +226,17 @@
 .xp-access-side > span { display: flex; align-items: center; gap: 7px; color: #687770; font-size: 10px; }
 .xp-access-side > span svg { color: #60906a; }
 .xp-access-side > a { display: flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--xp-green); font-size: 10px; font-weight: 700; }
+.xp-topup-section .xp-section-heading { margin-top: 56px; }
+.xp-topup-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 32px; padding: 23px 25px; background: var(--xp-paper); border: 1px solid var(--xp-line); border-radius: 8px; }
+.xp-topup-main { display: flex; align-items: flex-start; gap: 14px; }
+.xp-topup-icon { display: grid; place-items: center; flex: none; width: 38px; height: 38px; color: var(--xp-green); background: #edf3e9; border-radius: 8px; }
+.xp-topup-main h3 { margin: 4px 0; font: 700 14px "Manrope", sans-serif; }
+.xp-topup-main p { max-width: 570px; margin: 0; color: #78837d; font-size: 11px; line-height: 1.7; }
+.xp-topup-action { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; padding-left: 25px; border-left: 1px solid var(--xp-line); }
+.xp-topup-action > span { display: flex; align-items: center; gap: 7px; color: #78847d; font-size: 10px; }
+.xp-topup-action > span svg { color: var(--xp-green); }
+.xp-topup-action > button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 12px; color: #f6fbf6; background: var(--xp-green); border: 0; border-radius: 4px; font-size: 10px; font-weight: 700; transition: background .16s ease, transform .16s ease; }
+.xp-topup-action > button:hover { background: var(--xp-green-deep); transform: translateY(-1px); }
 .xp-bottom-cta { display: flex; align-items: center; gap: 17px; margin-top: 44px; padding: 23px 25px; color: #eff6ef; background: #2d483a; border-radius: 8px; }
 .xp-cta-mark { display: grid; flex: none; place-items: center; width: 42px; height: 42px; color: #d4e99a; border: 1px solid #ffffff31; border-radius: 8px; }
 .xp-bottom-cta > div:nth-child(2) { flex: 1; }
@@ -252,6 +264,9 @@
   .xp-topbar { height: 60px; padding: 0 19px; }
   .xp-top-links { display: none; }
   .xp-generator-link { margin-left: auto; font-size: 10px; }
+  .xp-mobile-menu { display: flex; align-items: center; justify-content: space-between; gap: 12px; overflow-x: auto; padding: 8px 18px; background: var(--xp-paper); border-bottom: 1px solid var(--xp-line); }
+  .xp-mobile-menu a { flex: none; color: #64716d; font-size: 10px; font-weight: 600; }
+  .xp-mobile-menu a:last-child { color: var(--xp-green-deep); }
   .xp-demo-banner { justify-content: flex-start; padding-inline: 18px; font-size: 9px; }
   .xp-main { width: calc(100% - 36px); }
   .xp-intro { padding: 45px 0 28px; }
@@ -303,6 +318,9 @@
   .xp-access-card { grid-template-columns: 1fr; gap: 17px; padding: 19px 17px; }
   .xp-access-divider { width: 100%; height: 1px; }
   .xp-access-side { padding-left: 51px; }
+  .xp-topup-section .xp-section-heading { margin-top: 42px; }
+  .xp-topup-card { grid-template-columns: 1fr; gap: 17px; padding: 19px 17px; }
+  .xp-topup-action { align-items: flex-start; padding: 14px 0 0 51px; border-top: 1px solid var(--xp-line); border-left: 0; }
   .xp-bottom-cta { align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 18px; }
   .xp-bottom-cta > div:nth-child(2) { min-width: calc(100% - 60px); }
   .xp-bottom-cta > button { margin-left: 54px; }
