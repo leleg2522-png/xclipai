@@ -4,6 +4,7 @@ const root = document.getElementById('developer-app');
 const state = {
   user: null, authMode: 'register', authDraft: { username: '', email: '' },
   overview: null, subscription: null, plans: [], payments: [], selectedPlan: '',
+  models: [], modelError: '',
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
   docTab: 'generate', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
 };
@@ -49,10 +50,16 @@ function render() {
 
 async function loadData() {
   state.subscriptionError = state.topupError = state.historyError = '';
+  state.models = [];
+  state.modelError = '';
   // Do not replace failed data with fake zeros or an invented balance.
   state.overview = null;
   await Promise.all([
     api('/api/developer/overview').then(data => { state.overview = data; }),
+    api('/api/developer/models').then(data => {
+      if (!Array.isArray(data.models)) throw new Error('Data katalog model tidak valid.');
+      state.models = data.models;
+    }).catch(error => { state.modelError = error.message; }),
     api('/api/subscription/status').then(data => { state.subscription = data; })
       .catch(error => { state.subscription = null; state.subscriptionError = error.message; }),
     api('/api/subscription/plans').then(data => {

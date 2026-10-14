@@ -62,3 +62,10 @@ Run `npm test`. Tests use fake sessions, provider responses, and database client
 
 ## Internal provider privacy
 Developer overview returns only account-scoped key and request information. Video results use protected Xclip media paths; streams are served through Xclip without upstream redirects. Media responses allow only video content and standard range headers. API callers must send `X-Xclip-Key` when retrieving media; browser playback uses the existing session. Streaming increases application bandwidth compared with direct CDN redirects.
+
+## Wan API
+`server/wan-provider.js` discovers Wan 3.0 text/image model IDs and parameter options from the authenticated catalog. Runtime credentials come from existing Railway `flora_key_pool` rows with available/active status, not from the browser. If multiple workspaces/projects exist, configure `FLORA_WORKSPACE_ID` and `FLORA_PROJECT_ID`; a single accessible workspace with a single project is selected automatically. No upstream project or workspace is created.
+
+The public model ID is `wan-3.0-uncensored`. POST `/api/videogen/proxy` requires an active Xclip key, active subscription (or admin), a prompt, and an `Idempotency-Key`. Resolution is 480p; duration is 2–30 seconds (default 30). Optional `image` is a PNG/JPEG/WebP data URI. GET `/api/videogen/tasks/:taskId` polls; completed video streams through Xclip. The portal reads the account-protected `/api/developer/models` catalog before showing availability.
+
+Jobs use existing `video_generation_tasks` storage, with provider run/key references only in internal `retry_data`. Per-user and per-provider-key PostgreSQL advisory locks protect idempotency, the existing 180-second cooldown, and the existing 50-per-key daily service quota. No production DDL or data migration is needed. A generation POST is never automatically retried. Uncertain delivery is retained as pending for manual reconciliation and blocks new Wan requests for that user; do not manually clear it before checking whether the upstream run was accepted. Legacy callbacks and background workers do not process Wan tasks.

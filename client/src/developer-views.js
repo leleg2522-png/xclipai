@@ -49,12 +49,13 @@ export function curlExample(tab) {
     ? 'curl "$XCLIP_BASE_URL/api/videogen/tasks/<taskId>" \\\n  -H "X-Xclip-Key: <API_KEY_ANDA>"'
     : `curl -X POST "$XCLIP_BASE_URL/api/videogen/proxy" \\
   -H "X-Xclip-Key: <API_KEY_ANDA>" \\
+  -H "Idempotency-Key: <UUID_UNIK_REQUEST>" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "kling-v2.6-pro",
-    "image": "<gambar_base64_atau_data_uri>",
+    "model": "wan-3.0-uncensored",
     "prompt": "Kamera bergerak perlahan melewati lanskap",
-    "duration": 5,
+    "resolution": "480p",
+    "duration": 30,
     "aspectRatio": "16:9"
   }'`;
 }
@@ -78,18 +79,20 @@ function docsView(s) {
     <div class="xp-section-heading xp-doc-heading"><div><span class="xp-kicker">02 / QUICKSTART</span><h2>Request pertama Anda</h2></div><span class="xp-doc-meta">${i('BookOpen')} REST · JSON</span></div>
     <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Kedua endpoint memakai header <code>X-Xclip-Key</code>.</span></div></aside>
     <div class="xp-endpoint"><div class="xp-endpoint-head"><span class="xp-method ${generate ? 'post' : 'get'}">${generate ? 'POST' : 'GET'}</span><code>${generate ? '/api/videogen/proxy' : '/api/videogen/tasks/:taskId'}</code><button class="xp-copy-inline" data-action="copy-curl">${i('Copy')} Salin cURL</button></div>
-    <p class="xp-endpoint-desc">${generate ? 'Kirim gambar Base64, prompt, dan parameter model. Simpan taskId dari respons untuk mengecek status.' : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
+    <p class="xp-endpoint-desc">${generate ? 'Wan 3.0 Uncensored: kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.' : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
     <div class="xp-data-note">Tetapkan <code>XCLIP_BASE_URL</code> ke alamat server Xclip tempat Anda menjalankan API. Ganti seluruh placeholder sebelum mengirim request. <code>videoUrl</code> adalah path relatif terhadap server Xclip; gunakan header <code>X-Xclip-Key</code> saat mengambil hasil video.</div>
-    ${generate ? `<div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>Model video yang digunakan.</p></div><div><code>image</code><span>string</span><p>Gambar Base64 atau data URI, wajib.</p></div><div><code>prompt</code><span>string</span><p>Deskripsi video yang diinginkan.</p></div><div><code>duration</code><span>number</span><p>Durasi dalam detik.</p></div><div><code>aspectRatio</code><span>string</span><p>Rasio aspek, misalnya 16:9.</p></div></div>` : ''}</div>` : ''}
+    ${generate ? `<div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>wan-3.0-uncensored.</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP; maksimal sekitar 10 MB.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>2–30 detik, default 30.</p></div><div><code>resolution</code><span>string</span><p>480p, default 480p.</p></div><div><code>aspectRatio</code><span>string</span><p>16:9, 9:16, 1:1, 4:3, atau 3:4; default 16:9.</p></div><div><code>audio</code><span>boolean</span><p>Audio bawaan, default true.</p></div></div>` : ''}</div>` : ''}
     <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
-    <div class="xp-data-note"><strong>Parameter:</strong> ${generate ? '<code>model</code>, <code>image</code> (Base64/data URI, wajib), <code>prompt</code>, <code>duration</code> (detik), <code>aspectRatio</code>. Model tersedia mengikuti backend Xclip yang berjalan.' : '<code>taskId</code> pada URL. Status dan output mengikuti respons API. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
+    <div class="xp-data-note"><strong>Request:</strong> ${generate ? 'Langganan aktif diperlukan. Ganti <code>Idempotency-Key</code> untuk setiap request baru; gunakan key yang sama dengan body identik saat mengulang request yang terputus, agar tidak memulai generasi ganda. Jeda request baru 180 detik. Respons <code>202</code> berisi <code>taskId</code>; periksa status setiap 5 detik. Jika pengiriman belum terkonfirmasi, simpan taskId dan hubungi dukungan—jangan membuat request baru.' : '<code>taskId</code> pada URL. Status: pending, processing, completed, atau failed. Saat completed, ambil <code>videoUrl</code> melalui Xclip. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 
-function modelsView() {
+function modelsView(s) {
+  const model = s.models?.find(m => m.id === 'wan-3.0-uncensored');
+  const available = model?.status === 'available';
   return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
     <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>
-    <article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">VIDEO · UNCENSORED</span><h3>Wan 3.0 Uncensored</h3></div><span class="xp-model-status">Segera tersedia</span></div><p>Model video dalam katalog Xclip. Belum aktif untuk request API; parameter integrasi akan ditampilkan saat model tersedia.</p></article>
+    <article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">VIDEO · UNCENSORED</span><h3>Wan 3.0 Uncensored</h3></div><span class="xp-model-status">${available ? 'Tersedia' : 'Belum tersedia'}</span></div><p>${available ? 'Text-to-video dan image-to-video · 480p · 2–30 detik, default 30 detik. Gunakan model ID wan-3.0-uncensored melalui API Xclip.' : e(s.modelError || 'Ketersediaan model belum terkonfirmasi. Muat ulang portal untuk memeriksa katalog.')}</p></article>
   </section>`;
 }
 
@@ -113,7 +116,7 @@ export function portalView(s) {
     <main id="home" class="xp-main"><section class="xp-intro"><div class="xp-eyebrow"><span>PORTAL DEVELOPER</span><i></i> API VIDEO XCLIP</div><div class="xp-intro-row"><div><h1>Mulai bangun<br><em>dengan video AI.</em></h1><p class="xp-lede">Halo, ${e(s.user.username)}. Kelola integrasi Xclip melalui satu portal yang terhubung ke akun Anda.</p></div><div class="xp-intro-aside"><div class="xp-aside-icon">${i('Code2')}</div><span>DIRANCANG UNTUK INTEGRASI</span><p>Gunakan API key Xclip di server aplikasi Anda.</p><a href="#dokumentasi">Lihat quickstart ${i('ArrowDownRight')}</a></div></div><div class="xp-step-line"><span><b>01</b> Buat kunci</span><i></i><span><b>02</b> Kirim request</span><i></i><span><b>03</b> Cek status tugas</span></div></section>
     <section class="xp-overview" aria-label="Penggunaan API"><div class="xp-overview-title"><span class="xp-overview-icon">${i('Activity')}</span><span>AKTIVITAS PORTAL</span></div><div class="xp-overview-number">${s.overview ? Number(s.overview.totalRequests).toLocaleString('id-ID') : '—'}</div><div class="xp-overview-caption">total request API akun Anda</div><div class="xp-overview-foot"><button class="xp-copy-button" data-action="refresh">Perbarui data</button></div></section>
     <section class="xp-key-section" id="kunci"><div class="xp-section-heading"><div><span class="xp-kicker">01 / KREDENSIAL</span><h2>API key Anda</h2></div><span class="xp-single-rule">${i('LockKeyhole')} Satu kunci seumur hidup</span></div><div class="xp-key-card">${keyView(s)}<div class="xp-key-footnote"><span>i</span> Maksimal satu API key per pengguna, termasuk setelah dinonaktifkan.</div></div></section>
-    ${modelsView()}
+    ${modelsView(s)}
     ${docsView(s)}
     <section class="xp-access-section" id="akses"><div class="xp-section-heading"><div><span class="xp-kicker">03 / AKSES</span><h2>Akses mengikuti akun Xclip</h2></div></div><div class="xp-access-card"><div class="xp-access-main"><div class="xp-access-icon">${i('ShieldCheck')}</div><div><span class="xp-access-label">LANGGANAN ANDA</span><h3>${s.subscriptionError ? 'Status belum tersedia' : s.subscription?.hasSubscription ? 'Langganan aktif' : 'Belum ada langganan aktif'}</h3><p>${s.subscriptionError ? e(s.subscriptionError) : s.subscription?.subscription?.expiredAt ? 'Berakhir: '+e(date(s.subscription.subscription.expiredAt)) : 'Lihat pilihan paket untuk mengaktifkan akses akun.'}</p></div></div><div class="xp-access-divider"></div><div class="xp-access-side"><a href="#topup">Lihat paket & Top up ${i('ArrowRight')}</a></div></div></section>
     ${topupView(s)}

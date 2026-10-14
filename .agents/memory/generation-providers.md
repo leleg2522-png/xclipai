@@ -26,3 +26,9 @@ The user wants a public video-model category showing “Wan 3.0 Uncensored”; i
 **Why:** The user specified the public model label and provider privacy, then requested 480p and 30 seconds, correcting the model version to “wan3,0”. When told the documentation did not confirm the Uncensored variant, the user stated “sudah gw tes dan benar”.
 
 **How to apply:** Use the requested public model name and category without provider branding, accepting the user's report that they tested and confirmed it. Do not describe that report as an independent agent test or official documentation confirmation. Verify the actual model identifier and parameter options before wiring the adapter; the user's confirmation does not supply an API contract or a moderation-toggle parameter.
+
+Flora's prose guides and search snippets can lag its generated API reference.
+
+**Why:** Documentation research found the generations guide claiming webhooks were unavailable, while the generated endpoint reference documented signed callbacks and read-only quotes.
+
+**How to apply:** Prefer the current generated reference for endpoint contracts and the authenticated model catalog for actual account capabilities. Do not infer a missing capability solely from older prose or cached search snippets.

@@ -148,6 +148,7 @@ function browserHarness() {
     if (path === '/api/subscription/status') data = { hasSubscription: false };
     if (path === '/api/subscription/plans') data = { plans: [{ id: 1, name: '1 Hari', price_idr: 30000, duration_days: 1 }] };
     if (path === '/api/payments/my') data = { payments };
+    if (path === '/api/developer/models') data = { models: [{ id: 'wan-3.0-uncensored', status: 'available' }] };
     if (path === '/api/payments/submit') {
       payments = [{ package: '1 Hari', amount: 30000, status: 'pending' }];
       data = { success: true, message: 'Menunggu verifikasi' };
@@ -213,7 +214,7 @@ test('top up submits proof and remains pending, not an invented balance increase
   assert.equal(h.controller.state.payments[0].status, 'pending');
 });
 
-test('revoked state has no create button and docs preserve the existing contract', () => {
+test('revoked state has no create button and docs describe the Wan API contract', () => {
   const { portalView, curlExample } = loadViews();
   const h = browserHarness();
   const s = h.controller.state;
@@ -224,11 +225,17 @@ test('revoked state has no create button and docs preserve the existing contract
   assert.ok(html.includes('VIDEO · UNCENSORED'));
   assert.ok(html.includes('href="#model"'));
   assert.ok(!/generator|Ke generator|Buka generator/i.test(html));
-  assert.ok(html.includes('Segera tersedia'));
+  assert.ok(html.includes('Belum tersedia'));
   assert.ok(!/flora|picsart|freepik/i.test(html));
   assert.ok(html.includes('API key telah dinonaktifkan'));
   assert.ok(!html.includes('id="key-form"'));
   assert.ok(!html.includes('hidden</code>'));
-  assert.ok(curlExample('generate').includes('gambar_base64_atau_data_uri'));
+  assert.ok(curlExample('generate').includes('"model": "wan-3.0-uncensored"'));
+  assert.ok(curlExample('generate').includes('"duration": 30'));
+  assert.ok(curlExample('generate').includes('"resolution": "480p"'));
+  assert.ok(curlExample('generate').includes('Idempotency-Key'));
+  s.models = [{ id: 'wan-3.0-uncensored', status: 'available' }];
+  assert.ok(portalView(s).includes('Tersedia'));
+  assert.ok(portalView(s).includes('480p'));
   assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
 });

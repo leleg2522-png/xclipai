@@ -1792,9 +1792,13 @@ app.post('/api/webhook/freepik', async (req, res) => {
     
     // Verify task exists in our database before processing
     const taskCheck = await pool.query(
-      'SELECT id FROM video_generation_tasks WHERE task_id = $1',
+      'SELECT id, model FROM video_generation_tasks WHERE task_id = $1',
       [taskId]
     );
+    // This legacy callback must never mutate jobs from a different integration.
+    if (taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored')) {
+      return res.status(200).json({ received: false });
+    }
     
     // Check if task is in vidgen3_tasks
     const vidgen3TaskCheck = await pool.query(
@@ -3905,6 +3909,7 @@ async function resumePendingTaskPolling() {
         );
         
         for (const row of result.rows) {
+          if (row.model === 'wan-3.0-uncensored') continue; // Reconciled by the dedicated API poll route.
           let apiKey = null;
           const isMotionTask = (row.model || '').startsWith('motion-');
 
@@ -4105,6 +4110,17 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
   
   return { key: keys[keyIndex], keyIndex };
 }
+
+const wanProvider = require('./server/wan-provider').createWanProvider(pool);
+app.use(require('./server/wan-routes')({
+  pool, provider: wanProvider, validateKey: validateXclipApiKey,
+  cooldownMs: RATE_LIMIT_CONFIG.videogen.cooldownMs,
+  dailyQuota: RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey,
+  saveImage: async (image, req) => {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return (await saveBase64ToFile(image, 'image', baseUrl)).publicUrl;
+  }
+}));
 
 app.post('/api/videogen/proxy', async (req, res) => {
   try {
@@ -5423,6 +5439,10 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
 
     const task = taskResult.rows[0];
     let videoUrl = task.video_url;
+
+    if (task.model === 'wan-3.0-uncensored') {
+      return await streamVideo(req, res, videoUrl);
+    }
 
     const cached = videoRefreshCache.get(taskId);
     if (cached) videoUrl = cached.url;
