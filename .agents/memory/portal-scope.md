@@ -38,3 +38,9 @@ Include a Top up menu in the developer portal and use KlikQRIS for payments.
 **Why:** The user explicitly requested “tambahkan juga menu top up”, then said “payment nya ganti pake klikqris.com kan ada tuh di DB”.
 
 **How to apply:** Keep top up accessible after login and use the user's selected KlikQRIS payment provider rather than substituting another provider. Preserve existing payment records. The gateway change does not specify new prices or a separate API balance; do not treat prototype copy as a confirmed billing policy or silently change the commercial model.
+
+The existing KlikQRIS merchant account uses PG KlikQRIS, not MY PG.
+
+**Why:** The user explicitly confirmed “PG KlikQRIS” when asked which mode their account already uses.
+
+**How to apply:** Maintain the PG flow unless the user changes their merchant setup. Replit configuration does not automatically update the external Railway service's Variables or deployed source.
