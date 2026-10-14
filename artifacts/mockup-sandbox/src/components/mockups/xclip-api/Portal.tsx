@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Activity,
   ArrowDownRight,
@@ -17,10 +17,13 @@ import {
   EyeOff,
   KeyRound,
   LockKeyhole,
+  LogIn,
+  Mail,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Terminal,
+  UserPlus,
   Video,
   X,
 } from "lucide-react";
@@ -57,6 +60,16 @@ function IconMark() {
 }
 
 export function Portal() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authConfirmPassword, setAuthConfirmPassword] = useState("");
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [apiKey, setApiKey] = useState<ApiKey | null>(null);
   const [keySpent, setKeySpent] = useState(false);
   const [keyVisible, setKeyVisible] = useState(false);
@@ -103,6 +116,218 @@ export function Portal() {
 
   const activeCurl = docTab === "generate" ? generateCurl : statusCurl;
 
+  const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = authEmail.trim().toLowerCase();
+    if (!email || !authPassword) {
+      setAuthError("Isi email dan kata sandi untuk melanjutkan.");
+      return;
+    }
+    if (!validEmail(email)) {
+      setAuthError("Masukkan alamat email dengan format yang benar.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError("Kata sandi harus berisi minimal 6 karakter.");
+      return;
+    }
+    if (registeredEmail && email !== registeredEmail) {
+      setAuthError("Untuk demo ini, lanjutkan dengan email yang baru didaftarkan.");
+      return;
+    }
+    setAuthError("");
+    setAuthPassword("");
+    setAuthConfirmPassword("");
+    setAuthNotice("");
+    setIsAuthenticated(true);
+  };
+
+  const handleRegister = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = authEmail.trim().toLowerCase();
+    if (!authName.trim()) {
+      setAuthError("Masukkan nama developer.");
+      return;
+    }
+    if (!validEmail(email)) {
+      setAuthError("Masukkan alamat email dengan format yang benar.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError("Kata sandi harus berisi minimal 6 karakter.");
+      return;
+    }
+    if (authPassword !== authConfirmPassword) {
+      setAuthError("Konfirmasi kata sandi belum cocok.");
+      return;
+    }
+    setRegisteredEmail(email);
+    setAuthEmail(email);
+    setAuthPassword("");
+    setAuthConfirmPassword("");
+    setShowAuthPassword(false);
+    setAuthError("");
+    setAuthNotice("Pendaftaran demo selesai. Masuk kembali untuk melanjutkan ke portal.");
+    setAuthMode("login");
+  };
+
+  const switchAuthMode = (mode: "register" | "login") => {
+    setAuthMode(mode);
+    setAuthPassword("");
+    setAuthConfirmPassword("");
+    setAuthError("");
+    setAuthNotice("");
+    setShowAuthPassword(false);
+  };
+
+  if (!isAuthenticated) {
+    const registering = authMode === "register";
+    return (
+      <div className="xp-portal xp-auth-screen">
+        <header className="xp-topbar xp-auth-topbar">
+          <a className="xp-brand" href="#login" aria-label="Xclip Developer Portal">
+            <IconMark />
+            <span className="xp-brand-name">xclip<span> / developers</span></span>
+          </a>
+          <span className="xp-auth-topnote"><LockKeyhole size={13} /> RUANG DEVELOPER XCLIP</span>
+        </header>
+
+        <div className="xp-auth-demo-banner">
+          <span className="xp-demo-pip" />
+          <strong>PRATINJAU</strong>
+          <span>Pendaftaran dan login hanya simulasi lokal; tidak membuat akun di Railway.</span>
+        </div>
+
+        <main className="xp-auth-main" id="login">
+          <section className="xp-auth-story">
+            <div className="xp-auth-kicker"><span /> PORTAL DEVELOPER</div>
+            <h1>{registering ? <>API video,<br /><em>dimulai dari sini.</em></> : <>Selamat<br /><em>datang kembali.</em></>}</h1>
+            <p>{registering ? "Daftarkan akun developer terlebih dahulu, lalu masuk untuk mengelola API key, membaca quickstart, dan memeriksa akses." : "Masuk dengan akun Xclip Anda untuk membuka menu developer dan mengelola integrasi."}</p>
+            <div className="xp-auth-promise">
+              <span className="xp-auth-promise-icon"><ShieldCheck size={17} /></span>
+              <span><strong>Akses terpusat</strong><small>{registering ? "Daftar dahulu sebelum masuk." : "Kredensial tidak disimpan dalam demo."}</small></span>
+            </div>
+          </section>
+
+          <section className="xp-login-card" aria-labelledby="xp-login-title">
+            <div className="xp-login-icon">{registering ? <UserPlus size={20} /> : <KeyRound size={20} />}</div>
+            <span className="xp-login-kicker">{registering ? "AKUN DEVELOPER BARU" : "AKUN XCLIP"}</span>
+            <h2 id="xp-login-title">{registering ? "Daftar developer" : "Masuk ke portal"}</h2>
+            <p className="xp-login-intro">{registering ? "Buat akses demo sebelum melihat menu API." : "Gunakan akun Xclip terdaftar untuk membuka portal."}</p>
+
+            <form className="xp-login-form" onSubmit={registering ? handleRegister : handleLogin} noValidate>
+              {registering && (
+                <>
+                  <label htmlFor="xp-signup-name">Nama developer</label>
+                  <div className="xp-login-input-wrap">
+                    <UserPlus size={16} aria-hidden="true" />
+                    <input
+                      id="xp-signup-name"
+                      type="text"
+                      name="name"
+                      autoComplete="name"
+                      placeholder="Nama Anda"
+                      value={authName}
+                      onChange={event => { setAuthName(event.target.value); setAuthError(""); }}
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              <label className={registering ? "xp-auth-secondary-label" : ""} htmlFor="xp-login-email">Email</label>
+              <div className="xp-login-input-wrap">
+                <Mail size={16} aria-hidden="true" />
+                <input
+                  id="xp-login-email"
+                  type="email"
+                  name="email"
+                  autoComplete={registering ? "email" : "username"}
+                  placeholder="nama@email.com"
+                  value={authEmail}
+                  onChange={event => { setAuthEmail(event.target.value); setAuthError(""); }}
+                  required
+                />
+              </div>
+
+              <div className={`xp-password-label-row ${registering ? "xp-auth-register-password-row" : ""}`}>
+                <label htmlFor="xp-login-password">Kata sandi</label>
+                <span>Minimal 6 karakter</span>
+              </div>
+              <div className="xp-login-input-wrap">
+                <LockKeyhole size={16} aria-hidden="true" />
+                <input
+                  id="xp-login-password"
+                  type={showAuthPassword ? "text" : "password"}
+                  name="password"
+                  autoComplete={registering ? "new-password" : "current-password"}
+                  placeholder="Masukkan kata sandi"
+                  value={authPassword}
+                  onChange={event => { setAuthPassword(event.target.value); setAuthError(""); }}
+                  required
+                  minLength={6}
+                />
+                <button
+                  className="xp-password-toggle"
+                  type="button"
+                  onClick={() => setShowAuthPassword(value => !value)}
+                  aria-label={showAuthPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+                >
+                  {showAuthPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {registering && (
+                <>
+                  <label className="xp-confirm-label" htmlFor="xp-confirm-password">Konfirmasi kata sandi</label>
+                  <div className="xp-login-input-wrap">
+                    <LockKeyhole size={16} aria-hidden="true" />
+                    <input
+                      id="xp-confirm-password"
+                      type={showAuthPassword ? "text" : "password"}
+                      name="confirm-password"
+                      autoComplete="new-password"
+                      placeholder="Ulangi kata sandi"
+                      value={authConfirmPassword}
+                      onChange={event => { setAuthConfirmPassword(event.target.value); setAuthError(""); }}
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                </>
+              )}
+
+              {authNotice && <div className="xp-login-notice" role="status"><Check size={15} />{authNotice}</div>}
+              {authError && <div className="xp-login-error" role="alert"><CircleHelp size={15} />{authError}</div>}
+
+              <button className="xp-login-submit" type="submit">
+                {registering ? "Daftar demo" : "Masuk ke portal"} {registering ? <UserPlus size={16} /> : <LogIn size={16} />}
+              </button>
+            </form>
+
+            <div className="xp-login-foot">
+              <LockKeyhole size={13} />
+              <span>Kata sandi hanya digunakan di sesi pratinjau ini; tidak dikirim atau disimpan.</span>
+            </div>
+            <div className="xp-auth-switch">
+              <span>{registering ? "Sudah punya akun?" : "Developer baru?"}</span>
+              <button type="button" onClick={() => switchAuthMode(registering ? "login" : "register")}>
+                {registering ? "Masuk" : "Daftar dulu"}
+              </button>
+            </div>
+          </section>
+        </main>
+
+        <footer className="xp-auth-footer">
+          <a className="xp-footer-brand" href="#login"><IconMark /> xclip</a>
+          <span>PORTAL DEVELOPER · PRATINJAU LOGIN</span>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="xp-portal">
       <header className="xp-topbar">
@@ -117,6 +342,9 @@ export function Portal() {
         <a className="xp-generator-link" href="#generator" onClick={() => setNotice("Tautan generator aplikasi ditampilkan sebagai prototipe.")}>
           <ArrowLeft size={15} /> Ke generator <ExternalLink size={13} />
         </a>
+        <button className="xp-signout" onClick={() => { setIsAuthenticated(false); setAuthPassword(""); setAuthError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
+          Keluar
+        </button>
       </header>
 
       <div className="xp-demo-banner">
