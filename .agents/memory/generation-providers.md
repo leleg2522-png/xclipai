@@ -21,8 +21,8 @@ Provider identity must remain internal: developer users should see Xclip, not Pi
 
 **How to apply:** Keep names, pool/configuration details, upstream error payloads, and provider media domains out of the public interface. Merely hiding credential values is insufficient; preserve this boundary when adding adapters and diagnostic views.
 
-The user wants a public video-model category showing “Wan 3.0 Uncensored”; its intended internal provider is Flora AI, which must not be named to developer users.
+The user wants a public video-model category showing “Wan 3.0 Uncensored”; its intended internal provider is Flora AI, which must not be named to developer users. The requested generation configuration is Wan 3.0, 480p, 30 seconds.
 
-**Why:** The user specified the model and explicitly said not to mention Flora AI.
+**Why:** The user specified the public model label and provider privacy, then requested 480p and 30 seconds, correcting the model version to “wan3,0”.
 
-**How to apply:** Use the requested public model name and category without provider branding. Verify the provider's actual model identifier and integration contract before making it callable or claiming availability.
+**How to apply:** Use the requested public model name and category without provider branding. Verify the provider's actual model identifier and parameter options through its authenticated catalog before making it callable. The requested “Uncensored” label is not proof of an officially supported unmoderated variant.
