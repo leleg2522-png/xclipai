@@ -1,4 +1,12 @@
 node_modules
+**/node_modules
+.env
+.env.*
+.agents
+artifacts/mockup-sandbox
+freepik_keys.txt
+railway_import.sql
+generated-artifacts
 attached_assets
 .local
 .git

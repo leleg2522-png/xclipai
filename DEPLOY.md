@@ -79,6 +79,22 @@ These files are already configured:
 
 ## Troubleshooting
 
+### npm "Exit handler never called!" / missing Express
+The Docker build uses Node 22 and pinned npm 10.9.2, then installs production
+dependencies with `npm ci --omit=dev`. The image build checks every declared
+dependency before and after copying application files. Missing Express or any
+other required module now fails the build rather than producing a broken image.
+
+The workspace lockfile can contain Replit-only registry URLs. The Docker build
+normalizes those URLs to the public npm registry while preserving package
+versions and integrity hashes. This normalization happens inside the image;
+the Replit-managed workspace lockfile is left unchanged.
+
+Make sure the updated Dockerfile, package.json, package-lock.json, and scripts/
+are included in the Railway build source. If Railway deploys a GitHub branch,
+push these changes to that branch before redeploying; redeploying the old source
+alone will not apply this fix. Verify `/api/health` after the new build.
+
 ### FFmpeg not found
 FFmpeg is auto-installed via `nixpacks.toml`. If issues persist, Railway's nixpacks builder includes FFmpeg by default.
 

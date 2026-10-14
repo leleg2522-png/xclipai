@@ -1,3 +1,4 @@
 - [Portal scope](portal-scope.md) — Xclip redesign is limited to the API portal; preserve the existing generators.
 - [Generation providers](generation-providers.md) — Picsart/Flora configuration stays internal; developer users should only see Xclip.
 - [Sandbox runtime](sandbox-runtime.md) — Node 18 imports can leave the mockup sandbox missing native optional dependencies.
+- [Production package portability](production-package-portability.md) — External builds need portable lockfile URLs, preserving vetted versions and integrity.
