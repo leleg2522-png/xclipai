@@ -125,7 +125,7 @@ function loadViews() {
   return vm.runInNewContext(source + '\n({authView,portalView,curlExample});', { icons, Intl, Date });
 }
 
-function browserHarness() {
+function browserHarness(overrides = {}) {
   const views = loadViews();
   const handlers = {};
   const root = {
@@ -165,6 +165,7 @@ function browserHarness() {
   const controller = vm.runInNewContext(source + '\n({start,state,render,isBusy:()=>busy});', {
     ...views, document: { getElementById(id) { return id === 'developer-app' ? root : null; } },
     navigator: {}, fetch: fakeFetch, AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
+    ...overrides,
   });
   const submit = (id, values) => handlers.submit({ preventDefault() {}, target: { id, values } });
   const click = action => handlers.click({ target: { closest() { return { dataset: { action } }; } } });
@@ -174,6 +175,54 @@ function browserHarness() {
   };
   return { controller, root, calls, submit, click, settle };
 }
+
+test('network failures display actionable preview help, not an incorrect-password claim', async () => {
+  const h = browserHarness({
+    fetch: async () => { throw new TypeError('Failed to fetch'); },
+    console: { warn() {} },
+  });
+  await h.controller.start();
+  assert.ok(h.root.innerHTML.includes('Tidak dapat terhubung ke server'));
+  assert.ok(h.root.innerHTML.includes('tab baru'));
+  assert.equal(h.controller.state.user, null);
+});
+
+test('legacy worker is released with one guarded reload before authentication requests', async () => {
+  const entries = new Map();
+  let reloads = 0;
+  let unregisters = 0;
+  const h = browserHarness({
+    URL, navigator: { serviceWorker: {
+      controller: { scriptURL: 'https://app.example.test/sw.js' },
+      async getRegistrations() { return [{
+        active: { scriptURL: 'https://app.example.test/sw.js' },
+        async unregister() { unregisters++; return true; },
+      }]; },
+    } },
+    sessionStorage: {
+      getItem(key) { return entries.get(key); },
+      setItem(key, value) { entries.set(key, value); },
+      removeItem(key) { entries.delete(key); },
+    },
+    location: { reload() { reloads++; } },
+  });
+  await h.controller.start();
+  assert.equal(reloads, 1);
+  assert.equal(unregisters, 1);
+  assert.equal(h.calls.length, 0);
+  await h.controller.start();
+  assert.equal(reloads, 1);
+  assert.equal(h.calls[0].path, '/api/auth/me');
+});
+
+test('non-JSON gateway errors are handled without exposing server HTML', async () => {
+  const h = browserHarness({
+    fetch: async () => ({ ok: false, status: 502, async json() { throw new SyntaxError('private gateway HTML'); } }),
+  });
+  await h.controller.start();
+  assert.ok(h.root.innerHTML.includes('HTTP 502'));
+  assert.ok(!h.root.innerHTML.includes('private gateway HTML'));
+});
 
 test('signup -> login -> portal -> logout uses real endpoints and escapes account data', async () => {
   const h = browserHarness();

@@ -17,7 +17,12 @@ async function api(path, options = {}) {
     const response = await fetch(path, {
       credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal,
     });
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(`Respons server tidak dapat dibaca (HTTP ${response.status}). Muat ulang Preview atau buka di tab baru.`);
+    }
     if (!response.ok) {
       if (response.status === 401 && state.user) {
         state.user = null;
@@ -29,6 +34,10 @@ async function api(path, options = {}) {
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('Server terlalu lama merespons. Coba lagi.');
+    if (error.name === 'TypeError') {
+      console.warn('Xclip: koneksi API gagal.', { method: options.method || 'GET', path });
+      throw new Error('Tidak dapat terhubung ke server. Muat ulang Preview atau buka Preview di tab baru, lalu coba lagi.');
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -203,8 +212,11 @@ root.addEventListener('click', event => {
 });
 
 async function retireLegacyFrontend() {
+  let controlledByLegacy = false;
   try {
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      const controller = navigator.serviceWorker.controller;
+      controlledByLegacy = !!controller && new URL(controller.scriptURL).pathname === '/sw.js';
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.filter(registration =>
         [registration.active, registration.waiting, registration.installing].some(worker =>
@@ -223,10 +235,26 @@ async function retireLegacyFrontend() {
   } catch {
     console.warn('Cache UI lama belum dapat dibersihkan oleh browser.');
   }
+  return controlledByLegacy;
 }
 
 async function start() {
-  await retireLegacyFrontend();
+  const controlledByLegacy = await retireLegacyFrontend();
+  // Unregistering a worker does not release its current page. Navigate once
+  // before sending login requests, while guarding against a reload loop.
+  if (typeof sessionStorage !== 'undefined' && typeof location !== 'undefined') {
+    try {
+      const marker = 'xclip-legacy-worker-reload';
+      if (controlledByLegacy && !sessionStorage.getItem(marker)) {
+        sessionStorage.setItem(marker, '1');
+        location.reload();
+        return;
+      }
+      if (!controlledByLegacy) sessionStorage.removeItem(marker);
+    } catch {
+      console.warn('Preview perlu dimuat ulang secara manual untuk melepas service worker lama.');
+    }
+  }
   try {
     const { user } = await api('/api/auth/me');
     state.user = user;
