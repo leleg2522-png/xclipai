@@ -33,8 +33,8 @@ Users who forget their password should register a new account instead of using p
 
 **How to apply:** Do not add Telegram login or password recovery for this request. Keep existing-account login for users who know their password. New registration is not permission to overwrite an existing identity, delete old accounts, or transfer balances, subscriptions, or API keys.
 
-Include a Top up menu in the developer portal.
+Include a Top up menu in the developer portal and use KlikQRIS for payments.
 
-**Why:** The user explicitly requested “tambahkan juga menu top up”.
+**Why:** The user explicitly requested “tambahkan juga menu top up”, then said “payment nya ganti pake klikqris.com kan ada tuh di DB”.
 
-**How to apply:** Keep top up accessible after login. The user has not yet specified payment methods, amounts, or a separate API balance; do not treat prototype copy as a confirmed billing policy.
+**How to apply:** Keep top up accessible after login and use the user's selected KlikQRIS payment provider rather than substituting another provider. Preserve existing payment records. The gateway change does not specify new prices or a separate API balance; do not treat prototype copy as a confirmed billing policy or silently change the commercial model.
