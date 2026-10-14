@@ -250,6 +250,27 @@ export function Portal() {
             <div className="xp-access-divider" />
             <div className="xp-access-side"><span><Check size={14} /> Tidak ada harga API terpisah</span><span><Check size={14} /> Tidak ada kuota baru di portal ini</span><a href="#generator" onClick={() => setNotice("Aksi ke generator Xclip — tautan aplikasi dalam prototipe.")}>Lihat akun di Xclip <ArrowUpRight size={14} /></a></div>
           </div>
+          <aside
+            role="note"
+            aria-label="Catatan konfigurasi provider"
+            style={{
+              marginTop: 14,
+              padding: "16px 18px",
+              border: "1px solid rgba(37, 94, 73, 0.18)",
+              borderRadius: 13,
+              background: "rgba(37, 94, 73, 0.055)",
+            }}
+          >
+            <div style={{ marginBottom: 5, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "#526b5e" }}>
+              KONFIGURASI PROVIDER · BELUM DIVERIFIKASI
+            </div>
+            <h3 style={{ margin: "0 0 5px", fontSize: 15, fontWeight: 650, color: "#202a25" }}>
+              Generasi dikelola oleh Xclip
+            </h3>
+            <p style={{ maxWidth: 820, margin: 0, fontSize: 13, lineHeight: 1.6, color: "#5c6c63" }}>
+              Menurut informasi dari Anda, generasi memakai akun Picsart dan key Flora AI. Konfigurasi ini belum diverifikasi terhadap Railway. Key provider tidak ditampilkan di portal; aplikasi pihak ketiga cukup memakai API key Xclip.
+            </p>
+          </aside>
         </section>
 
         <section className="xp-bottom-cta" id="generator">

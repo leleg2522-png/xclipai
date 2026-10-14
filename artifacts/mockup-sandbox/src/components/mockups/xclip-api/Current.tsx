@@ -58,6 +58,12 @@ function renderOriginalModal() {
           <code class="code-block">X-Xclip-Key: xclip_xxxxx...</code>
           <p style="margin-top: 8px;">Endpoint: POST /api/videogen/proxy</p>
         </div>
+
+        <div style="margin-top: 18px; padding: 14px 16px; border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 12px; background: rgba(16, 185, 129, 0.07);">
+          <div style="margin-bottom: 6px; color: #a1a1aa; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Provider dikelola Xclip</div>
+          <strong style="color: #fff;">Picsart + Flora AI</strong>
+          <p style="margin: 6px 0 0; color: #a1a1aa; font-size: 12px; line-height: 1.55;">Sesuai konfigurasi yang Anda sebutkan. Key provider tidak ditampilkan di sini; integrasi pihak ketiga hanya memerlukan API key Xclip di header <code>X-Xclip-Key</code>.</p>
+        </div>
       </div>
     </div>
   `;

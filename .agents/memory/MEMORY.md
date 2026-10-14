@@ -1,2 +1,3 @@
 - [Portal scope](portal-scope.md) — Xclip redesign is limited to the API portal; preserve the existing generators.
+- [Generation providers](generation-providers.md) — User specifies Picsart accounts and Flora AI keys stored in Railway for generation.
 - [Sandbox runtime](sandbox-runtime.md) — Node 18 imports can leave the mockup sandbox missing native optional dependencies.
