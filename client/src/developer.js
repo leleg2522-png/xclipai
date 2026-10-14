@@ -5,12 +5,15 @@ const state = {
   user: null, authMode: 'login', authDraft: { username: '', email: '' },
   overview: null, subscription: null, plans: [], payments: [], selectedPlan: '',
   models: [], modelError: '',
+  paymentConfig: null, checkout: null, checkoutError: '', paymentAttempt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
   docTab: 'generate', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
 };
 let busy = false;
+let paymentTimer;
 
 async function api(path, options = {}) {
+  const requestUserId = state.user?.id;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
@@ -24,7 +27,7 @@ async function api(path, options = {}) {
       throw new Error(`Respons server tidak dapat dibaca (HTTP ${response.status}). Muat ulang Preview atau buka di tab baru.`);
     }
     if (!response.ok) {
-      if (response.status === 401 && state.user) {
+      if (response.status === 401 && state.user && state.user.id === requestUserId) {
         state.user = null;
         state.overview = null;
         state.keyVisible = false;
@@ -55,6 +58,11 @@ function render() {
     const submit = document.querySelector('#payment-form button[type=submit]');
     if (submit) submit.disabled = true;
   });
+  clearTimeout(paymentTimer);
+  if (state.user && state.checkout?.status === 'pending') {
+    paymentTimer = setTimeout(() => checkPayment(true), 15000);
+    paymentTimer?.unref?.();
+  }
 }
 
 async function loadData() {
@@ -63,6 +71,8 @@ async function loadData() {
   state.modelError = '';
   // Do not replace failed data with fake zeros or an invented balance.
   state.overview = null;
+  state.paymentConfig = state.checkout = null;
+  state.checkoutError = '';
   await Promise.all([
     api('/api/developer/overview').then(data => { state.overview = data; }),
     api('/api/developer/models').then(data => {
@@ -79,7 +89,37 @@ async function loadData() {
     }).catch(error => { state.plans = []; state.topupError = error.message; }),
     api('/api/payments/my').then(data => { state.payments = data.payments; })
       .catch(error => { state.payments = []; state.historyError = error.message; }),
+    api('/api/payments/klikqris/config').then(data => { state.paymentConfig = data; })
+      .catch(error => { state.checkoutError = error.message; }),
+    api('/api/payments/klikqris/current').then(data => {
+      state.checkout = data.invoice;
+      if (data.invoice && ['paid', 'expired', 'failed'].includes(data.invoice.status)) state.paymentAttempt = null;
+    }).catch(error => { state.checkoutError = error.message; }),
   ]);
+}
+
+async function checkPayment(automatic = false) {
+  const invoiceId = state.checkout?.id, userId = state.user?.id;
+  if (!invoiceId || !userId) return;
+  if (automatic && busy) { render(); return; }
+  state.checkoutError = '';
+  try {
+    const { invoice } = await api(`/api/payments/klikqris/${encodeURIComponent(invoiceId)}`);
+    if (state.user?.id !== userId || state.checkout?.id !== invoiceId) return;
+    state.checkout = invoice;
+    if (['paid', 'expired', 'failed'].includes(invoice.status)) {
+      await loadData();
+      if (state.user?.id !== userId) return;
+      state.notice = invoice.status === 'paid'
+        ? state.paymentConfig?.sandbox ? 'Simulasi pembayaran berhasil. Langganan nyata tidak diubah.'
+          : 'Pembayaran dikonfirmasi. Langganan Xclip sudah diperpanjang.'
+        : invoice.status === 'expired' ? 'Tagihan kedaluwarsa. Buat QRIS baru jika ingin melanjutkan.' : 'Tagihan gagal.';
+    }
+  } catch (error) {
+    if (state.user?.id === userId) state.checkoutError = error.message;
+  } finally {
+    if (state.user?.id === userId) render();
+  }
 }
 
 async function perform(work) {
@@ -132,15 +172,26 @@ root.addEventListener('submit', event => {
     });
   } else if (form.id === 'payment-form') {
     perform(async () => {
-      const file = data.get('proof');
-      if (!file || !file.size) throw new Error('Pilih bukti pembayaran.');
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        throw new Error('Bukti harus berupa gambar JPG, PNG, atau WebP.');
+      const planId = String(data.get('planId') || state.selectedPlan);
+      if (!state.paymentConfig?.available || state.checkoutError) throw new Error('Pembayaran belum siap. Perbarui data terlebih dahulu.');
+      if (!state.paymentAttempt || state.paymentAttempt.planId !== planId) {
+        state.paymentAttempt = { planId, key: typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID() : `web_${Date.now()}_${Math.random().toString(36).slice(2)}` };
       }
-      if (file.size > 5 * 1024 * 1024) throw new Error('Bukti maksimal 5 MB.');
-      const result = await api('/api/payments/submit', { method: 'POST', body: data });
-      await loadData();
-      state.notice = result.message || 'Bukti terkirim. Menunggu verifikasi admin.';
+      let result;
+      try {
+        result = await api('/api/payments/klikqris/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': state.paymentAttempt.key },
+          body: JSON.stringify({ planId }),
+        });
+      } finally {
+        // Recover the persisted invoice even if the browser missed the POST response.
+        await loadData();
+      }
+      state.checkout = result.invoice;
+      state.notice = result.invoice.status === 'pending'
+        ? 'QRIS siap. Bayar sesuai nominal akhir yang ditampilkan; status diperiksa otomatis.'
+        : 'Tagihan sudah tercatat. Periksa status sebelum melakukan pembayaran.';
     });
   }
 });
@@ -181,10 +232,13 @@ root.addEventListener('click', event => {
   } else {
     perform(async () => {
       if (action === 'refresh') await loadData();
+      if (action === 'payment-check') await checkPayment();
       if (action === 'logout') {
         await post('/api/auth/logout', {});
         state.user = state.overview = state.subscription = null;
         state.payments = state.plans = [];
+        state.checkout = state.paymentConfig = state.paymentAttempt = null;
+        state.checkoutError = '';
         state.keyVisible = state.confirmRevoke = state.renaming = false;
         state.authMode = 'login';
         state.notice = 'Anda sudah keluar.';

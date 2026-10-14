@@ -162,7 +162,7 @@ async function routeFixture(t, opts = {}) {
   app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
   app.use(wanRoutes({ pool, provider, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
-      room_id: opts.noSubscription ? null : 1, is_admin: false },
+      room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } }));
   app.post('/api/videogen/proxy', (_req, res) => res.json({ legacy: true }));
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -188,6 +188,12 @@ test('catalog requires authentication and only returns the public Xclip projecti
   assert.equal(r.data.models[0].defaultDuration, 30);
   assert.ok(!/flora|provider|keyId|run_|workspace|prj_|fake_secret/i.test(JSON.stringify(r)));
   assert.equal(h.stats.starts, 0);
+});
+
+test('paid API subscribers can use the Wan pool without a legacy generator room', async t => {
+  const h = await routeFixture(t, { noSubscription: true, activeSubscription: true });
+  assert.equal((await h.generate()).status, 202);
+  assert.equal(h.stats.starts, 1);
 });
 
 test('parallel idempotent requests create and charge only once; changed body conflicts', async t => {

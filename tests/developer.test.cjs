@@ -134,6 +134,7 @@ function browserHarness(overrides = {}) {
   };
   const calls = [];
   let payments = [];
+  let invoice = null;
   const fakeFetch = async (path, options = {}) => {
     calls.push({ path, options });
     let data;
@@ -148,10 +149,20 @@ function browserHarness(overrides = {}) {
     if (path === '/api/subscription/status') data = { hasSubscription: false };
     if (path === '/api/subscription/plans') data = { plans: [{ id: 1, name: '1 Hari', price_idr: 30000, duration_days: 1 }] };
     if (path === '/api/payments/my') data = { payments };
+    if (path === '/api/payments/klikqris/config') data = { available: true, sandbox: false };
+    if (path === '/api/payments/klikqris/current') data = { invoice };
     if (path === '/api/developer/models') data = { models: [{ id: 'wan-3.0-uncensored', status: 'available' }] };
-    if (path === '/api/payments/submit') {
-      payments = [{ package: '1 Hari', amount: 30000, status: 'pending' }];
-      data = { success: true, message: 'Menunggu verifikasi' };
+    if (path === '/api/payments/klikqris/create') {
+      invoice = { id: 'xq_test', provider: 'klikqris', package: '1 Hari', amount: 30000,
+        total_amount: 30021, status: 'pending', qr_url: '/api/payments/klikqris/xq_test/qr',
+        expires_at: '2030-01-01T00:00:00Z' };
+      payments = [invoice];
+      data = { success: true, invoice };
+    }
+    if (path === '/api/payments/klikqris/xq_test') {
+      invoice = { ...invoice, status: 'paid', qr_url: null };
+      payments = [invoice];
+      data = { invoice };
     }
     assert.ok(data, `unexpected request ${path}`);
     return { ok: true, status: 200, async json() { return data; } };
@@ -253,17 +264,26 @@ test('signup -> login -> portal -> logout uses real endpoints and escapes accoun
   assert.equal(h.controller.state.overview, null);
 });
 
-test('top up submits proof and remains pending, not an invented balance increase', async () => {
+test('top up creates dynamic KlikQRIS and confirms server status without proof upload or invented balance', async () => {
   const h = browserHarness();
   await h.controller.start();
   h.controller.state.authMode = 'login';
   h.submit('auth-form', { email: 'dev@example.test', password: 'password123' });
   await h.settle();
-  h.submit('payment-form', { planId: '1', proof: { size: 10, type: 'image/png' } });
+  h.submit('payment-form', { planId: '1' });
   await h.settle();
-  assert.ok(h.calls.some(c => c.path === '/api/payments/submit'));
-  assert.ok(h.root.innerHTML.includes('Menunggu verifikasi pembayaran sebelumnya'));
+  const create = h.calls.find(c => c.path === '/api/payments/klikqris/create');
+  assert.ok(create);
+  assert.ok(create.options.headers['Idempotency-Key']);
+  assert.deepEqual(JSON.parse(create.options.body), { planId: '1' });
+  assert.ok(!h.root.innerHTML.includes('type="file"'));
+  assert.ok(h.root.innerHTML.includes('Masih ada tagihan aktif'));
+  assert.ok(h.root.innerHTML.includes('30.021'));
   assert.equal(h.controller.state.payments[0].status, 'pending');
+  h.click('payment-check');
+  await h.settle();
+  assert.equal(h.controller.state.checkout.status, 'paid');
+  assert.ok(h.root.innerHTML.includes('Pembayaran dikonfirmasi'));
 });
 
 test('revoked state has no create button and docs describe the Wan API contract', () => {

@@ -27,8 +27,8 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ## Key Features
 - Developer portal is the homepage `/`, with `/developer` retained as an alias. Legacy generator and admin UI files are removed; old entry points return 410. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
 - Backend generation and admin/payment APIs remain intact. There is currently no admin UI for approving Top up payments. The retirement service worker and portal startup remove legacy offline caches.
-- Portal API keys, request totals, subscription status, and QRIS payments use account data. Top up currently buys/renews access with proof uploaded for admin approval, not a separate wallet.
-- Railway contains Picsart/Flora configuration, but this imported backend has no adapters for them. Generation remains Freepik; do not claim integration is complete.
+- Portal API keys, request totals, subscription status, and QRIS payments use account data. Top up buys/renews access with dynamic KlikQRIS invoices and server-verified payment, not a separate wallet. New manual proof submissions are retired; old records and approval APIs remain available.
+- Railway's internal provider configuration is not shown to developer users. Wan generation uses the internal provider-pool adapter; legacy generation APIs remain intact.
 - AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API
 - AI Image Generation (X Image 2) via Freepik Nano Banana Pro API
 - Pool-based API key management for image generation (Freepik key pool)
@@ -59,6 +59,11 @@ The server runs on port 5000, serving both the API and static frontend files. On
 
 ## Portal verification
 Run `npm test`. Tests use fake sessions, provider responses, and database clients; they do not create Railway accounts, submit real payments, or perform paid generation.
+
+## KlikQRIS payments
+`server/klikqris-provider.js`, `klikqris-service.js`, and `klikqris-routes.js` implement dynamic QRIS. Credentials stay server-side in `KLIKQRIS_API_KEY` and `KLIKQRIS_MERCHANT_ID`. `KLIKQRIS_MODE` must be explicitly set to `pg`, `my_pg`, or `sandbox`; do not guess between the two merchant modes. Sandbox never grants real subscription time. Set `KLIKQRIS_CALLBACK_URL` to the actual published `/api/payments/klikqris/webhook` URL for per-invoice callbacks in PG mode. MY PG uses its dashboard webhook setting. When no callback URL is configured, server reconciliation polls every 30 seconds and the open portal checks its invoice every 15 seconds.
+
+Storage initialization adds `portal_qris_invoices` to the existing external Railway DB; it does not migrate/delete bot top ups or legacy payments. Prices/durations are snapshotted from active plans. One open invoice per user, stable idempotency keys, and no automatic create retry prevent duplicate billing. Webhooks compare the original private signature and independently fetch authenticated gateway status/order/amount. Invoice marking and subscription extension commit atomically, and repeated callbacks cannot extend twice. Only owner-scoped public invoice projections and authenticated QR images reach the browser; merchant credentials/signatures are never returned. Active API subscriptions permit Wan access without allocating a retired generator room.
 
 ## Existing account login
 The portal opens in login mode, with registration available for new users. `server/login.js` authenticates existing Railway `users` using their original bcrypt hashes and IDs, without account creation or password changes. Email lookup ignores casing and outer whitespace. Existing keys/subscriptions remain attached to the original user ID. Legacy passwordless accounts cannot use password login; linked Telegram authentication or verified email recovery requires a separate implementation, never an authentication bypass.

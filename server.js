@@ -3952,6 +3952,7 @@ async function validateXclipApiKey(apiKey) {
     // User has active subscription
     return {
       ...keyInfo,
+      has_subscription: true,
       room_id: subResult.rows[0].room_id,
       key_name_1: subResult.rows[0].key_name_1,
       key_name_2: subResult.rows[0].key_name_2,
@@ -6099,6 +6100,10 @@ app.get('/api/subscription/plans', async (req, res) => {
 });
 
 // ==================== QRIS PAYMENT API ====================
+
+const klikQrisProvider = require('./server/klikqris-provider').createKlikQrisProvider();
+const klikQrisPayments = require('./server/klikqris-service').createPaymentService(pool, klikQrisProvider);
+app.use(require('./server/klikqris-routes')({ service: klikQrisPayments, provider: klikQrisProvider, pool }));
 
 // Submit payment with proof
 app.post('/api/payments/submit', uploadPaymentProof.single('proof'), async (req, res) => {
@@ -15927,6 +15932,13 @@ app.listen(PORT, '0.0.0.0', () => {
   // Initialize database in background AFTER server is already listening
   initDatabase().then(async () => {
     console.log('[STARTUP] Database init completed');
+    try {
+      await klikQrisPayments.initialize();
+      console.log('[STARTUP] KlikQRIS payment storage ready');
+      setInterval(() => klikQrisPayments.reconcile(), 30000).unref();
+    } catch (error) {
+      console.error('[STARTUP] KlikQRIS payment storage unavailable:', error.code || error.name);
+    }
     try {
       initVpsProxy();
       console.log(`[STARTUP] Proxy initialized: ${isProxyConfigured() ? 'Decodo ready' : 'No proxy configured'}`);

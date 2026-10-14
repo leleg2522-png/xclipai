@@ -48,7 +48,8 @@ module.exports = function wanRoutes({ pool, provider, validateKey, saveImage, co
       const auth = await owner(req);
       if (!auth.key) throw new ServiceError(401, 'Gunakan header X-Xclip-Key untuk generasi.');
       const key = auth.key;
-      if (!key.room_id && !key.is_admin) throw new ServiceError(403, 'Langganan aktif diperlukan untuk generasi.');
+      // Wan uses its own internal provider pool, not a legacy generator room.
+      if (!key.has_subscription && !key.room_id && !key.is_admin) throw new ServiceError(403, 'Langganan aktif diperlukan untuk generasi.');
       userId = key.user_id;
       const input = validateInput(req.body);
       const idem = req.headers['idempotency-key'];

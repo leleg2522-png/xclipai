@@ -3,3 +3,4 @@
 - [Sandbox runtime](sandbox-runtime.md) — Node 18 imports can leave the mockup sandbox missing native optional dependencies.
 - [Production package portability](production-package-portability.md) — External builds need portable lockfile URLs, preserving vetted versions and integrity.
 - [Preview auth verification](preview-auth-verification.md) — HTTP health, browser connectivity, and authenticated session persistence require distinct verification.
+- [Browser testing runtime](browser-testing-runtime.md) — the documented testing subagent kind may be unavailable; verify critical UI without bypassing auth or mutating live data.
