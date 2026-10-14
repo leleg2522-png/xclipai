@@ -44,3 +44,9 @@ The existing KlikQRIS merchant account uses PG KlikQRIS, not MY PG.
 **Why:** The user explicitly confirmed “PG KlikQRIS” when asked which mode their account already uses.
 
 **How to apply:** Maintain the PG flow unless the user changes their merchant setup. Replit configuration does not automatically update the external Railway service's Variables or deployed source.
+
+The KlikQRIS merchant is also used by the user's other bots.
+
+**Why:** The user said the merchant is shared with their other bots and asked how to prevent transactions from mixing.
+
+**How to apply:** Preserve other bots' payment routing and the merchant's global webhook. Use application-specific order identifiers, owned invoice records, and PG per-invoice callbacks for the portal. Do not assume a shared merchant provides separate financial balances, or that another bot safely filters callbacks without checking its code.
