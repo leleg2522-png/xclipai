@@ -23,9 +23,9 @@ The user approved removing the entire old UI, including its admin panel, rather 
 
 New developers must register first, then log in before accessing the developer portal menus. Existing registered users can log in directly.
 
-**Why:** The user explicitly said “harus login dulu sebelum mulai ke menu” and “jadi dev harus daftar dulu”.
+**Why:** The user explicitly said “harus login dulu sebelum mulai ke menu” and “jadi dev harus daftar dulu”, then emphasized that previously registered accounts in the database must be able to log in.
 
-**How to apply:** Make registration the initial flow for new developers and gate portal menus behind authentication. Local prototype transitions do not constitute real account registration or backend access control.
+**How to apply:** Offer login directly for existing accounts and registration for genuinely new developers. Reuse existing Railway accounts and passwords; do not require old users to register again or create a separate developer identity. Gate portal menus behind authentication. Local prototype transitions do not constitute real account registration or backend access control.
 
 Include a Top up menu in the developer portal.
 

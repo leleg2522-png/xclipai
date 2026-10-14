@@ -178,6 +178,9 @@ function browserHarness() {
 test('signup -> login -> portal -> logout uses real endpoints and escapes account data', async () => {
   const h = browserHarness();
   await h.controller.start();
+  assert.ok(h.root.innerHTML.includes('Masuk ke portal'));
+  assert.ok(h.root.innerHTML.includes('tidak perlu daftar ulang'));
+  h.click('switch-auth');
   assert.ok(h.root.innerHTML.includes('Daftar developer'));
   assert.ok(!h.root.innerHTML.includes('id="topup"'));
   h.submit('auth-form', { username: 'developer', email: 'dev@example.test', password: 'password123', confirm: 'wrong' });

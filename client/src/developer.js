@@ -2,7 +2,7 @@ import { authView, portalView, curlExample } from './developer-views.js';
 
 const root = document.getElementById('developer-app');
 const state = {
-  user: null, authMode: 'register', authDraft: { username: '', email: '' },
+  user: null, authMode: 'login', authDraft: { username: '', email: '' },
   overview: null, subscription: null, plans: [], payments: [], selectedPlan: '',
   models: [], modelError: '',
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',

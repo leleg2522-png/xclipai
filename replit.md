@@ -60,6 +60,9 @@ The server runs on port 5000, serving both the API and static frontend files. On
 ## Portal verification
 Run `npm test`. Tests use fake sessions, provider responses, and database clients; they do not create Railway accounts, submit real payments, or perform paid generation.
 
+## Existing account login
+The portal opens in login mode, with registration available for new users. `server/login.js` authenticates existing Railway `users` using their original bcrypt hashes and IDs, without account creation or password changes. Email lookup ignores casing and outer whitespace. Existing keys/subscriptions remain attached to the original user ID. Legacy passwordless accounts cannot use password login; linked Telegram authentication or verified email recovery requires a separate implementation, never an authentication bypass.
+
 ## Internal provider privacy
 Developer overview returns only account-scoped key and request information. Video results use protected Xclip media paths; streams are served through Xclip without upstream redirects. Media responses allow only video content and standard range headers. API callers must send `X-Xclip-Key` when retrieving media; browser playback uses the existing session. Streaming increases application bandwidth compared with direct CDN redirects.
 

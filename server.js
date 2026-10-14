@@ -2201,61 +2201,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    console.log('Login attempt for:', email);
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email dan password diperlukan' });
-    }
-    
-    const result = await pool.query(
-      'SELECT id, username, email, password_hash, freepik_api_key FROM users WHERE email = $1',
-      [email]
-    );
-    
-    if (result.rows.length === 0) {
-      console.log('User not found:', email);
-      return res.status(401).json({ error: 'Email atau password salah' });
-    }
-    
-    const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    
-    if (!validPassword) {
-      console.log('Invalid password for:', email);
-      return res.status(401).json({ error: 'Email atau password salah' });
-    }
-    
-    await new Promise((resolve, reject) => {
-      req.session.regenerate(error => error ? reject(error) : resolve());
-    });
-    req.session.userId = user.id;
-    
-    req.session.save((err) => {
-      if (err) {
-        console.error('Session save error:', err);
-        return res.status(500).json({ error: 'Login gagal - session error' });
-      }
-      
-      console.log('Login successful');
-      res.json({ 
-        success: true, 
-        user: { 
-          id: user.id, 
-          username: user.username, 
-          email: user.email,
-          hasApiKey: !!user.freepik_api_key
-        }
-      });
-    });
-    
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login gagal' });
-  }
-});
+app.post('/api/auth/login', require('./server/login')(pool));
 
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy((err) => {

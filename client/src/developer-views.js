@@ -25,12 +25,12 @@ export function authView(s) {
         <div class="xp-login-icon">${i(registering ? 'UserPlus' : 'KeyRound')}</div>
         <span class="xp-login-kicker">${registering ? 'AKUN DEVELOPER BARU' : 'AKUN XCLIP'}</span>
         <h2 id="auth-title">${registering ? 'Daftar developer' : 'Masuk ke portal'}</h2>
-        <p class="xp-login-intro">${registering ? 'Buat akun, lalu login sebelum membuka menu API.' : 'Gunakan akun Xclip terdaftar untuk membuka portal.'}</p>
+        <p class="xp-login-intro">${registering ? 'Buat akun, lalu login sebelum membuka menu API.' : 'Sudah pernah daftar? Masuk dengan email dan password akun Xclip lama Anda—tidak perlu daftar ulang.'}</p>
         <form id="auth-form" class="xp-login-form">
           ${registering ? `<label for="auth-username">Username developer</label><div class="xp-login-input-wrap">${i('User')}<input id="auth-username" name="username" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username" placeholder="developer_xclip" value="${e(s.authDraft.username)}"></div>` : ''}
           <label class="xp-auth-secondary-label" for="auth-email">Email</label><div class="xp-login-input-wrap">${i('Mail')}<input id="auth-email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="nama@perusahaan.com" value="${e(s.authDraft.email)}"></div>
-          <div class="xp-password-label-row"><label for="auth-password">Kata sandi</label><span>Minimal 6 karakter</span></div>
-          <div class="xp-login-input-wrap">${i('LockKeyhole')}<input id="auth-password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="${registering ? 'new-password' : 'current-password'}"><button class="xp-password-toggle" type="button" data-action="toggle-password" aria-label="Tampilkan kata sandi">${i('Eye')}</button></div>
+          <div class="xp-password-label-row"><label for="auth-password">Kata sandi</label><span>${registering ? 'Minimal 6 karakter' : 'Password akun Anda'}</span></div>
+          <div class="xp-login-input-wrap">${i('LockKeyhole')}<input id="auth-password" name="password" type="password" required minlength="${registering ? '6' : '1'}" maxlength="128" autocomplete="${registering ? 'new-password' : 'current-password'}"><button class="xp-password-toggle" type="button" data-action="toggle-password" aria-label="Tampilkan kata sandi">${i('Eye')}</button></div>
           ${registering ? `<label class="xp-confirm-label" for="auth-confirm">Konfirmasi kata sandi</label><div class="xp-login-input-wrap">${i('LockKeyhole')}<input id="auth-confirm" name="confirm" type="password" required minlength="6" maxlength="128" autocomplete="new-password"></div>` : ''}
           ${s.error ? `<div class="xp-login-error" role="alert">${i('CircleHelp')}${e(s.error)}</div>` : ''}
           ${s.notice ? `<div class="xp-login-notice" role="status">${i('Check')}${e(s.notice)}</div>` : ''}
