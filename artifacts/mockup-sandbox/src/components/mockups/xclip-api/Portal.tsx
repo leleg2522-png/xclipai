@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import {
   Activity,
   ArrowDownRight,
-  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   BookOpen,
@@ -12,7 +11,6 @@ import {
   Clipboard,
   Code2,
   Copy,
-  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
@@ -342,9 +340,6 @@ export function Portal() {
           <a href="#akses">Akses & paket</a>
           <a href="#topup">Top up</a>
         </nav>
-        <a className="xp-generator-link" href="#generator" onClick={() => setNotice("Tautan generator aplikasi ditampilkan sebagai prototipe.")}>
-          <ArrowLeft size={15} /> Ke generator <ExternalLink size={13} />
-        </a>
         <button className="xp-signout" onClick={() => { setIsAuthenticated(false); setAuthPassword(""); setAuthError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
           Keluar
         </button>
@@ -369,7 +364,7 @@ export function Portal() {
           <div className="xp-intro-row">
             <div>
               <h1>Mulai bangun<br /><em>dengan video AI.</em></h1>
-              <p className="xp-lede">Satu kunci, dua endpoint, dan langkah pertama yang jelas. Hubungkan Xclip ke aplikasi Anda tanpa perlu menelusuri generator.</p>
+              <p className="xp-lede">Satu kunci, dua endpoint, dan langkah pertama yang jelas. Hubungkan layanan API Xclip langsung ke aplikasi Anda.</p>
             </div>
             <div className="xp-intro-aside">
               <div className="xp-aside-icon"><Code2 size={19} /></div>
@@ -499,7 +494,7 @@ export function Portal() {
           <div className="xp-access-card">
             <div className="xp-access-main"><div className="xp-access-icon"><Sparkles size={18} /></div><div><span className="xp-access-label">PAKET SAAT INI</span><h3>Langganan Xclip Anda</h3><p>Akses API mengikuti paket dan status langganan yang sudah terhubung ke akun Xclip Anda.</p></div></div>
             <div className="xp-access-divider" />
-            <div className="xp-access-side"><span><Check size={14} /> Tidak ada harga API terpisah</span><span><Check size={14} /> Tidak ada kuota baru di portal ini</span><a href="#generator" onClick={() => setNotice("Aksi ke generator Xclip — tautan aplikasi dalam prototipe.")}>Lihat akun di Xclip <ArrowUpRight size={14} /></a></div>
+            <div className="xp-access-side"><span><Check size={14} /> Tidak ada harga API terpisah</span><span><Check size={14} /> Tidak ada kuota baru di portal ini</span><a href="#topup">Lihat paket & Top up <ArrowUpRight size={14} /></a></div>
           </div>
           <aside
             role="note"
@@ -544,12 +539,6 @@ export function Portal() {
               </button>
             </div>
           </div>
-        </section>
-
-        <section className="xp-bottom-cta" id="generator">
-          <div className="xp-cta-mark"><Video size={20} /></div>
-          <div><span>SUDAH SIAP MENCOBA?</span><h2>Lanjutkan di generator Xclip.</h2><p>Gunakan aplikasi generator seperti biasa. Portal ini hanya untuk integrasi developer.</p></div>
-          <button onClick={() => setNotice("Generator Xclip terbuka melalui tautan prototipe.")}>Buka generator <ArrowRight size={16} /></button>
         </section>
 
         <footer className="xp-footer"><a className="xp-footer-brand" href="#home"><IconMark /> xclip</a><span>PORTAL DEVELOPER · PROTOTIPE</span><button onClick={() => setNotice("Bantuan dokumentasi belum terhubung pada prototipe.")}><CircleHelp size={14} /> Bantuan</button></footer>

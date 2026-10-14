@@ -15990,7 +15990,7 @@ app.post('/api/ads-studio/projects/:projectId/merge', async (req, res) => {
 
 // Catch-all route - MUST be last after all API routes
 app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'index.html'));
+  res.status(404).json({ error: 'Halaman tidak ditemukan' });
 });
 
 // Start listening IMMEDIATELY so Railway health check passes

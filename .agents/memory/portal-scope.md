@@ -15,6 +15,12 @@ The API portal should be the default homepage; retaining the old generator at `/
 
 **How to apply:** Treat the portal as the main entry point and do not reintroduce public generator navigation.
 
+The user approved removing the entire old UI, including its admin panel, rather than extracting and preserving that panel.
+
+**Why:** The user selected “Hapus seluruh UI lama, termasuk panel admin” after being told that its payment-approval interface would no longer be available.
+
+**How to apply:** Do not preserve or restore the legacy admin frontend. A new administration interface is separate work, not part of the old-UI removal. Backend APIs and stored data are not included in this deletion.
+
 New developers must register first, then log in before accessing the developer portal menus. Existing registered users can log in directly.
 
 **Why:** The user explicitly said “harus login dulu sebelum mulai ke menu” and “jadi dev harus daftar dulu”.

@@ -75,7 +75,7 @@
 .xp-auth-switch button:hover { color: var(--xp-green-deep); text-decoration: underline; text-underline-offset: 3px; }
 .xp-auth-footer { width: min(1020px, calc(100% - 52px)); min-height: 61px; display: flex; align-items: center; justify-content: space-between; margin: auto auto 0; border-top: 1px solid var(--xp-line); color: #89958e; }
 .xp-auth-footer > span { font: 8px "DM Mono", monospace; letter-spacing: .08em; }
-.xp-signout { margin-left: 18px; padding: 7px 11px; color: #60746a; background: transparent; border: 1px solid var(--xp-line-dark); border-radius: 4px; font-size: 10px; }
+.xp-signout { margin-left: auto; padding: 7px 11px; color: #60746a; background: transparent; border: 1px solid var(--xp-line-dark); border-radius: 4px; font-size: 10px; }
 .xp-signout:hover { color: var(--xp-green-deep); background: #f1f6f1; }
 .xp-topbar {
   height: 68px; padding: 0 max(5.6vw, 26px); display: flex; align-items: center; justify-content: space-between;

@@ -8,9 +8,9 @@ module.exports = function pageRoutes() {
     res.set('Cache-Control', 'no-store');
     res.sendFile(path.join(client, 'developer.html'));
   });
-  router.get('/generator', (_req, res) => {
+  router.get(['/generator', '/admin', '/index.html', '/manifest.json', '/src/main.js', '/styles/main.css'], (_req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.sendFile(path.join(client, 'index.html'));
+    res.status(410).type('text/plain').send('UI lama telah dihapus. Buka portal API di /.');
   });
   return router;
 };

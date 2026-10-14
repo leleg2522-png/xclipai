@@ -16,8 +16,8 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ```
 ├── server.js          # Main Express server (~15k lines) - API + static file serving
 ├── client/            # Frontend assets
-│   ├── index.html     # Main entry point
-│   ├── src/main.js    # Frontend JS logic (~14k lines)
+│   ├── developer.html # Portal entry point
+│   ├── src/developer.js # Developer portal behavior
 │   └── styles/        # CSS
 ├── droplet-proxy/     # DigitalOcean droplet proxy sub-project (optional)
 ├── database_backup.sql # Original DB schema reference
@@ -25,7 +25,8 @@ Xclip is an AI-powered platform for video clipping, image generation, and chat b
 ```
 
 ## Key Features
-- Developer portal is the homepage `/`, with `/developer` retained as an alias. The existing generator is served at `/generator`. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
+- Developer portal is the homepage `/`, with `/developer` retained as an alias. Legacy generator and admin UI files are removed; old entry points return 410. Uses existing session authentication and Railway storage; new portal accounts register first and then log in.
+- Backend generation and admin/payment APIs remain intact. There is currently no admin UI for approving Top up payments. The retirement service worker and portal startup remove legacy offline caches.
 - Portal API keys, request totals, subscription status, and QRIS payments use account data. Top up currently buys/renews access with proof uploaded for admin approval, not a separate wallet.
 - Railway contains Picsart/Flora configuration, but this imported backend has no adapters for them. Generation remains Freepik; do not claim integration is complete.
 - AI Video Generation (Text-to-Video, Image-to-Video) via Freepik API

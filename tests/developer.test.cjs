@@ -223,7 +223,7 @@ test('revoked state has no create button and docs preserve the existing contract
   assert.ok(html.includes('Wan 3.0 Uncensored'));
   assert.ok(html.includes('VIDEO · UNCENSORED'));
   assert.ok(html.includes('href="#model"'));
-  assert.equal((html.match(/href="\/generator"/g) || []).length, 2);
+  assert.ok(!/generator|Ke generator|Buka generator/i.test(html));
   assert.ok(html.includes('Segera tersedia'));
   assert.ok(!/flora|picsart|freepik/i.test(html));
   assert.ok(html.includes('API key telah dinonaktifkan'));

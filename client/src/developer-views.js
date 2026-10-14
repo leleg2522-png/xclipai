@@ -19,7 +19,7 @@ export function authView(s) {
         <div class="xp-auth-kicker"><span></span> PORTAL DEVELOPER</div>
         <h1>${registering ? 'API video,<br><em>dimulai dari sini.</em>' : 'Selamat<br><em>datang kembali.</em>'}</h1>
         <p>${registering ? 'Daftarkan akun developer terlebih dahulu, lalu masuk untuk mengelola API key, membaca quickstart, dan memeriksa akses.' : 'Masuk dengan akun Xclip Anda untuk membuka menu developer dan mengelola integrasi.'}</p>
-        <div class="xp-auth-promise"><span class="xp-auth-promise-icon">${i('ShieldCheck')}</span><span><strong>Akses terpusat</strong><small>Satu akun Xclip untuk portal dan generator.</small></span></div>
+        <div class="xp-auth-promise"><span class="xp-auth-promise-icon">${i('ShieldCheck')}</span><span><strong>Akses terpusat</strong><small>Satu akun untuk mengakses layanan API Xclip.</small></span></div>
       </section>
       <section class="xp-login-card" aria-labelledby="auth-title">
         <div class="xp-login-icon">${i(registering ? 'UserPlus' : 'KeyRound')}</div>
@@ -107,7 +107,7 @@ function topupView(s) {
 }
 
 export function portalView(s) {
-  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav><a class="xp-generator-link" href="/generator">${i('ArrowLeft')} Ke generator ${i('ExternalLink')}</a><button class="xp-signout" data-action="logout">Keluar</button></header>
+  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav><button class="xp-signout" data-action="logout">Keluar</button></header>
     <nav class="xp-mobile-menu" aria-label="Menu developer"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Akses & paket</a><a href="#topup">Top up</a></nav>
     ${s.error || s.notice ? `<div class="xp-alert" role="${s.error ? 'alert' : 'status'}">${e(s.error || s.notice)} <button data-action="dismiss" aria-label="Tutup pemberitahuan">×</button></div>` : ''}
     <main id="home" class="xp-main"><section class="xp-intro"><div class="xp-eyebrow"><span>PORTAL DEVELOPER</span><i></i> API VIDEO XCLIP</div><div class="xp-intro-row"><div><h1>Mulai bangun<br><em>dengan video AI.</em></h1><p class="xp-lede">Halo, ${e(s.user.username)}. Kelola integrasi Xclip melalui satu portal yang terhubung ke akun Anda.</p></div><div class="xp-intro-aside"><div class="xp-aside-icon">${i('Code2')}</div><span>DIRANCANG UNTUK INTEGRASI</span><p>Gunakan API key Xclip di server aplikasi Anda.</p><a href="#dokumentasi">Lihat quickstart ${i('ArrowDownRight')}</a></div></div><div class="xp-step-line"><span><b>01</b> Buat kunci</span><i></i><span><b>02</b> Kirim request</span><i></i><span><b>03</b> Cek status tugas</span></div></section>
@@ -117,6 +117,5 @@ export function portalView(s) {
     ${docsView(s)}
     <section class="xp-access-section" id="akses"><div class="xp-section-heading"><div><span class="xp-kicker">03 / AKSES</span><h2>Akses mengikuti akun Xclip</h2></div></div><div class="xp-access-card"><div class="xp-access-main"><div class="xp-access-icon">${i('ShieldCheck')}</div><div><span class="xp-access-label">LANGGANAN ANDA</span><h3>${s.subscriptionError ? 'Status belum tersedia' : s.subscription?.hasSubscription ? 'Langganan aktif' : 'Belum ada langganan aktif'}</h3><p>${s.subscriptionError ? e(s.subscriptionError) : s.subscription?.subscription?.expiredAt ? 'Berakhir: '+e(date(s.subscription.subscription.expiredAt)) : 'Lihat pilihan paket untuk mengaktifkan akses akun.'}</p></div></div><div class="xp-access-divider"></div><div class="xp-access-side"><a href="#topup">Lihat paket & Top up ${i('ArrowRight')}</a></div></div></section>
     ${topupView(s)}
-    <section class="xp-generator-cta" id="generator"><div class="xp-generator-cta-icon">${i('Video')}</div><div><span>APLIKASI XCLIP</span><h3>Lanjutkan di generator Xclip.</h3><p>Generator tetap tersedia seperti sebelumnya.</p></div><a class="xp-generator-cta-button" href="/generator">Buka generator ${i('ArrowRight')}</a></section>
     <footer class="xp-footer"><a class="xp-footer-brand" href="/">${mark} xclip</a><span>PORTAL DEVELOPER</span></footer></main></div>`;
 }

@@ -195,7 +195,31 @@ root.addEventListener('click', event => {
   render();
 });
 
+async function retireLegacyFrontend() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.filter(registration =>
+        [registration.active, registration.waiting, registration.installing].some(worker =>
+          worker && new URL(worker.scriptURL).pathname === '/sw.js'
+        )
+      ).map(registration => registration.unregister()));
+    }
+  } catch {
+    console.warn('Service worker lama belum dapat dibersihkan; muat ulang portal saat online.');
+  }
+  try {
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(key => /^xclip-v\d+$/.test(key)).map(key => caches.delete(key)));
+    }
+  } catch {
+    console.warn('Cache UI lama belum dapat dibersihkan oleh browser.');
+  }
+}
+
 async function start() {
+  await retireLegacyFrontend();
   try {
     const { user } = await api('/api/auth/me');
     state.user = user;
