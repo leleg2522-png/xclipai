@@ -1,0 +1,2 @@
+- [Portal scope](portal-scope.md) — Xclip redesign is limited to the API portal; preserve the existing generators.
+- [Sandbox runtime](sandbox-runtime.md) — Node 18 imports can leave the mockup sandbox missing native optional dependencies.
