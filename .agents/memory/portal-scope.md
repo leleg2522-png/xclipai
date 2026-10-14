@@ -37,7 +37,13 @@ Include a Top up menu in the developer portal and use KlikQRIS for payments.
 
 **Why:** The user explicitly requested “tambahkan juga menu top up”, then said “payment nya ganti pake klikqris.com kan ada tuh di DB”.
 
-**How to apply:** Keep top up accessible after login and use the user's selected KlikQRIS payment provider rather than substituting another provider. Preserve existing payment records. The gateway change does not specify new prices or a separate API balance; do not treat prototype copy as a confirmed billing policy or silently change the commercial model.
+**How to apply:** Keep top up accessible after login and use the user's selected KlikQRIS payment provider rather than substituting another provider. Preserve existing payment records. Follow the subsequently confirmed wallet requirement below; do not infer API usage prices from the former daily subscription prices.
+
+Portal top up must add API balance without an active-period limit, rather than purchase a daily subscription.
+
+**Why:** The user asked to remove durations such as “1 hari”, then explicitly selected “Saldo tanpa masa aktif” after being told the difference between changing billing and merely hiding duration text.
+
+**How to apply:** Use a non-expiring portal API wallet and charge it for API generation usage under a confirmed tariff. Keep the portal balance separate from other bots' balances. This choice does not authorize deleting historical subscriptions, transferring bot funds, or inventing usage prices.
 
 The existing KlikQRIS merchant account uses PG KlikQRIS, not MY PG.
 
