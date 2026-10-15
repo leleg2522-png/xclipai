@@ -14,7 +14,7 @@ const safeMoney = value => {
 function createApiWallet(pool) {
   let ready = false;
   const requireReady = () => {
-    if (!ready) throw new WalletError(503, 'Saldo API sedang disiapkan. Coba lagi nanti.');
+    if (!ready) throw new WalletError(503, 'Saldo API sedang disiapkan. Coba lagi nanti.', false, 'PAYMENT_INITIALIZING');
   };
   async function lock(client, userId) {
     requireReady();

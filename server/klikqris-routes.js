@@ -1,13 +1,16 @@
 const express = require('express');
+const { randomUUID } = require('node:crypto');
 const { PaymentError, sameSignature } = require('./klikqris-provider');
 const { publicInvoice } = require('./klikqris-service');
 
 function paymentRoutes({ service, provider, pool, wallet }) {
   const router = express.Router();
-  function failure(res, error) {
-    if (!(error instanceof PaymentError)) console.error('KlikQRIS request failed:', error.code || error.name);
+  function failure(res, error, reference) {
+    if (error.code === 'PAYMENT_INITIALIZING') res.set('Retry-After', '5');
     return res.status(error instanceof PaymentError ? error.status : 503).json({
       error: error instanceof PaymentError ? error.message : 'Layanan pembayaran sementara tidak tersedia.',
+      reference,
+      ...(error.code === 'PAYMENT_INITIALIZING' ? { code: 'PAYMENT_INITIALIZING' } : {}),
     });
   }
   function owner(req) {
@@ -15,8 +18,27 @@ function paymentRoutes({ service, provider, pool, wallet }) {
     return req.session.userId;
   }
   const route = fn => async (req, res) => {
+    const reference = randomUUID();
+    const start = Date.now();
     res.set('Cache-Control', 'private, no-store');
-    try { await fn(req, res); } catch (error) { failure(res, error); }
+    res.set('X-Payment-Request-Id', reference);
+    const log = (event, extra = {}) => console.log('[XCLIP_PAYMENT]', JSON.stringify({
+      time: new Date().toISOString(), event, reference, method: req.method, route: req.route.path,
+      ...extra,
+    }));
+    log('request_started');
+    try {
+      await fn(req, res);
+      log('request_completed', { status: res.statusCode, elapsedMs: Date.now() - start });
+    } catch (error) {
+      log('request_failed', {
+        status: error instanceof PaymentError ? error.status : 503,
+        code: typeof error.code === 'string' && /^[A-Z0-9_]{1,40}$/i.test(error.code) ? error.code : error.name,
+        message: error instanceof PaymentError ? error.message : 'Layanan pembayaran sementara tidak tersedia.',
+        elapsedMs: Date.now() - start,
+      });
+      failure(res, error, reference);
+    }
   };
   router.get('/api/developer/wallet', route(async (req, res) => {
     const userId = owner(req);
@@ -44,7 +66,12 @@ function paymentRoutes({ service, provider, pool, wallet }) {
   }));
   router.get('/api/payments/klikqris/:id', route(async (req, res) => {
     const row = await service.find(req.params.id, owner(req));
-    res.json({ invoice: publicInvoice(await service.synchronize(row)) });
+    if (['creating', 'uncertain'].includes(row.status) && (!row.signature || !row.total_amount)) {
+      throw new PaymentError(409, 'Tagihan belum dapat diverifikasi karena pembuatan QRIS belum terkonfirmasi. Jangan membuat ulang; hubungi admin Xclip.');
+    }
+    // Explicit checks must actually consult the gateway, not silently return
+    // the previous ten-second polling cache.
+    res.json({ invoice: publicInvoice(await service.synchronize({ ...row, last_checked_at: null })) });
   }));
   router.post('/api/payments/klikqris/webhook', route(async (req, res) => {
     const body = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;

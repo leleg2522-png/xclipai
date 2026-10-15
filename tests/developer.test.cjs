@@ -178,7 +178,7 @@ function browserHarness(overrides = {}) {
   }
   const source = fs.readFileSync('client/src/developer.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/\nstart\(\);\s*$/, '');
-  const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,checkPayment,isBusy:()=>busy});', {
+  const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,checkPayment,isBusy:()=>busy||state.paymentBusy});', {
     ...views, document: { querySelector() { return null; }, getElementById(id) { return id === 'developer-app' ? root : null; } },
     navigator: {}, fetch: interceptFetch ? (path, options) => interceptFetch(path, options, fakeFetch) : fakeFetch,
     AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
@@ -279,6 +279,113 @@ test('unchanged automatic payment polls do not redraw the portal or reload the Q
   await h.controller.checkPayment(true);
   assert.equal(writes,0);
   assert.equal(h.controller.state.checkout.status,'pending');
+});
+
+test('payment creation and checking remain usable while an unrelated account action is waiting', async () => {
+  let stall = false, release;
+  const h = browserHarness({ interceptFetch(path, options, next) {
+    if (stall && path === '/api/developer/overview') return new Promise(resolve => {
+      release = () => resolve(next(path, options));
+    });
+    return next(path, options);
+  } });
+  h.submit('auth-form', { email: 'dev@test.example', password: 'password' }); await h.settle();
+  stall = true;
+  h.click('refresh');
+  assert.equal(h.controller.state.actionBusy, true);
+  h.submit('payment-form', { amount: '100000' });
+  for (let i = 0; i < 20 && h.controller.state.paymentBusy; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.controller.state.checkout.status, 'pending');
+  assert.equal(h.controller.state.actionBusy, true);
+  h.click('payment-check');
+  for (let i = 0; i < 20 && h.controller.state.paymentBusy; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.controller.state.checkout.status, 'paid');
+  assert.equal(h.controller.state.paymentBusy, false);
+  release(); await h.settle();
+});
+
+test('payment refresh only reloads financial data, not the account or video providers', async () => {
+  const h = browserHarness();
+  h.submit('auth-form', { email: 'dev@test.example', password: 'password' }); await h.settle();
+  const start = h.calls.length;
+  h.click('payment-refresh'); await h.settle();
+  assert.deepEqual(h.calls.slice(start).map(call => call.path).sort(), [
+    '/api/developer/wallet', '/api/payments/klikqris/config',
+    '/api/payments/klikqris/current', '/api/payments/my',
+  ]);
+  assert.ok(h.root.innerHTML.includes('Data pembayaran berhasil diperbarui.'));
+});
+
+test('payment startup 503 recovers automatically with read-only requests, never a repeated QR create', async () => {
+  let ready = false, retry;
+  const h = browserHarness({
+    setTimeout(fn, delay) {
+      if (delay === 5000) { retry = fn; return { unref() {} }; }
+      return setTimeout(fn, delay);
+    },
+    interceptFetch(path, options, next) {
+      if (!ready && path === '/api/payments/klikqris/config') return Promise.resolve({
+        ok: false, status: 503, json: async () => ({
+          error: 'Layanan pembayaran sedang disiapkan.', code: 'PAYMENT_INITIALIZING',
+        }),
+      });
+      return next(path, options);
+    },
+  });
+  h.submit('auth-form', { email: 'dev@test.example', password: 'password' }); await h.settle();
+  assert.equal(loadViews().paymentButtonState(h.controller.state).disabled, true);
+  assert.ok(h.root.innerHTML.includes('memeriksa ulang otomatis'));
+  assert.equal(typeof retry, 'function');
+  const start = h.calls.length;
+  ready = true;
+  retry(); await h.settle();
+  assert.equal(loadViews().paymentButtonState(h.controller.state).disabled, false);
+  assert.ok(h.calls.slice(start).every(call => !call.options.method || call.options.method === 'GET'));
+  assert.ok(!h.calls.some(call => call.path === '/api/payments/klikqris/create'));
+});
+
+test('manual pending checks give visible confirmation and check failures do not poison readiness', async () => {
+  let fail = false, h;
+  h = browserHarness({ interceptFetch(path, options, next) {
+    if (path === '/api/payments/klikqris/xq_test') return Promise.resolve({
+      ok: !fail, status: fail ? 502 : 200,
+      json: async () => fail ? { error: 'Status belum dapat diperiksa.' }
+        : { invoice: structuredClone(h.controller.state.checkout) },
+    });
+    return next(path, options);
+  } });
+  h.submit('auth-form', { email: 'dev@test.example', password: 'password' }); await h.settle();
+  h.submit('payment-form', { amount: '100000' }); await h.settle();
+  h.click('payment-check'); await h.settle();
+  assert.ok(h.root.innerHTML.includes('Status berhasil diperiksa: belum ada pembayaran'));
+  fail = true;
+  h.click('payment-check'); await h.settle();
+  assert.equal(h.controller.state.paymentChecking, false);
+  assert.ok(h.root.innerHTML.includes('Status belum dapat diperiksa.'));
+  assert.equal(h.controller.state.checkoutError, '');
+  fail = false;
+  h.click('payment-check'); await h.settle();
+  assert.equal(h.controller.state.paymentStatusError, '');
+  assert.ok(h.root.innerHTML.includes('Status berhasil diperiksa: belum ada pembayaran'));
+});
+
+test('manual checks join an automatic check in progress rather than silently ignoring the click', async () => {
+  let release, h;
+  h = browserHarness({ interceptFetch(path, options, next) {
+    if (path === '/api/payments/klikqris/xq_test') return new Promise(resolve => {
+      release = () => resolve({ ok: true, status: 200, json: async () => ({
+        invoice: structuredClone(h.controller.state.checkout),
+      }) });
+    });
+    return next(path, options);
+  } });
+  h.submit('auth-form', { email: 'dev@test.example', password: 'password' }); await h.settle();
+  h.submit('payment-form', { amount: '100000' }); await h.settle();
+  const automatic = h.controller.checkPayment(true);
+  h.click('payment-check');
+  release(); await automatic; await h.settle();
+  assert.ok(h.root.innerHTML.includes('Status berhasil diperiksa: belum ada pembayaran'));
+  assert.equal(h.controller.state.paymentChecking, false);
 });
 
 test('a missed payment POST response recovers the invoice without reissuing the charge', async () => {

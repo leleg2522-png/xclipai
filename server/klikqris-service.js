@@ -18,7 +18,7 @@ function createPaymentService(pool, provider, wallet) {
   let ready = false, reconciling = false;
   const checks = new Map();
   function requireReady() {
-    if (!ready) throw new PaymentError(503, 'Layanan pembayaran sedang disiapkan. Coba lagi nanti.');
+    if (!ready) throw new PaymentError(503, 'Layanan pembayaran sedang disiapkan. Coba lagi nanti.', false, 'PAYMENT_INITIALIZING');
   }
   async function find(id, userId) {
     requireReady();

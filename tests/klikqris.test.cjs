@@ -371,3 +371,38 @@ test('routes enforce ownership, reject forged callbacks, and independently verif
     method: 'POST', headers: { 'x-test-user': '1' },
   })).status, 410);
 });
+
+test('explicit status checks bypass the poll cache and return traceable errors for unconfirmed invoices', async t => {
+  const h = fixture();
+  await h.service.initialize();
+  const row = await h.service.create(1, 100000, 'manual-check');
+  await h.service.synchronize(row);
+  assert.equal(h.state.statusCalls, 1);
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
+  app.use(paymentRoutes(h));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = { 'x-test-user': '1' };
+  const first = await fetch(`${base}/api/payments/klikqris/${row.id}`, { headers });
+  assert.equal(first.status, 200);
+  assert.equal(h.state.statusCalls, 2);
+  h.state.gatewayStatus = 'paid';
+  const second = await fetch(`${base}/api/payments/klikqris/${row.id}`, { headers });
+  assert.equal((await second.json()).invoice.status, 'paid');
+  assert.equal(h.state.balances.get(1), 100000);
+  await fetch(`${base}/api/payments/klikqris/${row.id}`, { headers });
+  assert.equal(h.state.balances.get(1), 100000);
+  const unconfirmed = await h.service.create(1, 100000, 'unconfirmed');
+  Object.assign(h.state.invoices.get(unconfirmed.id), { status: 'uncertain', signature: null, total_amount: null });
+  const response = await fetch(`${base}/api/payments/klikqris/${unconfirmed.id}`, { headers });
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.match(body.error, /belum dapat diverifikasi/);
+  assert.match(body.reference, /^[a-f0-9-]{36}$/);
+  assert.equal(response.headers.get('x-payment-request-id'), body.reference);
+  assert.ok(!/fake-original-signature|fake-merchant|fake-api-secret/.test(JSON.stringify(body)));
+});

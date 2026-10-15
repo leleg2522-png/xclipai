@@ -1,10 +1,11 @@
 const { timingSafeEqual } = require('node:crypto');
 
 class PaymentError extends Error {
-  constructor(status, message, definite = false) {
+  constructor(status, message, definite = false, code) {
     super(message);
     this.status = status;
     this.definite = definite;
+    if (code) this.code = code;
   }
 }
 function sameSignature(a, b) {

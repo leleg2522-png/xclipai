@@ -15938,19 +15938,17 @@ app.get('/{*splat}', (req, res) => {
 // Start listening IMMEDIATELY so Railway health check passes
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[STARTUP] Xclip server running on http://0.0.0.0:${PORT}`);
-  
+  require('./server/payment-startup').startPaymentStorage({
+    payments: klikQrisPayments, wallet: apiWallet,
+    onReady() {
+      setInterval(() => klikQrisPayments.reconcile(), 30000).unref();
+      setInterval(() => wanRouter.reconcile(), 30000).unref();
+    },
+  });
+
   // Initialize database in background AFTER server is already listening
   initDatabase().then(async () => {
     console.log('[STARTUP] Database init completed');
-    try {
-      await klikQrisPayments.initialize();
-      await apiWallet.initialize();
-      console.log('[STARTUP] KlikQRIS payment storage ready');
-      setInterval(() => klikQrisPayments.reconcile(), 30000).unref();
-      setInterval(() => wanRouter.reconcile(), 30000).unref();
-    } catch (error) {
-      console.error('[STARTUP] KlikQRIS payment storage unavailable:', error.code || error.name);
-    }
     try {
       initVpsProxy();
       console.log(`[STARTUP] Proxy initialized: ${isProxyConfigured() ? 'Decodo ready' : 'No proxy configured'}`);

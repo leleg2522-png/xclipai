@@ -7,6 +7,7 @@ const state = {
   models: [], modelError: '',
   paymentConfig: null, checkout: null, checkoutError: '', paymentAttempt: null,
   paymentCreating: false, paymentLoading: false,
+  paymentBusy: false, paymentChecking: false, paymentStatusError: '', paymentNotice: '',
   actionBusy: false,
   generationTasks: [], generationError: '', generationPage: 1, generationHasMore: false,
   generationLoading: false, generationUpdatedAt: null,
@@ -21,11 +22,19 @@ let generationInFlight = false;
 let generationRequestToken = 0;
 let modelRequestToken = 0;
 let paymentCheckInFlight = false;
+let paymentCheckPromise = null;
+let paymentDataToken = 0;
+let paymentReadyTimer, paymentReadyRetries = 0;
 
 function resetAccountData() {
+  clearTimeout(paymentReadyTimer);
+  paymentReadyRetries = 0;
+  paymentDataToken += 1;
   state.overview = state.subscription = state.wallet = null;
   state.checkout = state.paymentConfig = state.paymentAttempt = null;
   state.paymentCreating = state.paymentLoading = false;
+  state.paymentChecking = false;
+  state.paymentStatusError = state.paymentNotice = '';
   state.payments = [];
   state.walletError = state.historyError = state.checkoutError = '';
   state.models = [];
@@ -53,7 +62,10 @@ async function api(path, options = {}) {
         resetAccountData();
         state.keyVisible = false;
       }
-      throw new Error(data.error || `Request gagal (${response.status})`);
+      const reference = /^[-a-f0-9]{36}$/.test(data.reference || '') ? ` (Referensi: ${data.reference})` : '';
+      const error = new Error((data.error || `Request gagal (${response.status})`) + reference);
+      if (data.code === 'PAYMENT_INITIALIZING') error.code = data.code;
+      throw error;
     }
     return data;
   } catch (error) {
@@ -107,6 +119,13 @@ function updatePaymentButton() {
     status.textContent = view.reason;
     status.hidden = !view.reason;
   }
+  root.querySelectorAll('[data-action="payment-refresh"], [data-action="payment-check"]').forEach(control => {
+    const checking = control.dataset.action === 'payment-check' && state.paymentChecking;
+    control.disabled = state.paymentBusy || checking;
+    control.setAttribute('aria-busy', String(checking));
+    if (control.dataset.action === 'payment-check') control.textContent = checking
+      ? 'Memeriksa status…' : 'Cek status pembayaran';
+  });
 }
 
 function updateGenerationSection() {
@@ -179,7 +198,16 @@ async function loadGenerationHistory({ page = 1, append = false, poll = false } 
 
 async function loadPaymentData() {
   const userId = state.user?.id, epoch = generationEpoch;
-  const current = () => state.user?.id === userId && generationEpoch === epoch;
+  const token = ++paymentDataToken;
+  const current = () => state.user?.id === userId && generationEpoch === epoch && token === paymentDataToken;
+  clearTimeout(paymentReadyTimer);
+  let initializing = false;
+  const failed = (key, error) => {
+    if (!current()) return;
+    state[key] = error.message + (error.code === 'PAYMENT_INITIALIZING' && paymentReadyRetries < 6
+      ? ' Portal akan memeriksa ulang otomatis.' : '');
+    if (error.code === 'PAYMENT_INITIALIZING') initializing = true;
+  };
   state.walletError = state.historyError = state.checkoutError = '';
   state.paymentLoading = true;
   updatePaymentButton();
@@ -189,21 +217,28 @@ async function loadPaymentData() {
       if (!current()) return;
       if (!Number.isSafeInteger(data.balance) || !Number.isSafeInteger(data.reserved)) throw new Error('Data saldo tidak valid.');
       state.wallet = data;
-    }).catch(error => { if (current()) state.walletError = error.message; }),
+    }).catch(error => failed('walletError', error)),
     api('/api/payments/my').then(data => { if (current()) state.payments = data.payments; })
-      .catch(error => { if (current()) state.historyError = error.message; }),
+      .catch(error => failed('historyError', error)),
     api('/api/payments/klikqris/config').then(data => { if (current()) state.paymentConfig = data; })
-      .catch(error => { if (current()) state.checkoutError = error.message; }),
+      .catch(error => failed('checkoutError', error)),
     api('/api/payments/klikqris/current', { timeoutMs: 12000 }).then(data => {
       if (!current()) return;
       state.checkout = data.invoice;
       if (data.invoice && ['paid', 'expired', 'failed'].includes(data.invoice.status)) state.paymentAttempt = null;
-    }).catch(error => { if (current()) state.checkoutError = error.message; }),
+    }).catch(error => failed('checkoutError', error)),
   ]);
   } finally {
     if (current()) {
       state.paymentLoading = false;
       updatePaymentButton();
+      if (initializing && paymentReadyRetries < 6) {
+        paymentReadyRetries += 1;
+        paymentReadyTimer = setTimeout(() => {
+          if (current() && !state.paymentBusy) void performPayment(loadPaymentData);
+        }, 5000);
+        paymentReadyTimer?.unref?.();
+      } else if (!initializing) paymentReadyRetries = 0;
     }
   }
 }
@@ -242,21 +277,34 @@ async function loadData() {
     }).catch(error => {
       if (state.user?.id === userId && generationEpoch === epoch) state.subscriptionError = error.message;
     }),
-    loadPaymentData(),
+    state.paymentBusy ? Promise.resolve() : loadPaymentData(),
   ]);
 }
 
 async function checkPayment(automatic = false) {
   const invoiceId = state.checkout?.id, userId = state.user?.id, epoch = generationEpoch;
   if (!invoiceId || !userId) return;
-  if (paymentCheckInFlight || (automatic && busy)) { schedulePaymentCheck(); return; }
+  if (paymentCheckInFlight) {
+    await paymentCheckPromise;
+    if (!automatic && !state.paymentStatusError && state.user?.id === userId && generationEpoch === epoch) {
+      state.paymentNotice = paymentStatusMessage(state.checkout);
+      render();
+    }
+    return;
+  }
+  if (automatic && (state.paymentBusy || state.paymentLoading)) { schedulePaymentCheck(); return; }
   paymentCheckInFlight = true;
-  const previous = JSON.stringify(state.checkout), previousError = state.checkoutError;
-  state.checkoutError = '';
+  state.paymentChecking = true;
+  updatePaymentButton();
+  const previous = JSON.stringify(state.checkout), previousError = state.paymentStatusError;
+  state.paymentStatusError = '';
+  paymentCheckPromise = (async () => {
   try {
     const { invoice } = await api(`/api/payments/klikqris/${encodeURIComponent(invoiceId)}`);
     if (state.user?.id !== userId || generationEpoch !== epoch || state.checkout?.id !== invoiceId) return;
     state.checkout = invoice;
+    state.payments = state.payments.map(row => row.id === invoice.id ? invoice : row);
+    if (!automatic) state.paymentNotice = paymentStatusMessage(invoice);
     if (['paid', 'expired', 'failed'].includes(invoice.status)) {
       await loadPaymentData();
       if (state.user?.id !== userId || generationEpoch !== epoch) return;
@@ -267,21 +315,46 @@ async function checkPayment(automatic = false) {
         : invoice.status === 'expired' ? 'Tagihan kedaluwarsa. Buat QRIS baru jika ingin melanjutkan.' : 'Tagihan gagal.';
     }
   } catch (error) {
-    if (state.user?.id === userId && generationEpoch === epoch) state.checkoutError = error.message;
+    if (state.user?.id === userId && generationEpoch === epoch) state.paymentStatusError = error.message;
   } finally {
     paymentCheckInFlight = false;
+    state.paymentChecking = false;
     if (state.user?.id === userId && generationEpoch === epoch) {
-      if (!automatic || previous !== JSON.stringify(state.checkout) || previousError !== state.checkoutError) render();
+      updatePaymentButton();
+      if (!automatic || previous !== JSON.stringify(state.checkout) || previousError !== state.paymentStatusError) render();
       else schedulePaymentCheck();
     }
   }
+  })();
+  await paymentCheckPromise;
+}
+
+function paymentStatusMessage(invoice) {
+  return ({
+    pending: 'Status berhasil diperiksa: belum ada pembayaran yang terkonfirmasi. Jika sudah membayar, tunggu sebentar lalu periksa lagi.',
+    paid: 'Status berhasil diperiksa: pembayaran lunas.',
+    expired: 'Status berhasil diperiksa: tagihan kedaluwarsa. Buat QRIS baru; jangan bayar QRIS lama.',
+    failed: 'Status berhasil diperiksa: tagihan gagal. Anda dapat mencoba membuat QRIS baru.',
+    creating: 'Tagihan masih disiapkan. Jangan membuat ulang; hubungi admin jika status tidak berubah.',
+    uncertain: 'Pembuatan tagihan belum terkonfirmasi. Jangan membuat ulang; diperlukan pemeriksaan admin.',
+  })[invoice?.status] || 'Belum ada tagihan untuk diperiksa.';
+}
+
+async function performPayment(work) {
+  if (state.paymentBusy) return;
+  state.paymentBusy = true;
+  state.error = state.notice = '';
+  state.paymentStatusError = state.paymentNotice = '';
+  updatePaymentButton();
+  try { await work(); }
+  catch (error) { state.paymentStatusError = error.message || 'Pembayaran gagal diproses. Coba periksa kembali.'; }
+  finally { state.paymentBusy = false; render(); }
 }
 
 async function perform(work) {
   if (busy) return;
   busy = true;
   state.actionBusy = true;
-  root.querySelectorAll('button').forEach(button => { button.disabled = true; });
   updatePaymentButton();
   state.error = state.notice = '';
   try { await work(); }
@@ -291,8 +364,8 @@ async function perform(work) {
 
 root.addEventListener('submit', event => {
   event.preventDefault();
-  if (busy) return;
   const form = event.target;
+  if ((busy && form.id !== 'payment-form') || (form.id === 'payment-form' && state.paymentBusy)) return;
   const data = new FormData(form);
   if (form.id === 'auth-form') {
     const email = String(data.get('email')).trim().toLowerCase();
@@ -337,13 +410,17 @@ root.addEventListener('submit', event => {
       state.notice = 'Nama key diperbarui.';
     });
   } else if (form.id === 'payment-form') {
-    perform(async () => {
+    performPayment(async () => {
       const amount = Number(data.get('amount'));
       state.topupAmount = String(data.get('amount'));
       if (!state.wallet || !Number.isSafeInteger(amount) || amount < state.wallet.minimumTopup || amount > state.wallet.maximumTopup) {
         throw new Error('Nominal top up harus rupiah bulat sesuai batas yang ditampilkan.');
       }
       if (!state.paymentConfig?.available || state.checkoutError) throw new Error('Pembayaran belum siap. Perbarui data terlebih dahulu.');
+      // A slower account refresh must not overwrite the newly created invoice
+      // with the snapshot it fetched before this POST.
+      paymentDataToken += 1;
+      state.paymentLoading = false;
       if (!state.paymentAttempt || state.paymentAttempt.amount !== amount) {
         state.paymentAttempt = { amount, key: typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID() : `web_${Date.now()}_${Math.random().toString(36).slice(2)}` };
@@ -371,7 +448,8 @@ root.addEventListener('submit', event => {
       }
       state.checkout = result.invoice;
       state.payments = [result.invoice, ...state.payments.filter(invoice => invoice.id !== result.invoice.id)];
-      state.notice = result.invoice.status === 'pending'
+      if (['paid', 'expired', 'failed'].includes(result.invoice.status)) state.paymentAttempt = null;
+      state.paymentNotice = result.invoice.status === 'pending'
         ? 'QRIS siap. Bayar sesuai nominal akhir yang ditampilkan; status diperiksa otomatis.'
         : 'Tagihan sudah tercatat. Periksa status sebelum melakukan pembayaran.';
     });
@@ -384,8 +462,19 @@ root.addEventListener('change', event => {
 
 root.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
-  if (!button || (busy && !button.dataset.action.startsWith('generations-'))) return;
+  if (!button) return;
   const action = button.dataset.action;
+  if (action === 'payment-refresh' || action === 'payment-check') {
+    performPayment(async () => {
+      if (action === 'payment-check') await checkPayment();
+      else {
+        await loadPaymentData();
+        if (!state.checkoutError && !state.walletError) state.paymentNotice = 'Data pembayaran berhasil diperbarui.';
+      }
+    });
+    return;
+  }
+  if ((busy && !action.startsWith('generations-')) || (action === 'logout' && state.paymentBusy)) return;
   if (action === 'toggle-password') {
     const input = document.getElementById('auth-password');
     input.type = input.type === 'password' ? 'text' : 'password';
@@ -430,7 +519,6 @@ root.addEventListener('click', event => {
   } else {
     perform(async () => {
       if (action === 'refresh') await loadData();
-      if (action === 'payment-check') await checkPayment();
       if (action === 'logout') {
         await post('/api/auth/logout', {});
         generationEpoch += 1;

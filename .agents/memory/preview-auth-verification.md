@@ -14,3 +14,9 @@ Payment simulations do not prove that the user's signed-in payment screen or liv
 **Why:** The user continued reporting a stuck QR-creation button after successful fixture-based payment tests. A passing happy-path simulation did not identify the exact state in their browser.
 
 **How to apply:** Distinguish an actually pending request from a disabled button, inspect the visible readiness/error state, and state whether the real authenticated gateway flow was verified. Do not infer live payment success from simulated invoices or a public login screenshot.
+
+Treat payment readiness as separate from HTTP health and general database connectivity, especially during cold starts.
+
+**Why:** Real signed-in payment reads returned 503 while unrelated legacy initialization was running, leaving the portal unable to top up even after the process became healthy.
+
+**How to apply:** Exercise startup recovery as well as the already-running happy path. Keep retrying readiness reads bounded and read-only; never automatically resubmit QR creation to recover startup or connection failures.
