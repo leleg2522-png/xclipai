@@ -5,12 +5,11 @@ const { ServiceError, validateInput } = require('./wan-provider');
 const { checkedUrl } = require('./public-video');
 
 const API = 'https://api.picsart.com';
-const WORKFLOW = '/gw-v2/workflows/wan/v3/video';
 const unavailable = (reason = 'upstream_response_invalid') => Object.assign(
   new ServiceError(503, 'Layanan model sementara tidak tersedia. Coba lagi nanti.'), { diagnostic: { reason } });
 
 // Contract derived from the supplied capture. Never use captured cookies or tokens.
-function createPicsartWanProvider(pool, request = axios.request) {
+function createPicsartVideoProvider(pool, definition, request = axios.request) {
   const devices = new Map();
   let cached;
   async function credential(id) {
@@ -75,7 +74,7 @@ function createPicsartWanProvider(pool, request = axios.request) {
     for (const account of accounts) {
       try {
         const balance = await call(account, 'GET', '/guard/credits');
-        if (!Number.isFinite(balance.credits) || balance.credits < 60) {
+        if (!Number.isFinite(balance.credits) || balance.credits < definition.minimumCredits) {
           lastError = unavailable('upstream_insufficient_credits');
           continue;
         }
@@ -88,26 +87,22 @@ function createPicsartWanProvider(pool, request = axios.request) {
   async function prepare(raw) {
     const { image, ...fields } = raw;
     const input = validateInput({ ...fields, ...(image ? { image } : {}) });
-    if (input.model !== 'wan-3.0') throw new ServiceError(400, 'Model Xclip tidak dikenal.');
+    if (input.model !== definition.model) throw new ServiceError(400, 'Model Xclip tidak dikenal.');
     const ctx = await context();
     const account = (await credential(ctx.keyId))[0];
-    const params = {
-      model: 'wan3.0-video', resolution: '480P', ratio: input.aspectRatio,
-      duration: input.duration, audio: input.audio, enable_thinking: false, watermark: false,
-      prompt: input.prompt,
-    };
+    let imageUrl;
     if (input.image) {
       const [, extension, encoded] = input.image.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/);
       const form = new FormData();
       form.append('file', Buffer.from(encoded, 'base64'), { filename: `reference.${extension}`, contentType: `image/${extension}` });
       form.append('type', 'editing-temp');
       const image = await call(account, 'POST', '/v2/files', form, true);
-      const imageUrl = image.url;
+      imageUrl = image.url;
       try { checkedUrl(imageUrl); } catch { throw unavailable(); }
-      params.media = [{ type: 'reference_image', url: imageUrl }];
     }
+    const params = definition.params(input, imageUrl);
     // A quote is not a generation. Validate the actual requested combination before reserving money.
-    const quote = await call(account, 'POST', `${WORKFLOW}/options`, { params });
+    const quote = await call(account, 'POST', `${definition.workflow}/options`, { params });
     if (!Number.isFinite(quote.credits) || quote.credits <= 0 || quote.usageAmount !== 30 || quote.estimated !== false) throw unavailable();
     const balance = await call(account, 'GET', '/guard/credits');
     if (!Number.isFinite(balance.credits) || balance.credits < quote.credits) throw unavailable('upstream_insufficient_credits');
@@ -117,7 +112,7 @@ function createPicsartWanProvider(pool, request = axios.request) {
   }
   async function start(prepared) {
     const account = (await credential(prepared.keyId))[0];
-    const result = await call(account, 'POST', `${WORKFLOW}/submit`, prepared.body, false, true);
+    const result = await call(account, 'POST', `${definition.workflow}/submit`, prepared.body, false, true);
     if (typeof result.id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(result.id)) {
       const error = unavailable(); error.deliveryUncertain = true; throw error;
     }
@@ -127,13 +122,13 @@ function createPicsartWanProvider(pool, request = axios.request) {
   async function poll(meta) {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(meta?.runId || '')) throw unavailable();
     const account = (await credential(meta.keyId))[0];
-    const result = await call(account, 'GET', `${WORKFLOW}/${encodeURIComponent(meta.runId)}/result`);
+    const result = await call(account, 'GET', `${definition.workflow}/${encodeURIComponent(meta.runId)}/result`);
     const status = { ACCEPTED: 'pending', IN_PROGRESS: 'processing', COMPLETED: 'completed',
       FAILED: 'failed', CANCELED: 'failed', CANCELLED: 'failed' }[result.status];
     if (!status) throw unavailable(); // Unknown statuses are not proof of failure/refund.
     let videoUrl = null;
     if (status === 'completed') {
-      videoUrl = result.result?.url;
+      videoUrl = result.result?.[definition.resultField];
       try { checkedUrl(videoUrl); } catch { throw unavailable(); }
     }
     return { status, videoUrl,
@@ -143,4 +138,15 @@ function createPicsartWanProvider(pool, request = axios.request) {
   }
   return { context, prepare, start, poll, handlesImage: true };
 }
-module.exports = { createPicsartWanProvider };
+function createPicsartWanProvider(pool, request = axios.request) {
+  return createPicsartVideoProvider(pool, {
+    model: 'wan-3.0', workflow: '/gw-v2/workflows/wan/v3/video', minimumCredits: 60, resultField: 'url',
+    params: (input, imageUrl) => ({
+      model: 'wan3.0-video', resolution: '480P', ratio: input.aspectRatio,
+      duration: input.duration, audio: input.audio, enable_thinking: false, watermark: false,
+      prompt: input.prompt,
+      ...(imageUrl ? { media: [{ type: 'reference_image', url: imageUrl }] } : {}),
+    }),
+  }, request);
+}
+module.exports = { createPicsartWanProvider, createPicsartVideoProvider };

@@ -155,7 +155,8 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
   });
 
   router.post('/api/videogen/proxy', async (req, res, next) => {
-    if (!/^wan[-_\s]?3/i.test(String(req.body?.model || ''))) return next();
+    if (!isManagedVideoModel(req.body?.model) &&
+        !/^(?:wan[-_\s]?3|seedance[-_\s]?2)/i.test(String(req.body?.model || ''))) return next();
     res.set('Cache-Control', 'private, no-store');
     let client, locked = false, quotaKeyId = null, quotaNamespace;
     let userId,taskId,stage='authenticate';
@@ -210,14 +211,15 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
       await client.query('SELECT pg_advisory_lock($1, $2)', [quotaNamespace, prepared.keyId]);
       quotaKeyId = prepared.keyId;
       const usage = await client.query(
-        `SELECT COUNT(*)::int AS count FROM video_generation_tasks WHERE model = $1
+        `SELECT COUNT(*)::int AS count FROM video_generation_tasks WHERE model = ANY($1::text[])
          AND created_at >= date_trunc('day', NOW()) AND retry_data->>'keyId' = $2
-         AND (retry_data->>'delivery' = 'confirmed' OR status = 'pending')`, [input.model, String(prepared.keyId)]);
+         AND (retry_data->>'delivery' = 'confirmed' OR status = 'pending')`,
+        [input.model === MODEL ? [MODEL] : MODEL_IDS.filter(id => id !== MODEL), String(prepared.keyId)]);
       if (usage.rows[0].count >= dailyQuota) throw new ServiceError(429, 'Kuota layanan hari ini telah tercapai.');
       // Honor already-purchased active legacy access; new top ups never extend it.
       const billable = input.model !== MODEL || !key.has_subscription;
       if (billable && !wallet) throw new ServiceError(503, 'Saldo API belum tersedia.');
-      const meta = { source: input.model === MODEL ? 'wan' : 'picsart-wan', keyId: prepared.keyId, fingerprint, delivery: 'unconfirmed',
+      const meta = { source: input.model === MODEL ? 'wan' : 'picsart-video', keyId: prepared.keyId, fingerprint, delivery: 'unconfirmed',
         billing: billable ? 'wallet' : 'legacy', ...(billable ? { price } : {}) };
       let row;
       stage='reserve_and_save_task';

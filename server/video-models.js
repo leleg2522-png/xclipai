@@ -9,6 +9,10 @@ const MODELS = Object.freeze({
     id: 'wan-3.0', name: 'Wan 3.0', category: 'Video',
     pricePerVideo: 6500, minDuration: 30, maxDuration: 30, aspectRatios: ['16:9', '9:16'],
   }),
+  'seedance-2.5': Object.freeze({
+    id: 'seedance-2.5', name: 'Seedance 2.5', category: 'Video',
+    pricePerVideo: 11000, minDuration: 30, maxDuration: 30, aspectRatios: ['16:9', '9:16'],
+  }),
 });
 const MODEL_IDS = Object.keys(MODELS);
 const modelPrices = Object.fromEntries(MODEL_IDS.map(id => [id, MODELS[id].pricePerVideo]));

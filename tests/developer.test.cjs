@@ -373,6 +373,26 @@ test('new model docs and examples use Rp6.500/30s separately without public prov
   }
 });
 
+test('Seedance docs, catalog and cURL use public model and Rp11.000 without changing Wan prices', () => {
+  const {portalView,curlExample}=loadViews();
+  const s=browserHarness().controller.state;
+  s.user={username:'dev'};
+  s.docModelId='seedance-2.5';
+  s.models=[{id:'seedance-2.5',status:'available',pricePerVideo:11000}];
+  const html=portalView(s);
+  assert.ok(html.includes('Seedance 2.5'));
+  assert.ok(html.includes('11.000'));
+  assert.ok(html.includes('6.500'));
+  assert.ok(html.includes('6.000'));
+  assert.ok(html.includes('Durasi hanya 30 detik'));
+  assert.ok(!/picsart|flora|seedance_2_5|generate_audio|gw-v2/i.test(html));
+  const body=JSON.parse(curlExample('generate','seedance-2.5').match(/-d '([\s\S]*)'/)[1]);
+  assert.equal(body.model,'seedance-2.5');
+  assert.equal(body.duration,30);
+  assert.equal(body.resolution,'480p');
+  require('../server/wan-provider').validateInput(body);
+});
+
 test('generation polling updates all loaded pages without duplicate tasks and ignores a stale account response', async () => {
   const pages = [];
   let resolveResponse;

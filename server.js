@@ -1758,7 +1758,7 @@ app.post('/api/webhook/freepik', async (req, res) => {
       [taskId]
     );
     // This legacy callback must never mutate jobs from a different integration.
-    if (taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0')) {
+    if (taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5')) {
       return res.status(200).json({ received: false });
     }
     
@@ -3819,6 +3819,7 @@ async function resumePendingTaskPolling() {
         for (const row of result.rows) {
           if (row.model === 'wan-3.0-uncensored') continue; // Reconciled by the dedicated API poll route.
           if (row.model === 'wan-3.0') continue;
+          if (row.model === 'seedance-2.5') continue;
           let apiKey = null;
           const isMotionTask = (row.model || '').startsWith('motion-');
 
@@ -4024,7 +4025,10 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
 const wanProvider = require('./server/wan-provider').createWanProvider(pool);
 const wanRouter = require('./server/wan-routes')({
   pool, provider: wanProvider, wallet: apiWallet, validateKey: validateXclipApiKey,
-  providers: { 'wan-3.0': require('./server/picsart-wan-provider').createPicsartWanProvider(pool) },
+  providers: {
+    'wan-3.0': require('./server/picsart-wan-provider').createPicsartWanProvider(pool),
+    'seedance-2.5': require('./server/picsart-seedance-provider').createPicsartSeedanceProvider(pool),
+  },
   cooldownMs: RATE_LIMIT_CONFIG.videogen.cooldownMs,
   dailyQuota: RATE_LIMIT_CONFIG.videogen.dailyQuotaPerKey,
   saveImage: async (image, req) => {
@@ -5352,7 +5356,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     const task = taskResult.rows[0];
     let videoUrl = task.video_url;
 
-    if (task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0') {
+    if (task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5') {
       return await streamVideo(req, res, videoUrl);
     }
 

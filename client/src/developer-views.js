@@ -55,6 +55,11 @@ const modelSpecs = {
     resolution: '480p', ratios: '16:9, 9:16, 1:1, 4:3, atau 3:4', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
+  'seedance-2.5': {
+    name: 'Seedance 2.5', price: 11000, duration: '30 detik (tetap)',
+    resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
+    audio: 'Boolean, default true',
+  },
 };
 const modelSpec = (id, s) => {
   const spec = modelSpecs[id] || modelSpecs['wan-3.0-uncensored'];
@@ -99,7 +104,7 @@ function docsView(s) {
   const generate = s.docTab === 'generate';
   const modelId = selectedModelId(s);
   const model = modelSpec(modelId, s);
-  const isFixedDuration = modelId === 'wan-3.0';
+  const isFixedDuration = ['wan-3.0', 'seedance-2.5'].includes(modelId);
   return `<section class="xp-docs-section" id="dokumentasi">
     <div class="xp-section-heading xp-doc-heading"><div><span class="xp-kicker">02 / QUICKSTART</span><h2>Request pertama Anda</h2></div><span class="xp-doc-meta">${i('BookOpen')} REST · JSON</span></div>
     <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Kedua endpoint memakai header <code>X-Xclip-Key</code>.</span></div></aside>
@@ -110,22 +115,22 @@ function docsView(s) {
        const item = modelSpec(id, s);
        return `<button type="button" data-action="doc-model" data-model-id="${e(id)}" class="${id === modelId ? 'active' : ''}" aria-pressed="${id === modelId}"><span>${e(item.name)}</span><code>${e(id)}</code><strong>${money(item.price)} / video</strong></button>`;
      }).join('')}</div>
-     <div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>${e(model.id)}</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP untuk image-to-video.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>${e(model.duration)}${isFixedDuration ? '; durasi lain ditolak dengan HTTP 400' : ''}.</p></div><div><code>resolution</code><span>string</span><p>${e(model.resolution)}.</p></div><div><code>aspectRatio</code><span>string</span><p>${e(model.ratios)}; default ${e(model.defaultRatio)}.</p></div><div><code>audio</code><span>boolean</span><p>${e(model.audio)}.</p></div></div>` : ''}</div>` : ''}
+      <div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>${e(model.id)}</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP untuk image-to-video.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>${e(model.duration)}${isFixedDuration ? '; durasi lain ditolak dengan HTTP 400' : ''}.</p></div><div><code>resolution</code><span>string</span><p>${e(model.resolution)}.</p></div><div><code>aspectRatio</code><span>string</span><p>${e(model.ratios)}; default ${e(model.defaultRatio)}.${modelId === 'seedance-2.5' ? ' Rasio divalidasi oleh quote sebelum generasi berbayar.' : ''}</p></div><div><code>audio</code><span>boolean</span><p>${e(model.audio)}.</p></div></div>` : ''}</div>` : ''}
      <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab, modelId))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
      <div class="xp-data-note"><strong>Request:</strong> ${generate ? `Biaya ${money(model.price)} per video. ${isFixedDuration ? 'Durasi hanya 30 detik; durasi lain ditolak dengan HTTP 400.' : 'Durasi 2–30 detik.'} Saldo dicadangkan sebelum generasi. Saldo kurang menghasilkan <code>402</code>. ${isFixedDuration ? 'Model ini memakai saldo API, termasuk untuk akun dengan langganan lama.' : 'Akses langganan lama yang masih aktif tetap dihormati sampai berakhir untuk model ini.'} Ganti <code>Idempotency-Key</code> untuk setiap request baru; gunakan key yang sama dengan body identik saat mengulang request yang terputus, agar tidak memulai generasi atau memotong saldo dua kali. Jeda request baru 180 detik. Respons <code>202</code> berisi <code>taskId</code>; periksa status setiap 5 detik. Jika pengiriman belum terkonfirmasi, simpan taskId dan hubungi dukungan—saldo tetap dicadangkan dan jangan membuat request baru.` : '<code>taskId</code> pada URL. Status: pending, processing, completed, atau failed. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Saat completed, ambil <code>videoUrl</code> melalui Xclip. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 
 function modelsView(s) {
-  const ids = ['wan-3.0', 'wan-3.0-uncensored'];
+  const ids = ['wan-3.0', 'wan-3.0-uncensored', 'seedance-2.5'];
   return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
     <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>
     <div class="xp-model-catalog">${ids.map(id => {
       const model = modelSpec(id, s);
       const statusLabel = model.status === 'available' ? 'Tersedia'
         : model.status === 'unavailable' ? 'Belum tersedia' : 'Belum terkonfirmasi';
-      const config = id === 'wan-3.0'
-        ? 'Text-to-video dan image-to-video · 480p · 30 detik tetap · rasio 16:9 atau 9:16 · audio default aktif.'
+      const config = id === 'wan-3.0' || id === 'seedance-2.5'
+        ? `Text-to-video dan image-to-video · 480p · 30 detik tetap · rasio 16:9 atau 9:16${id === 'seedance-2.5' ? ' · rasio divalidasi saat quote sebelum generasi berbayar' : ''} · audio default aktif.`
         : 'Text-to-video dan image-to-video · 480p · 2–30 detik · rasio 16:9, 9:16, 1:1, 4:3, atau 3:4.';
       return `<article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">${id === 'wan-3.0-uncensored' ? 'VIDEO · UNCENSORED' : 'VIDEO'}</span><h3>${e(model.name)}</h3></div><span class="xp-model-status">${statusLabel}</span></div><p>${e(config)}</p><div class="xp-model-meta"><code>${e(id)}</code><strong>${money(model.price)} <span>/ video</span></strong></div></article>`;
     }).join('')}</div>

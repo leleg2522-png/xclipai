@@ -99,7 +99,7 @@ async function routeFixture(t, opts = {}) {
   const events = [];
   const logger=createGenerationLogger({write:(_level,record)=>events.push(record)});
   const locks = new Map();
-  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0, reservedAmounts: [], newStarts: 0, newPolls: 0 };
+  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0, reservedAmounts: [], newStarts: 0, newPolls: 0, seedanceStarts: 0, seedancePolls: 0 };
   async function query(sql, p = []) {
     if (['BEGIN','COMMIT','ROLLBACK'].includes(sql)) return { rows: [] };
     if (sql.includes('pg_advisory_unlock')) {
@@ -198,7 +198,13 @@ async function routeFixture(t, opts = {}) {
     async start() { stats.newStarts++; return 'captured-workflow-id'; },
     async poll() { stats.newPolls++; return {status:'completed',videoUrl:'https://cdn.picsart.com/fake.mp4'}; },
   };
-  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider}, wallet, logger, validateKey: async key =>
+  const seedanceProvider = {
+    ...secondProvider,
+    async context() { if(opts.seedanceUnavailable) throw new ServiceError(503,'Layanan sementara tidak tersedia.'); },
+    async start() { stats.seedanceStarts++; return 'seedance-workflow'; },
+    async poll() { stats.seedancePolls++; return {status:'completed',videoUrl:'https://cdn.picsart.com/seedance.mp4'}; },
+  };
+  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider}, wallet, logger, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
@@ -308,9 +314,41 @@ test('definite submission failure is retained as failed; idempotent retry does n
 test('legacy workers and webhook cannot dispatch or mutate Wan tasks', () => {
   const source = fs.readFileSync('server.js', 'utf8');
   assert.ok(source.includes("if (row.model === 'wan-3.0-uncensored') continue"));
-  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0')"));
+  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5')"));
   assert.ok(source.includes("if (row.model === 'wan-3.0') continue"));
+  assert.ok(source.includes("if (row.model === 'seedance-2.5') continue"));
   assert.ok(source.indexOf("app.use(wanRouter)") < source.indexOf("app.post('/api/videogen/proxy'"));
+});
+
+test('Seedance uses its own adapter and 11000 wallet charge with protected output and idempotent replay', async t => {
+  const h=await routeFixture(t,{activeSubscription:true});
+  const made=await h.generate({model:'seedance-2.5',duration:30});
+  assert.equal(made.status,202);
+  assert.equal(made.data.model,'seedance-2.5');
+  assert.deepEqual(h.stats.reservedAmounts,[11000]);
+  assert.equal(h.stats.seedanceStarts,1);
+  assert.equal(h.stats.starts+h.stats.newStarts,0);
+  assert.equal((await h.generate({model:'seedance-2.5',duration:30})).status,200);
+  assert.equal(h.stats.seedanceStarts,1);
+  const done=await h.call(`/api/videogen/tasks/${made.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  assert.equal(done.data.status,'completed');
+  assert.equal(done.data.model,'seedance-2.5');
+  assert.equal(h.stats.seedancePolls,1);
+  assert.equal(h.stats.polls+h.stats.newPolls,0);
+  assert.ok(done.data.videoUrl.startsWith('/api/videogen/proxy-video?taskId='));
+  assert.ok(!/picsart|flora|workflow/i.test(JSON.stringify(done.data)));
+});
+
+test('Seedance unavailable does not hide Wan or silently fall back to another model', async t => {
+  const h=await routeFixture(t,{seedanceUnavailable:true});
+  const catalog=await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
+  assert.equal(catalog.status,200);
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.5').status,'unavailable');
+  assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status,'available');
+  assert.equal((await h.generate({model:'seedance-2.5'})).status,503);
+  assert.equal((await h.generate({model:'seedance-2.5-fake'})).status,400);
+  assert.equal(h.stats.starts+h.stats.newStarts+h.stats.seedanceStarts,0);
+  assert.equal(h.stats.reservations,0);
 });
 
 test('both two-second and thirty-second videos reserve one fixed-price generation', async t => {

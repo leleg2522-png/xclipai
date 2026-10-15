@@ -44,3 +44,9 @@ The user approved adding a separate public “Wan 3.0” model backed internally
 **Why:** After providing a successful Picsart browser capture, the user selected “Tambah Wan 3.0 terpisah” and entered Rp6.500.
 
 **How to apply:** Do not replace or silently reroute the Uncensored model. Keep provider names internal and use the requested per-model prices. The supplied capture demonstrates 480p/30-second image-to-video, not an Uncensored capability or every possible duration; expand supported settings only with evidence.
+
+The user requested Seedance 2.5 as an additional model and confirmed Rp11.000 per video for 480p/30 seconds.
+
+**Why:** The user supplied a successful Seedance capture and entered Rp11.000 when asked for the 480p/30-second developer tariff.
+
+**How to apply:** Preserve the existing Wan models/prices and keep provider identity internal. Do not infer successful 1080p generation from the capture's quotes; its completed Seedance generation used 480p/30 seconds.

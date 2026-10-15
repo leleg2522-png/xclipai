@@ -77,7 +77,7 @@ test('confirmed prices and non-expiring API balance never reuse bot saldo', asyn
   const h=fixture();await h.wallet.initialize();
   assert.equal(VIDEO_PRICE,6000);assert.equal(MIN_TOPUP,100000);
   assert.deepEqual(await h.wallet.get(1),{balance:100000,reserved:0,videoPrice:6000,
-    modelPrices:{'wan-3.0-uncensored':6000,'wan-3.0':6500},
+    modelPrices:{'wan-3.0-uncensored':6000,'wan-3.0':6500,'seedance-2.5':11000},
     minimumTopup:100000,maximumTopup:100000000,currency:'IDR',expires:false});
   await assert.rejects(h.wallet.get(2),e=>e.status===404);
   const row=await h.reserve('one');
@@ -86,6 +86,25 @@ test('confirmed prices and non-expiring API balance never reuse bot saldo', asyn
   await h.wallet.finish(row,{status:'completed',videoUrl:'/video'});
   assert.equal(h.state.balance,94000);assert.equal(h.state.botSaldo,70000);
   assert.equal((await h.wallet.get(1)).reserved,0);
+});
+
+test('Seedance reserves 11000, a failure refunds 11000 once, and a successful charge is not refunded', async () => {
+  for(const status of ['failed','completed']) {
+    const h=fixture(11000);await h.wallet.initialize();
+    const row=await h.transaction(async c=>{
+      await h.wallet.reserve(c,1,'seedance',11000);
+      const row={task_id:'seedance',user_id:1,model:'seedance-2.5',status:'processing',retry_data:{billing:'wallet',price:11000}};
+      h.state.tasks.set(row.task_id,row);return row;
+    });
+    assert.equal(h.state.balance,0);
+    assert.equal(h.state.charges.get('seedance').amount,11000);
+    await h.wallet.finish(row,{status,videoUrl:status==='completed'?'/video':null});
+    await h.wallet.finish(row,{status:'failed'});
+    assert.equal(h.state.balance,status==='failed'?11000:0);
+    assert.equal(h.state.charges.get('seedance').status,status==='failed'?'refunded':'spent');
+  }
+  const low=fixture(10999);await low.wallet.initialize();
+  await assert.rejects(low.transaction(c=>low.wallet.reserve(c,1,'low',11000)),e=>e.status===402);
 });
 
 test('new Wan reservations use Rp6.500 and failures refund the original model-specific amount once', async () => {
