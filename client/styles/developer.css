@@ -1,3 +1,6 @@
+/* Disabled is not an active request. Only real in-flight work gets a wait cursor. */
+button:disabled:not([aria-busy="true"]) { cursor: not-allowed; }
+button:disabled[aria-busy="true"] { cursor: wait; }
 
 .xp-portal {
   --xp-ink: #202b2a;

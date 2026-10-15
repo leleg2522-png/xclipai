@@ -150,9 +150,30 @@ export function modelsView(s) {
   </section>`;
 }
 
+export function paymentButtonState(s) {
+  if (s.paymentCreating) return { disabled: true, busy: true, label: 'Sedang membuat QRIS…',
+    reason: 'Menunggu respons pembayaran. Jangan klik ulang; jika respons terputus, tagihan akan diperiksa terlebih dahulu.' };
+  if (s.paymentLoading) return { disabled: true, busy: true, label: 'Memeriksa pembayaran…',
+    reason: 'Sedang memeriksa saldo dan tagihan aktif.' };
+  if (s.checkout && ['creating', 'pending', 'uncertain'].includes(s.checkout.status)) {
+    return { disabled: true, busy: false,
+      label: s.checkout.status === 'uncertain' ? 'Tagihan perlu diperiksa' : 'Masih ada tagihan aktif',
+      reason: 'Periksa tagihan di bawah sebelum membuat pembayaran baru. Tidak ada pembuatan QRIS baru yang sedang berjalan.' };
+  }
+  if (s.checkoutError || !s.paymentConfig?.available) return {
+    disabled: true, busy: false, label: 'Pembayaran belum siap',
+    reason: s.checkoutError || 'Konfigurasi pembayaran belum tersedia. Tekan Perbarui pembayaran untuk memeriksa ulang.',
+  };
+  if (!s.wallet || s.walletError) return { disabled: true, busy: false, label: 'Saldo belum dapat diperiksa',
+    reason: s.walletError || 'Data saldo belum tersedia. Perbarui data sebelum membuat pembayaran.' };
+  if (s.actionBusy) return { disabled: true, busy: true, label: 'Menunggu proses akun…',
+    reason: 'Masih ada aksi akun yang diproses. Tombol akan aktif kembali setelah proses selesai.' };
+  return { disabled: false, busy: false, label: 'Buat QRIS pembayaran', reason: '' };
+}
+
 function topupView(s) {
   const invoice = s.checkout;
-  const pending = invoice && ['creating', 'pending', 'uncertain'].includes(invoice.status);
+  const button = paymentButtonState(s);
   const expires = invoice?.expires_at ? new Date(invoice.expires_at).toLocaleString('id-ID', {
     timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short',
   }) : '';
@@ -163,7 +184,9 @@ function topupView(s) {
     ${s.checkoutError ? `<div class="xp-data-note" role="alert">${e(s.checkoutError)} <button data-action="refresh">Perbarui pembayaran</button></div>` : ''}
     ${s.wallet ? `<form id="payment-form" class="xp-payment-form xp-key-card"><label for="payment-amount">Nominal top up (Rp)</label><input type="number" id="payment-amount" name="amount" min="${e(s.wallet.minimumTopup)}" max="${e(s.wallet.maximumTopup)}" step="1" value="${e(s.topupAmount)}" required>
     <p>Minimum ${money(s.wallet.minimumTopup)}. Saldo bertambah sesuai nominal top up; kode unik/biaya gateway tidak menjadi saldo. Bayar <strong>nominal akhir pada tagihan QRIS</strong>.</p>
-    <button type="submit" ${pending || !s.paymentConfig?.available || s.checkoutError ? 'disabled' : ''}>${pending ? 'Masih ada tagihan aktif' : 'Buat QRIS pembayaran'}</button></form>` : ''}
+    <button type="submit" aria-busy="${button.busy}" aria-describedby="payment-button-status" ${button.disabled ? 'disabled' : ''}>${e(button.label)}</button>
+    <p id="payment-button-status" role="status" ${button.reason ? '' : 'hidden'}>${e(button.reason)}</p>
+    ${button.disabled && !button.busy && !['creating', 'pending', 'uncertain'].includes(invoice?.status) && !s.checkoutError && !s.walletError ? '<button type="button" data-action="refresh">Perbarui pembayaran</button>' : ''}</form>` : ''}
     ${invoice ? `<div class="xp-payment-form xp-key-card" aria-label="Tagihan KlikQRIS"><strong>${e(invoice.package)}</strong><p>ID tagihan: <code>${e(invoice.id)}</code></p>
       ${invoice.billing_type === 'subscription' ? '<p role="note"><strong>Tagihan langganan lama, bukan top up saldo API.</strong> Tagihan ini dibuat sebelum perubahan sistem dan tidak menambah saldo API. Jika masih aktif, tunggu pembayaran terkonfirmasi atau tagihan kedaluwarsa sebelum membuat top up saldo baru.</p>' : ''}
       ${invoice.total_amount != null ? `<p>Nominal akhir: <strong>${money(invoice.total_amount)}</strong></p>` : ''}

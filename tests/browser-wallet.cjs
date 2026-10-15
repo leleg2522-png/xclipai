@@ -62,6 +62,7 @@ async function intercept(p) {
   else if(path==='/api/payments/klikqris/current')data={invoice:invoice?{...invoice,status:paid?'paid':'pending',qr_url:paid?null:invoice.qr_url}:null};
   else if(path==='/api/payments/klikqris/create') {
     creates.push(p.request);
+    await new Promise(resolve=>setTimeout(resolve,1000));
     invoice={id:'xq_11111111111111111111111111111111',provider:'klikqris',billing_type:'wallet',
       package:'Top up saldo API',amount:100000,total_amount:100021,status:'pending',
       created_at:new Date().toISOString(),expires_at:'2030-01-01T03:00:00Z',
@@ -147,10 +148,15 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     assert.equal(await evaluate("document.querySelector('#payment-amount').checkValidity()"),false);
     assert.equal(creates.length,0);
     await evaluate("document.querySelector('#payment-amount').value='100000'; document.querySelector('#payment-form button[type=submit]').click()");
+    await wait("document.querySelector('#payment-form button[type=submit]')?.getAttribute('aria-busy') === 'true'");
+    assert.equal(await evaluate("document.querySelector('#payment-form button[type=submit]').textContent.includes('Sedang membuat QRIS')"),true);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#payment-form button[type=submit]')).cursor"),'wait');
     await wait("document.querySelector('#qris-image')?.naturalWidth > 0");
     assert.equal(creates.length,1);assert.deepEqual(JSON.parse(creates[0].postData),{amount:100000});
     assert.ok(Object.keys(creates[0].headers).some(k=>k.toLowerCase()==='idempotency-key'));
     assert.equal(await evaluate("document.querySelector('#payment-form button[type=submit]').disabled"),true);
+    assert.equal(await evaluate("document.querySelector('#payment-form button[type=submit]').getAttribute('aria-busy')"),'false');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#payment-form button[type=submit]')).cursor"),'not-allowed');
     assert.equal(await evaluate("document.querySelector('#topup').textContent.includes('100.021')"),true);
     assert.equal(await evaluate("document.querySelector('#topup').textContent.includes('bukan masa aktif saldo')"),true);
     await evaluate("document.querySelector('#topup').scrollIntoView()");

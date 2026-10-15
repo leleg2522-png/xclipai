@@ -122,7 +122,7 @@ function loadViews() {
   const icons = JSON.parse(iconsSource.trim().replace(/;$/, ''));
   const source = fs.readFileSync('client/src/developer-views.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/^export /gm, '');
-  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent,modelsView});',
+  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent,modelsView,paymentButtonState});',
     { icons, Intl, Date, URL, window: { location: { origin: 'https://xclip.test' } } });
 }
 
@@ -179,7 +179,7 @@ function browserHarness(overrides = {}) {
   const source = fs.readFileSync('client/src/developer.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/\nstart\(\);\s*$/, '');
   const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,checkPayment,isBusy:()=>busy});', {
-    ...views, document: { getElementById(id) { return id === 'developer-app' ? root : null; } },
+    ...views, document: { querySelector() { return null; }, getElementById(id) { return id === 'developer-app' ? root : null; } },
     navigator: {}, fetch: interceptFetch ? (path, options) => interceptFetch(path, options, fakeFetch) : fakeFetch,
     AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
     ...runtimeOverrides,
@@ -192,6 +192,51 @@ function browserHarness(overrides = {}) {
   };
   return { controller, root, calls, submit, click, settle };
 }
+
+test('QR creation button distinguishes readiness, active requests and existing invoices', () => {
+  const {paymentButtonState,portalView}=loadViews();
+  const s=browserHarness().controller.state;
+  s.user={id:1,username:'dev'};
+  s.wallet={balance:0,reserved:0,minimumTopup:100000,maximumTopup:100000000};
+  s.paymentConfig={available:true};
+  assert.equal(paymentButtonState(s).disabled,false);
+  s.paymentCreating=true;
+  assert.equal(paymentButtonState(s).busy,true);
+  assert.ok(paymentButtonState(s).label.includes('Sedang membuat'));
+  s.paymentCreating=false;
+  s.paymentLoading=true;
+  assert.equal(paymentButtonState(s).busy,true);
+  s.paymentLoading=false;
+  s.paymentConfig=null;
+  assert.equal(paymentButtonState(s).busy,false);
+  assert.equal(paymentButtonState(s).disabled,true);
+  assert.ok(portalView(s).includes('Pembayaran belum siap'));
+  assert.ok(portalView(s).includes('Perbarui pembayaran'));
+  s.checkout={status:'pending'};
+  assert.equal(paymentButtonState(s).busy,false);
+  assert.ok(paymentButtonState(s).label.includes('tagihan aktif'));
+  s.checkout={status:'uncertain'};
+  assert.equal(paymentButtonState(s).busy,false);
+  assert.ok(paymentButtonState(s).label.includes('perlu diperiksa'));
+  s.checkout=null;
+  s.checkoutError='Gateway belum tersedia';
+  assert.equal(paymentButtonState(s).reason,s.checkoutError);
+});
+
+test('QR creating state is visible only during the request and resets when it finishes', async () => {
+  let release;
+  const h=browserHarness({interceptFetch(path,options,next) {
+    if(path==='/api/payments/klikqris/create') return new Promise(resolve=>{release=()=>resolve(next(path,options));});
+    return next(path,options);
+  }});
+  h.submit('auth-form',{email:'dev@test.example',password:'password'});await h.settle();
+  h.submit('payment-form',{amount:'100000'});
+  assert.equal(h.controller.state.paymentCreating,true);
+  assert.equal(loadViews().paymentButtonState(h.controller.state).busy,true);
+  release();await h.settle();
+  assert.equal(h.controller.state.paymentCreating,false);
+  assert.equal(loadViews().paymentButtonState(h.controller.state).busy,false);
+});
 
 test('slow video catalog and generation history cannot hold login or QR creation busy', async () => {
   const pending=[];
@@ -265,6 +310,8 @@ test('a timed-out QR creation and failed recovery release busy state with explic
   fail=true;
   h.submit('payment-form',{amount:'100000'});await h.settle();
   assert.equal(h.controller.isBusy(),false);
+  assert.equal(h.controller.state.paymentCreating,false);
+  assert.equal(h.controller.state.paymentLoading,false);
   assert.ok(h.root.innerHTML.includes('Server terlalu lama merespons'));
   assert.ok(h.root.innerHTML.includes('jangan membuat pembayaran ganda'));
   assert.equal(h.controller.state.checkout,null);

@@ -1,4 +1,4 @@
-import { authView, portalView, curlExample, generationHistoryContent, modelsView } from './developer-views.js';
+import { authView, portalView, curlExample, generationHistoryContent, modelsView, paymentButtonState } from './developer-views.js';
 
 const root = document.getElementById('developer-app');
 const state = {
@@ -6,6 +6,8 @@ const state = {
   overview: null, subscription: null, wallet: null, walletError: '', payments: [], topupAmount: '100000',
   models: [], modelError: '',
   paymentConfig: null, checkout: null, checkoutError: '', paymentAttempt: null,
+  paymentCreating: false, paymentLoading: false,
+  actionBusy: false,
   generationTasks: [], generationError: '', generationPage: 1, generationHasMore: false,
   generationLoading: false, generationUpdatedAt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
@@ -23,6 +25,7 @@ let paymentCheckInFlight = false;
 function resetAccountData() {
   state.overview = state.subscription = state.wallet = null;
   state.checkout = state.paymentConfig = state.paymentAttempt = null;
+  state.paymentCreating = state.paymentLoading = false;
   state.payments = [];
   state.walletError = state.historyError = state.checkoutError = '';
   state.models = [];
@@ -89,6 +92,20 @@ function schedulePaymentCheck() {
   if (state.user && state.checkout?.status === 'pending') {
     paymentTimer = setTimeout(() => checkPayment(true), 15000);
     paymentTimer?.unref?.();
+  }
+}
+
+function updatePaymentButton() {
+  const button = document.querySelector('#payment-form button[type=submit]');
+  if (!button) return;
+  const view = paymentButtonState(state);
+  button.disabled = view.disabled;
+  button.textContent = view.label;
+  button.setAttribute('aria-busy', String(view.busy));
+  const status = document.getElementById('payment-button-status');
+  if (status) {
+    status.textContent = view.reason;
+    status.hidden = !view.reason;
   }
 }
 
@@ -164,6 +181,9 @@ async function loadPaymentData() {
   const userId = state.user?.id, epoch = generationEpoch;
   const current = () => state.user?.id === userId && generationEpoch === epoch;
   state.walletError = state.historyError = state.checkoutError = '';
+  state.paymentLoading = true;
+  updatePaymentButton();
+  try {
   await Promise.all([
     api('/api/developer/wallet').then(data => {
       if (!current()) return;
@@ -180,6 +200,12 @@ async function loadPaymentData() {
       if (data.invoice && ['paid', 'expired', 'failed'].includes(data.invoice.status)) state.paymentAttempt = null;
     }).catch(error => { if (current()) state.checkoutError = error.message; }),
   ]);
+  } finally {
+    if (current()) {
+      state.paymentLoading = false;
+      updatePaymentButton();
+    }
+  }
 }
 
 async function loadModels() {
@@ -254,11 +280,13 @@ async function checkPayment(automatic = false) {
 async function perform(work) {
   if (busy) return;
   busy = true;
+  state.actionBusy = true;
   root.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  updatePaymentButton();
   state.error = state.notice = '';
   try { await work(); }
   catch (error) { state.error = error.message || 'Terjadi kesalahan. Coba lagi.'; }
-  finally { busy = false; render(); }
+  finally { busy = false; state.actionBusy = false; render(); }
 }
 
 root.addEventListener('submit', event => {
@@ -321,6 +349,8 @@ root.addEventListener('submit', event => {
           ? crypto.randomUUID() : `web_${Date.now()}_${Math.random().toString(36).slice(2)}` };
       }
       let result;
+      state.paymentCreating = true;
+      updatePaymentButton();
       try {
         result = await api('/api/payments/klikqris/create', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': state.paymentAttempt.key },
@@ -335,6 +365,9 @@ root.addEventListener('submit', event => {
           state.checkoutError = 'Pembuatan tagihan belum terkonfirmasi. Perbarui pembayaran sebelum mencoba lagi; jangan membuat pembayaran ganda.';
         }
         throw error;
+      } finally {
+        state.paymentCreating = false;
+        updatePaymentButton();
       }
       state.checkout = result.invoice;
       state.payments = [result.invoice, ...state.payments.filter(invoice => invoice.id !== result.invoice.id)];
