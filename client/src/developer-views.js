@@ -120,12 +120,68 @@ function topupView(s) {
     <div class="xp-data-note"><strong>Riwayat pembayaran</strong>${s.historyError ? `<p role="alert">${e(s.historyError)}</p>` : s.payments.length ? `<div style="overflow:auto"><table class="xp-history"><thead><tr><th>Paket</th><th>Nominal</th><th>Status</th><th>Tanggal</th></tr></thead><tbody>${s.payments.map(p => `<tr><td>${e(p.package)}</td><td>${money(p.total_amount ?? p.amount)}</td><td>${e(({pending:p.provider === 'klikqris' ? 'Menunggu pembayaran' : 'Menunggu verifikasi lama',paid:'Lunas',approved:'Disetujui',expired:'Kedaluwarsa',creating:'Menyiapkan QRIS',uncertain:'Belum terkonfirmasi',failed:'Gagal',rejected:'Ditolak'})[p.status] || p.status)}</td><td>${e(date(p.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<p>Belum ada pembayaran.</p>'}</div></section>`;
 }
 
+const generationStatus = {
+  pending: 'Menunggu',
+  processing: 'Sedang diproses',
+  completed: 'Selesai',
+  failed: 'Gagal',
+};
+const generationDate = value => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('id-ID', {
+    timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short',
+  }) + ' WIB';
+};
+
+function generationResultUrl(value) {
+  if (typeof value !== 'string' || !value) return '';
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin || !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.pathname !== '/api/videogen/proxy-video' || !parsed.searchParams.get('taskId')) return '';
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return '';
+  }
+}
+
+export function generationHistoryContent(s) {
+  const tasks = s.generationTasks || [];
+  if (s.generationError) {
+    return `<div class="xp-generation-state xp-generation-error" role="alert"><div><strong>Riwayat belum dapat dimuat</strong><p>${e(s.generationError)}</p></div><button class="xp-copy-button" data-action="generations-refresh" ${s.generationLoading ? 'disabled' : ''}>Coba lagi</button></div>`;
+  }
+  if (s.generationLoading && !tasks.length) {
+    return `<div class="xp-generation-skeleton" aria-label="Memuat riwayat generasi"><span></span><span></span><span></span></div>`;
+  }
+  if (!tasks.length) {
+    return `<div class="xp-generation-state"><div class="xp-generation-empty-mark">${i('Activity')}</div><div><strong>Belum ada tugas generasi</strong><p>Request yang dikirim melalui API Xclip akan muncul di sini.</p></div></div>`;
+  }
+  return `<div class="xp-generation-list">${tasks.map(task => {
+    const status = generationStatus[task.status] || 'Status diperiksa';
+    const resultUrl = task.status === 'completed' ? generationResultUrl(task.videoUrl) : '';
+    return `<article class="xp-generation-row">
+      <div class="xp-generation-status xp-generation-${e(generationStatus[task.status] ? task.status : 'pending')}"><span></span>${e(status)}</div>
+      <div class="xp-generation-details"><div class="xp-generation-id-line"><code>${e(task.taskId || 'ID tidak tersedia')}</code><span>${e(task.model || 'Model video')}</span></div>
+        <div class="xp-generation-times"><span>Dibuat ${e(generationDate(task.createdAt))}</span>${task.completedAt ? `<span>· Selesai ${e(generationDate(task.completedAt))}</span>` : ''}</div>
+        ${task.status === 'failed' && task.error ? `<p class="xp-generation-message xp-generation-message-error">${e(task.error)}</p>` : ''}
+        ${task.notice ? `<p class="xp-generation-message">${e(task.notice)}</p>` : ''}
+      </div>
+      ${resultUrl ? `<a class="xp-generation-download" href="${e(resultUrl)}" download>${i('Download')} Unduh video</a>` : ''}
+    </article>`;
+  }).join('')}</div>
+  ${s.generationHasMore ? `<div class="xp-generation-more-wrap"><button class="xp-copy-button" data-action="generations-more" ${s.generationLoading ? 'disabled' : ''}>${s.generationLoading ? 'Memuat…' : 'Muat tugas sebelumnya'}</button></div>` : ''}`;
+}
+
 export function portalView(s) {
-  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Saldo API</a><a href="#topup">Top up</a></nav><button class="xp-signout" data-action="logout">Keluar</button></header>
-    <nav class="xp-mobile-menu" aria-label="Menu developer"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Saldo API</a><a href="#topup">Top up</a></nav>
+  return `<div class="xp-portal"><header class="xp-topbar">${brand}<nav class="xp-top-links" aria-label="Navigasi utama"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#generasi">Riwayat generasi</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Saldo API</a><a href="#topup">Top up</a></nav><button class="xp-signout" data-action="logout">Keluar</button></header>
+    <nav class="xp-mobile-menu" aria-label="Menu developer"><a href="#kunci">API key</a><a href="#model">Model</a><a href="#generasi">Riwayat generasi</a><a href="#dokumentasi">Dokumentasi</a><a href="#akses">Saldo API</a><a href="#topup">Top up</a></nav>
     ${s.error || s.notice ? `<div class="xp-alert" role="${s.error ? 'alert' : 'status'}">${e(s.error || s.notice)} <button data-action="dismiss" aria-label="Tutup pemberitahuan">×</button></div>` : ''}
     <main id="home" class="xp-main"><section class="xp-intro"><div class="xp-eyebrow"><span>PORTAL DEVELOPER</span><i></i> API VIDEO XCLIP</div><div class="xp-intro-row"><div><h1>Mulai bangun<br><em>dengan video AI.</em></h1><p class="xp-lede">Halo, ${e(s.user.username)}. Kelola integrasi Xclip melalui satu portal yang terhubung ke akun Anda.</p></div><div class="xp-intro-aside"><div class="xp-aside-icon">${i('Code2')}</div><span>DIRANCANG UNTUK INTEGRASI</span><p>Gunakan API key Xclip di server aplikasi Anda.</p><a href="#dokumentasi">Lihat quickstart ${i('ArrowDownRight')}</a></div></div><div class="xp-step-line"><span><b>01</b> Buat kunci</span><i></i><span><b>02</b> Kirim request</span><i></i><span><b>03</b> Cek status tugas</span></div></section>
     <section class="xp-overview" aria-label="Penggunaan API"><div class="xp-overview-title"><span class="xp-overview-icon">${i('Activity')}</span><span>AKTIVITAS PORTAL</span></div><div class="xp-overview-number">${s.overview ? Number(s.overview.totalRequests).toLocaleString('id-ID') : '—'}</div><div class="xp-overview-caption">total request API akun Anda</div><div class="xp-overview-foot"><button class="xp-copy-button" data-action="refresh">Perbarui data</button></div></section>
+    <section class="xp-generation-section" id="generasi" aria-labelledby="generation-heading"><div class="xp-section-heading"><div><span class="xp-kicker">AKTIVITAS / VIDEO</span><h2 id="generation-heading">Riwayat generasi</h2></div><button class="xp-copy-button xp-generation-refresh" data-action="generations-refresh" ${s.generationLoading ? 'disabled' : ''}>${i('RefreshCw')} ${s.generationLoading ? 'Memperbarui…' : 'Perbarui riwayat'}</button></div>
+      <div class="xp-generation-card"><div class="xp-generation-info"><span>${i('Clock3')} Status diperbarui otomatis setiap 10 detik.</span><span>Pending berarti request diterima dan belum selesai—bukan kegagalan.</span><span class="xp-generation-updated" id="generation-updated">${s.generationUpdatedAt ? `Terakhir diperbarui ${e(generationDate(s.generationUpdatedAt))}` : 'Belum diperbarui'}</span></div><div id="generation-history-content" aria-live="polite">${generationHistoryContent(s)}</div></div>
+    </section>
     <section class="xp-key-section" id="kunci"><div class="xp-section-heading"><div><span class="xp-kicker">01 / KREDENSIAL</span><h2>API key Anda</h2></div><span class="xp-single-rule">${i('LockKeyhole')} Satu kunci seumur hidup</span></div><div class="xp-key-card">${keyView(s)}<div class="xp-key-footnote"><span>i</span> Maksimal satu API key per pengguna, termasuk setelah dinonaktifkan.</div></div></section>
     ${modelsView(s)}
     ${docsView(s)}

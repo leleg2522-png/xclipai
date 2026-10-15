@@ -122,7 +122,8 @@ function loadViews() {
   const icons = JSON.parse(iconsSource.trim().replace(/;$/, ''));
   const source = fs.readFileSync('client/src/developer-views.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/^export /gm, '');
-  return vm.runInNewContext(source + '\n({authView,portalView,curlExample});', { icons, Intl, Date });
+  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent});',
+    { icons, Intl, Date, URL, window: { location: { origin: 'https://xclip.test' } } });
 }
 
 function browserHarness(overrides = {}) {
@@ -142,6 +143,7 @@ function browserHarness(overrides = {}) {
     if (path === '/api/auth/register') data = { success: true };
     if (path === '/api/auth/login') data = { user: { id: 1, username: '<script>unsafe</script>' } };
     if (path === '/api/auth/logout') data = { success: true };
+    if (path.startsWith('/api/developer/generations')) data = { tasks: [], page: 1, hasMore: false };
     if (path === '/api/developer/overview') data = {
       keys: [], hasLifetimeKey: false, totalRequests: 0,
       providers: [{ name: 'Picsart', configured: true, connected: false }], generationProvider: 'Freepik',
@@ -175,7 +177,7 @@ function browserHarness(overrides = {}) {
   }
   const source = fs.readFileSync('client/src/developer.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/\nstart\(\);\s*$/, '');
-  const controller = vm.runInNewContext(source + '\n({start,state,render,isBusy:()=>busy});', {
+  const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,isBusy:()=>busy});', {
     ...views, document: { getElementById(id) { return id === 'developer-app' ? root : null; } },
     navigator: {}, fetch: fakeFetch, AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
     ...overrides,
@@ -328,4 +330,47 @@ test('revoked state has no create button and docs describe the Wan API contract'
   assert.ok(portalView(s).includes('Tersedia'));
   assert.ok(portalView(s).includes('480p'));
   assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
+});
+
+test('generation history UI shows safe statuses, uncertain notices and only protected Xclip downloads', () => {
+  const { generationHistoryContent } = loadViews();
+  const html = generationHistoryContent({ generationTasks: [
+    { taskId: 'done', status: 'completed', videoUrl: '/api/videogen/proxy-video?taskId=done' },
+    { taskId: 'failed', status: 'failed', error: '<script>bad</script>' },
+    { taskId: 'waiting', status: 'pending', notice: 'Jangan kirim ulang' },
+    { taskId: 'running', status: 'processing' },
+    { taskId: 'external', status: 'completed', videoUrl: 'https://media.flora.ai/private' },
+    { taskId: 'unsafe', status: 'completed', videoUrl: 'javascript:alert(1)' },
+  ] });
+  for (const label of ['Selesai', 'Gagal', 'Menunggu', 'Sedang diproses', 'Jangan kirim ulang']) assert.ok(html.includes(label));
+  assert.equal((html.match(/Unduh video/g) || []).length, 1);
+  assert.ok(!/flora|javascript:|<script>/.test(html));
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(generationHistoryContent({ generationTasks: [] }).includes('Belum ada tugas'));
+  assert.ok(generationHistoryContent({ generationError: 'Coba lagi' }).includes('role="alert"'));
+});
+
+test('generation polling updates all loaded pages without duplicate tasks and ignores a stale account response', async () => {
+  const pages = [];
+  let resolveResponse;
+  const h = browserHarness({ fetch: async path => {
+    pages.push(path);
+    const page = Number(new URL(path, 'https://xclip.test').searchParams.get('page'));
+    return { ok: true, json: async () => ({ tasks: [{ taskId: `task-${page}`, status: 'completed' }], page, hasMore: page === 1 }) };
+  } });
+  h.controller.state.user = { id: 1 };
+  h.controller.state.generationPage = 2;
+  h.controller.state.generationTasks = [{ taskId: 'task-2', status: 'processing' }];
+  await h.controller.loadGenerationHistory({ poll: true });
+  assert.equal(pages.length, 2);
+  assert.equal(h.controller.state.generationTasks.length, 2);
+  assert.equal(h.controller.state.generationTasks[1].status, 'completed');
+  assert.equal(h.controller.state.generationHasMore, false);
+  const stale = browserHarness({ fetch: () => new Promise(resolve => { resolveResponse = resolve; }) });
+  stale.controller.state.user = { id: 1 };
+  const work = stale.controller.loadGenerationHistory();
+  stale.controller.state.user = { id: 2 };
+  resolveResponse({ ok: true, json: async () => ({ tasks: [{ taskId: 'private-old-user' }], page: 1, hasMore: false }) });
+  await work;
+  assert.equal(stale.controller.state.generationTasks.length, 0);
 });

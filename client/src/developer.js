@@ -1,4 +1,4 @@
-import { authView, portalView, curlExample } from './developer-views.js';
+import { authView, portalView, curlExample, generationHistoryContent } from './developer-views.js';
 
 const root = document.getElementById('developer-app');
 const state = {
@@ -6,11 +6,17 @@ const state = {
   overview: null, subscription: null, wallet: null, walletError: '', payments: [], topupAmount: '100000',
   models: [], modelError: '',
   paymentConfig: null, checkout: null, checkoutError: '', paymentAttempt: null,
+  generationTasks: [], generationError: '', generationPage: 1, generationHasMore: false,
+  generationLoading: false, generationUpdatedAt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
   docTab: 'generate', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
 };
 let busy = false;
 let paymentTimer;
+let generationTimer;
+let generationEpoch = 0;
+let generationInFlight = false;
+let generationRequestToken = 0;
 
 async function api(path, options = {}) {
   const requestUserId = state.user?.id;
@@ -63,6 +69,79 @@ function render() {
     paymentTimer = setTimeout(() => checkPayment(true), 15000);
     paymentTimer?.unref?.();
   }
+  clearTimeout(generationTimer);
+  if (state.user) {
+    generationTimer = setTimeout(() => loadGenerationHistory({ poll: true }), 10000);
+    generationTimer?.unref?.();
+  }
+}
+
+function updateGenerationSection() {
+  const target = document.getElementById('generation-history-content');
+  if (!target || !state.user) return;
+  target.innerHTML = generationHistoryContent(state);
+  const refresh = document.querySelector('.xp-generation-refresh');
+  if (refresh) {
+    refresh.disabled = state.generationLoading;
+    refresh.textContent = state.generationLoading ? 'Memperbarui…' : 'Perbarui riwayat';
+  }
+  const updated = document.getElementById('generation-updated');
+  if (updated) updated.textContent = state.generationUpdatedAt
+    ? `Terakhir diperbarui ${new Date(state.generationUpdatedAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' })} WIB`
+    : 'Belum diperbarui';
+}
+
+async function loadGenerationHistory({ page = 1, append = false, poll = false } = {}) {
+  const userId = state.user?.id;
+  const epoch = generationEpoch;
+  if (!userId || generationInFlight) return;
+  const requestToken = ++generationRequestToken;
+  const requestedPage = poll ? 1 : page;
+  generationInFlight = true;
+  state.generationLoading = true;
+  state.generationError = '';
+  updateGenerationSection();
+  try {
+    let data, tasks = [];
+    // Refresh all loaded pages, not just the newest: older active tasks can finish too.
+    const lastPage = poll ? state.generationPage : requestedPage;
+    for (let current = requestedPage; current <= lastPage; current++) {
+      data = await api(`/api/developer/generations?page=${current}`);
+      if (state.user?.id !== userId || generationEpoch !== epoch) return;
+      if (!Array.isArray(data.tasks) || data.page !== current || typeof data.hasMore !== 'boolean') {
+        throw new Error('Respons riwayat generasi tidak valid. Coba lagi.');
+      }
+      tasks.push(...data.tasks);
+      if (!data.hasMore) break;
+    }
+    state.generationTasks = [...new Map((append ? [...state.generationTasks, ...tasks] : tasks)
+      .map(task => [task.taskId, task])).values()];
+    state.generationPage = data.page;
+    state.generationHasMore = data.hasMore;
+    state.generationUpdatedAt = new Date().toISOString();
+  } catch (error) {
+    if (state.user?.id === userId && generationEpoch === epoch) {
+      const message = error.message || '';
+      state.generationError = [
+        'Tidak dapat terhubung ke server.',
+        'Server terlalu lama merespons.',
+        'Respons server tidak dapat dibaca',
+        'Respons riwayat generasi tidak valid.',
+      ].some(prefix => message.startsWith(prefix))
+        ? message
+        : 'Riwayat generasi gagal dimuat. Periksa koneksi, lalu coba lagi.';
+    }
+    if (!state.user) render();
+  } finally {
+    if (requestToken === generationRequestToken) generationInFlight = false;
+    if (requestToken === generationRequestToken && state.user?.id === userId && generationEpoch === epoch) {
+      state.generationLoading = false;
+      updateGenerationSection();
+      clearTimeout(generationTimer);
+      generationTimer = setTimeout(() => loadGenerationHistory({ poll: true }), 10000);
+      generationTimer?.unref?.();
+    }
+  }
 }
 
 async function loadData() {
@@ -95,6 +174,7 @@ async function loadData() {
       if (data.invoice && ['paid', 'expired', 'failed'].includes(data.invoice.status)) state.paymentAttempt = null;
     }).catch(error => { state.checkoutError = error.message; }),
   ]);
+  await loadGenerationHistory({ page: 1 });
 }
 
 async function checkPayment(automatic = false) {
@@ -151,6 +231,14 @@ root.addEventListener('submit', event => {
         state.notice = 'Pendaftaran berhasil. Silakan login untuk membuka portal.';
       } else {
         const result = await post('/api/auth/login', { email, password });
+        generationEpoch += 1;
+        generationRequestToken += 1;
+        generationInFlight = false;
+        state.generationTasks = [];
+        state.generationPage = 1;
+        state.generationHasMore = false;
+        state.generationError = '';
+        state.generationUpdatedAt = null;
         state.user = result.user;
         await loadData();
       }
@@ -206,12 +294,27 @@ root.addEventListener('change', event => {
 
 root.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
-  if (!button || busy) return;
+  if (!button || (busy && !button.dataset.action.startsWith('generations-'))) return;
   const action = button.dataset.action;
   if (action === 'toggle-password') {
     const input = document.getElementById('auth-password');
     input.type = input.type === 'password' ? 'text' : 'password';
     button.setAttribute('aria-label', input.type === 'password' ? 'Tampilkan kata sandi' : 'Sembunyikan kata sandi');
+    return;
+  }
+  if (action === 'generations-refresh') {
+    if (!generationInFlight) {
+      state.generationTasks = [];
+      state.generationPage = 1;
+      state.generationHasMore = false;
+      loadGenerationHistory({ page: 1 });
+    }
+    return;
+  }
+  if (action === 'generations-more') {
+    if (!generationInFlight && state.generationHasMore) {
+      loadGenerationHistory({ page: state.generationPage + 1, append: true });
+    }
     return;
   }
   if (action === 'switch-auth') {
@@ -236,6 +339,17 @@ root.addEventListener('click', event => {
       if (action === 'payment-check') await checkPayment();
       if (action === 'logout') {
         await post('/api/auth/logout', {});
+        generationEpoch += 1;
+        generationRequestToken += 1;
+        generationInFlight = false;
+        clearTimeout(generationTimer);
+        generationTimer = null;
+        state.generationTasks = [];
+        state.generationError = '';
+        state.generationPage = 1;
+        state.generationHasMore = false;
+        state.generationLoading = false;
+        state.generationUpdatedAt = null;
         state.user = state.overview = state.subscription = null;
         state.payments = [];
         state.wallet = null;
@@ -313,6 +427,9 @@ async function start() {
   }
   try {
     const { user } = await api('/api/auth/me');
+    generationEpoch += 1;
+    generationRequestToken += 1;
+    generationInFlight = false;
     state.user = user;
     if (user) await loadData();
   } catch (error) {

@@ -98,6 +98,35 @@ module.exports = function wanRoutes({ pool, provider, wallet, validateKey, saveI
     if (req.session?.userId) return { column: 'user_id', id: req.session.userId };
     throw new ServiceError(401, 'Login atau Xclip API key diperlukan.');
   }
+  // Read-only history: never dispatch or poll upstream as a side effect of listing.
+  router.get('/api/developer/generations', async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    try {
+      const auth = await owner(req);
+      const page = req.query.page === undefined ? 1 : Number(req.query.page);
+      if (!Number.isSafeInteger(page) || page < 1 || page > 100000) {
+        throw new ServiceError(400, 'Halaman riwayat tidak valid.');
+      }
+      const { rows } = await pool.query(
+        `SELECT task_id, model, status, created_at, completed_at,
+          CASE WHEN status = 'completed' AND video_url IS NOT NULL THEN TRUE ELSE FALSE END AS has_video,
+          retry_data->>'delivery' AS delivery
+         FROM video_generation_tasks WHERE ${auth.column} = $1 AND model = $2
+         ORDER BY created_at DESC, task_id DESC LIMIT 21 OFFSET $3`,
+        [auth.id, MODEL, (page - 1) * 20]);
+      const tasks = rows.slice(0, 20).map(row => ({
+        taskId: row.task_id, model: MODEL, status: row.status,
+        createdAt: row.created_at, completedAt: row.completed_at,
+        videoUrl: row.status === 'completed' && row.has_video ? publicVideoUrl(row.task_id) : null,
+        ...(row.status === 'failed' ? { error: 'Generasi video gagal. Jika memakai saldo API, saldo dikembalikan setelah kegagalan dikonfirmasi.' } : {}),
+        ...(row.status === 'pending' && row.delivery !== 'confirmed' ? { notice: UNCERTAIN } : {}),
+      }));
+      res.json({ tasks, page, hasMore: rows.length > 20 });
+    } catch (error) {
+      logger.warn('history_request_failed', describeError(error));
+      sendError(res, error);
+    }
+  });
   router.get('/api/developer/models', async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     try {

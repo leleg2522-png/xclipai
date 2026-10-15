@@ -9,6 +9,7 @@ const browser = spawn(process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
   ['--headless','--no-sandbox','--disable-dev-shm-usage','--remote-debugging-pipe',`--user-data-dir=${profile}`],
   { stdio:['ignore','ignore','ignore','pipe','pipe'] });
 let sequence=0, incoming='', session, invoice=null, paid=false;
+let generationFailed=false, generationError=false;
 const pending=new Map(), creates=[], errors=[];
 function send(method,params={},sid=session) {
   return new Promise((resolve,reject)=>{
@@ -36,10 +37,19 @@ const png=Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),chunk('IHDR',head
   chunk('IDAT',zlib.deflateSync(pixels)),chunk('IEND',Buffer.alloc(0))]);
 async function intercept(p) {
   const path=new URL(p.request.url).pathname;
-  let data,body,type='application/json';
+  let data,body,type='application/json',responseCode=200;
   if(path==='/api/auth/me')data={user:{id:900001,username:'UI test developer'}};
   else if(path==='/api/developer/overview')data={keys:[],hasLifetimeKey:false,totalRequests:0};
   else if(path==='/api/developer/models')data={models:[{id:'wan-3.0-uncensored',name:'Wan 3.0 Uncensored',status:'available',pricePerVideo:6000}]};
+  else if(path==='/api/developer/generations') {
+    responseCode=generationError?503:200;
+    data=generationError?{error:'Riwayat sementara tidak tersedia'}:{tasks:[
+      {taskId:'xv_'+ 'a'.repeat(64),model:'wan-3.0-uncensored',status:'completed',
+        createdAt:'2026-10-15T00:00:00Z',videoUrl:'/api/videogen/proxy-video?taskId=xv_test'},
+      {taskId:'xv_'+ 'b'.repeat(64),model:'wan-3.0-uncensored',status:generationFailed?'failed':'processing',
+        createdAt:'2026-10-15T00:00:00Z',error:generationFailed?'Generasi video gagal. Saldo dikembalikan.':undefined},
+    ],page:Number(new URL(p.request.url).searchParams.get('page')||1),hasMore:false};
+  }
   else if(path==='/api/subscription/status')data={hasSubscription:false};
   else if(path==='/api/developer/wallet')data={balance:paid?100000:0,reserved:0,videoPrice:6000,
     minimumTopup:100000,maximumTopup:100000000,currency:'IDR',expires:false};
@@ -61,7 +71,7 @@ async function intercept(p) {
     await send('Fetch.failRequest',{requestId:p.requestId,errorReason:'BlockedByClient'});
     return;
   }
-  await send('Fetch.fulfillRequest',{requestId:p.requestId,responseCode:200,
+  await send('Fetch.fulfillRequest',{requestId:p.requestId,responseCode,
     responseHeaders:[{name:'Content-Type',value:type},{name:'Cache-Control',value:'no-store'}],
     body:(body||Buffer.from(JSON.stringify(data))).toString('base64')});
 }
@@ -95,6 +105,21 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     await send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
     await send('Page.navigate',{url:process.env.WALLET_QA_URL||'http://127.0.0.1:5000/'});
     await wait("!!document.querySelector('#payment-form button[type=submit]') && !document.querySelector('#payment-form button[type=submit]').disabled");
+    await wait("document.querySelectorAll('.xp-generation-row').length === 2");
+    assert.equal(await evaluate("document.querySelectorAll('.xp-generation-download').length"),1);
+    await evaluate("document.querySelector('#payment-amount').value='123456'; document.querySelector('#payment-amount').focus()");
+    generationFailed=true;
+    await wait("!!document.querySelector('.xp-generation-failed')");
+    assert.equal(await evaluate("document.querySelector('#payment-amount').value"),'123456');
+    assert.equal(await evaluate("document.activeElement.id"),'payment-amount');
+    generationError=true;
+    await evaluate("document.querySelector('[data-action=\"generations-refresh\"]').click()");
+    await wait("!!document.querySelector('.xp-generation-error')");
+    generationError=false;
+    await evaluate("document.querySelector('.xp-generation-error [data-action=\"generations-refresh\"]').click()");
+    await wait("document.querySelectorAll('.xp-generation-row').length === 2");
+    await evaluate("document.querySelector('#generasi').scrollIntoView()");
+    await screenshot('/tmp/xclip-generation-desktop.jpg');
     assert.equal(await evaluate("document.body.textContent.includes('1 Hari')"),false);
     assert.equal(await evaluate("document.querySelector('#payment-amount').min"),'100000');
     await evaluate("document.querySelector('#payment-amount').value='99999'; document.querySelector('#payment-form button[type=submit]').click()");
