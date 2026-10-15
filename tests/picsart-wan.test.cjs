@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPicsartWanProvider } = require('../server/picsart-wan-provider');
-const { createPicsartSeedanceProvider } = require('../server/picsart-seedance-provider');
+const { createPicsartSeedanceProvider, createPicsartSeedance2Provider } = require('../server/picsart-seedance-provider');
 const { validateInput } = require('../server/wan-provider');
 const { MODELS } = require('../server/video-models');
 
@@ -17,16 +17,59 @@ function fixture(overrides = {}) {
     if (overrides.request) return overrides.request(options);
     const path = new URL(options.url).pathname;
     const response = path === '/guard/credits' ? {credits:overrides.credits ?? 250}
-      : path.endsWith('/options') ? {credits:overrides.seedance?120:60,usageAmount:30,estimated:false}
+      : path.endsWith('/options') ? {
+        credits:overrides.seedance2?45:overrides.seedance?120:60,
+        usageAmount:overrides.quoteDuration??(overrides.seedance2?15:30),estimated:overrides.estimated??false}
       : path === '/v2/files' ? {url:'https://cdn.picsart.com/reference.png'}
       : path.endsWith('/submit') ? {id:'fake-workflow-id'}
       : {id:'fake-workflow-id',status:overrides.status || 'COMPLETED',
-        result:{[overrides.seedance?'video_url':'url']:overrides.videoUrl || 'https://cdn.picsart.com/result.mp4?token=private'},
+        result:{[overrides.seedance||overrides.seedance2?'video_url':'url']:overrides.videoUrl || 'https://cdn.picsart.com/result.mp4?token=private'},
         progress:{percent:46}};
     return {data:{status:'success',response}};
   };
-  return {provider:(overrides.seedance?createPicsartSeedanceProvider:createPicsartWanProvider)(pool,request),calls,queries};
+  return {provider:(overrides.seedance2?createPicsartSeedance2Provider:overrides.seedance?createPicsartSeedanceProvider:createPicsartWanProvider)(pool,request),calls,queries};
 }
+
+test('Seedance 2.0 preserves the separate captured 15s content contract and completed result', async () => {
+  assert.equal(MODELS['seedance-2.0'].pricePerVideo,5000);
+  const h=fixture({seedance2:true});
+  const p=await h.provider.prepare({model:'seedance-2.0',prompt:'safe landscape',image:png,aspectRatio:'9:16'});
+  assert.deepEqual(p.body,{params:{
+    model:'seedance_2_0',
+    content:[{type:'image_url',image_url:{url:'https://cdn.picsart.com/reference.png'},role:'reference_image'},
+      {type:'text',text:'safe landscape'}],
+    ratio:'9:16',duration:15,resolution:'480p',generate_audio:true,
+    options:{inputs_transformation:{downscale_oversized_images:true}},
+  }});
+  assert.equal(h.calls.filter(c=>c.url.endsWith('/submit')).length,0);
+  assert.ok(h.calls.find(c=>c.url.endsWith('/seedance/options')));
+  const runId=await h.provider.start(p);
+  assert.equal(h.calls.filter(c=>c.url.endsWith('/seedance/submit')).length,1);
+  const result=await h.provider.poll({keyId:12,runId});
+  assert.equal(result.status,'completed');
+  assert.equal(result.videoUrl,'https://cdn.picsart.com/result.mp4?token=private');
+  assert.deepEqual(h.queries.at(-1).params,[12]);
+});
+
+test('Seedance 2.0 defaults to 15s, supports text with audio=false and rejects other durations', async () => {
+  const h=fixture({seedance2:true});
+  const p=await h.provider.prepare({model:'seedance-2.0',prompt:'safe landscape',audio:false});
+  assert.equal(p.body.params.duration,15);
+  assert.equal(p.body.params.generate_audio,false);
+  assert.deepEqual(p.body.params.content,[{type:'text',text:'safe landscape'}]);
+  for(const change of [{duration:30},{duration:14},{duration:5},{duration:'15'},{resolution:'1080p'},{aspectRatio:'1:1'}]) {
+    assert.throws(()=>validateInput({model:'seedance-2.0',prompt:'test',...change}),e=>e.status===400);
+  }
+  assert.throws(()=>validateInput({model:'seedance-2.0',prompt:'test',duration:30}),/15 detik/);
+});
+
+test('Seedance 2.0 rejects low credits or a mismatched/estimated quote before any paid submission', async () => {
+  for(const options of [{credits:44},{quoteDuration:30},{estimated:true},{noCredentials:true}]) {
+    const h=fixture({seedance2:true,...options});
+    await assert.rejects(h.provider.prepare({model:'seedance-2.0',prompt:'test'}),e=>e.status===503);
+    assert.equal(h.calls.filter(c=>c.url.endsWith('/submit')).length,0);
+  }
+});
 
 test('separate Wan 3.0 has a fixed verified 30s contract and does not acquire an uncensored flag', () => {
   const input=validateInput({model:'wan-3.0',prompt:'test'});

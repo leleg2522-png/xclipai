@@ -13,6 +13,10 @@ const MODELS = Object.freeze({
     id: 'seedance-2.5', name: 'Seedance 2.5', category: 'Video',
     pricePerVideo: 11000, minDuration: 30, maxDuration: 30, aspectRatios: ['16:9', '9:16'],
   }),
+  'seedance-2.0': Object.freeze({
+    id: 'seedance-2.0', name: 'Seedance 2.0', category: 'Video',
+    pricePerVideo: 5000, minDuration: 15, maxDuration: 15, aspectRatios: ['16:9', '9:16'],
+  }),
 });
 const MODEL_IDS = Object.keys(MODELS);
 const modelPrices = Object.fromEntries(MODEL_IDS.map(id => [id, MODELS[id].pricePerVideo]));

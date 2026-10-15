@@ -144,12 +144,14 @@ function validateInput(body) {
   if (typeof body.prompt !== 'string' || !body.prompt.trim() || body.prompt.length > 10000) {
     throw new ServiceError(400, 'Prompt wajib diisi, maksimal 10000 karakter.');
   }
-  const duration = body.duration === undefined ? 30 : body.duration;
+  const duration = body.duration === undefined ? spec.maxDuration : body.duration;
   const resolution = body.resolution === undefined ? '480p' : body.resolution;
   const aspectRatio = body.aspectRatio === undefined ? '16:9' : body.aspectRatio;
   const audio = body.audio === undefined ? true : body.audio;
   if (!Number.isInteger(duration) || duration < spec.minDuration || duration > spec.maxDuration) {
-    throw new ServiceError(400, spec.minDuration === 30 ? 'Model ini menggunakan durasi 30 detik.' : 'Durasi harus 2–30 detik.');
+    throw new ServiceError(400, spec.minDuration === spec.maxDuration
+      ? `Model ini menggunakan durasi ${spec.maxDuration} detik.`
+      : `Durasi harus ${spec.minDuration}–${spec.maxDuration} detik.`);
   }
   if (resolution !== '480p') throw new ServiceError(400, 'Konfigurasi model ini menggunakan resolusi 480p.');
   if (!spec.aspectRatios.includes(aspectRatio)) throw new ServiceError(400, 'Rasio aspek tidak didukung.');

@@ -393,6 +393,27 @@ test('Seedance docs, catalog and cURL use public model and Rp11.000 without chan
   require('../server/wan-provider').validateInput(body);
 });
 
+test('Seedance 2.0 docs and cURL use 15 seconds and Rp5000, never 2.5 contract fields', () => {
+  const {portalView,curlExample}=loadViews();
+  const s=browserHarness().controller.state;
+  s.user={username:'dev'};
+  s.docModelId='seedance-2.0';
+  s.models=[{id:'seedance-2.0',status:'available',pricePerVideo:5000}];
+  const html=portalView(s);
+  assert.ok(html.includes('Seedance 2.0'));
+  assert.ok(html.includes('5.000'));
+  assert.ok(html.includes('Durasi hanya 15 detik'));
+  assert.ok(!/picsart|flora|seedance_2_0|generate_audio|gw-v2/i.test(html));
+  const body=JSON.parse(curlExample('generate','seedance-2.0').match(/-d '([\s\S]*)'/)[1]);
+  assert.equal(body.model,'seedance-2.0');
+  assert.equal(body.duration,15);
+  assert.equal(body.resolution,'480p');
+  require('../server/wan-provider').validateInput(body);
+  for(const id of ['wan-3.0','wan-3.0-uncensored','seedance-2.5']) {
+    assert.ok(curlExample('generate',id).includes('"duration": 30'));
+  }
+});
+
 test('generation polling updates all loaded pages without duplicate tasks and ignores a stale account response', async () => {
   const pages = [];
   let resolveResponse;

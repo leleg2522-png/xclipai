@@ -204,7 +204,13 @@ async function routeFixture(t, opts = {}) {
     async start() { stats.seedanceStarts++; return 'seedance-workflow'; },
     async poll() { stats.seedancePolls++; return {status:'completed',videoUrl:'https://cdn.picsart.com/seedance.mp4'}; },
   };
-  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider}, wallet, logger, validateKey: async key =>
+  stats.seedance2Starts=0;stats.seedance2Polls=0;
+  const seedance2Provider = {
+    ...seedanceProvider,
+    async start() {stats.seedance2Starts++;return 'seedance2-workflow';},
+    async poll() {stats.seedance2Polls++;return {status:'completed',videoUrl:'https://cdn.picsart.com/seedance2.mp4'};},
+  };
+  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider,'seedance-2.0':seedance2Provider}, wallet, logger, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
@@ -314,10 +320,37 @@ test('definite submission failure is retained as failed; idempotent retry does n
 test('legacy workers and webhook cannot dispatch or mutate Wan tasks', () => {
   const source = fs.readFileSync('server.js', 'utf8');
   assert.ok(source.includes("if (row.model === 'wan-3.0-uncensored') continue"));
-  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5')"));
+  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5' || task.model === 'seedance-2.0')"));
   assert.ok(source.includes("if (row.model === 'wan-3.0') continue"));
   assert.ok(source.includes("if (row.model === 'seedance-2.5') continue"));
+  assert.ok(source.includes("if (row.model === 'seedance-2.0') continue"));
   assert.ok(source.indexOf("app.use(wanRouter)") < source.indexOf("app.post('/api/videogen/proxy'"));
+});
+
+test('Seedance 2.0 defaults to 15s, charges 5000 even with a subscription and uses only its adapter', async t => {
+  const h=await routeFixture(t,{activeSubscription:true});
+  const catalog=await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
+  const model=catalog.data.models.find(m=>m.id==='seedance-2.0');
+  assert.equal(model.pricePerVideo,5000);
+  assert.equal(model.defaultDuration,15);
+  assert.equal(model.minDuration,15);
+  assert.equal(model.maxDuration,15);
+  const made=await h.generate({model:'seedance-2.0'});
+  assert.equal(made.status,202);
+  assert.equal(made.data.model,'seedance-2.0');
+  assert.deepEqual(h.stats.reservedAmounts,[5000]);
+  assert.equal(h.stats.seedance2Starts,1);
+  assert.equal(h.stats.starts+h.stats.newStarts+h.stats.seedanceStarts,0);
+  assert.equal((await h.generate({model:'seedance-2.0'})).status,200);
+  assert.equal(h.stats.seedance2Starts,1);
+  assert.equal((await h.generate({model:'seedance-2.5'})).status,409);
+  const done=await h.call(`/api/videogen/tasks/${made.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  assert.equal(done.data.model,'seedance-2.0');
+  assert.equal(done.data.status,'completed');
+  assert.equal(h.stats.seedance2Polls,1);
+  assert.equal(h.stats.polls+h.stats.newPolls+h.stats.seedancePolls,0);
+  assert.ok(done.data.videoUrl.startsWith('/api/videogen/proxy-video?taskId='));
+  assert.ok(!/picsart|flora|workflow|seedance_2_0/i.test(JSON.stringify(done.data)));
 });
 
 test('Seedance uses its own adapter and 11000 wallet charge with protected output and idempotent replay', async t => {
@@ -344,8 +377,10 @@ test('Seedance unavailable does not hide Wan or silently fall back to another mo
   const catalog=await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
   assert.equal(catalog.status,200);
   assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.5').status,'unavailable');
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.0').status,'unavailable');
   assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status,'available');
   assert.equal((await h.generate({model:'seedance-2.5'})).status,503);
+  assert.equal((await h.generate({model:'seedance-2.0'})).status,503);
   assert.equal((await h.generate({model:'seedance-2.5-fake'})).status,400);
   assert.equal(h.stats.starts+h.stats.newStarts+h.stats.seedanceStarts,0);
   assert.equal(h.stats.reservations,0);

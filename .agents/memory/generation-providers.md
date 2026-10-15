@@ -50,3 +50,9 @@ The user requested Seedance 2.5 as an additional model and confirmed Rp11.000 pe
 **Why:** The user supplied a successful Seedance capture and entered Rp11.000 when asked for the 480p/30-second developer tariff.
 
 **How to apply:** Preserve the existing Wan models/prices and keep provider identity internal. Do not infer successful 1080p generation from the capture's quotes; its completed Seedance generation used 480p/30 seconds.
+
+The user requested Seedance 2.0 as another separate model and confirmed Rp5.000 per video for 480p/15 seconds.
+
+**Why:** Their new HAR demonstrates a completed Seedance 2.0 generation at 480p/15 seconds, and they entered Rp5.000 when asked for that tariff.
+
+**How to apply:** Preserve the existing models and prices. Do not carry Seedance 2.5's 30-second default into Seedance 2.0; keep its examples, validation and billing consistent with the 15-second product. The capture's completed usage is not proof of a live options quote; unsupported configurations must fail preflight before charging.

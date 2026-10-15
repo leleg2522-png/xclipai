@@ -43,7 +43,8 @@ async function intercept(p) {
   else if(path==='/api/developer/models')data={models:[
     {id:'wan-3.0-uncensored',name:'Wan 3.0 Uncensored',status:'available',pricePerVideo:6000},
     {id:'wan-3.0',name:'Wan 3.0',status:'available',pricePerVideo:6500},
-    {id:'seedance-2.5',name:'Seedance 2.5',status:'available',pricePerVideo:11000}]};
+    {id:'seedance-2.5',name:'Seedance 2.5',status:'available',pricePerVideo:11000},
+    {id:'seedance-2.0',name:'Seedance 2.0',status:'available',pricePerVideo:5000}]};
   else if(path==='/api/developer/generations') {
     responseCode=generationError?503:200;
     data=generationError?{error:'Riwayat sementara tidak tersedia'}:{tasks:[
@@ -109,7 +110,7 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     await send('Page.navigate',{url:process.env.WALLET_QA_URL||'http://127.0.0.1:5000/'});
     await wait("!!document.querySelector('#payment-form button[type=submit]') && !document.querySelector('#payment-form button[type=submit]').disabled");
     await wait("document.querySelectorAll('.xp-generation-row').length === 2");
-    assert.equal(await evaluate("document.querySelectorAll('.xp-model-card').length"),3);
+    assert.equal(await evaluate("document.querySelectorAll('.xp-model-card').length"),4);
     await evaluate("document.querySelector('[data-action=\"doc-model\"][data-model-id=\"wan-3.0\"]').click()");
     assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('6.500')"),true);
     assert.equal(await evaluate("document.querySelector('#dokumentasi pre').textContent.includes('\"model\": \"wan-3.0\"')"),true);
@@ -118,6 +119,11 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     assert.equal(await evaluate("document.querySelector('#dokumentasi pre').textContent.includes('\"model\": \"seedance-2.5\"')"),true);
     assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('11.000')"),true);
     assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('Durasi hanya 30 detik')"),true);
+    await evaluate("document.querySelector('[data-action=\"doc-model\"][data-model-id=\"seedance-2.0\"]').click()");
+    assert.equal(await evaluate("document.querySelector('#dokumentasi pre').textContent.includes('\"model\": \"seedance-2.0\"')"),true);
+    assert.equal(await evaluate("document.querySelector('#dokumentasi pre').textContent.includes('\"duration\": 15')"),true);
+    assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('5.000')"),true);
+    assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('Durasi hanya 15 detik')"),true);
     assert.equal(await evaluate("/flora|picsart/i.test(document.body.textContent)"),false);
     await evaluate("document.querySelector('#model').scrollIntoView()");
     await screenshot('/tmp/xclip-models-desktop.jpg');

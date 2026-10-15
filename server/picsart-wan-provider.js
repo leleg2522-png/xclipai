@@ -103,7 +103,7 @@ function createPicsartVideoProvider(pool, definition, request = axios.request) {
     const params = definition.params(input, imageUrl);
     // A quote is not a generation. Validate the actual requested combination before reserving money.
     const quote = await call(account, 'POST', `${definition.workflow}/options`, { params });
-    if (!Number.isFinite(quote.credits) || quote.credits <= 0 || quote.usageAmount !== 30 || quote.estimated !== false) throw unavailable();
+    if (!Number.isFinite(quote.credits) || quote.credits <= 0 || quote.usageAmount !== input.duration || quote.estimated !== false) throw unavailable();
     const balance = await call(account, 'GET', '/guard/credits');
     if (!Number.isFinite(balance.credits) || balance.credits < quote.credits) throw unavailable('upstream_insufficient_credits');
     return { keyId: account.id, body: { params: {
