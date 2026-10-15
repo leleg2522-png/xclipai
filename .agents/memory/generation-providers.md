@@ -21,6 +21,12 @@ Provider identity must remain internal: developer users should see Xclip, not Pi
 
 **How to apply:** Keep names, pool/configuration details, upstream error payloads, and provider media domains out of the public interface. Merely hiding credential values is insufficient; preserve this boundary when adding adapters and diagnostic views.
 
+Distinguish hiding provider routing from guaranteeing untraceable generated media. Do not promise complete provider anonymity based only on sanitized HTTP responses.
+
+**Why:** A downloaded generation contained embedded AIGC provenance metadata with producer/propagator identifiers, despite clean public API responses and Xclip-only media URLs.
+
+**How to apply:** Include media metadata in privacy audits, explain its limits, and preserve AI-origin/provenance markings rather than silently stripping them to conceal origin.
+
 The user wants a public video-model category showing “Wan 3.0 Uncensored”; its intended internal provider is Flora AI, which must not be named to developer users. The requested generation configuration is Wan 3.0, 480p, 30 seconds.
 
 **Why:** The user specified the public model label and provider privacy, then requested 480p and 30 seconds, correcting the model version to “wan3,0”. When told the documentation did not confirm the Uncensored variant, the user stated “sudah gw tes dan benar”.
