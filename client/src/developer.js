@@ -9,7 +9,7 @@ const state = {
   generationTasks: [], generationError: '', generationPage: 1, generationHasMore: false,
   generationLoading: false, generationUpdatedAt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
-  docTab: 'generate', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
+  docTab: 'generate', docModelId: 'wan-3.0-uncensored', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
 };
 let busy = false;
 let paymentTimer;
@@ -323,6 +323,10 @@ root.addEventListener('click', event => {
     state.error = state.notice = '';
   } else if (action === 'doc-generate' || action === 'doc-status') {
     state.docTab = action === 'doc-generate' ? 'generate' : 'status';
+  } else if (action === 'doc-model') {
+    if (['wan-3.0', 'wan-3.0-uncensored'].includes(button.dataset.modelId)) {
+      state.docModelId = button.dataset.modelId;
+    }
   } else if (action === 'toggle-key') {
     state.keyVisible = !state.keyVisible;
   } else if (action === 'toggle-payload') {
@@ -368,7 +372,7 @@ root.addEventListener('click', event => {
         state.notice = 'API key dinonaktifkan permanen.';
       }
       if (action === 'copy-key' || action === 'copy-curl') {
-        const text = action === 'copy-curl' ? curlExample(state.docTab)
+        const text = action === 'copy-curl' ? curlExample(state.docTab, state.docModelId)
           : state.overview?.keys.find(k => k.status === 'active')?.api_key;
         if (!text) throw new Error('Tidak ada teks yang dapat disalin.');
         if (!navigator.clipboard) throw new Error('Clipboard tidak tersedia. Tampilkan dan salin teks secara manual.');

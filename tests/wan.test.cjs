@@ -99,7 +99,7 @@ async function routeFixture(t, opts = {}) {
   const events = [];
   const logger=createGenerationLogger({write:(_level,record)=>events.push(record)});
   const locks = new Map();
-  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0 };
+  const stats = { starts: 0, polls: 0, released: 0, uploads: 0, counts: 0, reservations: 0, refunds: 0, reservedAmounts: [], newStarts: 0, newPolls: 0 };
   async function query(sql, p = []) {
     if (['BEGIN','COMMIT','ROLLBACK'].includes(sql)) return { rows: [] };
     if (sql.includes('pg_advisory_unlock')) {
@@ -155,12 +155,13 @@ async function routeFixture(t, opts = {}) {
   const pool = { query, async connect() { return { query, release() { stats.released++; } }; } };
   const wallet = {
     assertReady() {},
-    async reserve() {
+    async reserve(_client, _userId, _taskId, price) {
       if (opts.noSubscription && !opts.activeSubscription) {
         const { WalletError } = require('../server/api-wallet');
         throw new WalletError(402, 'Saldo API tidak cukup.');
       }
       stats.reservations++;
+      stats.reservedAmounts.push(price);
     },
     async finish(row, result) {
       if (opts.finishFailure) throw Object.assign(new Error('secret database message fake_secret'),{code:'42P08'});
@@ -191,7 +192,13 @@ async function routeFixture(t, opts = {}) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.session = { userId: Number(req.headers['x-test-user']) || null }; next(); });
-  const router = wanRoutes({ pool, provider, wallet, logger, validateKey: async key =>
+  const secondProvider = {
+    ...provider, handlesImage: true,
+    async context() { if(opts.newUnavailable) throw new ServiceError(503,'Layanan sementara tidak tersedia.'); },
+    async start() { stats.newStarts++; return 'captured-workflow-id'; },
+    async poll() { stats.newPolls++; return {status:'completed',videoUrl:'https://cdn.picsart.com/fake.mp4'}; },
+  };
+  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider}, wallet, logger, validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
@@ -301,7 +308,8 @@ test('definite submission failure is retained as failed; idempotent retry does n
 test('legacy workers and webhook cannot dispatch or mutate Wan tasks', () => {
   const source = fs.readFileSync('server.js', 'utf8');
   assert.ok(source.includes("if (row.model === 'wan-3.0-uncensored') continue"));
-  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored')"));
+  assert.ok(source.includes("taskCheck.rows.some(task => task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0')"));
+  assert.ok(source.includes("if (row.model === 'wan-3.0') continue"));
   assert.ok(source.indexOf("app.use(wanRouter)") < source.indexOf("app.post('/api/videogen/proxy'"));
 });
 
@@ -312,6 +320,38 @@ test('both two-second and thirty-second videos reserve one fixed-price generatio
     assert.equal(h.stats.reservations,1);
     assert.equal([...h.rows.values()][0].retry_data.price,6000);
   }
+});
+
+test('new Wan routes to its own adapter, charges 6500 even with a legacy subscription and replays without dispatch', async t => {
+  const h=await routeFixture(t,{activeSubscription:true});
+  const created=await h.generate({model:'wan-3.0',duration:30});
+  assert.equal(created.status,202);
+  assert.equal(created.data.model,'wan-3.0');
+  assert.deepEqual(h.stats.reservedAmounts,[6500]);
+  assert.equal(h.stats.newStarts,1);
+  assert.equal(h.stats.starts,0);
+  assert.equal((await h.generate({model:'wan-3.0',duration:30})).status,200);
+  assert.equal(h.stats.newStarts,1);
+  assert.equal((await h.generate()).status,409);
+  const done=await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  assert.equal(done.data.status,'completed');
+  assert.equal(done.data.model,'wan-3.0');
+  assert.equal(h.stats.newPolls,1);
+  assert.equal(h.stats.polls,0);
+  assert.ok(!/picsart|flora|captured-workflow-id/i.test(JSON.stringify(done.data)));
+  assert.equal(done.data.videoUrl,`/api/videogen/proxy-video?taskId=${created.data.taskId}`);
+});
+
+test('model catalog reports independent availability and never sends a missing model to a different provider', async t => {
+  const h=await routeFixture(t,{newUnavailable:true});
+  const catalog=await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
+  assert.equal(catalog.status,200);
+  assert.equal(catalog.data.models.find(m=>m.id===MODEL).status,'available');
+  assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status,'unavailable');
+  assert.equal((await h.generate({model:'wan-3.0'})).status,503);
+  assert.equal(h.stats.starts,0);
+  assert.equal(h.stats.newStarts,0);
+  assert.equal(h.stats.reservations,0);
 });
 
 test('generation lifecycle logs queued, accepted, completed and replay without secret content', async t => {

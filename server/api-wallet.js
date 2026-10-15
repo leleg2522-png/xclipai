@@ -1,4 +1,5 @@
 const { PaymentError } = require('./klikqris-provider');
+const { modelPrices } = require('./video-models');
 
 const VIDEO_PRICE = 6000;
 const MIN_TOPUP = 100000;
@@ -55,7 +56,7 @@ function createApiWallet(pool) {
         FROM users u LEFT JOIN portal_api_wallets w ON w.user_id = u.id WHERE u.id = $1`, [userId])).rows[0];
       if (!row) throw new WalletError(404, 'Akun tidak ditemukan.');
       return { balance: safeMoney(row.balance), reserved: safeMoney(row.reserved),
-        videoPrice: VIDEO_PRICE, minimumTopup: MIN_TOPUP, maximumTopup: MAX_TOPUP,
+        videoPrice: VIDEO_PRICE, modelPrices, minimumTopup: MIN_TOPUP, maximumTopup: MAX_TOPUP,
         currency: 'IDR', expires: false };
     },
     // Called inside the same transaction that marks the verified invoice paid.
@@ -74,16 +75,17 @@ function createApiWallet(pool) {
       if (!update.rows.length) throw new WalletError(503, 'Saldo memerlukan pemeriksaan admin.');
     },
     // Caller stores the task and this reservation in ONE transaction, before dispatch.
-    async reserve(client, userId, taskId) {
+    async reserve(client, userId, taskId, price = VIDEO_PRICE) {
+      if (!Object.values(modelPrices).includes(price)) throw new WalletError(503, 'Tarif model tidak valid.');
       const balance = await lock(client, userId);
       const existing = (await client.query(
         'SELECT * FROM portal_api_wallet_charges WHERE task_id = $1', [taskId])).rows[0];
       if (existing) throw new WalletError(409, 'Reservasi task sudah tercatat. Jangan kirim ulang.');
-      if (balance < VIDEO_PRICE) throw new WalletError(402, 'Saldo API tidak cukup. Biaya satu video Rp6.000.');
+      if (balance < price) throw new WalletError(402, `Saldo API tidak cukup. Biaya satu video Rp${price.toLocaleString('id-ID')}.`);
       await client.query(`UPDATE portal_api_wallets SET balance = balance - $2, updated_at = NOW()
-        WHERE user_id = $1`, [userId, VIDEO_PRICE]);
+        WHERE user_id = $1`, [userId, price]);
       await client.query(`INSERT INTO portal_api_wallet_charges (task_id, user_id, amount, status)
-        VALUES ($1,$2,$3,'held')`, [taskId, userId, VIDEO_PRICE]);
+        VALUES ($1,$2,$3,'held')`, [taskId, userId, price]);
     },
     // Terminal results and financial state commit together; later polls cannot reverse them.
     async finish(row, result, existingClient) {

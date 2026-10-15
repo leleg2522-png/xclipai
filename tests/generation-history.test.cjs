@@ -6,7 +6,8 @@ const wanRoutes = require('../server/wan-routes');
 async function fixture(work, failing = false, empty = false) {
   const queries = [];
   const rows = Array.from({ length: 21 }, (_, n) => ({
-    task_id: `xv_${String(n).padStart(64, '0')}`, status: ['completed', 'failed', 'pending', 'processing'][n % 4],
+    task_id: `xv_${String(n).padStart(64, '0')}`, model: n % 2 ? 'wan-3.0' : 'wan-3.0-uncensored',
+    status: ['completed', 'failed', 'pending', 'processing'][n % 4],
     created_at: '2026-10-15T00:00:00Z', completed_at: n === 0 ? '2026-10-15T00:01:00Z' : null,
     has_video: n === 0, delivery: 'uncertain',
     // Projection must not accidentally spread even unexpected database properties.
@@ -67,8 +68,9 @@ test('history is owner scoped, paginated and sanitized for sessions and API keys
       assert.equal(data.tasks[3].videoUrl, null);
       assert.ok(!/flora|picsart|secret|retry_data|runId|api_key|video_url/i.test(JSON.stringify(data)));
       const query = queries.at(-1);
-      assert.match(query.sql, new RegExp(`WHERE ${column} = \\$1 AND model = \\$2`));
-      assert.deepEqual(query.params, [id, 'wan-3.0-uncensored', 20]);
+      assert.match(query.sql, new RegExp(`WHERE ${column} = \\$1 AND model = ANY\\(\\$2::text\\[\\]\\)`));
+      assert.deepEqual(query.params, [id, ['wan-3.0-uncensored','wan-3.0'], 20]);
+      assert.equal(data.tasks[1].model,'wan-3.0');
       assert.match(query.sql, /LIMIT 21 OFFSET \$3/);
     }
   });

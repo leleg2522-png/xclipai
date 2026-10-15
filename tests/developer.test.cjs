@@ -314,10 +314,10 @@ test('revoked state has no create button and docs describe the Wan API contract'
   s.overview = { keys: [{ status: 'revoked', api_key: 'hidden' }], hasLifetimeKey: true, totalRequests: 3, providers: [], generationProvider: 'Freepik' };
   const html = portalView(s);
   assert.ok(html.includes('Wan 3.0 Uncensored'));
-  assert.ok(html.includes('VIDEO · UNCENSORED'));
+  assert.match(html,/Video · Uncensored|VIDEO · UNCENSORED/);
   assert.ok(html.includes('href="#model"'));
   assert.ok(!/generator|Ke generator|Buka generator/i.test(html));
-  assert.ok(html.includes('Belum tersedia'));
+  assert.ok(html.includes('Belum terkonfirmasi'));
   assert.ok(!/flora|picsart|freepik/i.test(html));
   assert.ok(html.includes('API key telah dinonaktifkan'));
   assert.ok(!html.includes('id="key-form"'));
@@ -348,6 +348,29 @@ test('generation history UI shows safe statuses, uncertain notices and only prot
   assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(generationHistoryContent({ generationTasks: [] }).includes('Belum ada tugas'));
   assert.ok(generationHistoryContent({ generationError: 'Coba lagi' }).includes('role="alert"'));
+});
+
+test('new model docs and examples use Rp6.500/30s separately without public provider identity', () => {
+  const {portalView,curlExample}=loadViews();
+  const s=browserHarness().controller.state;
+  s.user={username:'dev'};
+  s.docModelId='wan-3.0';
+  s.models=[{id:'wan-3.0',status:'available',pricePerVideo:6500},
+    {id:'wan-3.0-uncensored',status:'unavailable',pricePerVideo:6000}];
+  const html=portalView(s);
+  assert.ok(html.includes('6.500'));
+  assert.ok(html.includes('6.000'));
+  assert.ok(html.includes('Durasi hanya 30 detik'));
+  assert.ok(html.includes('akun dengan langganan lama'));
+  assert.ok(html.includes('Belum tersedia'));
+  assert.ok(html.includes('Tersedia'));
+  assert.ok(!/flora|picsart|wan3.0-video|gw-v2/i.test(html));
+  for(const id of ['wan-3.0','wan-3.0-uncensored']) {
+    const body=JSON.parse(curlExample('generate',id).match(/-d '([\s\S]*)'/)[1]);
+    assert.equal(body.model,id);
+    assert.equal(body.duration,30);
+    require('../server/wan-provider').validateInput(body);
+  }
 });
 
 test('generation polling updates all loaded pages without duplicate tasks and ignores a stale account response', async () => {

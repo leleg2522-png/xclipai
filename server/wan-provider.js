@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { checkedUrl } = require('./public-video');
+const { MODELS, isManagedVideoModel } = require('./video-models');
 
 const MODEL = 'wan-3.0-uncensored';
 class ServiceError extends Error {
@@ -138,7 +139,8 @@ function createWanProvider(pool, request = axios.request, env = process.env) {
 function validateInput(body) {
   const allowed = ['model', 'prompt', 'image', 'duration', 'resolution', 'aspectRatio', 'audio'];
   if (Object.keys(body).some(k => !allowed.includes(k))) throw new ServiceError(400, 'Parameter request tidak didukung.');
-  if (body.model !== MODEL) throw new ServiceError(400, 'Model Xclip tidak dikenal.');
+  if (!isManagedVideoModel(body.model)) throw new ServiceError(400, 'Model Xclip tidak dikenal.');
+  const spec = MODELS[body.model];
   if (typeof body.prompt !== 'string' || !body.prompt.trim() || body.prompt.length > 10000) {
     throw new ServiceError(400, 'Prompt wajib diisi, maksimal 10000 karakter.');
   }
@@ -146,9 +148,11 @@ function validateInput(body) {
   const resolution = body.resolution === undefined ? '480p' : body.resolution;
   const aspectRatio = body.aspectRatio === undefined ? '16:9' : body.aspectRatio;
   const audio = body.audio === undefined ? true : body.audio;
-  if (!Number.isInteger(duration) || duration < 2 || duration > 30) throw new ServiceError(400, 'Durasi harus 2–30 detik.');
+  if (!Number.isInteger(duration) || duration < spec.minDuration || duration > spec.maxDuration) {
+    throw new ServiceError(400, spec.minDuration === 30 ? 'Model ini menggunakan durasi 30 detik.' : 'Durasi harus 2–30 detik.');
+  }
   if (resolution !== '480p') throw new ServiceError(400, 'Konfigurasi model ini menggunakan resolusi 480p.');
-  if (!['16:9', '9:16', '1:1', '4:3', '3:4'].includes(aspectRatio)) throw new ServiceError(400, 'Rasio aspek tidak didukung.');
+  if (!spec.aspectRatios.includes(aspectRatio)) throw new ServiceError(400, 'Rasio aspek tidak didukung.');
   if (typeof audio !== 'boolean') throw new ServiceError(400, 'Audio harus berupa boolean.');
   const image = body.image === undefined ? '' : body.image;
   if (body.image !== undefined) {
@@ -161,6 +165,6 @@ function validateInput(body) {
       : bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP';
     if (!valid) throw new ServiceError(400, 'Isi gambar tidak sesuai format.');
   }
-  return { model: MODEL, prompt: body.prompt.trim(), image, duration, resolution, aspectRatio, audio };
+  return { model: body.model, prompt: body.prompt.trim(), image, duration, resolution, aspectRatio, audio };
 }
 module.exports = { MODEL, ServiceError, createWanProvider, validateInput };

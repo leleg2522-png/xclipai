@@ -77,6 +77,7 @@ test('confirmed prices and non-expiring API balance never reuse bot saldo', asyn
   const h=fixture();await h.wallet.initialize();
   assert.equal(VIDEO_PRICE,6000);assert.equal(MIN_TOPUP,100000);
   assert.deepEqual(await h.wallet.get(1),{balance:100000,reserved:0,videoPrice:6000,
+    modelPrices:{'wan-3.0-uncensored':6000,'wan-3.0':6500},
     minimumTopup:100000,maximumTopup:100000000,currency:'IDR',expires:false});
   await assert.rejects(h.wallet.get(2),e=>e.status===404);
   const row=await h.reserve('one');
@@ -85,6 +86,26 @@ test('confirmed prices and non-expiring API balance never reuse bot saldo', asyn
   await h.wallet.finish(row,{status:'completed',videoUrl:'/video'});
   assert.equal(h.state.balance,94000);assert.equal(h.state.botSaldo,70000);
   assert.equal((await h.wallet.get(1)).reserved,0);
+});
+
+test('new Wan reservations use Rp6.500 and failures refund the original model-specific amount once', async () => {
+  const h=fixture(6500);await h.wallet.initialize();
+  const row=await h.transaction(async c=>{
+    await h.wallet.reserve(c,1,'new-wan',6500);
+    const row={task_id:'new-wan',user_id:1,model:'wan-3.0',status:'processing',retry_data:{billing:'wallet',price:6500}};
+    h.state.tasks.set(row.task_id,row);
+    return row;
+  });
+  assert.equal(h.state.balance,0);
+  assert.equal(h.state.charges.get('new-wan').amount,6500);
+  await h.wallet.finish(row,{status:'failed'});
+  await h.wallet.finish(row,{status:'failed'});
+  assert.equal(h.state.balance,6500);
+  assert.equal(h.state.charges.get('new-wan').status,'refunded');
+  const low=fixture(6499);await low.wallet.initialize();
+  await assert.rejects(low.transaction(c=>low.wallet.reserve(c,1,'too-low',6500)),e=>e.status===402);
+  await assert.rejects(low.transaction(c=>low.wallet.reserve(c,1,'wrong-price',1)),e=>e.status===503);
+  assert.equal(low.state.balance,6499);
 });
 
 test('credit is idempotent, excludes unique gateway fees, and rolls back with its transaction', async () => {

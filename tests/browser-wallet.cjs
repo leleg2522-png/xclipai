@@ -40,7 +40,9 @@ async function intercept(p) {
   let data,body,type='application/json',responseCode=200;
   if(path==='/api/auth/me')data={user:{id:900001,username:'UI test developer'}};
   else if(path==='/api/developer/overview')data={keys:[],hasLifetimeKey:false,totalRequests:0};
-  else if(path==='/api/developer/models')data={models:[{id:'wan-3.0-uncensored',name:'Wan 3.0 Uncensored',status:'available',pricePerVideo:6000}]};
+  else if(path==='/api/developer/models')data={models:[
+    {id:'wan-3.0-uncensored',name:'Wan 3.0 Uncensored',status:'available',pricePerVideo:6000},
+    {id:'wan-3.0',name:'Wan 3.0',status:'available',pricePerVideo:6500}]};
   else if(path==='/api/developer/generations') {
     responseCode=generationError?503:200;
     data=generationError?{error:'Riwayat sementara tidak tersedia'}:{tasks:[
@@ -106,6 +108,14 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     await send('Page.navigate',{url:process.env.WALLET_QA_URL||'http://127.0.0.1:5000/'});
     await wait("!!document.querySelector('#payment-form button[type=submit]') && !document.querySelector('#payment-form button[type=submit]').disabled");
     await wait("document.querySelectorAll('.xp-generation-row').length === 2");
+    assert.equal(await evaluate("document.querySelectorAll('.xp-model-card').length"),2);
+    await evaluate("document.querySelector('[data-action=\"doc-model\"][data-model-id=\"wan-3.0\"]').click()");
+    assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('6.500')"),true);
+    assert.equal(await evaluate("document.querySelector('#dokumentasi pre').textContent.includes('\"model\": \"wan-3.0\"')"),true);
+    assert.equal(await evaluate("document.querySelector('#dokumentasi').textContent.includes('Durasi hanya 30 detik')"),true);
+    assert.equal(await evaluate("/flora|picsart/i.test(document.body.textContent)"),false);
+    await evaluate("document.querySelector('#model').scrollIntoView()");
+    await screenshot('/tmp/xclip-models-desktop.jpg');
     assert.equal(await evaluate("document.querySelectorAll('.xp-generation-download').length"),1);
     await evaluate("document.querySelector('#payment-amount').value='123456'; document.querySelector('#payment-amount').focus()");
     generationFailed=true;
@@ -135,6 +145,9 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     await evaluate("document.querySelector('#topup').scrollIntoView()");
     await screenshot('/tmp/xclip-wallet-desktop.jpg');
     await send('Emulation.setDeviceMetricsOverride',{width:402,height:874,deviceScaleFactor:1,mobile:true});
+    await evaluate("document.querySelector('#model').scrollIntoView()");
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= 402'),true);
+    await screenshot('/tmp/xclip-models-mobile.jpg');
     await evaluate("document.querySelector('#topup').scrollIntoView()");
     assert.equal(await evaluate('document.documentElement.scrollWidth <= 402'),true);
     await screenshot('/tmp/xclip-wallet-mobile.jpg');

@@ -44,7 +44,28 @@ export function authView(s) {
   </div>`;
 }
 
-export function curlExample(tab) {
+const modelSpecs = {
+  'wan-3.0': {
+    name: 'Wan 3.0', price: 6500, duration: '30 detik (tetap)',
+    resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
+    audio: 'Boolean, default true',
+  },
+  'wan-3.0-uncensored': {
+    name: 'Wan 3.0 Uncensored', price: 6000, duration: '2–30 detik, default 30',
+    resolution: '480p', ratios: '16:9, 9:16, 1:1, 4:3, atau 3:4', defaultRatio: '16:9',
+    audio: 'Boolean, default true',
+  },
+};
+const modelSpec = (id, s) => {
+  const spec = modelSpecs[id] || modelSpecs['wan-3.0-uncensored'];
+  const catalog = s.models?.find(model => model.id === id);
+  return { ...spec, id, status: catalog?.status || 'unknown',
+    price: Number.isSafeInteger(catalog?.pricePerVideo) ? catalog.pricePerVideo : spec.price };
+};
+const modelLabel = id => modelSpecs[id]?.name || id || 'Model video';
+const selectedModelId = s => modelSpecs[s.docModelId] ? s.docModelId : 'wan-3.0-uncensored';
+
+export function curlExample(tab, modelId = 'wan-3.0-uncensored') {
   return tab === 'status'
     ? 'curl "$XCLIP_BASE_URL/api/videogen/tasks/<taskId>" \\\n  -H "X-Xclip-Key: <API_KEY_ANDA>"'
     : `curl -X POST "$XCLIP_BASE_URL/api/videogen/proxy" \\
@@ -52,11 +73,12 @@ export function curlExample(tab) {
   -H "Idempotency-Key: <UUID_UNIK_REQUEST>" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "wan-3.0-uncensored",
+    "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0-uncensored'}",
     "prompt": "Kamera bergerak perlahan melewati lanskap",
     "resolution": "480p",
     "duration": 30,
-    "aspectRatio": "16:9"
+    "aspectRatio": "16:9",
+    "audio": true
   }'`;
 }
 
@@ -75,24 +97,39 @@ function keyView(s) {
 
 function docsView(s) {
   const generate = s.docTab === 'generate';
+  const modelId = selectedModelId(s);
+  const model = modelSpec(modelId, s);
+  const isFixedDuration = modelId === 'wan-3.0';
   return `<section class="xp-docs-section" id="dokumentasi">
     <div class="xp-section-heading xp-doc-heading"><div><span class="xp-kicker">02 / QUICKSTART</span><h2>Request pertama Anda</h2></div><span class="xp-doc-meta">${i('BookOpen')} REST · JSON</span></div>
     <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Kedua endpoint memakai header <code>X-Xclip-Key</code>.</span></div></aside>
     <div class="xp-endpoint"><div class="xp-endpoint-head"><span class="xp-method ${generate ? 'post' : 'get'}">${generate ? 'POST' : 'GET'}</span><code>${generate ? '/api/videogen/proxy' : '/api/videogen/tasks/:taskId'}</code><button class="xp-copy-inline" data-action="copy-curl">${i('Copy')} Salin cURL</button></div>
-    <p class="xp-endpoint-desc">${generate ? 'Wan 3.0 Uncensored: kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.' : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
+     <p class="xp-endpoint-desc">${generate ? `${e(model.name)} (${e(model.id)}): kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.` : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
     <div class="xp-data-note">Tetapkan <code>XCLIP_BASE_URL</code> ke alamat server Xclip tempat Anda menjalankan API. Ganti seluruh placeholder sebelum mengirim request. <code>videoUrl</code> adalah path relatif terhadap server Xclip; gunakan header <code>X-Xclip-Key</code> saat mengambil hasil video.</div>
-    ${generate ? `<div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>wan-3.0-uncensored.</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP; maksimal sekitar 10 MB.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>2–30 detik, default 30.</p></div><div><code>resolution</code><span>string</span><p>480p, default 480p.</p></div><div><code>aspectRatio</code><span>string</span><p>16:9, 9:16, 1:1, 4:3, atau 3:4; default 16:9.</p></div><div><code>audio</code><span>boolean</span><p>Audio bawaan, default true.</p></div></div>` : ''}</div>` : ''}
-    <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
-    <div class="xp-data-note"><strong>Request:</strong> ${generate ? 'Biaya Rp6.000 per video untuk 2–30 detik; saldo dicadangkan sebelum generasi. Saldo kurang menghasilkan <code>402</code>. Akses langganan lama yang masih aktif tetap dihormati sampai berakhir. Ganti <code>Idempotency-Key</code> untuk setiap request baru; gunakan key yang sama dengan body identik saat mengulang request yang terputus, agar tidak memulai generasi atau memotong saldo dua kali. Jeda request baru 180 detik. Respons <code>202</code> berisi <code>taskId</code>; periksa status setiap 5 detik. Jika pengiriman belum terkonfirmasi, simpan taskId dan hubungi dukungan—saldo tetap dicadangkan dan jangan membuat request baru.' : '<code>taskId</code> pada URL. Status: pending, processing, completed, atau failed. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Saat completed, ambil <code>videoUrl</code> melalui Xclip. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
+     ${generate ? `<div class="xp-model-choice" role="group" aria-label="Pilih model untuk dokumentasi"><span class="xp-nav-caption">MODEL UNTUK CONTOH REQUEST</span>${Object.keys(modelSpecs).map(id => {
+       const item = modelSpec(id, s);
+       return `<button type="button" data-action="doc-model" data-model-id="${e(id)}" class="${id === modelId ? 'active' : ''}" aria-pressed="${id === modelId}"><span>${e(item.name)}</span><code>${e(id)}</code><strong>${money(item.price)} / video</strong></button>`;
+     }).join('')}</div>
+     <div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>${e(model.id)}</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP untuk image-to-video.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>${e(model.duration)}${isFixedDuration ? '; durasi lain ditolak dengan HTTP 400' : ''}.</p></div><div><code>resolution</code><span>string</span><p>${e(model.resolution)}.</p></div><div><code>aspectRatio</code><span>string</span><p>${e(model.ratios)}; default ${e(model.defaultRatio)}.</p></div><div><code>audio</code><span>boolean</span><p>${e(model.audio)}.</p></div></div>` : ''}</div>` : ''}
+     <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab, modelId))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
+     <div class="xp-data-note"><strong>Request:</strong> ${generate ? `Biaya ${money(model.price)} per video. ${isFixedDuration ? 'Durasi hanya 30 detik; durasi lain ditolak dengan HTTP 400.' : 'Durasi 2–30 detik.'} Saldo dicadangkan sebelum generasi. Saldo kurang menghasilkan <code>402</code>. ${isFixedDuration ? 'Model ini memakai saldo API, termasuk untuk akun dengan langganan lama.' : 'Akses langganan lama yang masih aktif tetap dihormati sampai berakhir untuk model ini.'} Ganti <code>Idempotency-Key</code> untuk setiap request baru; gunakan key yang sama dengan body identik saat mengulang request yang terputus, agar tidak memulai generasi atau memotong saldo dua kali. Jeda request baru 180 detik. Respons <code>202</code> berisi <code>taskId</code>; periksa status setiap 5 detik. Jika pengiriman belum terkonfirmasi, simpan taskId dan hubungi dukungan—saldo tetap dicadangkan dan jangan membuat request baru.` : '<code>taskId</code> pada URL. Status: pending, processing, completed, atau failed. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Saat completed, ambil <code>videoUrl</code> melalui Xclip. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 
 function modelsView(s) {
-  const model = s.models?.find(m => m.id === 'wan-3.0-uncensored');
-  const available = model?.status === 'available';
+  const ids = ['wan-3.0', 'wan-3.0-uncensored'];
   return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
     <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>
-    <article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">VIDEO · UNCENSORED</span><h3>Wan 3.0 Uncensored</h3></div><span class="xp-model-status">${available ? 'Tersedia' : 'Belum tersedia'}</span></div><p>${available ? 'Text-to-video dan image-to-video · 480p · 2–30 detik, default 30 detik. Gunakan model ID wan-3.0-uncensored melalui API Xclip.' : e(s.modelError || 'Ketersediaan model belum terkonfirmasi. Muat ulang portal untuk memeriksa katalog.')}</p></article>
+    <div class="xp-model-catalog">${ids.map(id => {
+      const model = modelSpec(id, s);
+      const statusLabel = model.status === 'available' ? 'Tersedia'
+        : model.status === 'unavailable' ? 'Belum tersedia' : 'Belum terkonfirmasi';
+      const config = id === 'wan-3.0'
+        ? 'Text-to-video dan image-to-video · 480p · 30 detik tetap · rasio 16:9 atau 9:16 · audio default aktif.'
+        : 'Text-to-video dan image-to-video · 480p · 2–30 detik · rasio 16:9, 9:16, 1:1, 4:3, atau 3:4.';
+      return `<article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">${id === 'wan-3.0-uncensored' ? 'VIDEO · UNCENSORED' : 'VIDEO'}</span><h3>${e(model.name)}</h3></div><span class="xp-model-status">${statusLabel}</span></div><p>${e(config)}</p><div class="xp-model-meta"><code>${e(id)}</code><strong>${money(model.price)} <span>/ video</span></strong></div></article>`;
+    }).join('')}</div>
+    ${s.modelError ? `<p class="xp-model-error" role="status">${e(s.modelError)} Katalog tetap menampilkan konfigurasi dan harga yang tersedia.</p>` : ''}
   </section>`;
 }
 
@@ -103,7 +140,7 @@ function topupView(s) {
     timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short',
   }) : '';
   return `<section class="xp-topup-section" id="topup"><div class="xp-section-heading"><div><span class="xp-kicker">04 / TOP UP</span><h2>Top up saldo API</h2></div>${i('Wallet')}</div>
-    <div class="xp-topup-card"><div class="xp-topup-main"><div class="xp-topup-icon">${i('Wallet')}</div><div><span class="xp-access-label">KLIKQRIS · VERIFIKASI OTOMATIS</span><h3>Isi saldo, tanpa masa aktif</h3><p>Saldo API tidak kedaluwarsa dan terpisah dari saldo bot. Wan 3.0 480p dikenakan Rp6.000 per video, untuk durasi 2–30 detik. Saldo ditambahkan setelah pembayaran diverifikasi server.</p></div></div></div>
+     <div class="xp-topup-card"><div class="xp-topup-main"><div class="xp-topup-icon">${i('Wallet')}</div><div><span class="xp-access-label">KLIKQRIS · VERIFIKASI OTOMATIS</span><h3>Isi saldo, tanpa masa aktif</h3><p>Saldo API tidak kedaluwarsa dan terpisah dari saldo bot. Harga per video berbeda menurut model; lihat katalog model untuk rincian harga dan konfigurasi. Saldo ditambahkan setelah pembayaran diverifikasi server.</p></div></div></div>
     ${s.paymentConfig?.sandbox ? '<div class="xp-data-note" role="status"><strong>Mode sandbox.</strong> Ini simulasi, bukan pembayaran nyata. Saldo nyata tidak ditambahkan.</div>' : ''}
     ${s.walletError ? `<div class="xp-data-note" role="alert">${e(s.walletError)} <button data-action="refresh">Coba lagi</button></div>` : ''}
     ${s.checkoutError ? `<div class="xp-data-note" role="alert">${e(s.checkoutError)} <button data-action="refresh">Perbarui pembayaran</button></div>` : ''}
@@ -162,7 +199,7 @@ export function generationHistoryContent(s) {
     const resultUrl = task.status === 'completed' ? generationResultUrl(task.videoUrl) : '';
     return `<article class="xp-generation-row">
       <div class="xp-generation-status xp-generation-${e(generationStatus[task.status] ? task.status : 'pending')}"><span></span>${e(status)}</div>
-      <div class="xp-generation-details"><div class="xp-generation-id-line"><code>${e(task.taskId || 'ID tidak tersedia')}</code><span>${e(task.model || 'Model video')}</span></div>
+        <div class="xp-generation-details"><div class="xp-generation-id-line"><code>${e(task.taskId || 'ID tidak tersedia')}</code><span>${e(modelLabel(task.model))}</span></div>
         <div class="xp-generation-times"><span>Dibuat ${e(generationDate(task.createdAt))}</span>${task.completedAt ? `<span>· Selesai ${e(generationDate(task.completedAt))}</span>` : ''}</div>
         ${task.status === 'failed' && task.error ? `<p class="xp-generation-message xp-generation-message-error">${e(task.error)}</p>` : ''}
         ${task.notice ? `<p class="xp-generation-message">${e(task.notice)}</p>` : ''}
@@ -185,7 +222,7 @@ export function portalView(s) {
     <section class="xp-key-section" id="kunci"><div class="xp-section-heading"><div><span class="xp-kicker">01 / KREDENSIAL</span><h2>API key Anda</h2></div><span class="xp-single-rule">${i('LockKeyhole')} Satu kunci seumur hidup</span></div><div class="xp-key-card">${keyView(s)}<div class="xp-key-footnote"><span>i</span> Maksimal satu API key per pengguna, termasuk setelah dinonaktifkan.</div></div></section>
     ${modelsView(s)}
     ${docsView(s)}
-    <section class="xp-access-section" id="akses"><div class="xp-section-heading"><div><span class="xp-kicker">03 / SALDO</span><h2>Saldo API tanpa masa aktif</h2></div></div><div class="xp-access-card"><div class="xp-access-main"><div class="xp-access-icon">${i('Wallet')}</div><div><span class="xp-access-label">SALDO TERSEDIA</span><h3>${s.wallet ? money(s.wallet.balance) : 'Saldo belum tersedia'}</h3><p>${s.walletError ? e(s.walletError) : s.wallet ? `Dicadangkan untuk task: ${money(s.wallet.reserved)}. Biaya ${money(s.wallet.videoPrice)} per video.` : 'Perbarui data untuk melihat saldo.'}</p><p>Saldo dicadangkan saat generasi dimulai; kegagalan terkonfirmasi mengembalikan saldo. Request yang belum terkonfirmasi tetap dicadangkan untuk mencegah tagihan ganda.</p>${s.subscription?.hasSubscription ? '<p>Akses langganan lama tetap dihormati sampai berakhir. Top up baru menambah saldo, bukan memperpanjangnya.</p>' : ''}</div></div><div class="xp-access-divider"></div><div class="xp-access-side"><a href="#topup">Isi saldo API ${i('ArrowRight')}</a><p>Saldo terpisah dari saldo bot dan tidak kedaluwarsa.</p></div></div></section>
+     <section class="xp-access-section" id="akses"><div class="xp-section-heading"><div><span class="xp-kicker">03 / SALDO</span><h2>Saldo API tanpa masa aktif</h2></div></div><div class="xp-access-card"><div class="xp-access-main"><div class="xp-access-icon">${i('Wallet')}</div><div><span class="xp-access-label">SALDO TERSEDIA</span><h3>${s.wallet ? money(s.wallet.balance) : 'Saldo belum tersedia'}</h3><p>${s.walletError ? e(s.walletError) : s.wallet ? `Dicadangkan untuk task: ${money(s.wallet.reserved)}. Harga per video mengikuti model yang dipilih; lihat katalog model.` : 'Perbarui data untuk melihat saldo.'}</p><p>Saldo dicadangkan saat generasi dimulai; kegagalan terkonfirmasi mengembalikan saldo. Request yang belum terkonfirmasi tetap dicadangkan untuk mencegah tagihan ganda.</p>${s.subscription?.hasSubscription ? '<p>Akses langganan lama tetap dihormati sampai berakhir. Top up baru menambah saldo, bukan memperpanjangnya.</p>' : ''}</div></div><div class="xp-access-divider"></div><div class="xp-access-side"><a href="#topup">Isi saldo API ${i('ArrowRight')}</a><p>Saldo terpisah dari saldo bot dan tidak kedaluwarsa.</p></div></div></section>
     ${topupView(s)}
     <footer class="xp-footer"><a class="xp-footer-brand" href="/">${mark} xclip</a><span>PORTAL DEVELOPER</span></footer></main></div>`;
 }
