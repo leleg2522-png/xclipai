@@ -133,7 +133,7 @@ function docsView(s) {
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 
-function modelsView(s) {
+export function modelsView(s) {
   const ids = ['wan-3.0', 'wan-3.0-uncensored', 'seedance-2.5', 'seedance-2.0'];
   return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
     <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>

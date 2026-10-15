@@ -122,11 +122,12 @@ function loadViews() {
   const icons = JSON.parse(iconsSource.trim().replace(/;$/, ''));
   const source = fs.readFileSync('client/src/developer-views.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/^export /gm, '');
-  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent});',
+  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent,modelsView});',
     { icons, Intl, Date, URL, window: { location: { origin: 'https://xclip.test' } } });
 }
 
 function browserHarness(overrides = {}) {
+  const { interceptFetch, ...runtimeOverrides } = overrides;
   const views = loadViews();
   const handlers = {};
   const root = {
@@ -177,10 +178,11 @@ function browserHarness(overrides = {}) {
   }
   const source = fs.readFileSync('client/src/developer.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/\nstart\(\);\s*$/, '');
-  const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,isBusy:()=>busy});', {
+  const controller = vm.runInNewContext(source + '\n({start,state,render,loadGenerationHistory,checkPayment,isBusy:()=>busy});', {
     ...views, document: { getElementById(id) { return id === 'developer-app' ? root : null; } },
-    navigator: {}, fetch: fakeFetch, AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
-    ...overrides,
+    navigator: {}, fetch: interceptFetch ? (path, options) => interceptFetch(path, options, fakeFetch) : fakeFetch,
+    AbortController, setTimeout, clearTimeout, FormData: FormDataStub,
+    ...runtimeOverrides,
   });
   const submit = (id, values) => handlers.submit({ preventDefault() {}, target: { id, values } });
   const click = action => handlers.click({ target: { closest() { return { dataset: { action } }; } } });
@@ -191,6 +193,83 @@ function browserHarness(overrides = {}) {
   return { controller, root, calls, submit, click, settle };
 }
 
+test('slow video catalog and generation history cannot hold login or QR creation busy', async () => {
+  const pending=[];
+  const h=browserHarness({interceptFetch(path,options,next) {
+    if(path==='/api/developer/models'||path.startsWith('/api/developer/generations')) {
+      return new Promise(resolve=>pending.push(()=>resolve({ok:true,status:200,json:async()=>path.includes('/models')
+        ?{models:[]}:{tasks:[],page:1,hasMore:false}})));
+    }
+    return next(path,options);
+  }});
+  try {
+    h.submit('auth-form',{email:'dev@test.example',password:'password'});
+    await h.settle();
+    assert.ok(h.root.innerHTML.includes('Buat QRIS pembayaran'));
+    h.submit('payment-form',{amount:'100000'});
+    await h.settle();
+    assert.equal(h.controller.state.checkout.status,'pending');
+    assert.ok(h.root.innerHTML.includes('id="qris-image"'));
+    assert.equal(h.calls.filter(c=>c.path==='/api/payments/klikqris/create').length,1);
+    assert.equal(h.calls.filter(c=>c.path==='/api/payments/klikqris/current').length,1);
+    await h.controller.checkPayment();
+    assert.equal(h.controller.state.checkout.status,'paid');
+    assert.equal(h.controller.state.wallet.balance,100000);
+  } finally {pending.forEach(resolve=>resolve());await new Promise(resolve=>setImmediate(resolve));}
+});
+
+test('unchanged automatic payment polls do not redraw the portal or reload the QR image', async () => {
+  let h;
+  h=browserHarness({interceptFetch(path,options,next) {
+    if(path==='/api/payments/klikqris/xq_test') {
+      return Promise.resolve({ok:true,status:200,json:async()=>({invoice:structuredClone(h.controller.state.checkout)})});
+    }
+    return next(path,options);
+  }});
+  h.submit('auth-form',{email:'dev@test.example',password:'password'});await h.settle();
+  h.submit('payment-form',{amount:'100000'});await h.settle();
+  let html=h.root.innerHTML,writes=0;
+  Object.defineProperty(h.root,'innerHTML',{get:()=>html,set:value=>{writes++;html=value;}});
+  await h.controller.checkPayment(true);
+  await h.controller.checkPayment(true);
+  assert.equal(writes,0);
+  assert.equal(h.controller.state.checkout.status,'pending');
+});
+
+test('a missed payment POST response recovers the invoice without reissuing the charge', async () => {
+  const h=browserHarness({async interceptFetch(path,options,next) {
+    if(path==='/api/payments/klikqris/create') {
+      await next(path,options);
+      throw new TypeError('Failed to fetch');
+    }
+    return next(path,options);
+  },console:{warn(){}}});
+  h.submit('auth-form',{email:'dev@test.example',password:'password'});await h.settle();
+  h.submit('payment-form',{amount:'100000'});await h.settle();
+  assert.equal(h.controller.state.checkout.status,'pending');
+  assert.ok(h.root.innerHTML.includes('id="qris-image"'));
+  assert.equal(h.calls.filter(c=>c.path==='/api/payments/klikqris/create').length,1);
+  assert.equal(h.calls.filter(c=>c.path==='/api/payments/klikqris/current').length,2);
+  assert.ok(h.controller.state.paymentAttempt.key);
+});
+
+test('a timed-out QR creation and failed recovery release busy state with explicit retry guidance', async () => {
+  let fail=false;
+  const h=browserHarness({async interceptFetch(path,options,next) {
+    if(fail && ['/api/payments/klikqris/create','/api/payments/klikqris/current'].includes(path)) {
+      throw Object.assign(new Error('aborted'),{name:'AbortError'});
+    }
+    return next(path,options);
+  }});
+  h.submit('auth-form',{email:'dev@test.example',password:'password'});await h.settle();
+  fail=true;
+  h.submit('payment-form',{amount:'100000'});await h.settle();
+  assert.equal(h.controller.isBusy(),false);
+  assert.ok(h.root.innerHTML.includes('Server terlalu lama merespons'));
+  assert.ok(h.root.innerHTML.includes('jangan membuat pembayaran ganda'));
+  assert.equal(h.controller.state.checkout,null);
+  assert.ok(h.controller.state.paymentAttempt.key);
+});
 test('network failures display actionable preview help, not an incorrect-password claim', async () => {
   const h = browserHarness({
     fetch: async () => { throw new TypeError('Failed to fetch'); },

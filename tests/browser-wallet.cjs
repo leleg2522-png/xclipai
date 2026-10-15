@@ -162,6 +162,10 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     await evaluate("document.querySelector('#topup').scrollIntoView()");
     assert.equal(await evaluate('document.documentElement.scrollWidth <= 402'),true);
     await screenshot('/tmp/xclip-wallet-mobile.jpg');
+    await evaluate("window.__paymentQrNode = document.querySelector('#qris-image')");
+    await new Promise(resolve=>setTimeout(resolve,16000));
+    assert.equal(await evaluate("window.__paymentQrNode === document.querySelector('#qris-image')"),true);
+    assert.equal(creates.length,1);
     paid=true;
     await evaluate("document.querySelector('[data-action=\"payment-check\"]').click()");
     await wait("document.body.textContent.includes('Saldo API sudah ditambahkan')");
@@ -171,7 +175,7 @@ async function screenshot(path){const r=await send('Page.captureScreenshot',{for
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({mocked_wallet_ui:'passed',minimum:100000,video_price:6000,
       final_payment:100021,credited_balance:100000,expired_balance:false,mobile_no_overflow:true,
-      actual_api_mutations:0,screenshots:['/tmp/xclip-wallet-desktop.jpg','/tmp/xclip-wallet-mobile.jpg']}));
+       actual_api_mutations:0,qr_stable_across_automatic_poll:true,screenshots:['/tmp/xclip-wallet-desktop.jpg','/tmp/xclip-wallet-mobile.jpg']}));
   } catch(e){console.error('Mocked wallet browser verification failed:',e.message);process.exitCode=1;}
   finally {
     for(const p of pending.values())clearTimeout(p.timer);

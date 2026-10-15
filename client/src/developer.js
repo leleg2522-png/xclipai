@@ -1,4 +1,4 @@
-import { authView, portalView, curlExample, generationHistoryContent } from './developer-views.js';
+import { authView, portalView, curlExample, generationHistoryContent, modelsView } from './developer-views.js';
 
 const root = document.getElementById('developer-app');
 const state = {
@@ -17,14 +17,26 @@ let generationTimer;
 let generationEpoch = 0;
 let generationInFlight = false;
 let generationRequestToken = 0;
+let modelRequestToken = 0;
+let paymentCheckInFlight = false;
+
+function resetAccountData() {
+  state.overview = state.subscription = state.wallet = null;
+  state.checkout = state.paymentConfig = state.paymentAttempt = null;
+  state.payments = [];
+  state.walletError = state.historyError = state.checkoutError = '';
+  state.models = [];
+  state.modelError = '';
+}
 
 async function api(path, options = {}) {
+  const { timeoutMs = 20000, ...fetchOptions } = options;
   const requestUserId = state.user?.id;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(path, {
-      credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal,
+      credentials: 'same-origin', cache: 'no-store', ...fetchOptions, signal: controller.signal,
     });
     let data;
     try {
@@ -35,7 +47,7 @@ async function api(path, options = {}) {
     if (!response.ok) {
       if (response.status === 401 && state.user && state.user.id === requestUserId) {
         state.user = null;
-        state.overview = null;
+        resetAccountData();
         state.keyVisible = false;
       }
       throw new Error(data.error || `Request gagal (${response.status})`);
@@ -64,15 +76,19 @@ function render() {
     const submit = document.querySelector('#payment-form button[type=submit]');
     if (submit) submit.disabled = true;
   });
-  clearTimeout(paymentTimer);
-  if (state.user && state.checkout?.status === 'pending') {
-    paymentTimer = setTimeout(() => checkPayment(true), 15000);
-    paymentTimer?.unref?.();
-  }
+  schedulePaymentCheck();
   clearTimeout(generationTimer);
   if (state.user) {
     generationTimer = setTimeout(() => loadGenerationHistory({ poll: true }), 10000);
     generationTimer?.unref?.();
+  }
+}
+
+function schedulePaymentCheck() {
+  clearTimeout(paymentTimer);
+  if (state.user && state.checkout?.status === 'pending') {
+    paymentTimer = setTimeout(() => checkPayment(true), 15000);
+    paymentTimer?.unref?.();
   }
 }
 
@@ -144,51 +160,80 @@ async function loadGenerationHistory({ page = 1, append = false, poll = false } 
   }
 }
 
-async function loadData() {
-  state.subscriptionError = state.walletError = state.historyError = '';
-  state.models = [];
-  state.modelError = '';
-  // Do not replace failed data with fake zeros or an invented balance.
-  state.overview = null;
-  state.wallet = null;
-  state.paymentConfig = state.checkout = null;
-  state.checkoutError = '';
+async function loadPaymentData() {
+  const userId = state.user?.id, epoch = generationEpoch;
+  const current = () => state.user?.id === userId && generationEpoch === epoch;
+  state.walletError = state.historyError = state.checkoutError = '';
   await Promise.all([
-    api('/api/developer/overview').then(data => { state.overview = data; }),
-    api('/api/developer/models').then(data => {
-      if (!Array.isArray(data.models)) throw new Error('Data katalog model tidak valid.');
-      state.models = data.models;
-    }).catch(error => { state.modelError = error.message; }),
-    api('/api/subscription/status').then(data => { state.subscription = data; })
-      .catch(error => { state.subscription = null; state.subscriptionError = error.message; }),
     api('/api/developer/wallet').then(data => {
+      if (!current()) return;
       if (!Number.isSafeInteger(data.balance) || !Number.isSafeInteger(data.reserved)) throw new Error('Data saldo tidak valid.');
       state.wallet = data;
-    }).catch(error => { state.walletError = error.message; }),
-    api('/api/payments/my').then(data => { state.payments = data.payments; })
-      .catch(error => { state.payments = []; state.historyError = error.message; }),
-    api('/api/payments/klikqris/config').then(data => { state.paymentConfig = data; })
-      .catch(error => { state.checkoutError = error.message; }),
-    api('/api/payments/klikqris/current').then(data => {
+    }).catch(error => { if (current()) state.walletError = error.message; }),
+    api('/api/payments/my').then(data => { if (current()) state.payments = data.payments; })
+      .catch(error => { if (current()) state.historyError = error.message; }),
+    api('/api/payments/klikqris/config').then(data => { if (current()) state.paymentConfig = data; })
+      .catch(error => { if (current()) state.checkoutError = error.message; }),
+    api('/api/payments/klikqris/current', { timeoutMs: 12000 }).then(data => {
+      if (!current()) return;
       state.checkout = data.invoice;
       if (data.invoice && ['paid', 'expired', 'failed'].includes(data.invoice.status)) state.paymentAttempt = null;
-    }).catch(error => { state.checkoutError = error.message; }),
+    }).catch(error => { if (current()) state.checkoutError = error.message; }),
   ]);
-  await loadGenerationHistory({ page: 1 });
+}
+
+async function loadModels() {
+  const userId = state.user?.id, epoch = generationEpoch, token = ++modelRequestToken;
+  const current = () => state.user?.id === userId && generationEpoch === epoch && token === modelRequestToken;
+  state.modelError = '';
+  try {
+    const data = await api('/api/developer/models');
+    if (!Array.isArray(data.models)) throw new Error('Data katalog model tidak valid.');
+    if (current()) state.models = data.models;
+  } catch (error) {
+    if (current()) state.modelError = error.message;
+  } finally {
+    // Never redraw the payment form or QR image for a video-provider response.
+    if (current()) {
+      const section = document.getElementById('model');
+      if (section) section.outerHTML = modelsView(state);
+    }
+  }
+}
+
+async function loadData() {
+  const userId = state.user?.id, epoch = generationEpoch;
+  state.subscriptionError = '';
+  // Video providers and history cannot block financial actions.
+  void loadModels();
+  void loadGenerationHistory({ page: 1 });
+  await Promise.all([
+    api('/api/developer/overview').then(data => {
+      if (state.user?.id === userId && generationEpoch === epoch) state.overview = data;
+    }),
+    api('/api/subscription/status').then(data => {
+      if (state.user?.id === userId && generationEpoch === epoch) state.subscription = data;
+    }).catch(error => {
+      if (state.user?.id === userId && generationEpoch === epoch) state.subscriptionError = error.message;
+    }),
+    loadPaymentData(),
+  ]);
 }
 
 async function checkPayment(automatic = false) {
-  const invoiceId = state.checkout?.id, userId = state.user?.id;
+  const invoiceId = state.checkout?.id, userId = state.user?.id, epoch = generationEpoch;
   if (!invoiceId || !userId) return;
-  if (automatic && busy) { render(); return; }
+  if (paymentCheckInFlight || (automatic && busy)) { schedulePaymentCheck(); return; }
+  paymentCheckInFlight = true;
+  const previous = JSON.stringify(state.checkout), previousError = state.checkoutError;
   state.checkoutError = '';
   try {
     const { invoice } = await api(`/api/payments/klikqris/${encodeURIComponent(invoiceId)}`);
-    if (state.user?.id !== userId || state.checkout?.id !== invoiceId) return;
+    if (state.user?.id !== userId || generationEpoch !== epoch || state.checkout?.id !== invoiceId) return;
     state.checkout = invoice;
     if (['paid', 'expired', 'failed'].includes(invoice.status)) {
-      await loadData();
-      if (state.user?.id !== userId) return;
+      await loadPaymentData();
+      if (state.user?.id !== userId || generationEpoch !== epoch) return;
       state.notice = invoice.status === 'paid'
         ? state.paymentConfig?.sandbox ? 'Simulasi pembayaran berhasil. Saldo nyata tidak diubah.'
           : invoice.billing_type === 'subscription' ? 'Pembayaran langganan lama dikonfirmasi.'
@@ -196,9 +241,13 @@ async function checkPayment(automatic = false) {
         : invoice.status === 'expired' ? 'Tagihan kedaluwarsa. Buat QRIS baru jika ingin melanjutkan.' : 'Tagihan gagal.';
     }
   } catch (error) {
-    if (state.user?.id === userId) state.checkoutError = error.message;
+    if (state.user?.id === userId && generationEpoch === epoch) state.checkoutError = error.message;
   } finally {
-    if (state.user?.id === userId) render();
+    paymentCheckInFlight = false;
+    if (state.user?.id === userId && generationEpoch === epoch) {
+      if (!automatic || previous !== JSON.stringify(state.checkout) || previousError !== state.checkoutError) render();
+      else schedulePaymentCheck();
+    }
   }
 }
 
@@ -239,6 +288,7 @@ root.addEventListener('submit', event => {
         state.generationHasMore = false;
         state.generationError = '';
         state.generationUpdatedAt = null;
+        resetAccountData();
         state.user = result.user;
         await loadData();
       }
@@ -276,11 +326,18 @@ root.addEventListener('submit', event => {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': state.paymentAttempt.key },
           body: JSON.stringify({ amount }),
         });
-      } finally {
+      } catch (error) {
         // Recover the persisted invoice even if the browser missed the POST response.
-        await loadData();
+        try {
+          const recovered = await api('/api/payments/klikqris/current', { timeoutMs: 10000 });
+          state.checkout = recovered.invoice;
+        } catch {
+          state.checkoutError = 'Pembuatan tagihan belum terkonfirmasi. Perbarui pembayaran sebelum mencoba lagi; jangan membuat pembayaran ganda.';
+        }
+        throw error;
       }
       state.checkout = result.invoice;
+      state.payments = [result.invoice, ...state.payments.filter(invoice => invoice.id !== result.invoice.id)];
       state.notice = result.invoice.status === 'pending'
         ? 'QRIS siap. Bayar sesuai nominal akhir yang ditampilkan; status diperiksa otomatis.'
         : 'Tagihan sudah tercatat. Periksa status sebelum melakukan pembayaran.';
