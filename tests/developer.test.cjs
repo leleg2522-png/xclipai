@@ -537,6 +537,29 @@ test('existing daily invoices are clearly distinguished from new non-expiring wa
   assert.ok(html.includes('Tagihan langganan lama, bukan top up saldo API'));
   assert.ok(html.includes('tidak menambah saldo API'));
   assert.ok(!html.includes('Saldo yang ditambahkan:'));
+  assert.ok(!html.includes('1 Hari'));
+});
+
+test('closed legacy daily invoices stay in history without duration labels or an active checkout', () => {
+  const { portalView, paymentButtonState } = loadViews();
+  const s = browserHarness().controller.state;
+  s.user = { id: 1, username: 'test' };
+  s.wallet = { balance: 0, reserved: 0, minimumTopup: 100000, maximumTopup: 100000000 };
+  s.paymentConfig = { available: true };
+  for (const status of ['expired', 'paid', 'failed']) {
+    s.checkout = { id: 'old', billing_type: 'subscription', package: '1 Hari', amount: 30000,
+      total_amount: 30374, status, created_at: '2026-10-14T00:00:00Z' };
+    s.payments = [s.checkout, { package: '7 Hari', amount: 60000, status: 'approved' }];
+    const html = portalView(s);
+    assert.ok(!/1 Hari|7 Hari/.test(html));
+    assert.ok(!html.includes('aria-label="Tagihan KlikQRIS"'));
+    assert.ok(!html.includes('data-action="payment-check"'));
+    assert.ok(html.includes('Pembayaran lama'));
+    assert.ok(html.includes('30.374'));
+    assert.equal(paymentButtonState(s).disabled, false);
+    assert.equal(s.checkout.package, '1 Hari'); // Presentation only, no data rewrite.
+    assert.equal(s.payments.length, 2);
+  }
 });
 
 test('revoked state has no create button and docs describe the Wan API contract', () => {

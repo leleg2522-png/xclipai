@@ -41,9 +41,9 @@ Include a Top up menu in the developer portal and use KlikQRIS for payments.
 
 Portal top up must add API balance without an active-period limit, rather than purchase a daily subscription.
 
-**Why:** The user asked to remove durations such as “1 hari”, then explicitly selected “Saldo tanpa masa aktif” after being told the difference between changing billing and merely hiding duration text.
+**Why:** The user asked to remove durations such as “1 hari”, then explicitly selected “Saldo tanpa masa aktif” after being told the difference between changing billing and merely hiding duration text. They repeated the request when an expired historical invoice still displayed “1 Hari”.
 
-**How to apply:** Use a non-expiring portal API wallet and charge it for API generation usage under a confirmed tariff. Keep the portal balance separate from other bots' balances. This choice does not authorize deleting historical subscriptions, transferring bot funds, or inventing usage prices.
+**How to apply:** Use a non-expiring portal API wallet and charge it for API generation usage under a confirmed tariff. Keep the portal balance separate from other bots' balances. Do not surface legacy package-duration labels in Top up or its history; retain historical financial records and keep open legacy invoices distinguishable from wallet deposits. This choice does not authorize deleting historical subscriptions, transferring bot funds, or inventing usage prices.
 
 Wan 3.0 480p costs Rp6.000 per video, not per second; minimum portal top up is Rp100.000.
 

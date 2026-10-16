@@ -172,7 +172,11 @@ export function paymentButtonState(s) {
 }
 
 function topupView(s) {
-  const invoice = s.checkout;
+  // Closed subscription invoices belong in history, not the wallet checkout.
+  // Keep open legacy invoices visible so users cannot accidentally pay twice.
+  const invoice = s.checkout?.billing_type === 'subscription'
+    && ['paid', 'expired', 'failed'].includes(s.checkout.status) ? null : s.checkout;
+  const paymentLabel = row => row.billing_type === 'wallet' ? 'Top up saldo API' : 'Pembayaran lama';
   const button = paymentButtonState(s);
   const expires = invoice?.expires_at ? new Date(invoice.expires_at).toLocaleString('id-ID', {
     timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short',
@@ -190,14 +194,14 @@ function topupView(s) {
     <button type="submit" aria-busy="${button.busy}" aria-describedby="payment-button-status" ${button.disabled ? 'disabled' : ''}>${e(button.label)}</button>
     <p id="payment-button-status" role="status" ${button.reason ? '' : 'hidden'}>${e(button.reason)}</p>
     </form>` : ''}
-    ${invoice ? `<div class="xp-payment-form xp-key-card" aria-label="Tagihan KlikQRIS"><strong>${e(invoice.package)}</strong><p>ID tagihan: <code>${e(invoice.id)}</code></p>
+    ${invoice ? `<div class="xp-payment-form xp-key-card" aria-label="Tagihan KlikQRIS"><strong>${paymentLabel(invoice)}</strong><p>ID tagihan: <code>${e(invoice.id)}</code></p>
       ${invoice.billing_type === 'subscription' ? '<p role="note"><strong>Tagihan langganan lama, bukan top up saldo API.</strong> Tagihan ini dibuat sebelum perubahan sistem dan tidak menambah saldo API. Jika masih aktif, tunggu pembayaran terkonfirmasi atau tagihan kedaluwarsa sebelum membuat top up saldo baru.</p>' : ''}
       ${invoice.total_amount != null ? `<p>Nominal akhir: <strong>${money(invoice.total_amount)}</strong></p>` : ''}
       ${invoice.billing_type === 'wallet' ? `<p>Saldo yang ditambahkan: <strong>${money(invoice.amount)}</strong> · tanpa masa aktif.</p>` : ''}
       ${expires ? `<p>QRIS berlaku sampai ${e(expires)} WIB. Ini batas pembayaran, bukan masa aktif saldo.</p>` : ''}
       ${invoice.status === 'pending' ? `${invoice.qr_url ? `<img id="qris-image" class="xp-qris" src="${e(invoice.qr_url)}" alt="QRIS dinamis untuk tagihan ini"><p id="qris-error" hidden role="alert">QRIS belum dapat ditampilkan. Jangan membayar sebelum kode terlihat; periksa status tagihan atau hubungi admin.</p>` : '<p>QRIS belum tersedia. Jangan melakukan pembayaran.</p>'}<p>Status diperiksa otomatis setiap 15 detik. Setelah membayar, Anda juga bisa menekan tombol di bawah.</p>` : invoice.status === 'paid' ? `<p>${s.paymentConfig?.sandbox ? 'Simulasi telah dikonfirmasi; saldo nyata tidak diubah.' : invoice.billing_type === 'subscription' ? 'Pembayaran langganan lama dikonfirmasi.' : 'Pembayaran telah dikonfirmasi. Saldo API ditambahkan otomatis.'}</p>` : invoice.status === 'expired' ? '<p>Tagihan kedaluwarsa. Jangan scan QRIS lama; buat tagihan baru.</p>' : invoice.status === 'failed' ? '<p>Tagihan gagal dibuat. Periksa konfigurasi dengan admin sebelum mencoba lagi.</p>' : '<p>Pembuatan tagihan belum terkonfirmasi. Jangan membuat ulang atau membayar; periksa status dan hubungi admin bila tetap belum terkonfirmasi.</p>'}
       ${invoice.status !== 'paid' && invoice.status !== 'failed' ? `<button type="button" data-action="payment-check" aria-busy="${!!s.paymentChecking}" ${s.paymentBusy || s.paymentChecking ? 'disabled' : ''}>${s.paymentChecking ? 'Memeriksa status…' : 'Cek status pembayaran'}</button>` : ''}</div>` : ''}
-    <div class="xp-data-note"><strong>Riwayat pembayaran</strong>${s.historyError ? `<p role="alert">${e(s.historyError)}</p>` : s.payments.length ? `<div style="overflow:auto"><table class="xp-history"><thead><tr><th>Paket</th><th>Nominal</th><th>Status</th><th>Tanggal</th></tr></thead><tbody>${s.payments.map(p => `<tr><td>${e(p.package)}</td><td>${money(p.total_amount ?? p.amount)}</td><td>${e(({pending:p.provider === 'klikqris' ? 'Menunggu pembayaran' : 'Menunggu verifikasi lama',paid:'Lunas',approved:'Disetujui',expired:'Kedaluwarsa',creating:'Menyiapkan QRIS',uncertain:'Belum terkonfirmasi',failed:'Gagal',rejected:'Ditolak'})[p.status] || p.status)}</td><td>${e(date(p.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<p>Belum ada pembayaran.</p>'}</div></section>`;
+    <div class="xp-data-note"><strong>Riwayat pembayaran</strong>${s.historyError ? `<p role="alert">${e(s.historyError)}</p>` : s.payments.length ? `<div style="overflow:auto"><table class="xp-history"><thead><tr><th>Jenis pembayaran</th><th>Nominal</th><th>Status</th><th>Tanggal</th></tr></thead><tbody>${s.payments.map(p => `<tr><td>${paymentLabel(p)}</td><td>${money(p.total_amount ?? p.amount)}</td><td>${e(({pending:p.provider === 'klikqris' ? 'Menunggu pembayaran' : 'Menunggu verifikasi lama',paid:'Lunas',approved:'Disetujui',expired:'Kedaluwarsa',creating:'Menyiapkan QRIS',uncertain:'Belum terkonfirmasi',failed:'Gagal',rejected:'Ditolak'})[p.status] || p.status)}</td><td>${e(date(p.created_at))}</td></tr>`).join('')}</tbody></table></div>` : '<p>Belum ada pembayaran.</p>'}</div></section>`;
 }
 
 const generationStatus = {
