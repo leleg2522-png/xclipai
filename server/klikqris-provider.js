@@ -47,14 +47,16 @@ function qrUrl(value) {
   } catch { return null; }
 }
 
-function createKlikQrisProvider({ env = process.env, fetcher = fetch } = {}) {
+function createKlikQrisProvider({ env = process.env, fetcher = fetch, defaultMode } = {}) {
   function settings() {
     const apiKey = env.KLIKQRIS_API_KEY?.trim();
     const merchantId = env.KLIKQRIS_MERCHANT_ID?.trim();
-    const mode = env.KLIKQRIS_MODE;
+    // The application may explicitly supply its confirmed merchant mode.
+    // Never infer a mode from credentials or override an invalid nonempty value.
+    const mode = env.KLIKQRIS_MODE?.trim().toLowerCase() || defaultMode;
     if (!apiKey || !merchantId) throw new PaymentError(503, 'Kredensial pembayaran KlikQRIS belum tersedia.');
     if (!['pg', 'my_pg', 'sandbox'].includes(mode)) {
-      throw new PaymentError(503, 'Mode pembayaran KlikQRIS belum dikonfigurasi. Hubungi admin Xclip.');
+      throw new PaymentError(503, 'Mode pembayaran KlikQRIS belum dikonfigurasi atau tidak valid. Atur KLIKQRIS_MODE ke pg, my_pg, atau sandbox.');
     }
     let callbackUrl;
     if (env.KLIKQRIS_CALLBACK_URL) {

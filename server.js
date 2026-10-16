@@ -6111,7 +6111,9 @@ app.get('/api/subscription/plans', async (req, res) => {
 
 // ==================== QRIS PAYMENT API ====================
 
-const klikQrisProvider = require('./server/klikqris-provider').createKlikQrisProvider();
+// The merchant owner confirmed PG KlikQRIS. Keep that explicit project default
+// portable to Railway, which does not load Replit's shared environment settings.
+const klikQrisProvider = require('./server/klikqris-provider').createKlikQrisProvider({ defaultMode: 'pg' });
 const klikQrisPayments = require('./server/klikqris-service').createPaymentService(pool, klikQrisProvider, apiWallet);
 app.use(require('./server/klikqris-routes')({ service: klikQrisPayments, provider: klikQrisProvider, pool, wallet: apiWallet }));
 

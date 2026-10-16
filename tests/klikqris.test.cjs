@@ -22,6 +22,31 @@ test('merchant mode must be explicit; credentials alone never select a payment d
     error => error.status === 503 && /Mode pembayaran/.test(error.message));
 });
 
+test('confirmed application PG configuration works without a Railway mode variable', async () => {
+  const { KLIKQRIS_MODE, ...credentials } = env;
+  const urls = [];
+  const provider = createKlikQrisProvider({
+    env: credentials, defaultMode: 'pg',
+    fetcher: async url => { urls.push(url); return json({ status: true, data: gatewayData() }); },
+  });
+  assert.equal(provider.configuration().mode, 'pg');
+  await provider.create('XCWEB-test', 30000, 'test only');
+  assert.deepEqual(urls, ['https://klikqris.com/api/qris/create']);
+  assert.equal(createKlikQrisProvider({ env: { ...credentials, KLIKQRIS_MODE: '  ' }, defaultMode: 'pg' })
+    .configuration().mode, 'pg');
+});
+
+test('explicit mode overrides the project default; invalid modes are never silently routed to PG', () => {
+  for (const mode of ['pg', 'my_pg', 'sandbox']) {
+    assert.equal(createKlikQrisProvider({
+      env: { ...env, KLIKQRIS_MODE: ` ${mode.toUpperCase()} ` }, defaultMode: 'pg',
+    }).configuration().mode, mode);
+  }
+  assert.throws(() => createKlikQrisProvider({
+    env: { ...env, KLIKQRIS_MODE: 'unknown-mode' }, defaultMode: 'pg',
+  }).configuration(), error => error.status === 503 && /KLIKQRIS_MODE/.test(error.message));
+});
+
 test('KlikQRIS sends server-only credentials, immutable amount and callback to the documented API', async () => {
   const calls = [];
   const provider = createKlikQrisProvider({
