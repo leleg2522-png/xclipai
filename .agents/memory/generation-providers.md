@@ -3,6 +3,12 @@ name: Xclip generation provider intent
 description: User-specified provider setup for the third-party Xclip API.
 ---
 
+For the Alriz migration, the user's “Kling MC P5” means the existing Kling Motion Control backend, not the Picsart `p500` pool. Replace that motion-control integration with Alriz Kling MC 2.6 Pro without changing Wan or Seedance.
+
+**Why:** The user explicitly corrected the mistaken interpretation of “P5” as the shared Picsart pool.
+
+**How to apply:** Scope this migration to motion-control requests and their status/results. Do not remove or reroute the Wan and Seedance models as part of it.
+
 The user states that generation should use Picsart accounts and Flora AI keys stored in the database of the Railway-hosted project.
 
 **Why:** The user explicitly identified these providers for Xclip generation.
