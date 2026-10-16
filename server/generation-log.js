@@ -59,7 +59,7 @@ function createGenerationLogger({ write = (level, record) =>
   function emit(level, event, fields = {}) {
     if (!/^[a-z_]{1,50}$/.test(event)) return;
     const record = { time:new Date().toISOString(),level,event };
-    if (/^xv_[a-f0-9]{64}$/.test(fields.taskId || '')) record.taskId=fields.taskId;
+    if (/^(?:xv_[a-f0-9]{64}|xmc_[a-f0-9]{32})$/.test(fields.taskId || '')) record.taskId=fields.taskId;
     if (/^[a-f0-9-]{36}$/.test(fields.requestId || '')) record.requestId=fields.requestId;
     if (/^[a-z_]{1,40}$/.test(fields.stage || '')) record.stage=fields.stage;
     if (reasons.has(fields.reason)) {

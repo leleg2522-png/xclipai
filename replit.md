@@ -1,6 +1,16 @@
 # Xclip - AI Video Clipper & Chat
 
 ## Overview
+
+### Kling Motion Control backend
+
+New `/api/motion/generate` calls use Alriz `mc-kling-2.6-pro` only, with server-side `ALRIZ_API_KEY`. Public model `kling-v2.6-pro` and legacy fields `characterImage`, `referenceVideo`, optional `prompt` and `roomId` remain accepted; HTTPS URLs, media data URIs and legacy raw base64 are supported. Supply image JPG/PNG/WebP and video MP4/MOV no longer than 30 seconds. Custom character orientation is rejected unless `video`; no undocumented upstream orientation or webhook fields are sent.
+
+Wan, Seedance and their Picsart `p500` routing/prices are unchanged. Motion retains its existing authentication/cooldown/access behavior; this migration does not invent a wallet price or alter user balances. Standard motion submissions are explicitly rejected instead of silently billing them as Pro.
+
+Local `xmc_...` task IDs hide upstream IDs. Optional `Idempotency-Key` deduplicates per Xclip API key and rejects changed inputs. A committed reservation plus per-user PostgreSQL transaction lock prevents competing submits; ambiguous delivery remains pending for operator review, never automatically resubmitted or sent to Freepik. Polling/reconciliation handles only accepted jobs and resumes after restart. Previous-provider jobs keep their existing status path. Media/history use authenticated same-origin routes, not CDN links. `[XCLIP_GENERATION]` motion events report sanitized status and upstream HTTP status without keys or provider payloads.
+
+Alriz key validation is read-only `GET /api/account`; `GET /api/models` being successful alone does not prove valid credentials. Railway must receive `ALRIZ_API_KEY` separately; adding it in Replit does not update Railway. No paid generation should be claimed tested on the basis of unit tests or catalog reads.
 Xclip is an AI-powered platform for video clipping, image generation, and chat built by MANAZIL. It enables users to generate AI videos (using models like Kling, Veo, Seedance via Freepik API), create AI images, analyze videos for virality, and interact with AI chat models (via OpenRouter/OpenAI).
 
 ## Architecture

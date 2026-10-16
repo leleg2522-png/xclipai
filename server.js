@@ -1751,6 +1751,9 @@ app.post('/api/webhook/freepik', async (req, res) => {
       console.log('Webhook rejected: No task_id in payload');
       return res.status(200).json({ received: true, error: 'No task_id' });
     }
+    if (typeof taskId === 'string' && taskId.startsWith('xmc_')) {
+      return res.status(200).json({ received: false }); // Alriz jobs are reconciled independently.
+    }
     
     // Verify task exists in our database before processing
     const taskCheck = await pool.query(
@@ -2450,7 +2453,7 @@ async function saveBase64ToFile(base64Data, type, baseUrl) {
     // Extract extension from data URI
     const mimeMatch = parts[0].match(/data:(\w+)\/(\w+)/);
     if (mimeMatch) {
-      ext = mimeMatch[2] === 'jpeg' ? 'jpg' : mimeMatch[2];
+      ext = mimeMatch[2] === 'jpeg' ? 'jpg' : mimeMatch[2] === 'quicktime' ? 'mov' : mimeMatch[2];
     }
   }
   
@@ -3821,6 +3824,7 @@ async function resumePendingTaskPolling() {
           if (row.model === 'wan-3.0') continue;
           if (row.model === 'seedance-2.5') continue;
           if (row.model === 'seedance-2.0') continue;
+          if (row.retry_data?.provider === 'alriz-motion') continue; // Dedicated motion reconciler; never retry via Freepik.
           let apiKey = null;
           const isMotionTask = (row.model || '').startsWith('motion-');
 
@@ -4404,6 +4408,9 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
       }
     }
     
+    if (taskId.startsWith('xmc_') && xclipApiKey && !taskResult?.rows.length) {
+      return res.status(keyInfo ? 404 : 401).json({ error: keyInfo ? 'Task tidak ditemukan' : 'Xclip API key tidak valid.' });
+    }
     // Fallback to session authentication (for resumed polling after refresh)
     if (!taskResult || taskResult.rows.length === 0) {
       if (req.session.userId) {
@@ -4419,6 +4426,9 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     }
     
     const savedTask = taskResult.rows[0];
+    if (savedTask.retry_data?.provider === 'alriz-motion') {
+      return res.json(await alrizMotion.status(savedTask));
+    }
     let freepikApiKey = null;
     let keySource = 'unknown';
     
@@ -4643,6 +4653,21 @@ app.get('/api/videogen/tasks/:taskId', async (req, res) => {
     res.status(500).json({ error: 'Gagal mengambil status task' });
   }
 });
+
+// New motion requests are handled exclusively by Alriz. Keep legacy handlers
+// below only for polling jobs that were already sent to the previous provider.
+const alrizMotionProvider = require('./server/alriz-motion-provider').createAlrizMotionProvider();
+const alrizMotion = require('./server/alriz-motion-routes')({
+  pool,
+  provider: alrizMotionProvider,
+  validateKey: validateXclipApiKey,
+  saveFile: saveBase64ToFile,
+  getCooldown: getUserCooldownRemaining,
+  setCooldown: setUserCooldown,
+  cooldownMs: RATE_LIMIT_CONFIG.motion.cooldownMs,
+});
+app.use('/api/motion', alrizMotion);
+setInterval(() => alrizMotion.reconcile(), 30000).unref();
 
 app.post('/api/motion/generate', async (req, res) => {
   try {
@@ -5342,7 +5367,7 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
     const ownerId = keyInfo ? keyInfo.id : req.session.userId;
 
     let taskResult = await pool.query(
-      `SELECT task_id, model, video_url, used_key_name, room_id FROM video_generation_tasks WHERE task_id = $1 AND status = $2 AND ${ownerColumn} = $3`,
+      `SELECT task_id, model, video_url, used_key_name, room_id, retry_data FROM video_generation_tasks WHERE task_id = $1 AND status = $2 AND ${ownerColumn} = $3`,
       [taskId, 'completed', ownerId]
     );
     if (taskResult.rows.length === 0) {
@@ -5357,6 +5382,12 @@ app.get('/api/videogen/proxy-video', async (req, res) => {
 
     const task = taskResult.rows[0];
     let videoUrl = task.video_url;
+
+    if (task.retry_data?.provider === 'alriz-motion') {
+      const result = await alrizMotionProvider.poll(task.retry_data.jobId);
+      if (result.status !== 'completed') return res.status(503).json({ error: 'Video hasil belum tersedia.' });
+      return await streamVideo(req, res, result.videoUrl);
+    }
 
     if (task.model === 'wan-3.0-uncensored' || task.model === 'wan-3.0' || task.model === 'seedance-2.5' || task.model === 'seedance-2.0') {
       return await streamVideo(req, res, videoUrl);
