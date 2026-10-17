@@ -4029,6 +4029,9 @@ function getRotatedApiKey(keyInfo, forceKeyIndex = null, userId = null) {
 
 const wanProvider = require('./server/wan-provider').createWanProvider(pool);
 const wanRouter = require('./server/wan-routes')({
+  upscaler: require('./server/seedance-upscale').createSeedanceUpscale({
+    pool, provider: require('./server/renderful-upscale-provider').createRenderfulUpscaleProvider(pool),
+  }),
   pool, provider: wanProvider, wallet: apiWallet, validateKey: validateXclipApiKey,
   providers: {
     'wan-3.0': require('./server/picsart-wan-provider').createPicsartWanProvider(pool),

@@ -4,7 +4,7 @@
 
 ### Retired video model
 
-Normal Wan 3.0 now requires **1080p / 30 seconds** at the existing Rp6.500/video price. Its upstream request uses `1080P`; omitted resolution defaults to 1080p, other resolutions are rejected. Catalog and copied cURL must agree. Both Seedance models remain 480p at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; do not silently fall back to 480p if 1080p is unavailable.
+Normal Wan 3.0 now requires **1080p / 30 seconds** at the existing Rp6.500/video price. Its upstream request uses `1080P`; omitted resolution defaults to 1080p, other resolutions are rejected. Catalog and copied cURL must agree. Seedance's upstream generation remains 480p, but new public requests now require a verified 1080p upscale before completion, at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; never silently deliver 480p for a new 1080p request.
 
 Wan 3.0 Uncensored is retired at the user's request. Only normal Wan 3.0, Seedance 2.5 and Seedance 2.0 are advertised by the API video catalog and docs. New public Uncensored submissions return HTTP 410 `MODEL_RETIRED` before any provider call or wallet mutation. Historical registry/pricing, task polling, reconciliation, refunds, history and protected media remain intact; earlier sections describing Uncensored availability are historical, not permission to offer new jobs.
 
@@ -110,12 +110,22 @@ Both models share owner-scoped history, idempotency protection, non-expiring API
 
 ### Seedance 2.5
 
-Public `seedance-2.5` is a separate **Rp11.000/video** API-wallet model: fixed 30 seconds, 480p, 16:9/9:16, optional reference image, audio boolean. Existing Wan models and prices are unchanged. The supplied successful capture confirms image-to-video at 480p/30 seconds with audio; do not advertise 1080p generation based only on a price quote.
+Public `seedance-2.5` is a separate **Rp11.000/video** API-wallet model: fixed 30 seconds, final 1080p through upscale, 16:9/9:16, optional reference image, audio boolean. Existing Wan models and prices are unchanged. Generation remains 480p/30 seconds as demonstrated by the capture, not native 1080p.
 
 `server/picsart-seedance-provider.js` supplies its distinct private contract to the shared Picsart transport: `/gw-v2/workflows/seedance`, `seedance_2_5`, `content[]` with nested image URL/reference role and text entries, `generate_audio`, `output_format`, and completed `result.video_url`. Wan keeps its own endpoint, params and result parser. Seedance's observed quote is 120 credits; readiness filters insufficient accounts and the actual request is quoted again before any wallet reservation or paid submission. Both shared-pool models use the same account advisory-lock namespace and combined daily per-account service quota. No provider fallback, retries of uncertain paid submits, or captured-token reuse is permitted.
 
 ### Seedance 2.0
 
-Public `seedance-2.0` is an additional **Rp5.000/video** wallet model, fixed **15 seconds at 480p**, with optional reference image and audio boolean. Existing prices and durations do not change. API defaults, catalog defaults and copied cURL must all use 15 seconds for this model.
+Public `seedance-2.0` is an additional **Rp5.000/video** wallet model, fixed **15 seconds, final 1080p through upscale**, with optional reference image and audio boolean. Its upstream generation remains 480p. Existing prices and durations do not change. API defaults, catalog defaults and copied cURL must all use 15 seconds for this model.
+
+### Mandatory Seedance output enhancement
+
+New Seedance requests use public `resolution: "1080p"` and durable `retry_data.upscale` metadata. Both source-generation quote and Renderful key/balance readiness must succeed before reserving funds and dispatching generation. `renderful_key_pool` supplies only available, unassigned, non-dead keys for new jobs; use the recorded key ID for subsequent polling, never publish credentials.
+
+The private Renderful contract is `POST https://api.renderful.ai/api/v1/generations` with `type: "video-to-video"`, `model: "bytedance-video-upscaler"`, `video_url`, `resolution: "1080p"` and original `duration`. Poll `GET /api/v1/generations/:id`; use its generated OpenAPI schema, not the model page's legacy predictions FAQ.
+
+`server/seedance-upscale.js` serializes per task with PostgreSQL advisory locks and persists submit intent before the paid POST. A restart/ambiguous response must not cause a second paid submission. Stage/job/source/result references stay in private task metadata. Public status/history exposes only generic `generating`/`upscaling` stages and protected Xclip media paths. Definite failure uses the original wallet reservation's idempotent refund; ambiguous delivery or transient verification failure keeps the task processing and funds held.
+
+Only verified final output can set `completed`/publish video: download through DNS-checked transport, follow redirects safely without provider headers, bound size/time, then run ffprobe on a temporary local file. Both orientations must have at least 1080 pixels on the short edge. Never strip AI provenance or return the original 480p as a success. Old jobs without the new enhancement marker retain their purchased contract: do not create retroactive paid upscales. No paid end-to-end test is implied by read-only account/catalog checks or local fixture tests.
 
 Its successful HAR uses the same private Seedance workflow with `model: seedance_2_0`, image/text `content[]`, `generate_audio: true`, ratio 9:16 and completed `result.video_url`; the completed usage is 45 credits. Do not copy the 2.5-specific `output_format` or `omni_reference_task_type` flags into 2.0 requests. The capture does not contain an options quote: the adapter must still obtain a non-estimated live quote matching the requested duration before reserving wallet funds or submitting, and reject unavailable/unsupported settings rather than guessing or falling back. Text-only, 16:9 and disabled audio use this same preflight validation; the successful capture itself only demonstrates image input, 9:16 and enabled audio. Shared-pool concurrency, owner-scoped history, protected media and original-charge refunds apply to this model too.

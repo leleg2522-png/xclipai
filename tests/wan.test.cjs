@@ -210,7 +210,9 @@ async function routeFixture(t, opts = {}) {
     async start() {stats.seedance2Starts++;return 'seedance2-workflow';},
     async poll() {stats.seedance2Polls++;return {status:'completed',videoUrl:'https://cdn.picsart.com/seedance2.mp4'};},
   };
-  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider,'seedance-2.0':seedance2Provider}, wallet, logger, validateKey: async key =>
+  const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider,'seedance-2.0':seedance2Provider}, wallet, logger,
+    upscaler: opts.upscaler || { context: async()=>{}, prepare:async()=>({required:true,phase:'waiting_source',keyId:9}), process:async(row,result)=>result },
+    validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
       room_id: opts.noSubscription ? null : 1, has_subscription: !!opts.activeSubscription, is_admin: false },
     saveImage: async () => { stats.uploads++; return 'https://xclip.example/test.png'; } });
@@ -421,8 +423,8 @@ test('model catalog reports independent availability and never sends a missing m
   assert.equal(catalog.status,200);
   assert.equal(catalog.data.models.some(m=>m.id===MODEL),false);
   assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').resolution,'1080p');
-  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.5').resolution,'480p');
-  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.0').resolution,'480p');
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.5').resolution,'1080p');
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.0').resolution,'1080p');
   assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status,'unavailable');
   assert.equal((await h.generate({model:'wan-3.0'})).status,503);
   assert.equal(h.stats.starts,0);
@@ -443,6 +445,72 @@ test('generation lifecycle logs queued, accepted, completed and replay without s
   assert.equal(h.events.filter(e=>e.event==='generation_dispatch_started').length,1);
   assert.equal(h.stats.starts,1);
   assert.ok(!/flora|secret=|run_test|prompt|authorization/i.test(JSON.stringify(h.events)));
+});
+
+test('Seedance rejects missing upscale readiness before any reservation or generation and preserves replay', async t => {
+  let unavailable = false;
+  const upscaler = {
+    async context() { if (unavailable) throw new ServiceError(503, 'Peningkatan kualitas belum tersedia.'); },
+    async prepare() { await this.context(); return { required:true,phase:'waiting_source',keyId:9 }; },
+    async process(row, result) { return result; },
+  };
+  const h = await routeFixture(t, { upscaler });
+  unavailable = true;
+  const rejected = await h.generate({ model:'seedance-2.0' });
+  assert.equal(rejected.status, 503);
+  assert.equal(h.stats.seedance2Starts, 0);
+  assert.equal(h.stats.reservations, 0);
+  unavailable = false;
+  const created = await h.generate({ model:'seedance-2.0' });
+  assert.equal(created.status, 202);
+  assert.equal(created.data.stage, 'generating');
+  unavailable = true;
+  assert.equal((await h.generate({ model:'seedance-2.0' })).status, 200);
+  assert.equal(h.stats.seedance2Starts, 1);
+  const catalog = await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.0').status, 'unavailable');
+  assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status, 'available');
+  assert.ok(!/renderful|bytedance|picsart|generationResolution|"upscale":/i.test(JSON.stringify(catalog.data)));
+});
+
+test('Seedance only settles and publishes the upscale result; failure refunds once and pending keeps source private', async t => {
+  for (const status of ['processing','failed','completed']) {
+    const upscaler = {
+      async context() {},
+      async prepare() { return {required:true,phase:'waiting_source',keyId:9}; },
+      async process(row, result) {
+        assert.equal(result.status,'completed');
+        row.retry_data.upscale.phase = 'processing';
+        h.rows.get(row.task_id).retry_data.upscale.phase = 'processing'; // Simulate durable pipeline metadata.
+        return {status, ...(status==='completed'?{videoUrl:'https://final.example/1080.mp4'}:{})};
+      },
+    };
+    const h = await routeFixture(t, { upscaler });
+    const created = await h.generate({ model:'seedance-2.5' });
+    const url = `/api/videogen/tasks/${created.data.taskId}`;
+    const response = await h.call(url,null,{'X-Xclip-Key':'owner'});
+    assert.equal(response.data.status,status);
+    assert.equal(response.data.videoUrl, status==='completed'
+      ? `/api/videogen/proxy-video?taskId=${created.data.taskId}` : null);
+    if (status==='processing') assert.equal(response.data.stage,'upscaling');
+    if (status==='completed') assert.equal(h.rows.get(created.data.taskId).video_url,'https://final.example/1080.mp4');
+    await h.call(url,null,{'X-Xclip-Key':'owner'});
+    assert.equal(h.stats.reservations,1);
+    assert.equal(h.stats.refunds,status==='failed'?1:0);
+    assert.ok(!/picsart|renderful|bytedance|final.example|sourceUrl|runId|keyId/i.test(JSON.stringify(response.data)));
+  }
+});
+
+test('pre-existing Seedance jobs keep their old contract without retroactive paid upscales', async t => {
+  const h = await routeFixture(t, {upscaler:{
+    async context(){},async prepare(){return {required:true,phase:'waiting_source',keyId:9};},
+    async process(){throw new Error('Must not upscale historical job');},
+  }});
+  const created = await h.generate({model:'seedance-2.0'});
+  delete h.rows.get(created.data.taskId).retry_data.upscale;
+  const response = await h.call(`/api/videogen/tasks/${created.data.taskId}`,null,{'X-Xclip-Key':'owner'});
+  assert.equal(response.data.status,'completed');
+  assert.equal(h.stats.seedance2Starts,1);
 });
 
 test('worker reports idle heartbeat and progress without making another generation',async t=>{

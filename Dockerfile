@@ -26,7 +26,8 @@ COPY . .
 RUN node scripts/prepare-production-lock.cjs \
     && npm run verify:runtime \
     && node --check server.js \
-    && ffmpeg -version > /dev/null
+    && ffmpeg -version > /dev/null \
+    && ffprobe -version > /dev/null
 
 EXPOSE 5000
 

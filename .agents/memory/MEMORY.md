@@ -6,3 +6,4 @@
 - [Preview auth verification](preview-auth-verification.md) — HTTP health, browser connectivity, and authenticated session persistence require distinct verification.
 - [Browser testing runtime](browser-testing-runtime.md) — the documented testing subagent kind may be unavailable; verify critical UI without bypassing auth or mutating live data.
 - [PostgreSQL parameter typing](postgres-parameter-typing.md) — reused status parameters need explicit consistent casts; fake SQL tests do not validate PostgreSQL inference.
+- [Seedance final resolution](seedance-upscale.md) — Seedance delivers verified 1080p via mandatory upscale, not native generation; old jobs are not retroactively billed.

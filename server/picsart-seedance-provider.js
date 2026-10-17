@@ -7,7 +7,7 @@ function seedanceParams(input, imageUrl, model) {
       ...(imageUrl ? [{ type: 'image_url', image_url: { url: imageUrl }, role: 'reference_image' }] : []),
       { type: 'text', text: input.prompt },
     ],
-    ratio: input.aspectRatio, duration: input.duration, resolution: input.resolution,
+    ratio: input.aspectRatio, duration: input.duration, resolution: '480p',
     generate_audio: input.audio,
   };
 }

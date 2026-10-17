@@ -7,9 +7,14 @@ const { createGenerationLogger, describeError } = require('./generation-log');
 const { MODELS, MODEL_IDS, ACTIVE_MODEL_IDS, isManagedVideoModel } = require('./video-models');
 
 const UNCERTAIN = 'Pengiriman belum terkonfirmasi. Jangan kirim ulang; simpan taskId dan hubungi dukungan Xclip.';
+const UPSCALE_UNCERTAIN = 'Peningkatan kualitas belum terkonfirmasi. Simpan taskId dan hubungi dukungan Xclip; jangan mengirim request generasi baru.';
 function taskResponse(row) {
   return { success: row.status !== 'failed', taskId: row.task_id, model: row.model,
     status: row.status, createdAt: row.created_at,
+    ...(row.retry_data?.upscale?.required && !['completed','failed'].includes(row.status)
+      ? { stage: row.retry_data.upscale.phase === 'waiting_source' ? 'generating' : 'upscaling' } : {}),
+    ...(row.status === 'processing' && ['submitting','uncertain'].includes(row.retry_data?.upscale?.phase)
+      ? { notice: UPSCALE_UNCERTAIN } : {}),
     videoUrl: row.status === 'completed' && row.video_url ? publicVideoUrl(row.task_id) : null,
     ...(row.status === 'failed' ? { error: 'Generasi video gagal.' } : {}),
     ...(row.status === 'pending' && !row.retry_data?.runId ? { notice: UNCERTAIN } : {}) };
@@ -20,7 +25,7 @@ function sendError(res, error) {
     .json({ error: known ? error.message : 'Layanan Xclip sementara tidak tersedia.' });
 }
 
-module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, validateKey, saveImage, cooldownMs = 180000, dailyQuota = 50,
+module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, upscaler, validateKey, saveImage, cooldownMs = 180000, dailyQuota = 50,
   logger = createGenerationLogger() }) {
   const adapters = { [MODEL]: provider, ...providers };
   function adapter(model) {
@@ -33,13 +38,18 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
   logger.info('routes_ready');
   async function pollTask(row) {
     let entry = polling.get(row.task_id);
-    if (!entry || entry.until < Date.now()) {
+    if (!entry || !entry.pending && entry.until < Date.now()) {
       const promise = (async () => {
         const started=Date.now();
         let stage='poll_upstream';
         logger.info('task_poll_started',{taskId:row.task_id,status:row.status});
         try {
-          const result = await adapter(row.model).poll(row.retry_data);
+          let result = row.retry_data?.upscale?.sourceUrl ? null : await adapter(row.model).poll(row.retry_data);
+          if (row.retry_data?.upscale?.required) {
+            if (!upscaler) throw new ServiceError(503, 'Peningkatan kualitas video belum tersedia.');
+            stage = 'upscale';
+            result = await upscaler.process(row, result);
+          }
           stage='persist_task_status';
           if (!wallet) throw new ServiceError(503, 'Penyelesaian task belum tersedia.');
           const updated=await wallet.finish(row, result);
@@ -57,12 +67,13 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
           throw error;
         }
       })();
-      entry = { promise, until: Date.now() + 25000 };
+      entry = { promise, pending: true, until: Date.now() + 25000 };
       polling.set(row.task_id, entry);
-      promise.then(() => { entry.until = Date.now() + 5000; }, () => {
+      promise.then(() => { entry.pending = false; entry.until = Date.now() + 5000; }, () => {
+        entry.pending = false;
         if (polling.get(row.task_id) === entry) polling.delete(row.task_id);
       });
-      for (const [id, old] of polling) if (old.until < Date.now()) polling.delete(id);
+      for (const [id, old] of polling) if (!old.pending && old.until < Date.now()) polling.delete(id);
     }
     return entry.promise;
   }
@@ -116,7 +127,11 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
       const { rows } = await pool.query(
         `SELECT task_id, model, status, created_at, completed_at,
           CASE WHEN status = 'completed' AND video_url IS NOT NULL THEN TRUE ELSE FALSE END AS has_video,
-          retry_data->>'delivery' AS delivery
+          retry_data->>'delivery' AS delivery,
+          CASE WHEN retry_data->'upscale'->>'required' = 'true' AND status IN ('pending','processing')
+            THEN CASE WHEN retry_data->'upscale'->>'phase' = 'waiting_source'
+              THEN 'generating' ELSE 'upscaling' END END AS stage,
+          retry_data->'upscale'->>'phase' AS upscale_phase
          FROM video_generation_tasks WHERE ${auth.column} = $1 AND model = ANY($2::text[])
          ORDER BY created_at DESC, task_id DESC LIMIT 21 OFFSET $3`,
         [auth.id, MODEL_IDS, (page - 1) * 20]);
@@ -124,6 +139,9 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
         taskId: row.task_id, model: row.model, status: row.status,
         createdAt: row.created_at, completedAt: row.completed_at,
         videoUrl: row.status === 'completed' && row.has_video ? publicVideoUrl(row.task_id) : null,
+        ...(['generating','upscaling'].includes(row.stage) ? { stage: row.stage } : {}),
+        ...(row.status === 'processing' && ['submitting','uncertain'].includes(row.upscale_phase)
+          ? { notice: UPSCALE_UNCERTAIN } : {}),
         ...(row.status === 'failed' ? { error: 'Generasi video gagal. Jika memakai saldo API, saldo dikembalikan setelah kegagalan dikonfirmasi.' } : {}),
         ...(row.status === 'pending' && row.delivery !== 'confirmed' ? { notice: UNCERTAIN } : {}),
       }));
@@ -139,12 +157,20 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
       await owner(req);
       const models = await Promise.all(ACTIVE_MODEL_IDS.map(async id => {
         let status = 'available';
-        try { await adapter(id).context(); }
+        try {
+          await adapter(id).context();
+          if (MODELS[id].upscale) {
+            if (!upscaler) throw new ServiceError(503, 'Peningkatan kualitas video belum tersedia.');
+            await upscaler.context(MODELS[id].maxDuration);
+          }
+        }
         catch (error) {
           status = 'unavailable';
           logger.warn('catalog_failed', { stage: 'load_model_catalog', ...describeError(error) });
         }
-        return { ...MODELS[id], status, modes: ['text-to-video', 'image-to-video'],
+        const { generationResolution, upscale, retired, ...publicSpec } = MODELS[id];
+        return { ...publicSpec, status, modes: ['text-to-video', 'image-to-video'],
+          ...(upscale ? { outputProcessing: 'upscaled' } : {}),
           resolution: MODELS[id].resolution || '480p', defaultDuration: MODELS[id].maxDuration, currency: 'IDR' };
       }));
       res.json({ models });
@@ -204,6 +230,11 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
 
       // Check account/model metadata before accepting or storing any paid request.
       stage='prepare_generation';
+      let upscale;
+      if (MODELS[input.model].upscale) {
+        if (!upscaler) throw new ServiceError(503, 'Peningkatan kualitas video belum tersedia.');
+        upscale = await upscaler.prepare(input.duration);
+      }
       await service.context();
       const imageUrl = input.image && !service.handlesImage ? await saveImage(input.image, req) : undefined;
       const prepared = await service.prepare(input, imageUrl);
@@ -220,6 +251,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
       const billable = input.model !== MODEL || !key.has_subscription;
       if (billable && !wallet) throw new ServiceError(503, 'Saldo API belum tersedia.');
       const meta = { source: input.model === MODEL ? 'wan' : 'picsart-video', keyId: prepared.keyId, fingerprint, delivery: 'unconfirmed',
+        ...(upscale ? { upscale } : {}),
         billing: billable ? 'wallet' : 'legacy', ...(billable ? { price } : {}) };
       let row;
       stage='reserve_and_save_task';

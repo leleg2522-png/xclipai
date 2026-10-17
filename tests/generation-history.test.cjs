@@ -10,6 +10,8 @@ async function fixture(work, failing = false, empty = false) {
     status: ['completed', 'failed', 'pending', 'processing'][n % 4],
     created_at: '2026-10-15T00:00:00Z', completed_at: n === 0 ? '2026-10-15T00:01:00Z' : null,
     has_video: n === 0, delivery: 'uncertain',
+    stage: n === 3 ? 'upscaling' : 'private-provider-value',
+    upscale_phase: n === 3 ? 'uncertain' : null,
     // Projection must not accidentally spread even unexpected database properties.
     api_key: 'secret', video_url: 'https://media.flora.ai/secret', retry_data: { runId: 'internal' },
     error_message: 'Picsart Flora secret payload',
@@ -66,6 +68,9 @@ test('history is owner scoped, paginated and sanitized for sessions and API keys
       assert.equal(data.tasks[1].error.includes('gagal'), true);
       assert.equal(data.tasks[2].notice.includes('Jangan kirim ulang'), true);
       assert.equal(data.tasks[3].videoUrl, null);
+      assert.equal(data.tasks[3].stage, 'upscaling');
+      assert.match(data.tasks[3].notice, /Peningkatan kualitas belum terkonfirmasi/);
+      assert.equal(data.tasks[0].stage, undefined);
       assert.ok(!/flora|picsart|secret|retry_data|runId|api_key|video_url/i.test(JSON.stringify(data)));
       const query = queries.at(-1);
       assert.match(query.sql, new RegExp(`WHERE ${column} = \\$1 AND model = ANY\\(\\$2::text\\[\\]\\)`));

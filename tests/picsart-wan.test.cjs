@@ -57,7 +57,7 @@ test('Seedance 2.0 defaults to 15s, supports text with audio=false and rejects o
   assert.equal(p.body.params.duration,15);
   assert.equal(p.body.params.generate_audio,false);
   assert.deepEqual(p.body.params.content,[{type:'text',text:'safe landscape'}]);
-  for(const change of [{duration:30},{duration:14},{duration:5},{duration:'15'},{resolution:'1080p'},{aspectRatio:'1:1'}]) {
+  for(const change of [{duration:30},{duration:14},{duration:5},{duration:'15'},{resolution:'480p'},{aspectRatio:'1:1'}]) {
     assert.throws(()=>validateInput({model:'seedance-2.0',prompt:'test',...change}),e=>e.status===400);
   }
   assert.throws(()=>validateInput({model:'seedance-2.0',prompt:'test',duration:30}),/15 detik/);
@@ -111,7 +111,7 @@ test('Seedance text mode has no media field, preserves audio=false and rejects u
   assert.equal(p.body.params.generate_audio,false);
   assert.equal(p.body.params.media,undefined);
   assert.equal(p.body.params.audio,undefined);
-  for(const extra of [{duration:29},{duration:5},{resolution:'1080p'},{aspectRatio:'4:3'},{generate_audio:true}]) {
+  for(const extra of [{duration:29},{duration:5},{resolution:'480p'},{aspectRatio:'4:3'},{generate_audio:true}]) {
     assert.throws(()=>validateInput({model:'seedance-2.5',prompt:'test',...extra}),e=>e.status===400);
   }
 });

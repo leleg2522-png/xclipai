@@ -52,12 +52,12 @@ const modelSpecs = {
   },
   'seedance-2.5': {
     name: 'Seedance 2.5', price: 11000, duration: '30 detik (tetap)',
-    resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
+    resolution: '1080p (upscale)', requestResolution: '1080p', upscaled: true, ratios: '16:9 atau 9:16', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
   'seedance-2.0': {
     name: 'Seedance 2.0', price: 5000, duration: '15 detik (tetap)',
-    requestDuration: 15, fixedDuration: true, resolution: '480p (tetap)',
+    requestDuration: 15, fixedDuration: true, resolution: '1080p (upscale)', requestResolution: '1080p', upscaled: true,
     ratios: '16:9 atau 9:16', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
@@ -85,7 +85,7 @@ export function curlExample(tab, modelId = 'wan-3.0') {
   -d '{
     "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0'}",
     "prompt": "Kamera bergerak perlahan melewati lanskap",
-    "resolution": "${modelSpecs[modelId]?.requestResolution || (modelSpecs[modelId] ? '480p' : '1080p')}",
+    "resolution": "${modelSpecs[modelId]?.requestResolution || modelSpecs['wan-3.0'].requestResolution}",
     "duration": ${modelSpecs[modelId]?.requestDuration ?? modelSpecs['wan-3.0'].requestDuration},
     "aspectRatio": "16:9",
     "audio": true
@@ -115,6 +115,7 @@ function docsView(s) {
     <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Kedua endpoint memakai header <code>X-Xclip-Key</code>.</span></div></aside>
     <div class="xp-endpoint"><div class="xp-endpoint-head"><span class="xp-method ${generate ? 'post' : 'get'}">${generate ? 'POST' : 'GET'}</span><code>${generate ? '/api/videogen/proxy' : '/api/videogen/tasks/:taskId'}</code><button class="xp-copy-inline" data-action="copy-curl">${i('Copy')} Salin cURL</button></div>
      <p class="xp-endpoint-desc">${generate ? `${e(model.name)} (${e(model.id)}): kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.` : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
+     ${generate && model.upscaled ? '<div class="xp-data-note"><strong>Output 1080p melalui upscale.</strong> Video diproses dalam dua tahap: generasi, lalu peningkatan resolusi. Status tetap processing dan videoUrl belum tersedia sampai hasil 1080p terverifikasi. Pantau stage generating atau upscaling. Jika tahap akhir gagal, task gagal dan reservasi saldo dikembalikan; video resolusi rendah tidak dikirim sebagai hasil akhir. Request yang dibuat sebelum perubahan ini tetap memakai kontrak resolusi lamanya dan tidak otomatis ditingkatkan.</div>' : ''}
     <div class="xp-data-note">Tetapkan <code>XCLIP_BASE_URL</code> ke alamat server Xclip tempat Anda menjalankan API. Ganti seluruh placeholder sebelum mengirim request. <code>videoUrl</code> adalah path relatif terhadap server Xclip; gunakan header <code>X-Xclip-Key</code> saat mengambil hasil video.</div>
      ${generate ? `<div class="xp-model-choice" role="group" aria-label="Pilih model untuk dokumentasi"><span class="xp-nav-caption">MODEL UNTUK CONTOH REQUEST</span>${Object.keys(modelSpecs).map(id => {
        const item = modelSpec(id, s);
@@ -242,6 +243,7 @@ export function generationHistoryContent(s) {
         <div class="xp-generation-details"><div class="xp-generation-id-line"><code>${e(task.taskId || 'ID tidak tersedia')}</code><span>${e(modelLabel(task.model))}</span></div>
         <div class="xp-generation-times"><span>Dibuat ${e(generationDate(task.createdAt))}</span>${task.completedAt ? `<span>· Selesai ${e(generationDate(task.completedAt))}</span>` : ''}</div>
         ${task.status === 'failed' && task.error ? `<p class="xp-generation-message xp-generation-message-error">${e(task.error)}</p>` : ''}
+        ${task.stage === 'upscaling' && task.status === 'processing' ? '<p class="xp-generation-message">Meningkatkan kualitas ke 1080p. Hasil tersedia setelah verifikasi selesai.</p>' : ''}
         ${task.notice ? `<p class="xp-generation-message">${e(task.notice)}</p>` : ''}
       </div>
       ${resultUrl ? `<a class="xp-generation-download" href="${e(resultUrl)}" download>${i('Download')} Unduh video</a>` : ''}

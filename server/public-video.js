@@ -100,4 +100,4 @@ async function streamVideo(req, res, value, request = axios.get) {
   throw new Error('Media unavailable');
 }
 
-module.exports = { publicVideoUrl, publicTask, streamVideo, checkedUrl, isPrivateAddress };
+module.exports = { publicVideoUrl, publicTask, streamVideo, checkedUrl, isPrivateAddress, httpAgent, httpsAgent };

@@ -13,10 +13,12 @@ const MODELS = Object.freeze({
   }),
   'seedance-2.5': Object.freeze({
     id: 'seedance-2.5', name: 'Seedance 2.5', category: 'Video',
+    resolution: '1080p', generationResolution: '480p', upscale: true,
     pricePerVideo: 11000, minDuration: 30, maxDuration: 30, aspectRatios: ['16:9', '9:16'],
   }),
   'seedance-2.0': Object.freeze({
     id: 'seedance-2.0', name: 'Seedance 2.0', category: 'Video',
+    resolution: '1080p', generationResolution: '480p', upscale: true,
     pricePerVideo: 5000, minDuration: 15, maxDuration: 15, aspectRatios: ['16:9', '9:16'],
   }),
 });

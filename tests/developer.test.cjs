@@ -585,7 +585,7 @@ test('revoked state has no create button and docs describe the Wan API contract'
   assert.ok(curlExample('generate').includes('Idempotency-Key'));
   s.models = [{ id: 'wan-3.0', status: 'available' }];
   assert.ok(portalView(s).includes('Tersedia'));
-  assert.ok(portalView(s).includes('480p'));
+  assert.ok(portalView(s).includes('1080p'));
   assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
 });
 
@@ -648,7 +648,7 @@ test('Seedance docs, catalog and cURL use public model and Rp11.000 without chan
   const body=JSON.parse(curlExample('generate','seedance-2.5').match(/-d '([\s\S]*)'/)[1]);
   assert.equal(body.model,'seedance-2.5');
   assert.equal(body.duration,30);
-  assert.equal(body.resolution,'480p');
+  assert.equal(body.resolution,'1080p');
   require('../server/wan-provider').validateInput(body);
 });
 
@@ -666,7 +666,7 @@ test('Seedance 2.0 docs and cURL use 15 seconds and Rp5000, never 2.5 contract f
   const body=JSON.parse(curlExample('generate','seedance-2.0').match(/-d '([\s\S]*)'/)[1]);
   assert.equal(body.model,'seedance-2.0');
   assert.equal(body.duration,15);
-  assert.equal(body.resolution,'480p');
+  assert.equal(body.resolution,'1080p');
   require('../server/wan-provider').validateInput(body);
   for(const id of ['wan-3.0','seedance-2.5']) {
     assert.ok(curlExample('generate',id).includes('"duration": 30'));
