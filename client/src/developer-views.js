@@ -50,11 +50,6 @@ const modelSpecs = {
     resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
-  'wan-3.0-uncensored': {
-    name: 'Wan 3.0 Uncensored', price: 6000, duration: '2–30 detik, default 30',
-    resolution: '480p', ratios: '16:9, 9:16, 1:1, 4:3, atau 3:4', defaultRatio: '16:9',
-    audio: 'Boolean, default true',
-  },
   'seedance-2.5': {
     name: 'Seedance 2.5', price: 11000, duration: '30 detik (tetap)',
     resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
@@ -69,20 +64,18 @@ const modelSpecs = {
 };
 modelSpecs['wan-3.0'].requestDuration = 30;
 modelSpecs['wan-3.0'].fixedDuration = true;
-modelSpecs['wan-3.0-uncensored'].requestDuration = 30;
-modelSpecs['wan-3.0-uncensored'].fixedDuration = false;
 modelSpecs['seedance-2.5'].requestDuration = 30;
 modelSpecs['seedance-2.5'].fixedDuration = true;
 const modelSpec = (id, s) => {
-  const spec = modelSpecs[id] || modelSpecs['wan-3.0-uncensored'];
+  const spec = modelSpecs[id] || modelSpecs['wan-3.0'];
   const catalog = s.models?.find(model => model.id === id);
   return { ...spec, id, status: catalog?.status || 'unknown',
     price: Number.isSafeInteger(catalog?.pricePerVideo) ? catalog.pricePerVideo : spec.price };
 };
 const modelLabel = id => modelSpecs[id]?.name || id || 'Model video';
-const selectedModelId = s => modelSpecs[s.docModelId] ? s.docModelId : 'wan-3.0-uncensored';
+const selectedModelId = s => modelSpecs[s.docModelId] ? s.docModelId : 'wan-3.0';
 
-export function curlExample(tab, modelId = 'wan-3.0-uncensored') {
+export function curlExample(tab, modelId = 'wan-3.0') {
   return tab === 'status'
     ? 'curl "$XCLIP_BASE_URL/api/videogen/tasks/<taskId>" \\\n  -H "X-Xclip-Key: <API_KEY_ANDA>"'
     : `curl -X POST "$XCLIP_BASE_URL/api/videogen/proxy" \\
@@ -90,10 +83,10 @@ export function curlExample(tab, modelId = 'wan-3.0-uncensored') {
   -H "Idempotency-Key: <UUID_UNIK_REQUEST>" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0-uncensored'}",
+    "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0'}",
     "prompt": "Kamera bergerak perlahan melewati lanskap",
     "resolution": "480p",
-    "duration": ${modelSpecs[modelId]?.requestDuration ?? modelSpecs['wan-3.0-uncensored'].requestDuration},
+    "duration": ${modelSpecs[modelId]?.requestDuration ?? modelSpecs['wan-3.0'].requestDuration},
     "aspectRatio": "16:9",
     "audio": true
   }'`;
@@ -134,7 +127,7 @@ function docsView(s) {
 }
 
 export function modelsView(s) {
-  const ids = ['wan-3.0', 'wan-3.0-uncensored', 'seedance-2.5', 'seedance-2.0'];
+  const ids = ['wan-3.0', 'seedance-2.5', 'seedance-2.0'];
   return `<section class="xp-model-section" id="model" aria-labelledby="model-heading">
     <div class="xp-section-heading"><div><span class="xp-kicker">KATALOG / VIDEO</span><h2 id="model-heading">Model video</h2></div></div>
     <div class="xp-model-catalog">${ids.map(id => {
@@ -144,7 +137,7 @@ export function modelsView(s) {
       const config = model.fixedDuration
         ? `Text-to-video dan image-to-video · ${model.resolution.replace(' (tetap', '').replace(')', '')} · ${model.requestDuration} detik tetap · rasio ${model.ratios}${id === 'seedance-2.5' ? ' · rasio divalidasi saat quote sebelum generasi berbayar' : ''} · audio default aktif.`
         : 'Text-to-video dan image-to-video · 480p · 2–30 detik · rasio 16:9, 9:16, 1:1, 4:3, atau 3:4.';
-      return `<article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">${id === 'wan-3.0-uncensored' ? 'VIDEO · UNCENSORED' : 'VIDEO'}</span><h3>${e(model.name)}</h3></div><span class="xp-model-status">${statusLabel}</span></div><p>${e(config)}</p><div class="xp-model-meta"><code>${e(id)}</code><strong>${money(model.price)} <span>/ video</span></strong></div></article>`;
+      return `<article class="xp-model-card"><div class="xp-model-title"><div><span class="xp-model-category">VIDEO</span><h3>${e(model.name)}</h3></div><span class="xp-model-status">${statusLabel}</span></div><p>${e(config)}</p><div class="xp-model-meta"><code>${e(id)}</code><strong>${money(model.price)} <span>/ video</span></strong></div></article>`;
     }).join('')}</div>
     ${s.modelError ? `<p class="xp-model-error" role="status">${e(s.modelError)} Katalog tetap menampilkan konfigurasi dan harga yang tersedia.</p>` : ''}
   </section>`;

@@ -4042,6 +4042,7 @@ const wanRouter = require('./server/wan-routes')({
     return (await saveBase64ToFile(image, 'image', baseUrl)).publicUrl;
   }
 });
+app.use('/api/videogen/proxy', require('./server/model-retirement'));
 app.use(wanRouter);
 
 app.post('/api/videogen/proxy', async (req, res) => {

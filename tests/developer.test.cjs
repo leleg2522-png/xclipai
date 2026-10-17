@@ -569,8 +569,9 @@ test('revoked state has no create button and docs describe the Wan API contract'
   s.user = { username: 'dev' };
   s.overview = { keys: [{ status: 'revoked', api_key: 'hidden' }], hasLifetimeKey: true, totalRequests: 3, providers: [], generationProvider: 'Freepik' };
   const html = portalView(s);
-  assert.ok(html.includes('Wan 3.0 Uncensored'));
-  assert.match(html,/Video · Uncensored|VIDEO · UNCENSORED/);
+  assert.ok(html.includes('Wan 3.0'));
+  assert.ok(!/Uncensored|wan-3.0-uncensored/i.test(html));
+  assert.match(html,/xp-model-category">VIDEO/);
   assert.ok(html.includes('href="#model"'));
   assert.ok(!/generator|Ke generator|Buka generator/i.test(html));
   assert.ok(html.includes('Belum terkonfirmasi'));
@@ -578,11 +579,11 @@ test('revoked state has no create button and docs describe the Wan API contract'
   assert.ok(html.includes('API key telah dinonaktifkan'));
   assert.ok(!html.includes('id="key-form"'));
   assert.ok(!html.includes('hidden</code>'));
-  assert.ok(curlExample('generate').includes('"model": "wan-3.0-uncensored"'));
+  assert.ok(curlExample('generate').includes('"model": "wan-3.0"'));
   assert.ok(curlExample('generate').includes('"duration": 30'));
   assert.ok(curlExample('generate').includes('"resolution": "480p"'));
   assert.ok(curlExample('generate').includes('Idempotency-Key'));
-  s.models = [{ id: 'wan-3.0-uncensored', status: 'available' }];
+  s.models = [{ id: 'wan-3.0', status: 'available' }];
   assert.ok(portalView(s).includes('Tersedia'));
   assert.ok(portalView(s).includes('480p'));
   assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
@@ -615,13 +616,14 @@ test('new model docs and examples use Rp6.500/30s separately without public prov
     {id:'wan-3.0-uncensored',status:'unavailable',pricePerVideo:6000}];
   const html=portalView(s);
   assert.ok(html.includes('6.500'));
-  assert.ok(html.includes('6.000'));
+  assert.ok(!html.includes('6.000'));
+  assert.ok(!/Uncensored|wan-3.0-uncensored/i.test(html));
   assert.ok(html.includes('Durasi hanya 30 detik'));
   assert.ok(html.includes('akun dengan langganan lama'));
-  assert.ok(html.includes('Belum tersedia'));
+  assert.ok(html.includes('Belum terkonfirmasi'));
   assert.ok(html.includes('Tersedia'));
   assert.ok(!/flora|picsart|wan3.0-video|gw-v2/i.test(html));
-  for(const id of ['wan-3.0','wan-3.0-uncensored']) {
+  for(const id of ['wan-3.0']) {
     const body=JSON.parse(curlExample('generate',id).match(/-d '([\s\S]*)'/)[1]);
     assert.equal(body.model,id);
     assert.equal(body.duration,30);
@@ -639,7 +641,7 @@ test('Seedance docs, catalog and cURL use public model and Rp11.000 without chan
   assert.ok(html.includes('Seedance 2.5'));
   assert.ok(html.includes('11.000'));
   assert.ok(html.includes('6.500'));
-  assert.ok(html.includes('6.000'));
+  assert.ok(!html.includes('6.000'));
   assert.ok(html.includes('Durasi hanya 30 detik'));
   assert.ok(!/picsart|flora|seedance_2_5|generate_audio|gw-v2/i.test(html));
   const body=JSON.parse(curlExample('generate','seedance-2.5').match(/-d '([\s\S]*)'/)[1]);
@@ -665,7 +667,7 @@ test('Seedance 2.0 docs and cURL use 15 seconds and Rp5000, never 2.5 contract f
   assert.equal(body.duration,15);
   assert.equal(body.resolution,'480p');
   require('../server/wan-provider').validateInput(body);
-  for(const id of ['wan-3.0','wan-3.0-uncensored','seedance-2.5']) {
+  for(const id of ['wan-3.0','seedance-2.5']) {
     assert.ok(curlExample('generate',id).includes('"duration": 30'));
   }
 });

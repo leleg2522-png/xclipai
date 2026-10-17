@@ -4,7 +4,7 @@ const { MODEL, ServiceError, validateInput } = require('./wan-provider');
 const { publicVideoUrl } = require('./public-video');
 const { WalletError } = require('./api-wallet');
 const { createGenerationLogger, describeError } = require('./generation-log');
-const { MODELS, MODEL_IDS, isManagedVideoModel } = require('./video-models');
+const { MODELS, MODEL_IDS, ACTIVE_MODEL_IDS, isManagedVideoModel } = require('./video-models');
 
 const UNCERTAIN = 'Pengiriman belum terkonfirmasi. Jangan kirim ulang; simpan taskId dan hubungi dukungan Xclip.';
 function taskResponse(row) {
@@ -137,7 +137,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
     res.set('Cache-Control', 'private, no-store');
     try {
       await owner(req);
-      const models = await Promise.all(MODEL_IDS.map(async id => {
+      const models = await Promise.all(ACTIVE_MODEL_IDS.map(async id => {
         let status = 'available';
         try { await adapter(id).context(); }
         catch (error) {

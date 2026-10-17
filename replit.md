@@ -2,6 +2,10 @@
 
 ## Overview
 
+### Retired video model
+
+Wan 3.0 Uncensored is retired at the user's request. Only normal Wan 3.0, Seedance 2.5 and Seedance 2.0 are advertised by the API video catalog and docs. New public Uncensored submissions return HTTP 410 `MODEL_RETIRED` before any provider call or wallet mutation. Historical registry/pricing, task polling, reconciliation, refunds, history and protected media remain intact; earlier sections describing Uncensored availability are historical, not permission to offer new jobs.
+
 ### Kling Motion Control backend
 
 New `/api/motion/generate` calls use Alriz `mc-kling-2.6-pro` only, with server-side `ALRIZ_API_KEY`. Public model `kling-v2.6-pro` and legacy fields `characterImage`, `referenceVideo`, optional `prompt` and `roomId` remain accepted; HTTPS URLs, media data URIs and legacy raw base64 are supported. Supply image JPG/PNG/WebP and video MP4/MOV no longer than 30 seconds. Custom character orientation is rejected unless `video`; no undocumented upstream orientation or webhook fields are sent.

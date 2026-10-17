@@ -12,7 +12,7 @@ const state = {
   generationTasks: [], generationError: '', generationPage: 1, generationHasMore: false,
   generationLoading: false, generationUpdatedAt: null,
   error: '', notice: '', subscriptionError: '', topupError: '', historyError: '',
-  docTab: 'generate', docModelId: 'wan-3.0-uncensored', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
+  docTab: 'generate', docModelId: 'wan-3.0', showPayload: true, keyVisible: false, confirmRevoke: false, renaming: false,
 };
 let busy = false;
 let paymentTimer;
@@ -503,7 +503,7 @@ root.addEventListener('click', event => {
   } else if (action === 'doc-generate' || action === 'doc-status') {
     state.docTab = action === 'doc-generate' ? 'generate' : 'status';
   } else if (action === 'doc-model') {
-    if (['wan-3.0', 'wan-3.0-uncensored', 'seedance-2.5', 'seedance-2.0'].includes(button.dataset.modelId)) {
+    if (['wan-3.0', 'seedance-2.5', 'seedance-2.0'].includes(button.dataset.modelId)) {
       state.docModelId = button.dataset.modelId;
     }
   } else if (action === 'toggle-key') {

@@ -2,6 +2,7 @@
 const MODELS = Object.freeze({
   'wan-3.0-uncensored': Object.freeze({
     id: 'wan-3.0-uncensored', name: 'Wan 3.0 Uncensored', category: 'Video · Uncensored',
+    retired: true, // Retained only for historical task settlement and pricing.
     pricePerVideo: 6000, minDuration: 2, maxDuration: 30,
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
   }),
@@ -19,6 +20,7 @@ const MODELS = Object.freeze({
   }),
 });
 const MODEL_IDS = Object.keys(MODELS);
+const ACTIVE_MODEL_IDS = MODEL_IDS.filter(id => !MODELS[id].retired);
 const modelPrices = Object.fromEntries(MODEL_IDS.map(id => [id, MODELS[id].pricePerVideo]));
 const isManagedVideoModel = id => Object.hasOwn(MODELS, id);
-module.exports = { MODELS, MODEL_IDS, modelPrices, isManagedVideoModel };
+module.exports = { MODELS, MODEL_IDS, ACTIVE_MODEL_IDS, modelPrices, isManagedVideoModel };

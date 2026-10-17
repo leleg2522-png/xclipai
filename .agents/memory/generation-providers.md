@@ -33,11 +33,11 @@ Distinguish hiding provider routing from guaranteeing untraceable generated medi
 
 **How to apply:** Include media metadata in privacy audits, explain its limits, and preserve AI-origin/provenance markings rather than silently stripping them to conceal origin.
 
-The user wants a public video-model category showing “Wan 3.0 Uncensored”; its intended internal provider is Flora AI, which must not be named to developer users. The requested generation configuration is Wan 3.0, 480p, 30 seconds.
+The user has retired “Wan 3.0 Uncensored”: do not offer it in the catalog/docs or accept new public generation requests. Preserve historical jobs, media access, and billing settlement.
 
-**Why:** The user specified the public model label and provider privacy, then requested 480p and 30 seconds, correcting the model version to “wan3,0”. When told the documentation did not confirm the Uncensored variant, the user stated “sudah gw tes dan benar”.
+**Why:** The user explicitly said “dan juga hilangkan model wan uncecored”, superseding the earlier request to offer this model.
 
-**How to apply:** Use the requested public model name and category without provider branding, accepting the user's report that they tested and confirmed it. Do not describe that report as an independent agent test or official documentation confirmation. Verify the actual model identifier and parameter options before wiring the adapter; the user's confirmation does not supply an API contract or a moderation-toggle parameter.
+**How to apply:** Keep the normal Wan 3.0 and both Seedance models available as configured. Retaining an internal historical adapter/price is not permission to restore Uncensored as a public model.
 
 Flora's prose guides and search snippets can lag its generated API reference.
 
