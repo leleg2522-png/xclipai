@@ -145,7 +145,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, va
           logger.warn('catalog_failed', { stage: 'load_model_catalog', ...describeError(error) });
         }
         return { ...MODELS[id], status, modes: ['text-to-video', 'image-to-video'],
-          resolution: '480p', defaultDuration: MODELS[id].maxDuration, currency: 'IDR' };
+          resolution: MODELS[id].resolution || '480p', defaultDuration: MODELS[id].maxDuration, currency: 'IDR' };
       }));
       res.json({ models });
     } catch (error) {

@@ -420,6 +420,9 @@ test('model catalog reports independent availability and never sends a missing m
   const catalog=await h.call('/api/developer/models',null,{'X-Xclip-Key':'owner'});
   assert.equal(catalog.status,200);
   assert.equal(catalog.data.models.some(m=>m.id===MODEL),false);
+  assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').resolution,'1080p');
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.5').resolution,'480p');
+  assert.equal(catalog.data.models.find(m=>m.id==='seedance-2.0').resolution,'480p');
   assert.equal(catalog.data.models.find(m=>m.id==='wan-3.0').status,'unavailable');
   assert.equal((await h.generate({model:'wan-3.0'})).status,503);
   assert.equal(h.stats.starts,0);

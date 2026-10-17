@@ -145,7 +145,8 @@ function validateInput(body) {
     throw new ServiceError(400, 'Prompt wajib diisi, maksimal 10000 karakter.');
   }
   const duration = body.duration === undefined ? spec.maxDuration : body.duration;
-  const resolution = body.resolution === undefined ? '480p' : body.resolution;
+  const modelResolution = spec.resolution || '480p';
+  const resolution = body.resolution === undefined ? modelResolution : body.resolution;
   const aspectRatio = body.aspectRatio === undefined ? '16:9' : body.aspectRatio;
   const audio = body.audio === undefined ? true : body.audio;
   if (!Number.isInteger(duration) || duration < spec.minDuration || duration > spec.maxDuration) {
@@ -153,7 +154,7 @@ function validateInput(body) {
       ? `Model ini menggunakan durasi ${spec.maxDuration} detik.`
       : `Durasi harus ${spec.minDuration}–${spec.maxDuration} detik.`);
   }
-  if (resolution !== '480p') throw new ServiceError(400, 'Konfigurasi model ini menggunakan resolusi 480p.');
+  if (resolution !== modelResolution) throw new ServiceError(400, `Konfigurasi model ini menggunakan resolusi ${modelResolution}.`);
   if (!spec.aspectRatios.includes(aspectRatio)) throw new ServiceError(400, 'Rasio aspek tidak didukung.');
   if (typeof audio !== 'boolean') throw new ServiceError(400, 'Audio harus berupa boolean.');
   const image = body.image === undefined ? '' : body.image;

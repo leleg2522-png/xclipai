@@ -142,7 +142,7 @@ function createPicsartWanProvider(pool, request = axios.request) {
   return createPicsartVideoProvider(pool, {
     model: 'wan-3.0', workflow: '/gw-v2/workflows/wan/v3/video', minimumCredits: 60, resultField: 'url',
     params: (input, imageUrl) => ({
-      model: 'wan3.0-video', resolution: '480P', ratio: input.aspectRatio,
+      model: 'wan3.0-video', resolution: input.resolution.toUpperCase(), ratio: input.aspectRatio,
       duration: input.duration, audio: input.audio, enable_thinking: false, watermark: false,
       prompt: input.prompt,
       ...(imageUrl ? { media: [{ type: 'reference_image', url: imageUrl }] } : {}),

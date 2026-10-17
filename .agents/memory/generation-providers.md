@@ -45,11 +45,11 @@ Flora's prose guides and search snippets can lag its generated API reference.
 
 **How to apply:** Prefer the current generated reference for endpoint contracts and the authenticated model catalog for actual account capabilities. Do not infer a missing capability solely from older prose or cached search snippets.
 
-The user approved adding a separate public “Wan 3.0” model backed internally by Picsart, priced Rp6.500 per video, while retaining Wan 3.0 Uncensored at its existing price.
+The user approved a separate public “Wan 3.0” model backed internally by Picsart, priced Rp6.500 per video. They subsequently requested its backend resolution be changed to 1080p; duration remains 30 seconds.
 
 **Why:** After providing a successful Picsart browser capture, the user selected “Tambah Wan 3.0 terpisah” and entered Rp6.500.
 
-**How to apply:** Do not replace or silently reroute the Uncensored model. Keep provider names internal and use the requested per-model prices. The supplied capture demonstrates 480p/30-second image-to-video, not an Uncensored capability or every possible duration; expand supported settings only with evidence.
+**How to apply:** Keep provider names internal and preserve the requested per-model price. New normal Wan requests use 1080p and 30 seconds, subject to a successful upstream quote; do not claim live 1080p generation was verified from the original 480p capture. Uncensored is retired separately as described above.
 
 The user requested Seedance 2.5 as an additional model and confirmed Rp11.000 per video for 480p/30 seconds.
 

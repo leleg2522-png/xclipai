@@ -4,6 +4,8 @@
 
 ### Retired video model
 
+Normal Wan 3.0 now requires **1080p / 30 seconds** at the existing Rp6.500/video price. Its upstream request uses `1080P`; omitted resolution defaults to 1080p, other resolutions are rejected. Catalog and copied cURL must agree. Both Seedance models remain 480p at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; do not silently fall back to 480p if 1080p is unavailable.
+
 Wan 3.0 Uncensored is retired at the user's request. Only normal Wan 3.0, Seedance 2.5 and Seedance 2.0 are advertised by the API video catalog and docs. New public Uncensored submissions return HTTP 410 `MODEL_RETIRED` before any provider call or wallet mutation. Historical registry/pricing, task polling, reconciliation, refunds, history and protected media remain intact; earlier sections describing Uncensored availability are historical, not permission to offer new jobs.
 
 ### Kling Motion Control backend

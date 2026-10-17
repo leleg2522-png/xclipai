@@ -47,7 +47,7 @@ export function authView(s) {
 const modelSpecs = {
   'wan-3.0': {
     name: 'Wan 3.0', price: 6500, duration: '30 detik (tetap)',
-    resolution: '480p (tetap)', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
+    resolution: '1080p (tetap)', requestResolution: '1080p', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
   'seedance-2.5': {
@@ -85,7 +85,7 @@ export function curlExample(tab, modelId = 'wan-3.0') {
   -d '{
     "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0'}",
     "prompt": "Kamera bergerak perlahan melewati lanskap",
-    "resolution": "480p",
+    "resolution": "${modelSpecs[modelId]?.requestResolution || (modelSpecs[modelId] ? '480p' : '1080p')}",
     "duration": ${modelSpecs[modelId]?.requestDuration ?? modelSpecs['wan-3.0'].requestDuration},
     "aspectRatio": "16:9",
     "audio": true
