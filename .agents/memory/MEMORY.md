@@ -7,3 +7,4 @@
 - [Browser testing runtime](browser-testing-runtime.md) — the documented testing subagent kind may be unavailable; verify critical UI without bypassing auth or mutating live data.
 - [PostgreSQL parameter typing](postgres-parameter-typing.md) — reused status parameters need explicit consistent casts; fake SQL tests do not validate PostgreSQL inference.
 - [Seedance final resolution](seedance-upscale.md) — Seedance delivers verified 1080p via mandatory upscale, not native generation; old jobs are not retroactively billed.
+- [Asset delivery](asset-delivery.md) — Library asset cards reject files above 100 MiB; use a smaller delivery copy while preserving original generation output.

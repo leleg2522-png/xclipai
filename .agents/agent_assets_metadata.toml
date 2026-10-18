@@ -28,3 +28,17 @@ mtime_ms = 1792001081090
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:4d6c99d7-546b-477d-872d-9a887a5fbdbb/6a13e9b6-5d61-4757-aea6-d60f358149e0/f84333fe-6b2b-4db4-8ee8-1d1cc53e4749"
 storage_version_token = "1792001135332029"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "liSbAXQN_U54Pz1FB2FEE"
+uri = "file://generated-artifacts/internal-wan-30s-share.mp4"
+type = "video"
+title = "Hasil tes Wan 3.0 — 1080p, 30 detik"
+description = "Salinan lebih kecil untuk chat, 34 MB. Terverifikasi 1920×1080, durasi 30,02 detik, dengan audio. File asli tidak diubah. Tes ini tidak memotong saldo portal."
+logical_id = "b0008144-2a53-455d-8cbb-2810d5f48941"
+content_hash = "sha256:1a788dce91a7a15745da8a703874ed51a930888fe15ef1fdae895f277d55c395"
+size = 34176511
+mtime_ms = 1792325648033
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:4d6c99d7-546b-477d-872d-9a887a5fbdbb/b0008144-2a53-455d-8cbb-2810d5f48941/ec46869e-f94f-4d28-bbb9-541a639b744f"
+storage_version_token = "1792325654921312"
+content_type = "video/mp4"
