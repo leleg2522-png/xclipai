@@ -14,3 +14,9 @@ Renderful's model page FAQ uses legacy predictions terminology, while its genera
 **Why:** Research for this integration found the two public documentation surfaces conflicting, despite authenticated catalog/account reads succeeding.
 
 **How to apply:** Use the current generated OpenAPI for field names and endpoint paths; model-page native UI parameter names are not proof of the public REST schema. Quote/account reads and local fixtures do not prove a paid end-to-end upscale succeeded.
+
+Renderful developer and agent credentials have different endpoint scopes. A rejection from an agent-only quote endpoint does not by itself prove a developer key is invalid.
+
+**Why:** An account key authenticated successfully against developer balance and model health, while the agent quote endpoint returned 401.
+
+**How to apply:** Check developer authentication with the developer account endpoint and distinguish unsupported endpoint scope from invalid credentials. Never treat a successful balance check as proof that a paid upscale completed.
