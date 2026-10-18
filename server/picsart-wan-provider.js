@@ -18,7 +18,6 @@ function createPicsartVideoProvider(pool, definition, request = axios.request) {
          WHERE p.status = 'available' AND p.pool = 'p500'
          AND p.access_token IS NOT NULL AND p.access_token <> ''
          AND p.access_expires_at > NOW() + INTERVAL '2 minutes'
-         AND NOT EXISTS (SELECT 1 FROM picsart_user_accounts a WHERE a.credential_id = p.id)
          ORDER BY p.id LIMIT 10`
       : `SELECT id, access_token FROM picsart_credentials WHERE id = $1
          AND access_token IS NOT NULL AND access_token <> ''

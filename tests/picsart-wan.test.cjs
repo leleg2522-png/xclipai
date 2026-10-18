@@ -145,7 +145,10 @@ test('Picsart adapter uses database accounts and captured quote/submit/result co
   assert.equal(h.calls.at(-1).url,'https://api.picsart.com/gw-v2/workflows/wan/v3/video/fake-workflow-id/result');
   assert.deepEqual(h.queries.at(-1).params,[12]);
   assert.match(h.queries[0].sql,/pool = 'p500'/);
-  assert.match(h.queries[0].sql,/NOT EXISTS/);
+  assert.doesNotMatch(h.queries[0].sql,/picsart_user_accounts|NOT EXISTS/);
+  assert.match(h.queries[0].sql,/status = 'available'/);
+  assert.match(h.queries[0].sql,/access_token IS NOT NULL/);
+  assert.match(h.queries[0].sql,/access_expires_at > NOW\(\) \+ INTERVAL '2 minutes'/);
   assert.match(h.queries[0].sql,/access_expires_at >/);
   for(const call of h.calls) {
     assert.equal(call.headers['X-App-Authorization'],'Bearer fake-db-token');

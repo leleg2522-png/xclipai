@@ -3,6 +3,12 @@ name: Xclip generation provider intent
 description: User-specified provider setup for the third-party Xclip API.
 ---
 
+The user permits `p500` generation accounts to be shared with legacy assigned users.
+
+**Why:** After the eligibility audit showed assigned accounts were excluded, the user said “gpp jadi kaya nyampur aja”.
+
+**How to apply:** Do not treat a legacy assignment as an exclusion from the Xclip generation pool, and do not delete assignment mappings. Continue requiring available status, valid tokens, sufficient credits, the selected pool, and shared concurrency/quota controls. Do not infer permission to share assigned Renderful keys, revive dead accounts, or bypass expiry.
+
 For the Alriz migration, the user's “Kling MC P5” means the existing Kling Motion Control backend, not the Picsart `p500` pool. Replace that motion-control integration with Alriz Kling MC 2.6 Pro without changing Wan or Seedance.
 
 **Why:** The user explicitly corrected the mistaken interpretation of “P5” as the shared Picsart pool.
