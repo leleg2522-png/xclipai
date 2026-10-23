@@ -632,10 +632,10 @@ test('new model docs and examples use Rp6.500/30s separately without public prov
   }
 });
 
-test('quickstarts use the current origin, valid shell request IDs and authenticated downloads without embedded keys', () => {
+test('quickstarts use Railway, valid shell request IDs and authenticated downloads without embedded keys', () => {
   const {curlExample,requestBody,portalView}=loadViews();
   const script=curlExample('generate','wan-3.0');
-  assert.ok(script.includes("export XCLIP_BASE_URL='https://xclip.test'"));
+  assert.ok(script.includes("export XCLIP_BASE_URL='https://web-production-0531a.up.railway.app'"));
   assert.ok(script.includes('Idempotency-Key: $XCLIP_REQUEST_ID'));
   assert.ok(script.includes('read -r -s'));
   assert.ok(!/<UUID_UNIK_REQUEST>|<API_KEY_ANDA>/.test(script));
@@ -685,9 +685,18 @@ test('docs distinguish the visible Base URL from full Postman endpoints and warn
   assert.ok(html.includes('data-action="copy-endpoint-url"'));
   assert.ok(!html.includes('Anda sedang membuka Preview'));
   assert.ok(views.curlExample('generate').includes(`export XCLIP_BASE_URL='${base}'`));
-  const preview=loadViews('https://example.replit.dev').portalView(s);
+  const previewViews=loadViews('https://example.replit.dev');
+  const preview=previewViews.portalView(s);
   assert.ok(preview.includes('Anda sedang membuka Preview'));
-  assert.ok(preview.includes('Jangan memakai alamat Preview untuk production'));
+  assert.ok(preview.includes('tetap mengarah ke API production di Railway'));
+  assert.ok(!preview.includes('https://example.replit.dev'));
+  assert.ok(preview.includes(`<strong>Postman:</strong> gunakan method <code>POST</code> ke <code>${base}/api/videogen/proxy</code>`));
+  assert.equal(previewViews.apiBaseUrl(),base);
+  assert.equal(previewViews.apiBaseUrl('http://127.0.0.1:5001'),'http://127.0.0.1:5001');
+  for (const tab of ['generate','status','download']) {
+    assert.ok(previewViews.apiEndpointUrl(tab).startsWith(base+'/api/'));
+    assert.ok(previewViews.curlExample(tab).includes(`export XCLIP_BASE_URL='${base}'`));
+  }
   s.docTab='status';
   assert.ok(views.portalView(s).includes(base+'/api/videogen/tasks/{taskId}'));
   assert.ok(views.portalView(s).includes('tanpa tanda kurung kurawal'));
@@ -700,17 +709,17 @@ test('Base URL and full endpoint copy buttons copy the selected address without 
   const h=browserHarness({navigator:{clipboard:{async writeText(text){copied.push(text);}}}});
   h.controller.state.user={username:'dev'};
   await h.click('copy-base-url');await h.settle();
-  assert.equal(copied[0],'https://xclip.test');
+  assert.equal(copied[0],'https://web-production-0531a.up.railway.app');
   assert.equal(h.controller.state.notice,'Base URL tersalin.');
   await h.click('copy-endpoint-url');await h.settle();
-  assert.equal(copied[1],'https://xclip.test/api/videogen/proxy');
+  assert.equal(copied[1],'https://web-production-0531a.up.railway.app/api/videogen/proxy');
   h.click('doc-status');
   await h.click('copy-endpoint-url');await h.settle();
-  assert.equal(copied[2],'https://xclip.test/api/videogen/tasks/{taskId}');
+  assert.equal(copied[2],'https://web-production-0531a.up.railway.app/api/videogen/tasks/{taskId}');
   assert.equal(h.controller.state.notice,'URL endpoint tersalin.');
   h.click('doc-download');
   await h.click('copy-endpoint-url');await h.settle();
-  assert.equal(copied[3],'https://xclip.test/api/videogen/proxy-video?taskId={taskId}');
+  assert.equal(copied[3],'https://web-production-0531a.up.railway.app/api/videogen/proxy-video?taskId={taskId}');
 });
 
 test('Seedance docs, catalog and cURL use public model and Rp11.000 without changing Wan prices', () => {
