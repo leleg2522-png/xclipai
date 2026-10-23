@@ -47,7 +47,7 @@ export function authView(s) {
 const modelSpecs = {
   'wan-3.0': {
     name: 'Wan 3.0', price: 6500, duration: '30 detik (tetap)',
-    resolution: '1080p (tetap)', requestResolution: '1080p', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
+    resolution: '720p (tetap)', requestResolution: '720p', ratios: '16:9 atau 9:16', defaultRatio: '16:9',
     audio: 'Boolean, default true',
   },
   'seedance-2.5': {

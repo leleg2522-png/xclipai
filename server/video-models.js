@@ -8,7 +8,7 @@ const MODELS = Object.freeze({
   }),
   'wan-3.0': Object.freeze({
     id: 'wan-3.0', name: 'Wan 3.0', category: 'Video',
-    resolution: '1080p',
+    resolution: '720p',
     pricePerVideo: 6500, minDuration: 30, maxDuration: 30, aspectRatios: ['16:9', '9:16'],
   }),
   'seedance-2.5': Object.freeze({

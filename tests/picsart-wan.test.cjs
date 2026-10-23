@@ -74,10 +74,11 @@ test('Seedance 2.0 rejects low credits or a mismatched/estimated quote before an
 test('separate Wan 3.0 has a fixed verified 30s contract and does not acquire an uncensored flag', () => {
   const input=validateInput({model:'wan-3.0',prompt:'test'});
   assert.equal(input.duration,30);
-  assert.equal(input.resolution,'1080p');
+  assert.equal(input.resolution,'720p');
   assert.equal(MODELS['wan-3.0'].pricePerVideo,6500);
   assert.equal(MODELS['wan-3.0-uncensored'].pricePerVideo,6000);
-  for(const extra of [{duration:2},{duration:29},{resolution:'480p'},{resolution:'720p'},{aspectRatio:'1:1'},{uncensored:true}]) {
+  assert.equal(validateInput({model:'wan-3.0',prompt:'test',resolution:'720p'}).resolution,'720p');
+  for(const extra of [{duration:2},{duration:29},{resolution:'480p'},{resolution:'1080p'},{aspectRatio:'1:1'},{uncensored:true}]) {
     assert.throws(()=>validateInput({model:'wan-3.0',prompt:'test',...extra}),e=>e.status===400);
   }
 });
@@ -132,7 +133,7 @@ test('Picsart adapter uses database accounts and captured quote/submit/result co
   const h=fixture();
   const prepared=await h.provider.prepare(validateInput({model:'wan-3.0',prompt:'safe landscape',aspectRatio:'9:16'}));
   assert.deepEqual(prepared.body,{params:{
-    model:'wan3.0-video',resolution:'1080P',ratio:'9:16',duration:30,audio:true,
+    model:'wan3.0-video',resolution:'720P',ratio:'9:16',duration:30,audio:true,
     enable_thinking:false,watermark:false,prompt:'safe landscape',
     options:{inputs_transformation:{downscale_oversized_images:true}},
   }});

@@ -581,11 +581,11 @@ test('revoked state has no create button and docs describe the Wan API contract'
   assert.ok(!html.includes('hidden</code>'));
   assert.ok(curlExample('generate').includes('"model": "wan-3.0"'));
   assert.ok(curlExample('generate').includes('"duration": 30'));
-  assert.ok(curlExample('generate').includes('"resolution": "1080p"'));
+  assert.ok(curlExample('generate').includes('"resolution": "720p"'));
   assert.ok(curlExample('generate').includes('Idempotency-Key'));
   s.models = [{ id: 'wan-3.0', status: 'available' }];
   assert.ok(portalView(s).includes('Tersedia'));
-  assert.ok(portalView(s).includes('1080p'));
+  assert.ok(portalView(s).includes('720p'));
   assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
 });
 
@@ -626,7 +626,7 @@ test('new model docs and examples use Rp6.500/30s separately without public prov
   for(const id of ['wan-3.0']) {
     const body=JSON.parse(curlExample('generate',id).match(/-d '([\s\S]*)'/)[1]);
     assert.equal(body.model,id);
-    assert.equal(body.resolution,'1080p');
+    assert.equal(body.resolution,'720p');
     assert.equal(body.duration,30);
     require('../server/wan-provider').validateInput(body);
   }

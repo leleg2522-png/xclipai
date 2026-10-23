@@ -4,7 +4,7 @@
 
 ### Retired video model
 
-Normal Wan 3.0 now requires **1080p / 30 seconds** at the existing Rp6.500/video price. Its upstream request uses `1080P`; omitted resolution defaults to 1080p, other resolutions are rejected. Catalog and copied cURL must agree. Seedance's upstream generation remains 480p, but new public requests now require a verified 1080p upscale before completion, at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; never silently deliver 480p for a new 1080p request.
+Normal Wan 3.0 now requires **720p / 30 seconds** at the existing Rp6.500/video price, per the user's request. Its upstream request uses `720P`; omitted resolution defaults to 720p, other resolutions are rejected. Catalog and copied cURL must agree. Previously completed Wan videos retain their original resolution. Seedance's upstream generation remains 480p, but new public requests now require a verified 1080p upscale before completion, at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; never silently deliver 480p for a new 1080p request.
 
 Wan 3.0 Uncensored is retired at the user's request. Only normal Wan 3.0, Seedance 2.5 and Seedance 2.0 are advertised by the API video catalog and docs. New public Uncensored submissions return HTTP 410 `MODEL_RETIRED` before any provider call or wallet mutation. Historical registry/pricing, task polling, reconciliation, refunds, history and protected media remain intact; earlier sections describing Uncensored availability are historical, not permission to offer new jobs.
 
@@ -102,7 +102,7 @@ Developer generation history: GET `/api/developer/generations?page=1` accepts a 
 
 ### Separate Wan 3.0 model
 
-Public `wan-3.0` is **Wan 3.0**, priced **Rp6.500/video**, separate from `wan-3.0-uncensored` (Rp6.000/video). Its verified configuration is 480p, fixed 30 seconds, 16:9/9:16, audio on/off, prompt with optional PNG/JPEG/WebP data URI. It does not inherit an Uncensored claim. New-model requests always use API wallet balance; existing legacy access remains limited to the previously available model.
+Public `wan-3.0` is **Wan 3.0**, priced **Rp6.500/video**, separate from the retired `wan-3.0-uncensored` (Rp6.000/video). Its current configuration is 720p, fixed 30 seconds, 16:9/9:16, audio on/off, prompt with optional PNG/JPEG/WebP data URI. It does not inherit an Uncensored claim. New-model requests always use API wallet balance; existing legacy access remains limited to the previously available model.
 
 Internally, `server/picsart-wan-provider.js` follows the supplied browser-capture workflow: temporary image upload when needed, non-generating options quote, one submit, then result polling. The user explicitly allows shared use of available `p500` credentials even when assigned to legacy users. Assignment mappings must stay intact; assignment alone no longer disqualifies a credential. Tokens must still be present/unexpired, the pool must be `p500`, and status must be `available`. This permission does not extend to sharing assigned Renderful keys or reviving dead accounts. Quotes, credit checks and shared per-account locking/quota still apply; no generation retries, provider fallback, captured bearer tokens, cookie replay, subscription manipulation, or token refresh contract is invented. If access expires, polling fails safely without treating the job as failed or refunding unconfirmed delivery. Existing account-maintenance tooling must refresh expiring credentials.
 
