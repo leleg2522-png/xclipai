@@ -75,21 +75,54 @@ const modelSpec = (id, s) => {
 const modelLabel = id => modelSpecs[id]?.name || id || 'Model video';
 const selectedModelId = s => modelSpecs[s.docModelId] ? s.docModelId : 'wan-3.0';
 
-export function curlExample(tab, modelId = 'wan-3.0') {
-  return tab === 'status'
-    ? 'curl "$XCLIP_BASE_URL/api/videogen/tasks/<taskId>" \\\n  -H "X-Xclip-Key: <API_KEY_ANDA>"'
-    : `curl -X POST "$XCLIP_BASE_URL/api/videogen/proxy" \\
-  -H "X-Xclip-Key: <API_KEY_ANDA>" \\
-  -H "Idempotency-Key: <UUID_UNIK_REQUEST>" \\
+export function apiBaseUrl(origin = typeof window !== 'undefined' ? window.location?.origin : '') {
+  return /^https?:\/\/[a-z0-9.[\]:-]+$/i.test(origin || '') ? origin : '';
+}
+
+export function apiEndpointUrl(tab = 'generate', origin) {
+  const base = apiBaseUrl(origin);
+  return `${base}${tab === 'download' ? '/api/videogen/proxy-video?taskId={taskId}'
+    : tab === 'status' ? '/api/videogen/tasks/{taskId}' : '/api/videogen/proxy'}`;
+}
+
+export function requestBody(modelId = 'wan-3.0') {
+  const id = modelSpecs[modelId] ? modelId : 'wan-3.0';
+  return { model: id, prompt: 'Kamera bergerak perlahan melewati lanskap',
+    resolution: modelSpecs[id].requestResolution, duration: modelSpecs[id].requestDuration,
+    aspectRatio: '16:9', audio: true };
+}
+
+export function curlExample(tab, modelId = 'wan-3.0', origin = typeof window !== 'undefined' ? window.location?.origin : '') {
+  const base = apiBaseUrl(origin);
+  const setup = `${base ? `export XCLIP_BASE_URL='${base}'` : ': "${XCLIP_BASE_URL:?Isi alamat server Xclip terlebih dahulu}"'}
+# Jalankan di Bash. Key dimasukkan di terminal, tidak ditampilkan.
+if [ -z "\${XCLIP_API_KEY:-}" ]; then
+  read -r -s -p "API key Xclip: " XCLIP_API_KEY
+  printf '\\n'
+  export XCLIP_API_KEY
+fi
+: "\${XCLIP_API_KEY:?API key Xclip wajib diisi}"
+`;
+  if (tab === 'status' || tab === 'download') {
+    return `${setup}
+if [ -z "\${XCLIP_TASK_ID:-}" ]; then
+  read -r -p "taskId dari respons generate: " XCLIP_TASK_ID
+  export XCLIP_TASK_ID
+fi
+: "\${XCLIP_TASK_ID:?taskId wajib diisi}"
+${tab === 'download'
+    ? 'curl --fail --silent --show-error "$XCLIP_BASE_URL/api/videogen/proxy-video?taskId=$XCLIP_TASK_ID" \\\n  -H "X-Xclip-Key: $XCLIP_API_KEY" \\\n  --output xclip-video.mp4'
+    : 'curl --silent --show-error --include "$XCLIP_BASE_URL/api/videogen/tasks/$XCLIP_TASK_ID" \\\n  -H "X-Xclip-Key: $XCLIP_API_KEY"'}`;
+  }
+  return `${setup}
+# Simpan ID ini. Untuk retry request yang sama, gunakan ID dan body yang sama.
+XCLIP_REQUEST_ID="xclip-$(date +%s)-$RANDOM-$RANDOM"
+printf 'Idempotency-Key: %s\\n' "$XCLIP_REQUEST_ID"
+curl --silent --show-error --include -X POST "$XCLIP_BASE_URL/api/videogen/proxy" \\
+  -H "X-Xclip-Key: $XCLIP_API_KEY" \\
+  -H "Idempotency-Key: $XCLIP_REQUEST_ID" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${modelSpecs[modelId] ? modelId : 'wan-3.0'}",
-    "prompt": "Kamera bergerak perlahan melewati lanskap",
-    "resolution": "${modelSpecs[modelId]?.requestResolution || modelSpecs['wan-3.0'].requestResolution}",
-    "duration": ${modelSpecs[modelId]?.requestDuration ?? modelSpecs['wan-3.0'].requestDuration},
-    "aspectRatio": "16:9",
-    "audio": true
-  }'`;
+  -d '${JSON.stringify(requestBody(modelId), null, 2)}'`;
 }
 
 function keyView(s) {
@@ -107,23 +140,38 @@ function keyView(s) {
 
 function docsView(s) {
   const generate = s.docTab === 'generate';
+  const download = s.docTab === 'download';
   const modelId = selectedModelId(s);
   const model = modelSpec(modelId, s);
   const isFixedDuration = model.fixedDuration;
+  const base = apiBaseUrl();
+  const endpoint = apiEndpointUrl(s.docTab);
+  const preview = /https?:\/\/(?:[^/]+\.replit\.dev|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)(?:$|\/)/i.test(base);
   return `<section class="xp-docs-section" id="dokumentasi">
     <div class="xp-section-heading xp-doc-heading"><div><span class="xp-kicker">02 / QUICKSTART</span><h2>Request pertama Anda</h2></div><span class="xp-doc-meta">${i('BookOpen')} REST · JSON</span></div>
-    <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Kedua endpoint memakai header <code>X-Xclip-Key</code>.</span></div></aside>
-    <div class="xp-endpoint"><div class="xp-endpoint-head"><span class="xp-method ${generate ? 'post' : 'get'}">${generate ? 'POST' : 'GET'}</span><code>${generate ? '/api/videogen/proxy' : '/api/videogen/tasks/:taskId'}</code><button class="xp-copy-inline" data-action="copy-curl">${i('Copy')} Salin cURL</button></div>
-     <p class="xp-endpoint-desc">${generate ? `${e(model.name)} (${e(model.id)}): kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.` : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses.'}</p>
+    <div class="xp-data-note xp-api-address">
+      <strong>Base URL — alamat server API Xclip</strong>
+      <div class="xp-api-address-row"><code>${e(base || 'Buka docs melalui alamat server Xclip.')}</code>${base ? '<button type="button" class="xp-copy-inline" data-action="copy-base-url">Salin Base URL</button>' : ''}</div>
+      <p>Base URL bukan API key dan tidak diakhiri <code>/api</code>. Untuk Postman, salin <strong>URL endpoint lengkap</strong> di bawah langsung ke kolom URL. Tidak perlu mengetik variabel <code>XCLIP_BASE_URL</code> atau menambahkan <code>/api</code> lagi.</p>
+      ${preview ? '<p><strong>Anda sedang membuka Preview.</strong> Alamat di atas untuk pengujian. Untuk integrasi production, buka docs di domain Railway, lalu salin Base URL dari sana. Jangan memakai alamat Preview untuk production.</p>' : '<p>Gunakan Base URL yang sama untuk generate, cek status, dan unduh video.</p>'}
+      <strong>URL endpoint lengkap · ${generate ? 'POST' : 'GET'}</strong>
+      <div class="xp-api-address-row"><code>${e(endpoint)}</code>${base ? '<button type="button" class="xp-copy-inline" data-action="copy-endpoint-url">Salin URL endpoint</button>' : ''}</div>
+      ${!generate ? '<p>Ganti <code>{taskId}</code> dengan taskId dari respons generate, tanpa tanda kurung kurawal.</p>' : ''}
+    </div>
+    <div class="xp-doc-layout"><aside class="xp-doc-nav"><span class="xp-nav-caption">ENDPOINT</span><button data-action="doc-generate" class="xp-endpoint-button ${generate ? 'active' : ''}"><span class="xp-method post">POST</span> Generate video</button><button data-action="doc-status" class="xp-endpoint-button ${!generate && !download ? 'active' : ''}"><span class="xp-method get">GET</span> Status tugas</button><button data-action="doc-download" class="xp-endpoint-button ${download ? 'active' : ''}"><span class="xp-method get">GET</span> Unduh video</button><div class="xp-doc-nav-note">${i('LockKeyhole')}<span>Semua endpoint memakai header <code>X-Xclip-Key</code>. Gunakan dari server Anda, bukan frontend publik.</span></div></aside>
+    <div class="xp-endpoint"><div class="xp-endpoint-head"><span class="xp-method ${generate ? 'post' : 'get'}">${generate ? 'POST' : 'GET'}</span><code>${generate ? '/api/videogen/proxy' : download ? '/api/videogen/proxy-video?taskId=…' : '/api/videogen/tasks/:taskId'}</code><button class="xp-copy-inline" data-action="copy-curl">${i('Copy')} Salin cURL</button></div>
+     <p class="xp-endpoint-desc">${generate ? `${e(model.name)} (${e(model.id)}): kirim prompt untuk text-to-video. Tambahkan image berupa data URI untuk image-to-video. Simpan taskId dari respons untuk mengecek status.` : download ? 'Jalankan hanya setelah status completed. File disimpan sebagai xclip-video.mp4. Link hasil membutuhkan header API key; bukan link publik untuk dibuka langsung.' : 'Gunakan taskId hasil generasi. Hanya task milik akun/key Anda yang dapat diakses. Ulangi pengecekan setiap 10–20 detik sampai completed atau failed; jangan generate ulang saat menunggu.'}</p>
      ${generate && model.upscaled ? '<div class="xp-data-note"><strong>Output 1080p melalui upscale.</strong> Video diproses dalam dua tahap: generasi, lalu peningkatan resolusi. Status tetap processing dan videoUrl belum tersedia sampai hasil 1080p terverifikasi. Pantau stage generating atau upscaling. Jika tahap akhir gagal, task gagal dan reservasi saldo dikembalikan; video resolusi rendah tidak dikirim sebagai hasil akhir. Request yang dibuat sebelum perubahan ini tetap memakai kontrak resolusi lamanya dan tidak otomatis ditingkatkan.</div>' : ''}
-    <div class="xp-data-note">Tetapkan <code>XCLIP_BASE_URL</code> ke alamat server Xclip tempat Anda menjalankan API. Ganti seluruh placeholder sebelum mengirim request. <code>videoUrl</code> adalah path relatif terhadap server Xclip; gunakan header <code>X-Xclip-Key</code> saat mengambil hasil video.</div>
+    <div class="xp-data-note"><strong>Persiapan:</strong> daftar/masuk, buat API key aktif di menu key, dan isi saldo sebelum generate. Gunakan Bash dengan cURL (Windows: Git Bash atau WSL). Alamat API mengikuti server tempat docs dibuka dan sudah diisi dalam contoh. Masukkan API key saat terminal meminta; key tidak disisipkan otomatis atau ditampilkan. <code>videoUrl</code> adalah path relatif ke server Xclip yang sama.</div>
+    ${generate ? `<div class="xp-data-note"><strong>Postman:</strong> gunakan method <code>POST</code> ke <code>${e(typeof window !== 'undefined' ? window.location?.origin || '' : '')}/api/videogen/proxy</code>. Headers: <code>Content-Type: application/json</code>, <code>X-Xclip-Key: API key Anda</code>, <code>Idempotency-Key: wan-test-001</code> (contoh ID valid; ganti untuk video baru, pertahankan untuk retry body yang sama). Body → raw → JSON. <button class="xp-copy-inline" data-action="copy-json">Salin body JSON</button><pre><code>${e(JSON.stringify(requestBody(modelId), null, 2))}</code></pre></div>` : ''}
      ${generate ? `<div class="xp-model-choice" role="group" aria-label="Pilih model untuk dokumentasi"><span class="xp-nav-caption">MODEL UNTUK CONTOH REQUEST</span>${Object.keys(modelSpecs).map(id => {
        const item = modelSpec(id, s);
        return `<button type="button" data-action="doc-model" data-model-id="${e(id)}" class="${id === modelId ? 'active' : ''}" aria-pressed="${id === modelId}"><span>${e(item.name)}</span><code>${e(id)}</code><strong>${money(item.price)} / video</strong></button>`;
      }).join('')}</div>
       <div class="xp-parameter-box"><div class="xp-param-title"><span>BODY · APPLICATION/JSON</span><button data-action="toggle-payload">${s.showPayload ? 'Sembunyikan' : 'Tampilkan'} ${i('ChevronDown')}</button></div>${s.showPayload ? `<div class="xp-param-grid"><div><code>model</code><span>string</span><p>${e(model.id)}</p></div><div><code>image</code><span>string · opsional</span><p>Data URI PNG, JPEG, atau WebP untuk image-to-video.</p></div><div><code>prompt</code><span>string · wajib</span><p>Deskripsi video, maksimal 10000 karakter.</p></div><div><code>duration</code><span>number</span><p>${e(model.duration)}${isFixedDuration ? '; durasi lain ditolak dengan HTTP 400' : ''}.</p></div><div><code>resolution</code><span>string</span><p>${e(model.resolution)}.</p></div><div><code>aspectRatio</code><span>string</span><p>${e(model.ratios)}; default ${e(model.defaultRatio)}.${modelId === 'seedance-2.5' ? ' Rasio divalidasi oleh quote sebelum generasi berbayar.' : ''}</p></div><div><code>audio</code><span>boolean</span><p>${e(model.audio)}.</p></div></div>` : ''}</div>` : ''}
      <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab, modelId))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
-      <div class="xp-data-note"><strong>Request:</strong> ${generate ? `Biaya ${money(model.price)} per video. ${isFixedDuration ? `Durasi hanya ${model.requestDuration} detik; durasi lain ditolak dengan HTTP 400.` : 'Durasi 2–30 detik.'} Saldo dicadangkan sebelum generasi. Saldo kurang menghasilkan <code>402</code>. ${isFixedDuration ? 'Model ini memakai saldo API, termasuk untuk akun dengan langganan lama.' : 'Akses langganan lama yang masih aktif tetap dihormati sampai berakhir untuk model ini.'} Ganti <code>Idempotency-Key</code> untuk setiap request baru; gunakan key yang sama dengan body identik saat mengulang request yang terputus, agar tidak memulai generasi atau memotong saldo dua kali. Jeda request baru 180 detik. Respons <code>202</code> berisi <code>taskId</code>; periksa status setiap 5 detik. Jika pengiriman belum terkonfirmasi, simpan taskId dan hubungi dukungan—saldo tetap dicadangkan dan jangan membuat request baru.` : '<code>taskId</code> pada URL. Status: pending, processing, completed, atau failed. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Saat completed, ambil <code>videoUrl</code> melalui Xclip. Request tanpa key yang sah ditolak; task yang tidak dapat diakses menghasilkan 404.'}</div>
+      <div class="xp-data-note"><strong>Request:</strong> ${generate ? `Biaya ${money(model.price)} per video. ${isFixedDuration ? `Durasi hanya ${model.requestDuration} detik; durasi lain ditolak dengan HTTP 400.` : 'Durasi 2–30 detik.'} Model ini memakai saldo API, termasuk untuk akun dengan langganan lama. Saldo dicadangkan sebelum generasi. Contoh membuat Idempotency-Key valid dan mencetaknya untuk disimpan. Retry hanya perintah curl dengan ID dan body yang sama, bukan seluruh blok pembuat ID. Jeda request baru 180 detik. HTTP 202 berarti tugas diterima, bukan video sudah selesai. Simpan taskId dari respons, lalu buka Status tugas. Pending dengan notice pengiriman belum terkonfirmasi: jangan membuat request baru.` : download ? 'HTTP 200 berisi video, bukan JSON. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Untuk video berikutnya, ganti XCLIP_TASK_ID ke taskId baru. Key tidak valid menghasilkan 401; task yang tidak dapat diakses 404.' : 'Status: pending, processing, completed, atau failed. HTTP 200 dapat berarti pending atau processing, bukan berarti generasi selesai. Saat completed, videoUrl terisi dan Anda dapat membuka tab Unduh video. Saat failed, periksa error dan jangan unduh. Untuk task baru, ganti XCLIP_TASK_ID. Jika pending disertai notice, simpan taskId dan jangan membuat generasi baru.'}</div>
+      <div class="xp-data-note"><strong>Jika gagal:</strong> <code>400</code> body/model/resolusi/Idempotency-Key tidak sesuai; <code>401</code> key tidak valid/nonaktif; <code>402</code> saldo kurang; <code>409</code> ID request dipakai dengan body berbeda; <code>429</code> cooldown/kuota; <code>503</code> layanan belum siap, bukan tanda generasi berhasil. Simpan header <code>X-Xclip-Request-Id</code> jika tersedia. Jangan membuat ID request baru untuk mengatasi timeout. Versi Preview dan Railway dapat berbeda sebelum deploy; gunakan katalog dan docs dari server yang sama.</div>
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 

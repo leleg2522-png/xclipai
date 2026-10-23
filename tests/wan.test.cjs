@@ -229,8 +229,50 @@ async function routeFixture(t, opts = {}) {
   }
   const generate = (body = {}, headers = {}) => call('/api/videogen/proxy',
     { model: MODEL, prompt: 'test', ...body }, { 'X-Xclip-Key': 'owner', 'Idempotency-Key': 'request-one', ...headers });
-  return { rows, stats, call, generate, router, events };
+  return { rows, stats, call, generate, router, events, app, base:`http://127.0.0.1:${server.address().port}` };
 }
+
+test('copied Bash quickstarts call the real managed router for every model, status and protected download', async t => {
+  const fs=require('node:fs');
+  const vm=require('node:vm');
+  const exec=require('node:util').promisify(require('node:child_process').execFile);
+  const os=require('node:os');
+  const path=require('node:path');
+  const source=fs.readFileSync('client/src/developer-views.js','utf8')
+    .replace(/^import .*;\n/,'').replace(/^export /gm,'');
+  const {curlExample}=vm.runInNewContext(source+'\n({curlExample});',{icons:{},Intl,Date});
+  for(const model of ['wan-3.0','seedance-2.5','seedance-2.0']){
+    const h=await routeFixture(t);
+    const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'xclip-docs-'));
+    t.after(()=>fs.promises.rm(dir,{recursive:true,force:true}));
+    let downloads=0;
+    h.app.get('/api/videogen/proxy-video',(req,res)=>{
+      const task=h.rows.get(req.query.taskId);
+      if(req.get('X-Xclip-Key')!=='owner'||!task||task.status!=='completed')return res.sendStatus(404);
+      downloads++;res.type('video/mp4').send('fixture-video');
+    });
+    const env={...process.env,XCLIP_API_KEY:'owner',XCLIP_TASK_ID:''};
+    const run=script=>exec('bash',['-c',script],{env,cwd:dir,timeout:15000});
+    const script=curlExample('generate',model,h.base)
+      .replace(/^XCLIP_REQUEST_ID=.*$/m,'XCLIP_REQUEST_ID="docs-request-one"');
+    const first=await run(script);
+    assert.match(first.stdout,/202 Accepted/);
+    const task=JSON.parse(first.stdout.match(/\{[^\n]+\}\s*$/)[0]);
+    assert.equal(task.model,model);
+    assert.match(task.taskId,/^xv_[a-f0-9]{64}$/);
+    assert.ok(!/fixture-run|picsart|flora|keyId|runId/i.test(first.stdout));
+    const replay=await run(script);
+    assert.match(replay.stdout,/200 OK/);
+    assert.equal(h.stats.newStarts+h.stats.seedanceStarts+h.stats.seedance2Starts,1);
+    env.XCLIP_TASK_ID=task.taskId;
+    const status=await run(curlExample('status',model,h.base));
+    assert.equal(JSON.parse(status.stdout.match(/\{[^\n]+\}\s*$/)[0]).status,'completed');
+    await run(curlExample('download',model,h.base));
+    assert.equal(downloads,1);
+    assert.equal(await fs.promises.readFile(path.join(dir,'xclip-video.mp4'),'utf8'),'fixture-video');
+    assert.equal(h.stats.newStarts+h.stats.seedanceStarts+h.stats.seedance2Starts,1);
+  }
+});
 
 test('catalog requires authentication and only returns the public Xclip projection', async t => {
   const h = await routeFixture(t);

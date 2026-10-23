@@ -18,7 +18,7 @@ function fixture(overrides = {}) {
     const path = new URL(options.url).pathname;
     const response = path === '/guard/credits' ? {credits:overrides.credits ?? 250}
       : path.endsWith('/options') ? {
-        credits:overrides.seedance2?45:overrides.seedance?120:60,
+        credits:overrides.seedance2?45:overrides.seedance?120:90,
         usageAmount:overrides.quoteDuration??(overrides.seedance2?15:30),estimated:overrides.estimated??false}
       : path === '/v2/files' ? {url:'https://cdn.picsart.com/reference.png'}
       : path.endsWith('/submit') ? {id:'fake-workflow-id'}
@@ -81,6 +81,49 @@ test('separate Wan 3.0 has a fixed verified 30s contract and does not acquire an
   for(const extra of [{duration:2},{duration:29},{resolution:'480p'},{resolution:'1080p'},{aspectRatio:'1:1'},{uncensored:true}]) {
     assert.throws(()=>validateInput({model:'wan-3.0',prompt:'test',...extra}),e=>e.status===400);
   }
+});
+
+test('quote-aware selection skips an underfunded account before any paid submission', async () => {
+  const calls = [];
+  const accounts = [{id:1,access_token:'fixture-one'},{id:2,access_token:'fixture-two'}];
+  const pool = {async query(sql,params) {
+    return {rows:params?.length ? accounts.filter(a=>a.id===params[0]) : accounts};
+  }};
+  const request = async opts => {
+    calls.push(opts);
+    const body = opts.url.endsWith('/guard/credits')
+      ? {credits:opts.headers['X-App-Authorization'].endsWith('fixture-one')?100:200}
+      : opts.url.endsWith('/options') ? {credits:180,usageAmount:30,estimated:false}
+      : {id:'fixture-run'};
+    return {data:{status:'success',response:body}};
+  };
+  const provider = createPicsartWanProvider(pool,request);
+  const prepared = await provider.prepare({model:'wan-3.0',prompt:'landscape'});
+  assert.equal(prepared.keyId,2);
+  assert.equal(prepared.body.params.resolution,'720P');
+  assert.equal(calls.filter(c=>c.url.endsWith('/options')).length,2);
+  assert.equal(calls.filter(c=>c.url.endsWith('/submit')).length,0);
+  await provider.start(prepared);
+  const submits=calls.filter(c=>c.url.endsWith('/submit'));
+  assert.equal(submits.length,1);
+  assert.equal(submits[0].headers['X-App-Authorization'],'Bearer fixture-two');
+});
+
+test('720p readiness rejects accounts below the verified 90-credit floor without submitting', async () => {
+  const h=fixture({credits:89});
+  await assert.rejects(h.provider.prepare({model:'wan-3.0',prompt:'test'}),
+    e=>e.diagnostic.reason==='upstream_insufficient_credits');
+  assert.equal(h.calls.filter(c=>c.url.endsWith('/submit')).length,0);
+});
+
+test('an unaffordable live quote fails closed without dispatch even when the initial floor is met', async () => {
+  const h=fixture({credits:100,request:async opts=>({
+    data:{status:'success',response:opts.url.endsWith('/guard/credits')
+      ? {credits:100} : {credits:180,usageAmount:30,estimated:false}}
+  })});
+  await assert.rejects(h.provider.prepare({model:'wan-3.0',prompt:'test'}),
+    e=>e.diagnostic.reason==='upstream_insufficient_credits');
+  assert.equal(h.calls.filter(c=>c.url.endsWith('/submit')).length,0);
 });
 
 test('Seedance 2.5 is separate, costs 11000, and uses captured content/generate_audio/output fields', async () => {

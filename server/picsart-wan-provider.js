@@ -65,19 +65,19 @@ function createPicsartVideoProvider(pool, definition, request = axios.request) {
       throw safe;
     }
   }
-  async function context() {
-    if (cached && cached.until > Date.now()) return { keyId: cached.id };
+  async function context(requiredCredits = definition.minimumCredits) {
+    if (cached && cached.until > Date.now() && cached.credits >= requiredCredits) return { keyId: cached.id };
     const accounts = await credential();
     let lastError;
     // Read-only balance checks may fail over; a paid submission NEVER does.
     for (const account of accounts) {
       try {
         const balance = await call(account, 'GET', '/guard/credits');
-        if (!Number.isFinite(balance.credits) || balance.credits < definition.minimumCredits) {
+        if (!Number.isFinite(balance.credits) || balance.credits < requiredCredits) {
           lastError = unavailable('upstream_insufficient_credits');
           continue;
         }
-        cached = { id: account.id, until: Date.now() + 30000 };
+        cached = { id: account.id, credits: balance.credits, until: Date.now() + 30000 };
         return { keyId: account.id };
       } catch (error) { lastError = error; }
     }
@@ -87,27 +87,36 @@ function createPicsartVideoProvider(pool, definition, request = axios.request) {
     const { image, ...fields } = raw;
     const input = validateInput({ ...fields, ...(image ? { image } : {}) });
     if (input.model !== definition.model) throw new ServiceError(400, 'Model Xclip tidak dikenal.');
-    const ctx = await context();
-    const account = (await credential(ctx.keyId))[0];
-    let imageUrl;
-    if (input.image) {
-      const [, extension, encoded] = input.image.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/);
-      const form = new FormData();
-      form.append('file', Buffer.from(encoded, 'base64'), { filename: `reference.${extension}`, contentType: `image/${extension}` });
-      form.append('type', 'editing-temp');
-      const image = await call(account, 'POST', '/v2/files', form, true);
-      imageUrl = image.url;
-      try { checkedUrl(imageUrl); } catch { throw unavailable(); }
+    let requiredCredits = definition.minimumCredits;
+    // Only preflight may select another account. Never retry/fail over a paid submit.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ctx = await context(requiredCredits);
+      const account = (await credential(ctx.keyId))[0];
+      let imageUrl;
+      if (input.image) {
+        const [, extension, encoded] = input.image.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/);
+        const form = new FormData();
+        form.append('file', Buffer.from(encoded, 'base64'), { filename: `reference.${extension}`, contentType: `image/${extension}` });
+        form.append('type', 'editing-temp');
+        const image = await call(account, 'POST', '/v2/files', form, true);
+        imageUrl = image.url;
+        try { checkedUrl(imageUrl); } catch { throw unavailable(); }
+      }
+      const params = definition.params(input, imageUrl);
+      // A quote is not a generation. Validate the actual requested combination before reserving money.
+      const quote = await call(account, 'POST', `${definition.workflow}/options`, { params });
+      if (!Number.isFinite(quote.credits) || quote.credits <= 0 || quote.usageAmount !== input.duration || quote.estimated !== false) throw unavailable();
+      const balance = await call(account, 'GET', '/guard/credits');
+      if (!Number.isFinite(balance.credits) || balance.credits < quote.credits) {
+        requiredCredits = quote.credits;
+        cached = null;
+        continue;
+      }
+      return { keyId: account.id, body: { params: {
+        ...params, options: { inputs_transformation: { downscale_oversized_images: true } },
+      } } };
     }
-    const params = definition.params(input, imageUrl);
-    // A quote is not a generation. Validate the actual requested combination before reserving money.
-    const quote = await call(account, 'POST', `${definition.workflow}/options`, { params });
-    if (!Number.isFinite(quote.credits) || quote.credits <= 0 || quote.usageAmount !== input.duration || quote.estimated !== false) throw unavailable();
-    const balance = await call(account, 'GET', '/guard/credits');
-    if (!Number.isFinite(balance.credits) || balance.credits < quote.credits) throw unavailable('upstream_insufficient_credits');
-    return { keyId: account.id, body: { params: {
-      ...params, options: { inputs_transformation: { downscale_oversized_images: true } },
-    } } };
+    throw unavailable('upstream_insufficient_credits');
   }
   async function start(prepared) {
     const account = (await credential(prepared.keyId))[0];
@@ -139,7 +148,7 @@ function createPicsartVideoProvider(pool, definition, request = axios.request) {
 }
 function createPicsartWanProvider(pool, request = axios.request) {
   return createPicsartVideoProvider(pool, {
-    model: 'wan-3.0', workflow: '/gw-v2/workflows/wan/v3/video', minimumCredits: 60, resultField: 'url',
+    model: 'wan-3.0', workflow: '/gw-v2/workflows/wan/v3/video', minimumCredits: 90, resultField: 'url',
     params: (input, imageUrl) => ({
       model: 'wan3.0-video', resolution: input.resolution.toUpperCase(), ratio: input.aspectRatio,
       duration: input.duration, audio: input.audio, enable_thinking: false, watermark: false,

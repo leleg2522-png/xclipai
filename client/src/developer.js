@@ -1,4 +1,4 @@
-import { authView, portalView, curlExample, generationHistoryContent, modelsView, paymentButtonState } from './developer-views.js';
+import { authView, portalView, curlExample, requestBody, apiBaseUrl, apiEndpointUrl, generationHistoryContent, modelsView, paymentButtonState } from './developer-views.js';
 
 const root = document.getElementById('developer-app');
 const state = {
@@ -500,8 +500,8 @@ root.addEventListener('click', event => {
     state.authDraft.email = document.getElementById('auth-email')?.value || '';
     state.authMode = state.authMode === 'register' ? 'login' : 'register';
     state.error = state.notice = '';
-  } else if (action === 'doc-generate' || action === 'doc-status') {
-    state.docTab = action === 'doc-generate' ? 'generate' : 'status';
+  } else if (action === 'doc-generate' || action === 'doc-status' || action === 'doc-download') {
+    state.docTab = action === 'doc-generate' ? 'generate' : action === 'doc-download' ? 'download' : 'status';
   } else if (action === 'doc-model') {
     if (['wan-3.0', 'seedance-2.5', 'seedance-2.0'].includes(button.dataset.modelId)) {
       state.docModelId = button.dataset.modelId;
@@ -549,13 +549,19 @@ root.addEventListener('click', event => {
         await loadData();
         state.notice = 'API key dinonaktifkan permanen.';
       }
-      if (action === 'copy-key' || action === 'copy-curl') {
-        const text = action === 'copy-curl' ? curlExample(state.docTab, state.docModelId)
+      if (['copy-key', 'copy-curl', 'copy-json', 'copy-base-url', 'copy-endpoint-url'].includes(action)) {
+        const text = action === 'copy-base-url' ? apiBaseUrl()
+          : action === 'copy-endpoint-url' ? apiEndpointUrl(state.docTab)
+          : action === 'copy-json' ? JSON.stringify(requestBody(state.docModelId), null, 2)
+          : action === 'copy-curl' ? curlExample(state.docTab, state.docModelId)
           : state.overview?.keys.find(k => k.status === 'active')?.api_key;
         if (!text) throw new Error('Tidak ada teks yang dapat disalin.');
         if (!navigator.clipboard) throw new Error('Clipboard tidak tersedia. Tampilkan dan salin teks secara manual.');
         await navigator.clipboard.writeText(text);
-        state.notice = action === 'copy-key' ? 'API key tersalin.' : 'Contoh cURL tersalin.';
+        state.notice = action === 'copy-base-url' ? 'Base URL tersalin.'
+          : action === 'copy-endpoint-url' ? 'URL endpoint tersalin.'
+          : action === 'copy-key' ? 'API key tersalin.'
+          : action === 'copy-json' ? 'Body JSON tersalin.' : 'Contoh cURL tersalin.';
       }
     });
     return;

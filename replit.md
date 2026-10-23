@@ -6,6 +6,10 @@
 
 Normal Wan 3.0 now requires **720p / 30 seconds** at the existing Rp6.500/video price, per the user's request. Its upstream request uses `720P`; omitted resolution defaults to 720p, other resolutions are rejected. Catalog and copied cURL must agree. Previously completed Wan videos retain their original resolution. Seedance's upstream generation remains 480p, but new public requests now require a verified 1080p upscale before completion, at their existing durations/prices. Quote validation remains mandatory before reserving funds/submitting; never silently deliver 480p for a new 1080p request.
 
+Developer quickstarts use the current portal origin, prompt for the developer's key in Bash, and create a valid request ID. Postman JSON and authenticated status/download examples are included. Never embed the user's key in rendered docs. A 202/processing response is not a completed video; retain the request ID/body for retries rather than running the whole new-ID block again. Preview verification does not update or verify Railway's deployed version.
+
+Wan 720p/30s readiness uses the live-confirmed 90-credit backend floor; the actual quote remains authoritative. If a selected account is underfunded for the quote, bounded read-only reselection may choose a funded account before dispatch. Backend credits and developer wallet balance are different. Never retry/fail over a paid submission, and never expose backend credit or credential details to developer users.
+
 Wan 3.0 Uncensored is retired at the user's request. Only normal Wan 3.0, Seedance 2.5 and Seedance 2.0 are advertised by the API video catalog and docs. New public Uncensored submissions return HTTP 410 `MODEL_RETIRED` before any provider call or wallet mutation. Historical registry/pricing, task polling, reconciliation, refunds, history and protected media remain intact; earlier sections describing Uncensored availability are historical, not permission to offer new jobs.
 
 ### Kling Motion Control backend

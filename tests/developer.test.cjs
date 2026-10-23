@@ -117,13 +117,13 @@ test('revoked keys cannot be replaced; different users receive distinct keys', a
   assert.notEqual(a.api_key, b.api_key);
 });
 
-function loadViews() {
+function loadViews(origin = 'https://xclip.test') {
   const iconsSource = fs.readFileSync('client/src/developer-icons.js', 'utf8').replace('export const icons =', '');
   const icons = JSON.parse(iconsSource.trim().replace(/;$/, ''));
   const source = fs.readFileSync('client/src/developer-views.js', 'utf8')
     .replace(/^import .*;\n/, '').replace(/^export /gm, '');
-  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,generationHistoryContent,modelsView,paymentButtonState});',
-    { icons, Intl, Date, URL, window: { location: { origin: 'https://xclip.test' } } });
+  return vm.runInNewContext(source + '\n({authView,portalView,curlExample,requestBody,apiBaseUrl,apiEndpointUrl,generationHistoryContent,modelsView,paymentButtonState});',
+    { icons, Intl, Date, URL, window: { location: { origin } } });
 }
 
 function browserHarness(overrides = {}) {
@@ -586,7 +586,7 @@ test('revoked state has no create button and docs describe the Wan API contract'
   s.models = [{ id: 'wan-3.0', status: 'available' }];
   assert.ok(portalView(s).includes('Tersedia'));
   assert.ok(portalView(s).includes('720p'));
-  assert.ok(curlExample('status').includes('/api/videogen/tasks/<taskId>'));
+  assert.ok(curlExample('status').includes('/api/videogen/tasks/$XCLIP_TASK_ID'));
 });
 
 test('generation history UI shows safe statuses, uncertain notices and only protected Xclip downloads', () => {
@@ -630,6 +630,87 @@ test('new model docs and examples use Rp6.500/30s separately without public prov
     assert.equal(body.duration,30);
     require('../server/wan-provider').validateInput(body);
   }
+});
+
+test('quickstarts use the current origin, valid shell request IDs and authenticated downloads without embedded keys', () => {
+  const {curlExample,requestBody,portalView}=loadViews();
+  const script=curlExample('generate','wan-3.0');
+  assert.ok(script.includes("export XCLIP_BASE_URL='https://xclip.test'"));
+  assert.ok(script.includes('Idempotency-Key: $XCLIP_REQUEST_ID'));
+  assert.ok(script.includes('read -r -s'));
+  assert.ok(!/<UUID_UNIK_REQUEST>|<API_KEY_ANDA>/.test(script));
+  assert.equal(requestBody('wan-3.0').resolution,'720p');
+  assert.equal(requestBody('seedance-2.0').duration,15);
+  const download=curlExample('download');
+  assert.ok(download.includes('/api/videogen/proxy-video?taskId=$XCLIP_TASK_ID'));
+  assert.ok(download.includes('X-Xclip-Key: $XCLIP_API_KEY'));
+  assert.ok(download.includes('--fail'));
+  assert.ok(!curlExample('generate','wan-3.0',"https://evil.test';touch /tmp/unwanted").includes('touch'));
+  const s=browserHarness().controller.state;
+  s.user={username:'dev'};
+  assert.ok(portalView(s).includes('Postman:'));
+  assert.ok(portalView(s).includes('data-action="copy-json"'));
+  s.docTab='download';
+  const html=portalView(s);
+  assert.ok(html.includes('Unduh video'));
+  assert.ok(html.includes('xclip-video.mp4'));
+  assert.ok(!/picsart|flora|renderful/i.test(html));
+});
+
+test('developer can select downloads and copy Postman JSON for the selected model', async () => {
+  const copied=[];
+  const h=browserHarness({navigator:{clipboard:{async writeText(text){copied.push(text);}}}});
+  h.controller.state.user={username:'dev'};
+  h.click('doc-download');
+  assert.equal(h.controller.state.docTab,'download');
+  h.controller.state.docModelId='seedance-2.0';
+  await h.click('copy-json');await h.settle();
+  assert.equal(JSON.parse(copied[0]).model,'seedance-2.0');
+  assert.equal(JSON.parse(copied[0]).duration,15);
+  assert.equal(h.controller.state.notice,'Body JSON tersalin.');
+  assert.ok(!copied[0].includes('XCLIP_API_KEY'));
+});
+
+test('docs distinguish the visible Base URL from full Postman endpoints and warn about Preview', () => {
+  const s=browserHarness().controller.state;
+  s.user={username:'dev'};
+  const base='https://web-production-0531a.up.railway.app';
+  const views=loadViews(base);
+  assert.equal(views.apiBaseUrl(),base);
+  assert.equal(views.apiEndpointUrl('generate'),base+'/api/videogen/proxy');
+  const html=views.portalView(s);
+  assert.ok(html.includes('Base URL — alamat server API Xclip'));
+  assert.ok(html.includes(base+'/api/videogen/proxy'));
+  assert.ok(html.includes('data-action="copy-base-url"'));
+  assert.ok(html.includes('data-action="copy-endpoint-url"'));
+  assert.ok(!html.includes('Anda sedang membuka Preview'));
+  assert.ok(views.curlExample('generate').includes(`export XCLIP_BASE_URL='${base}'`));
+  const preview=loadViews('https://example.replit.dev').portalView(s);
+  assert.ok(preview.includes('Anda sedang membuka Preview'));
+  assert.ok(preview.includes('Jangan memakai alamat Preview untuk production'));
+  s.docTab='status';
+  assert.ok(views.portalView(s).includes(base+'/api/videogen/tasks/{taskId}'));
+  assert.ok(views.portalView(s).includes('tanpa tanda kurung kurawal'));
+  s.docTab='download';
+  assert.ok(views.portalView(s).includes(base+'/api/videogen/proxy-video?taskId={taskId}'));
+});
+
+test('Base URL and full endpoint copy buttons copy the selected address without API keys', async () => {
+  const copied=[];
+  const h=browserHarness({navigator:{clipboard:{async writeText(text){copied.push(text);}}}});
+  h.controller.state.user={username:'dev'};
+  await h.click('copy-base-url');await h.settle();
+  assert.equal(copied[0],'https://xclip.test');
+  assert.equal(h.controller.state.notice,'Base URL tersalin.');
+  await h.click('copy-endpoint-url');await h.settle();
+  assert.equal(copied[1],'https://xclip.test/api/videogen/proxy');
+  h.click('doc-status');
+  await h.click('copy-endpoint-url');await h.settle();
+  assert.equal(copied[2],'https://xclip.test/api/videogen/tasks/{taskId}');
+  assert.equal(h.controller.state.notice,'URL endpoint tersalin.');
+  h.click('doc-download');
+  await h.click('copy-endpoint-url');await h.settle();
+  assert.equal(copied[3],'https://xclip.test/api/videogen/proxy-video?taskId={taskId}');
 });
 
 test('Seedance docs, catalog and cURL use public model and Rp11.000 without changing Wan prices', () => {

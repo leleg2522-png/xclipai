@@ -190,6 +190,11 @@ button:disabled[aria-busy="true"] { cursor: wait; }
 .xp-endpoint { min-width: 0; padding: 20px 23px 18px; }
 .xp-endpoint-head { display: flex; align-items: center; gap: 11px; min-height: 26px; }
 .xp-endpoint-head > code { color: #30443b; font: 500 12px "DM Mono", monospace; }
+.xp-api-address { margin-bottom: 20px; }
+.xp-api-address-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.xp-api-address-row > code { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; color: #30443b; font: 500 12px "DM Mono", monospace; }
+.xp-api-address-row > button { flex-shrink: 0; }
+.xp-api-address p { line-height: 1.7; margin: 12px 0; }
 .xp-copy-inline { margin-left: auto; min-height: 29px; font-size: 9px; }
 .xp-endpoint-desc { margin: 10px 0 16px; color: #748078; font-size: 11px; }
 .xp-parameter-box { border: 1px solid var(--xp-line); border-radius: 5px; overflow: hidden; }
