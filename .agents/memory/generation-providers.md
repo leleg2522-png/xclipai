@@ -63,6 +63,12 @@ Account count and a successful catalog read do not prove that the selected accou
 
 **How to apply:** Compare account balance against the live quote for the actual resolution/duration, not only a minimum from an older capture. Bounded read-only account selection may happen before dispatch; never fail over or resubmit after an ambiguous paid submission. Check the catalog on the actual destination server: Preview and Railway can advertise different contracts until the new code is deployed.
 
+A healthy catalog does not prove that existing generations can still be polled.
+
+**Why:** A live catalog reported models available while an old processing task could not be checked because its original generation credential was no longer usable.
+
+**How to apply:** Check readiness for new requests separately from recovery of existing tasks. Preserve the original task/account relationship; missing polling credentials are not proof that generation failed and do not authorize another paid submission or an unconfirmed refund.
+
 The user requested Seedance 2.5 as an additional model and confirmed Rp11.000 per video for 480p/30 seconds.
 
 **Why:** The user supplied a successful Seedance capture and entered Rp11.000 when asked for the 480p/30-second developer tariff.
