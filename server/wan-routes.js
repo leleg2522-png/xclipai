@@ -8,6 +8,12 @@ const { MODELS, MODEL_IDS, ACTIVE_MODEL_IDS, isManagedVideoModel } = require('./
 
 const UNCERTAIN = 'Pengiriman belum terkonfirmasi. Jangan kirim ulang; simpan taskId dan hubungi dukungan Xclip.';
 const UPSCALE_UNCERTAIN = 'Peningkatan kualitas belum terkonfirmasi. Simpan taskId dan hubungi dukungan Xclip; jangan mengirim request generasi baru.';
+const STATUS_UNAVAILABLE = 'Pengecekan hasil sedang terkendala. Status terakhir belum memastikan hasil generasi. Simpan taskId, cek lagi dalam 30 detik, dan jangan generate ulang. Jika berlanjut, hubungi dukungan Xclip.';
+function requestReference(res) {
+  const requestId = res.get('X-Xclip-Request-Id') || crypto.randomUUID();
+  res.set('X-Xclip-Request-Id', requestId);
+  return requestId;
+}
 function taskResponse(row) {
   return { success: row.status !== 'failed', taskId: row.task_id, model: row.model,
     status: row.status, createdAt: row.created_at,
@@ -21,11 +27,18 @@ function taskResponse(row) {
 }
 function sendError(res, error) {
   const known = error instanceof ServiceError || error instanceof WalletError;
-  return res.status(known ? error.status : 503)
-    .json({ error: known ? error.message : 'Layanan Xclip sementara tidak tersedia.' });
+  const status = known ? error.status : 503;
+  const codes = { 400:'INVALID_REQUEST', 401:'AUTH_REQUIRED', 402:'INSUFFICIENT_BALANCE',
+    403:'ACCESS_DENIED', 404:'TASK_NOT_FOUND', 409:'REQUEST_CONFLICT',
+    410:'MODEL_RETIRED', 429:'REQUEST_LIMIT', 503:'SERVICE_UNAVAILABLE' };
+  return res.status(status).json({
+    error: known ? error.message : 'Layanan Xclip sementara tidak tersedia.',
+    code: codes[status] || 'SERVICE_UNAVAILABLE', requestId: requestReference(res),
+  });
 }
 
 module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, upscaler, validateKey, saveImage, cooldownMs = 180000, dailyQuota = 50,
+  statusRetryMs = 20000,
   logger = createGenerationLogger() }) {
   const adapters = { [MODEL]: provider, ...providers };
   function adapter(model) {
@@ -34,6 +47,19 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
   }
   const router = express.Router();
   const polling = new Map();
+  function responseWithDiagnostics(row) {
+    const data = taskResponse(row);
+    if (['pending', 'processing'].includes(row.status)) {
+      const failure = polling.get(row.task_id)?.failure;
+      if (failure) {
+        data.statusCheck = { state: 'unavailable', checkedAt: failure };
+        data.notice = STATUS_UNAVAILABLE;
+      } else if (Date.now() - new Date(row.created_at).getTime() > 30 * 60 * 1000) {
+        data.notice = data.notice || 'Generasi memerlukan pemeriksaan karena sudah lebih dari 30 menit. Simpan taskId dan hubungi dukungan Xclip; jangan generate ulang.';
+      }
+    }
+    return data;
+  }
   let reconciling = false;
   logger.info('routes_ready');
   async function pollTask(row) {
@@ -64,6 +90,9 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
           return updated;
         } catch (error) {
           logger.error('task_poll_failed',{taskId:row.task_id,stage,elapsedMs:Date.now()-started,...describeError(error)});
+          if (stage === 'poll_upstream' || stage === 'upscale') {
+            error.statusCheckUnavailable = true;
+          }
           throw error;
         }
       })();
@@ -71,7 +100,8 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
       polling.set(row.task_id, entry);
       promise.then(() => { entry.pending = false; entry.until = Date.now() + 5000; }, () => {
         entry.pending = false;
-        if (polling.get(row.task_id) === entry) polling.delete(row.task_id);
+        entry.failure = new Date().toISOString();
+        entry.until = Date.now() + statusRetryMs;
       });
       for (const [id, old] of polling) if (!old.pending && old.until < Date.now()) polling.delete(id);
     }
@@ -118,6 +148,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
   // Read-only history: never dispatch or poll upstream as a side effect of listing.
   router.get('/api/developer/generations', async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
+    requestReference(res);
     try {
       const auth = await owner(req);
       const page = req.query.page === undefined ? 1 : Number(req.query.page);
@@ -144,6 +175,13 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
           ? { notice: UPSCALE_UNCERTAIN } : {}),
         ...(row.status === 'failed' ? { error: 'Generasi video gagal. Jika memakai saldo API, saldo dikembalikan setelah kegagalan dikonfirmasi.' } : {}),
         ...(row.status === 'pending' && row.delivery !== 'confirmed' ? { notice: UNCERTAIN } : {}),
+        ...(['pending','processing'].includes(row.status) && polling.get(row.task_id)?.failure
+          ? { statusCheck: { state: 'unavailable', checkedAt: polling.get(row.task_id).failure }, notice: STATUS_UNAVAILABLE }
+          : ['pending','processing'].includes(row.status) &&
+            !(row.status === 'pending' && row.delivery !== 'confirmed') &&
+            !(row.status === 'processing' && ['submitting','uncertain'].includes(row.upscale_phase)) &&
+            Date.now() - new Date(row.created_at).getTime() > 30 * 60 * 1000
+            ? { notice: 'Generasi memerlukan pemeriksaan karena sudah lebih dari 30 menit. Simpan taskId dan hubungi dukungan Xclip; jangan generate ulang.' } : {}),
       }));
       res.json({ tasks, page, hasMore: rows.length > 20 });
     } catch (error) {
@@ -153,6 +191,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
   });
   router.get('/api/developer/models', async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
+    requestReference(res);
     try {
       await owner(req);
       const models = await Promise.all(ACTIVE_MODEL_IDS.map(async id => {
@@ -228,6 +267,16 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
          AND created_at > NOW() - ($2 * INTERVAL '1 millisecond') LIMIT 1`, [userId, cooldownMs]);
       if (recent.rows.length) throw new ServiceError(429, `Tunggu ${Math.ceil(cooldownMs / 1000)} detik sebelum request baru.`);
 
+      // Fail early for empty wallets, before uploads, quotes or backend credential access.
+      // Reservation below remains authoritative and atomic; this check never grants credit.
+      const billable = input.model !== MODEL || !key.has_subscription;
+      if (billable) {
+        stage = 'check_wallet';
+        if (!wallet) throw new ServiceError(503, 'Saldo API belum tersedia.');
+        const balance = await wallet.get(userId);
+        if (balance.balance < price) throw new WalletError(402,
+          `Saldo API tidak cukup. Biaya video ini Rp${price.toLocaleString('id-ID')}. Isi saldo API melalui menu Top up; API key aktif dan langganan lama bukan saldo API.`);
+      }
       // Check account/model metadata before accepting or storing any paid request.
       stage='prepare_generation';
       let upscale;
@@ -248,8 +297,6 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
         [input.model === MODEL ? [MODEL] : MODEL_IDS.filter(id => id !== MODEL), String(prepared.keyId)]);
       if (usage.rows[0].count >= dailyQuota) throw new ServiceError(429, 'Kuota layanan hari ini telah tercapai.');
       // Honor already-purchased active legacy access; new top ups never extend it.
-      const billable = input.model !== MODEL || !key.has_subscription;
-      if (billable && !wallet) throw new ServiceError(503, 'Saldo API belum tersedia.');
       const meta = { source: input.model === MODEL ? 'wan' : 'picsart-video', keyId: prepared.keyId, fingerprint, delivery: 'unconfirmed',
         ...(upscale ? { upscale } : {}),
         billing: billable ? 'wallet' : 'legacy', ...(billable ? { price } : {}) };
@@ -325,6 +372,7 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
   router.get('/api/videogen/tasks/:taskId', async (req, res, next) => {
     if (!req.params.taskId.startsWith('xv_')) return next();
     res.set('Cache-Control', 'private, no-store');
+    const requestId = requestReference(res);
     try {
       const auth = await owner(req);
       const row = (await pool.query(
@@ -333,11 +381,17 @@ module.exports = function wanRoutes({ pool, provider, providers = {}, wallet, up
       if (!row) throw new ServiceError(404, 'Task tidak ditemukan.');
       if (['completed', 'failed'].includes(row.status) || !row.retry_data?.runId) {
         logger.info('task_status_read',{taskId:row.task_id,status:row.status});
-        return res.json(taskResponse(row));
+        return res.json(responseWithDiagnostics(row));
       }
-      res.json(taskResponse(await pollTask(row)));
+      try {
+        res.json(responseWithDiagnostics(await pollTask(row)));
+      } catch (error) {
+        if (!error.statusCheckUnavailable) throw error;
+        res.set('Retry-After', '30');
+        res.json({ ...responseWithDiagnostics(row), requestId });
+      }
     } catch (error) {
-      logger.warn('status_request_failed',{taskId:req.params.taskId,...describeError(error)});
+      logger.warn('status_request_failed',{requestId,taskId:req.params.taskId,...describeError(error)});
       sendError(res, error);
     }
   });

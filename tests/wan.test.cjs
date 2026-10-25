@@ -155,6 +155,7 @@ async function routeFixture(t, opts = {}) {
   const pool = { query, async connect() { return { query, release() { stats.released++; } }; } };
   const wallet = {
     assertReady() {},
+    async get() { return { balance: opts.walletBalance ?? (opts.noSubscription && !opts.activeSubscription ? 0 : 100000) }; },
     async reserve(_client, _userId, _taskId, price) {
       if (opts.noSubscription && !opts.activeSubscription) {
         const { WalletError } = require('../server/api-wallet');
@@ -211,6 +212,7 @@ async function routeFixture(t, opts = {}) {
     async poll() {stats.seedance2Polls++;return {status:'completed',videoUrl:'https://cdn.picsart.com/seedance2.mp4'};},
   };
   const router = wanRoutes({ pool, provider, providers: {'wan-3.0':secondProvider,'seedance-2.5':seedanceProvider,'seedance-2.0':seedance2Provider}, wallet, logger,
+    statusRetryMs: opts.statusRetryMs,
     upscaler: opts.upscaler || { context: async()=>{}, prepare:async()=>({required:true,phase:'waiting_source',keyId:9}), process:async(row,result)=>result },
     validateKey: async key =>
     key === 'revoked' ? null : { id: key === 'other' ? 2 : 1, user_id: key === 'other' ? 2 : 1,
@@ -598,6 +600,69 @@ test('worker logs upstream HTTP failures and query failures rather than swallowi
   await q.router.reconcile();
   assert.ok(q.events.some(e=>e.event==='worker_failed'&&e.code==='42703'));
   assert.equal(q.events.at(-1).failedChecks,1);
+});
+
+test('empty wallets fail before backend preparation with actionable errors and a matching reference', async t => {
+  const h = await routeFixture(t, { walletBalance: 0, unavailable: true });
+  const result = await h.generate();
+  assert.equal(result.status, 402);
+  assert.equal(result.data.code, 'INSUFFICIENT_BALANCE');
+  assert.match(result.data.requestId, /^[a-f0-9-]{36}$/);
+  assert.ok(result.data.error.includes('Top up'));
+  assert.equal(h.stats.starts, 0);
+  assert.equal(h.stats.uploads, 0);
+  assert.equal(h.stats.reservations, 0);
+  assert.equal(h.rows.size, 0);
+  assert.ok(h.events.some(e => e.requestId === result.data.requestId));
+});
+
+test('unavailable status checks preserve the task, warn the developer, and never resubmit or refund', async t => {
+  const h = await routeFixture(t, { pollFailure: true });
+  const created = await h.generate();
+  const path = `/api/videogen/tasks/${created.data.taskId}`;
+  const checked = await h.call(path, null, { 'X-Xclip-Key': 'owner' });
+  assert.equal(checked.status, 200);
+  assert.equal(checked.data.status, 'processing');
+  assert.equal(checked.data.statusCheck.state, 'unavailable');
+  assert.ok(checked.data.notice.includes('jangan generate ulang'));
+  assert.equal(checked.data.videoUrl, null);
+  assert.match(checked.data.requestId, /^[a-f0-9-]{36}$/);
+  assert.ok(!/keyId|run_test|upstream|flora|picsart|renderful/.test(JSON.stringify(checked.data)));
+  await h.call(path, null, { 'X-Xclip-Key': 'owner' });
+  assert.equal(h.stats.polls, 1, 'failed polls are temporarily cached');
+  assert.equal(h.stats.starts, 1);
+  assert.equal(h.stats.refunds, 0);
+  assert.equal(h.rows.get(created.data.taskId).status, 'processing');
+  const outsider = await h.call(path, null, { 'X-Xclip-Key': 'other' });
+  assert.equal(outsider.status, 404);
+  assert.equal(outsider.data.code, 'TASK_NOT_FOUND');
+});
+
+test('long-running tasks display an escalation warning without manufacturing failure', async t => {
+  const h = await routeFixture(t, { processing: true });
+  const created = await h.generate();
+  h.rows.get(created.data.taskId).created_at = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const result = await h.call(`/api/videogen/tasks/${created.data.taskId}`, null, { 'X-Xclip-Key': 'owner' });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.status, 'processing');
+  assert.ok(result.data.notice.includes('lebih dari 30 menit'));
+  assert.equal(h.stats.refunds, 0);
+});
+
+test('a recovered status check completes the original task without a new paid generation', async t => {
+  const options = { pollFailure: true, statusRetryMs: 5 };
+  const h = await routeFixture(t, options);
+  const created = await h.generate();
+  const path = `/api/videogen/tasks/${created.data.taskId}`;
+  assert.equal((await h.call(path, null, { 'X-Xclip-Key': 'owner' })).data.statusCheck.state, 'unavailable');
+  options.pollFailure = false;
+  await new Promise(resolve => setTimeout(resolve, 15));
+  const recovered = await h.call(path, null, { 'X-Xclip-Key': 'owner' });
+  assert.equal(recovered.data.status, 'completed');
+  assert.equal(recovered.data.statusCheck, undefined);
+  assert.equal(recovered.data.notice, undefined);
+  assert.equal(h.stats.starts, 1);
+  assert.equal(h.stats.refunds, 0);
 });
 
 test('uncertain dispatch is logged without retry or leaking provider response',async t=>{

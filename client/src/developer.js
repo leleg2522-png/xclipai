@@ -62,8 +62,10 @@ async function api(path, options = {}) {
         resetAccountData();
         state.keyVisible = false;
       }
-      const reference = /^[-a-f0-9]{36}$/.test(data.reference || '') ? ` (Referensi: ${data.reference})` : '';
+      const referenceId = data.reference || data.requestId || response.headers?.get?.('X-Xclip-Request-Id');
+      const reference = /^[-a-f0-9]{36}$/.test(referenceId || '') ? ` (Referensi: ${referenceId})` : '';
       const error = new Error((data.error || `Request gagal (${response.status})`) + reference);
+      if (reference) error.reference = referenceId;
       if (data.code === 'PAYMENT_INITIALIZING') error.code = data.code;
       throw error;
     }
@@ -181,7 +183,8 @@ async function loadGenerationHistory({ page = 1, append = false, poll = false } 
         'Respons riwayat generasi tidak valid.',
       ].some(prefix => message.startsWith(prefix))
         ? message
-        : 'Riwayat generasi gagal dimuat. Periksa koneksi, lalu coba lagi.';
+        : 'Riwayat generasi gagal dimuat. Periksa koneksi, lalu coba lagi.' +
+          (error.reference ? ` (Referensi: ${error.reference})` : '');
     }
     if (!state.user) render();
   } finally {

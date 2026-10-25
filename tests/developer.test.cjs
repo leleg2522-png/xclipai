@@ -722,6 +722,34 @@ test('Base URL and full endpoint copy buttons copy the selected address without 
   assert.equal(copied[3],'https://web-production-0531a.up.railway.app/api/videogen/proxy-video?taskId={taskId}');
 });
 
+test('docs show selected-model wallet readiness, server-only integration and safe status guidance', () => {
+  const { portalView } = loadViews();
+  const s = browserHarness().controller.state;
+  s.user = { username: 'dev' };
+  s.overview = { keys: [{ status: 'active', api_key: 'xclip_fixture_only' }], totalRequests: 0 };
+  s.wallet = { balance: 0, reserved: 0 };
+  s.models = [{ id: 'wan-3.0', status: 'available' }];
+  let html = portalView(s);
+  assert.ok(html.includes('Cek sebelum generate'));
+  assert.ok(html.includes('belum cukup'));
+  assert.ok(html.includes('Integrasi wajib melalui backend/server Anda'));
+  assert.ok(html.includes('ORIGIN_NOT_ALLOWED'));
+  assert.ok(html.includes('statusCheck.state: unavailable'));
+  assert.ok(html.includes('requestId'));
+  assert.ok(!/picsart|flora|renderful/i.test(html));
+  s.wallet.balance = 6500;
+  html = portalView(s);
+  assert.ok(html.includes('cukup untuk satu video'));
+  s.docModelId = 'seedance-2.5';
+  html = portalView(s);
+  assert.ok(html.includes('belum cukup; perlu Rp'));
+  s.wallet = null;
+  s.walletError = 'Saldo gagal diperiksa';
+  html = portalView(s);
+  assert.ok(html.includes('Saldo gagal diperiksa'));
+  assert.ok(!html.includes('— cukup untuk satu video'));
+});
+
 test('Seedance docs, catalog and cURL use public model and Rp11.000 without changing Wan prices', () => {
   const {portalView,curlExample}=loadViews();
   const s=browserHarness().controller.state;

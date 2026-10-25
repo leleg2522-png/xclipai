@@ -140,6 +140,20 @@ function keyView(s) {
     ${s.confirmRevoke ? `<div class="xp-confirm"><div><strong>Nonaktifkan API key ini?</strong><p>Permanen. Aplikasi yang memakai key ini akan kehilangan akses dan Anda tidak dapat membuat key pengganti.</p></div><div class="xp-confirm-actions"><button data-action="cancel-revoke">Batal</button><button class="xp-danger-button" data-action="revoke-key">Ya, nonaktifkan</button></div></div>` : ''}`;
 }
 
+function integrationReadinessView(s, model) {
+  const activeKey = s.overview?.keys?.some(key => key.status === 'active');
+  const balance = s.wallet && Number.isSafeInteger(s.wallet.balance) ? s.wallet.balance : null;
+  const enough = balance !== null && balance >= model.price;
+  return `<div class="xp-data-note" aria-label="Kesiapan integrasi">
+    <strong>Cek sebelum generate · ${e(model.name)}</strong>
+    <p>API key: ${!s.overview ? 'belum diperiksa' : activeKey ? 'aktif' : 'belum ada key aktif — buka menu API key'}.
+    Saldo: ${s.walletError ? e(s.walletError) : balance === null ? 'belum dapat diperiksa' : enough ? `${money(balance)} — cukup untuk satu video` : `${money(balance)} — belum cukup; perlu ${money(model.price)} per video`}.
+    Layanan: ${model.status === 'available' ? 'tersedia menurut katalog' : model.status === 'unavailable' ? 'sementara tidak tersedia' : 'belum dapat diperiksa'}.</p>
+    ${balance !== null && !enough ? '<p><a href="#topup">Isi saldo API</a> sebelum mengirim request. API key aktif dan langganan lama bukan saldo API; saldo tidak diisi otomatis.</p>' : ''}
+    <p>Katalog tersedia bukan jaminan generasi berhasil. Respons request tetap menjadi acuan; HTTP 202 baru berarti tugas diterima.</p>
+  </div>`;
+}
+
 function docsView(s) {
   const generate = s.docTab === 'generate';
   const download = s.docTab === 'download';
@@ -152,6 +166,11 @@ function docsView(s) {
   const preview = /https?:\/\/(?:[^/]+\.replit\.dev|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)(?:$|\/)/i.test(pageOrigin);
   return `<section class="xp-docs-section" id="dokumentasi">
     <div class="xp-section-heading xp-doc-heading"><div><span class="xp-kicker">02 / QUICKSTART</span><h2>Request pertama Anda</h2></div><span class="xp-doc-meta">${i('BookOpen')} REST · JSON</span></div>
+    ${integrationReadinessView(s, model)}
+    <div class="xp-data-note"><strong>Integrasi wajib melalui backend/server Anda.</strong>
+      <p>Alur: browser pengguna → backend Anda → API Xclip. Simpan API key di environment server. Jangan memakai fetch langsung dari frontend publik, memasukkan key ke JavaScript browser, atau membuka videoUrl tanpa autentikasi.</p>
+      <p>Gunakan cURL di terminal server atau Postman untuk mencoba contoh ini. Membuka Base URL di browser hanya membuka portal, bukan menjalankan generasi. Jika browser menampilkan Failed to fetch/CORS, pindahkan request ke backend Anda; jangan membagikan API key atau memakai proxy publik.</p>
+    </div>
     <div class="xp-data-note xp-api-address">
       <strong>Base URL — alamat server API Xclip</strong>
       <div class="xp-api-address-row"><code>${e(base || 'Buka docs melalui alamat server Xclip.')}</code>${base ? '<button type="button" class="xp-copy-inline" data-action="copy-base-url">Salin Base URL</button>' : ''}</div>
@@ -175,6 +194,15 @@ function docsView(s) {
      <div class="xp-code-window"><div class="xp-code-title"><span>${i('Terminal')} CONTOH cURL</span><span class="xp-lang-tag">SHELL</span></div><pre><code>${e(curlExample(s.docTab, modelId))}</code></pre><div class="xp-code-foot"><span>${i('ShieldCheck')} Key tidak disertakan otomatis di contoh ini.</span><button data-action="copy-curl">Salin cURL</button></div></div>
       <div class="xp-data-note"><strong>Request:</strong> ${generate ? `Biaya ${money(model.price)} per video. ${isFixedDuration ? `Durasi hanya ${model.requestDuration} detik; durasi lain ditolak dengan HTTP 400.` : 'Durasi 2–30 detik.'} Model ini memakai saldo API, termasuk untuk akun dengan langganan lama. Saldo dicadangkan sebelum generasi. Contoh membuat Idempotency-Key valid dan mencetaknya untuk disimpan. Retry hanya perintah curl dengan ID dan body yang sama, bukan seluruh blok pembuat ID. Jeda request baru 180 detik. HTTP 202 berarti tugas diterima, bukan video sudah selesai. Simpan taskId dari respons, lalu buka Status tugas. Pending dengan notice pengiriman belum terkonfirmasi: jangan membuat request baru.` : download ? 'HTTP 200 berisi video, bukan JSON. Cek status dan unduh hasil tidak dikenakan biaya generasi tambahan. Untuk video berikutnya, ganti XCLIP_TASK_ID ke taskId baru. Key tidak valid menghasilkan 401; task yang tidak dapat diakses 404.' : 'Status: pending, processing, completed, atau failed. HTTP 200 dapat berarti pending atau processing, bukan berarti generasi selesai. Saat completed, videoUrl terisi dan Anda dapat membuka tab Unduh video. Saat failed, periksa error dan jangan unduh. Untuk task baru, ganti XCLIP_TASK_ID. Jika pending disertai notice, simpan taskId dan jangan membuat generasi baru.'}</div>
       <div class="xp-data-note"><strong>Jika gagal:</strong> <code>400</code> body/model/resolusi/Idempotency-Key tidak sesuai; <code>401</code> key tidak valid/nonaktif; <code>402</code> saldo kurang; <code>409</code> ID request dipakai dengan body berbeda; <code>429</code> cooldown/kuota; <code>503</code> layanan belum siap, bukan tanda generasi berhasil. Simpan header <code>X-Xclip-Request-Id</code> jika tersedia. Jangan membuat ID request baru untuk mengatasi timeout. Versi Preview dan Railway dapat berbeda sebelum deploy; contoh ini menargetkan Railway. Pastikan perubahan backend sudah di-deploy ke Railway sebelum memakai konfigurasi baru.</div>
+      <div class="xp-data-note"><strong>Membaca error dan kendala status:</strong>
+        <p><code>401 AUTH_REQUIRED</code>: gunakan header <code>X-Xclip-Key</code>, bukan hanya Authorization: Bearer.
+        <code>402 INSUFFICIENT_BALANCE</code>: isi saldo API.
+        <code>403 ORIGIN_NOT_ALLOWED</code>: domain browser ditolak; panggil dari backend/server Anda.
+        <code>400 INVALID_REQUEST</code>: periksa body dan header Idempotency-Key.
+        <code>503 SERVICE_UNAVAILABLE</code>: layanan perlu diperiksa; jangan menganggap video sudah dibuat.</p>
+        <p>Respons error memuat <code>error</code>, <code>code</code>, dan <code>requestId</code>. Kirim requestId, kode HTTP, endpoint, dan waktu kejadian ke dukungan; jangan kirim API key.</p>
+        <p>Jika cek status mengembalikan <code>statusCheck.state: unavailable</code>, HTTP 200 hanya menampilkan status terakhir yang tersimpan, bukan konfirmasi bahwa proses masih berjalan. Baca <code>notice</code>, simpan taskId dan requestId, lalu cek ulang setelah 30 detik. Jangan generate ulang. Jika lebih dari 30 menit, minta pemeriksaan; saldo tidak otomatis dikembalikan tanpa konfirmasi kegagalan.</p>
+      </div>
     <div class="xp-data-note"><strong>Layanan Xclip:</strong> Seluruh proses generasi dan hasil video diakses melalui API Xclip. Aplikasi Anda hanya membutuhkan API key Xclip.</div></div></div></section>`;
 }
 

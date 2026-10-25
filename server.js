@@ -1,6 +1,5 @@
 const express = require('express');
 const compression = require('compression');
-const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
@@ -262,19 +261,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) {
-      callback(null, true);
-    } else if (isAllowedOrigin(origin)) {
-      callback(null, true);
-    } else {
-      console.log('CORS rejected origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
+app.use(require('./server/cors-policy')(isAllowedOrigin));
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
